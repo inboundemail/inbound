@@ -1,101 +1,161 @@
-import Image from "next/image";
+import { Button } from "@/components/ui/button"
+import InboundIcon from "@/components/InboundIcon"
+import { FaArrowRight, FaCheck, FaRocket, FaLock, FaUsers } from "react-icons/fa"
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="relative min-h-screen">
+      {/* Background with subtle pattern */}
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-50 via-white to-blue-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900"></div>
+      
+      {/* Main content */}
+      <div className="relative z-10">
+        {/* Header */}
+        <header className="px-6 py-4 md:px-10">
+          <div className="flex items-center justify-between max-w-7xl mx-auto">
+            <div className="flex items-center gap-2">
+              <InboundIcon className="w-8 h-8" variant="black" />
+              <span className="text-3xl font-bold -ml-1">inbound</span>
+            </div>
+            <nav className="hidden md:flex items-center gap-8">
+              <a href="#features" className="text-gray-600 hover:text-gray-900 transition-colors">Features</a>
+              <a href="#pricing" className="text-gray-600 hover:text-gray-900 transition-colors">Pricing</a>
+              <a href="#about" className="text-gray-600 hover:text-gray-900 transition-colors">About</a>
+              <Button variant="secondary" asChild>
+                <a href="/login">Sign In</a>
+              </Button>
+            </nav>
+          </div>
+        </header>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        {/* Hero Section */}
+        <section className="px-6 py-20 md:px-10 md:py-32">
+          <div className="max-w-7xl mx-auto text-center">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-5xl md:text-7xl font-bold text-gray-900 mb-6">
+                Streamline Your
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-blue-600"> Inbound </span>
+                Operations
+              </h1>
+              <p className="text-xl md:text-2xl text-gray-600 mb-8 leading-relaxed">
+                Transform your business with our powerful SaaS platform. Automate workflows, 
+                manage customers, and scale your operations with ease.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button size="lg" className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-8 py-4 text-lg">
+                  Get Started Free
+                  <span className="ml-2"><FaArrowRight /></span>
+                </Button>
+                <Button variant="secondary" size="lg" className="px-8 py-4 text-lg">
+                  Watch Demo
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Features Section */}
+        <section id="features" className="px-6 py-20 md:px-10 bg-white/50 backdrop-blur-sm">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+                Why Choose Inbound?
+              </h2>
+              <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+                Everything you need to manage and grow your business in one powerful platform
+              </p>
+            </div>
+            
+            <div className="grid md:grid-cols-3 gap-8">
+              <div className="text-center p-8 rounded-2xl bg-white/80 backdrop-blur-sm shadow-lg hover:shadow-xl transition-shadow">
+                <div className="w-16 h-16 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <span className="text-white text-2xl"><FaRocket /></span>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">Lightning Fast</h3>
+                <p className="text-gray-600 leading-relaxed">
+                  Built for speed and performance. Get things done faster with our optimized platform.
+                </p>
+              </div>
+              
+              <div className="text-center p-8 rounded-2xl bg-white/80 backdrop-blur-sm shadow-lg hover:shadow-xl transition-shadow">
+                <div className="w-16 h-16 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <span className="text-white text-2xl"><FaLock /></span>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">Secure & Reliable</h3>
+                <p className="text-gray-600 leading-relaxed">
+                  Enterprise-grade security with 99.9% uptime. Your data is safe and always accessible.
+                </p>
+              </div>
+              
+              <div className="text-center p-8 rounded-2xl bg-white/80 backdrop-blur-sm shadow-lg hover:shadow-xl transition-shadow">
+                <div className="w-16 h-16 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <span className="text-white text-2xl"><FaUsers /></span>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">Team Collaboration</h3>
+                <p className="text-gray-600 leading-relaxed">
+                  Work together seamlessly with powerful collaboration tools and real-time updates.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* CTA Section */}
+        <section className="px-6 py-20 md:px-10">
+          <div className="max-w-4xl mx-auto text-center">
+            <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-3xl p-12 md:p-16 text-white">
+              <h2 className="text-4xl md:text-5xl font-bold mb-6">
+                Ready to Get Started?
+              </h2>
+              <p className="text-xl mb-8 opacity-90">
+                Join thousands of businesses already using Inbound to streamline their operations.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button size="lg" variant="secondary" className="bg-white text-purple-600 hover:bg-gray-100 px-8 py-4 text-lg font-semibold">
+                  Start Free Trial
+                </Button>
+                <Button size="lg" variant="ghost" className="border border-white text-white hover:bg-white/10 px-8 py-4 text-lg">
+                  Contact Sales
+                </Button>
+              </div>
+              <div className="flex items-center justify-center gap-6 mt-8 text-sm opacity-80">
+                <div className="flex items-center gap-2">
+                  <span className="text-green-300"><FaCheck /></span>
+                  <span>No credit card required</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-green-300"><FaCheck /></span>
+                  <span>14-day free trial</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-green-300"><FaCheck /></span>
+                  <span>Cancel anytime</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="px-6 py-12 md:px-10 bg-gray-900 text-white">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex flex-col md:flex-row items-center justify-between">
+              <div className="flex items-center gap-2 mb-4 md:mb-0">
+                <InboundIcon className="w-6 h-6" variant="white" />
+                <span className="text-2xl font-bold -ml-1">inbound</span>
+              </div>
+              <div className="flex items-center gap-8 text-sm text-gray-400">
+                <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
+                <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
+                <a href="#" className="hover:text-white transition-colors">Support</a>
+              </div>
+            </div>
+            <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400 text-sm">
+              © 2024 Inbound. All rights reserved.
+            </div>
+          </div>
+        </footer>
+      </div>
     </div>
-  );
+  )
 }
