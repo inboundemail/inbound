@@ -28,16 +28,27 @@ export function NavSecondary({
             const isActive = isNavigationItemActive(item.url, currentPath)
             return (
               <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton 
-                  asChild 
-                  tooltip={item.title}
-                  isActive={isActive}
-                >
-                  <Link href={item.url} className="flex items-center gap-2">
+                {isActive ? (
+                  <SidebarMenuButton 
+                    tooltip={item.title}
+                    isActive={true}
+                    className="cursor-default"
+                  >
                     {item.icon && <item.icon className="h-4 w-4" />}
                     <span>{item.title}</span>
-                  </Link>
-                </SidebarMenuButton>
+                  </SidebarMenuButton>
+                ) : (
+                  <SidebarMenuButton 
+                    asChild 
+                    tooltip={item.title}
+                    isActive={false}
+                  >
+                    <Link href={item.url} className="flex items-center gap-2">
+                      {item.icon && <item.icon className="h-4 w-4" />}
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                )}
               </SidebarMenuItem>
             )
           })}

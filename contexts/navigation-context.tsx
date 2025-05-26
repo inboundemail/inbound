@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { NavigationItem, getPageTitleFromUrl, getNavigationItemFromUrl } from '@/lib/navigation'
+import { NavigationItem, getPageTitleFromUrl, getNavigationItemFromUrl, generateDocumentTitle } from '@/lib/navigation'
 
 interface NavigationContextType {
   currentPath: string
@@ -23,6 +23,11 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const currentTitle = customTitle || defaultTitle
 
   const resetTitle = () => setCustomTitle(null)
+
+  // Update document title when current title changes
+  useEffect(() => {
+    document.title = generateDocumentTitle(currentTitle)
+  }, [currentTitle])
 
   useEffect(() => {
     // Reset custom title when route changes

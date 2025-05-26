@@ -6,6 +6,7 @@ import { MailIcon } from "lucide-react"
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
+import { HistoricalStatusCard } from "@/components/historical-status-card"
 import {
   Sidebar,
   SidebarContent,
@@ -37,7 +38,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        {data.navSecondary.length > 0 && (
+          <NavSecondary items={data.navSecondary} className="mt-auto" />
+        )}
+        <div className={`mb-2 px-3 ${data.navSecondary.length > 0 ? 'mt-4' : 'mt-auto'}`}>
+          <HistoricalStatusCard />
+        </div>
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={data.user} />

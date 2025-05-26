@@ -42,16 +42,27 @@ export function NavMain({
             const isActive = isNavigationItemActive(item.url, currentPath)
             return (
               <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton 
-                  tooltip={item.title} 
-                  asChild 
-                  isActive={isActive}
-                >
-                  <Link href={item.url}>
+                {isActive ? (
+                  <SidebarMenuButton 
+                    tooltip={item.title} 
+                    isActive={true}
+                    className="cursor-default"
+                  >
                     {item.icon && <item.icon className="h-4 w-4" />}
                     <span>{item.title}</span>
-                  </Link>
-                </SidebarMenuButton>
+                  </SidebarMenuButton>
+                ) : (
+                  <SidebarMenuButton 
+                    tooltip={item.title} 
+                    asChild 
+                    isActive={false}
+                  >
+                    <Link href={item.url}>
+                      {item.icon && <item.icon className="h-4 w-4" />}
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                )}
               </SidebarMenuItem>
             )
           })}

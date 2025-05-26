@@ -44,27 +44,14 @@ export const navigationConfig: NavigationConfig = {
       icon: CreditCardIcon,
       description: "Manage your subscription"
     },
-  ],
-  secondary: [
     {
       title: "Settings",
       url: "/settings",
       icon: SettingsIcon,
       description: "Account and app settings"
     },
-    {
-      title: "Documentation",
-      url: "/docs",
-      icon: HelpCircleIcon,
-      description: "API documentation and guides"
-    },
-    {
-      title: "API Status",
-      url: "/status",
-      icon: ShieldCheckIcon,
-      description: "Service status and uptime"
-    },
   ],
+  secondary: [],
 }
 
 // Helper function to get page title from URL
@@ -86,11 +73,15 @@ export function getPageTitleFromUrl(pathname: string): string {
   if (secondaryItem) return secondaryItem.title
 
   // Default fallback - capitalize first segment
-  if (firstSegment) {
-    return firstSegment.charAt(0).toUpperCase() + firstSegment.slice(1)
-  }
+  return firstSegment.charAt(0).toUpperCase() + firstSegment.slice(1)
+}
 
-  return "Dashboard"
+// Helper function to generate document title
+export function generateDocumentTitle(pageTitle: string, baseTitle: string = "Inbound"): string {
+  if (pageTitle === "Dashboard") {
+    return baseTitle
+  }
+  return `${pageTitle} - ${baseTitle}`
 }
 
 // Helper function to get navigation item from URL

@@ -2,10 +2,8 @@
 
 import { usePageTitle } from '@/hooks/use-page-title'
 
-export default function AnalyticsPage() {
-  // The page title will automatically be set to "Analytics" based on the navigation config
-  // But you could also set a custom title like this:
-  // usePageTitle("Email Analytics")
+export default function SettingsPage() {
+  // The page title will automatically be set to "Settings" based on the navigation config
   
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
@@ -16,9 +14,9 @@ export default function AnalyticsPage() {
       </div>
       <div className="min-h-[100vh] flex-1 rounded-xl bg-muted/50 md:min-h-min">
         <div className="p-6">
-          <h2 className="text-2xl font-bold mb-4">Analytics</h2>
+          <h2 className="text-2xl font-bold mb-4">Settings</h2>
           <p className="text-muted-foreground">
-            View detailed analytics and insights about your email traffic.
+            Manage your account settings, preferences, and application configuration.
           </p>
         </div>
       </div>
