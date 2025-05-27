@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { db } from "./db/index";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { stripe } from "@better-auth/stripe";
+import { admin } from "better-auth/plugins";
 import Stripe from "stripe";
 import * as schema from "./db/schema";
 
@@ -9,7 +10,7 @@ const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 export const auth = betterAuth({
     database: drizzleAdapter(db, {
-        provider: "mysql",
+        provider: "pg",
         schema: schema
     }),
     socialProviders: {
@@ -19,6 +20,7 @@ export const auth = betterAuth({
         },
     },
     plugins: [
+        admin(),
         stripe({
             stripeClient,
             stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,

@@ -10,6 +10,7 @@ export interface NavigationItem {
 export interface NavigationConfig {
   main: NavigationItem[]
   secondary: NavigationItem[]
+  admin: NavigationItem[]
 }
 
 export const navigationConfig: NavigationConfig = {
@@ -40,6 +41,14 @@ export const navigationConfig: NavigationConfig = {
     },
   ],
   secondary: [],
+  admin: [
+    {
+      title: "Admin Panel",
+      url: "/admin",
+      icon: ShieldCheckIcon,
+      description: "Administrative controls and user management"
+    },
+  ],
 }
 
 // Helper function to get page title from URL
@@ -54,6 +63,12 @@ export function getPageTitleFromUrl(pathname: string): string {
   )
   if (mainItem) return mainItem.title
 
+  // Check admin navigation items
+  const adminItem = navigationConfig.admin.find(item => 
+    item.url === pathname || item.url === `/${firstSegment}`
+  )
+  if (adminItem) return adminItem.title
+
   // Check secondary navigation items
   const secondaryItem = navigationConfig.secondary.find(item => 
     item.url === pathname || item.url === `/${firstSegment}`
@@ -62,17 +77,18 @@ export function getPageTitleFromUrl(pathname: string): string {
 
   // Special cases for compound words
   if (firstSegment === 'addinbound') return 'Add Inbound Email'
+  if (firstSegment === 'admin') return 'Admin Panel'
   
   // Default fallback - capitalize first segment
   return firstSegment.charAt(0).toUpperCase() + firstSegment.slice(1)
 }
 
 // Helper function to generate document title
-export function generateDocumentTitle(pageTitle: string, baseTitle: string = "Inbound"): string {
+export function generateDocumentTitle(pageTitle: string, baseTitle: string = "inbound"): string {
   if (pageTitle === "Dashboard") {
     return baseTitle
   }
-  return `${pageTitle} - ${baseTitle}`
+  return `${pageTitle} | ${baseTitle}`
 }
 
 // Helper function to get navigation item from URL
@@ -85,6 +101,12 @@ export function getNavigationItemFromUrl(pathname: string): NavigationItem | nul
     item.url === pathname || item.url === `/${firstSegment}`
   )
   if (mainItem) return mainItem
+
+  // Check admin navigation items
+  const adminItem = navigationConfig.admin.find(item => 
+    item.url === pathname || item.url === `/${firstSegment}`
+  )
+  if (adminItem) return adminItem
 
   // Check secondary navigation items
   const secondaryItem = navigationConfig.secondary.find(item => 
@@ -105,4 +127,9 @@ export function isNavigationItemActive(itemUrl: string, currentPath: string): bo
   }
   
   return false
+}
+
+// Helper function to check if user has admin role
+export function isUserAdmin(userRole: string | null | undefined): boolean {
+  return userRole === 'admin'
 } 

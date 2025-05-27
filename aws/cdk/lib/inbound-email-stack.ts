@@ -1,12 +1,12 @@
 import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as ses from 'aws-cdk-lib/aws-ses';
-import * as sesActions from 'aws-cdk-lib/aws-ses-actions';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as ses from 'aws-cdk-lib/aws-ses';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import { Construct } from 'constructs';
+import * as path from 'path';
 
 export class InboundEmailStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -15,40 +15,52 @@ export class InboundEmailStack extends cdk.Stack {
     // Get environment variables for configuration
     const serviceApiUrl = process.env.SERVICE_API_URL || 'https://inbound.exon.dev';
     const serviceApiKey = process.env.SERVICE_API_KEY || '';
-    const emailDomains = process.env.EMAIL_DOMAINS?.split(',') || ['exon.dev'];
+    const importExisting = process.env.IMPORT_EXISTING_RESOURCES === 'true';
+    
+    // Consistent resource names
+    const bucketName = `inbound-emails-${this.account}-${this.region}`;
+    const ruleSetName = 'inbound-email-rules';
+    const lambdaFunctionName = 'inbound-email-processor';
+    const dlqName = 'inbound-email-processor-dlq';
 
-    // S3 bucket for email storage
-    const emailBucket = new s3.Bucket(this, 'EmailBucket', {
-      bucketName: `inbound-emails-${this.account}-${this.region}`,
-      encryption: s3.BucketEncryption.S3_MANAGED,
-      lifecycleRules: [{
-        id: 'DeleteOldEmails',
-        expiration: cdk.Duration.days(90),
-      }],
-      publicReadAccess: false,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-    });
+    // Reference existing S3 bucket for email storage (don't create new one)
+    const emailBucket = s3.Bucket.fromBucketName(this, 'EmailBucket', bucketName);
 
-    // Dead Letter Queue for failed Lambda invocations
+    // Note: Bucket policy for SES permissions has been manually applied
+    // Cannot add resource policy to existing bucket referenced by name
+    // Grant SES permission to write to S3 bucket
+    // emailBucket.addToResourcePolicy(new iam.PolicyStatement({
+    //   sid: 'AllowSESPuts',
+    //   effect: iam.Effect.ALLOW,
+    //   principals: [new iam.ServicePrincipal('ses.amazonaws.com')],
+    //   actions: ['s3:PutObject'],
+    //   resources: [`${emailBucket.bucketArn}/*`],
+    //   conditions: {
+    //     StringEquals: {
+    //       'aws:Referer': this.account,
+    //     },
+    //   },
+    // }));
+
+    // Create Dead Letter Queue for failed Lambda invocations
     const dlq = new sqs.Queue(this, 'EmailProcessorDLQ', {
-      queueName: 'inbound-email-processor-dlq',
+      queueName: dlqName,
       retentionPeriod: cdk.Duration.days(14),
+      visibilityTimeout: cdk.Duration.minutes(5),
     });
 
-    // Lambda function for email processing
+    // Create Lambda function for email processing
     const emailProcessor = new lambda.Function(this, 'EmailProcessor', {
-      functionName: 'inbound-email-processor',
+      functionName: lambdaFunctionName,
       runtime: lambda.Runtime.NODEJS_18_X,
-      handler: 'index.handler',
-      code: lambda.Code.fromAsset('../../lambda/email-processor/dist'),
-      timeout: cdk.Duration.minutes(5),
-      memorySize: 512,
+      handler: 'email-processor.handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, 'lambda')),
+      timeout: cdk.Duration.minutes(2),
+      memorySize: 256,
       environment: {
         SERVICE_API_URL: serviceApiUrl,
         SERVICE_API_KEY: serviceApiKey,
-        MAX_ATTACHMENT_SIZE: '10485760',
-        ENABLE_SPAM_FILTER: 'true',
-        ENABLE_VIRUS_FILTER: 'true',
+        S3_BUCKET_NAME: bucketName,
       },
       deadLetterQueue: dlq,
       retryAttempts: 2,
@@ -57,35 +69,34 @@ export class InboundEmailStack extends cdk.Stack {
     // Grant S3 read permissions to Lambda
     emailBucket.grantRead(emailProcessor);
 
+    // Grant SES permission to invoke Lambda
+    emailProcessor.addPermission('AllowSESInvoke', {
+      principal: new iam.ServicePrincipal('ses.amazonaws.com'),
+      sourceAccount: this.account,
+    });
+
     // Grant SES bounce permissions
     emailProcessor.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['ses:SendBounce'],
+      actions: ['ses:SendBounce', 'ses:SendEmail'],
       resources: ['*'],
     }));
 
-    // SES receipt rule set
-    const ruleSet = new ses.ReceiptRuleSet(this, 'EmailRuleSet', {
-      receiptRuleSetName: 'inbound-email-rules',
-    });
-
-    // Catch-all rule for your domains
-    new ses.ReceiptRule(this, 'CatchAllRule', {
-      ruleSet,
-      recipients: emailDomains,
+    // Grant CloudWatch Logs permissions
+    emailProcessor.addToRolePolicy(new iam.PolicyStatement({
       actions: [
-        new sesActions.S3({
-          bucket: emailBucket,
-          objectKeyPrefix: 'emails/',
-        }),
-        new sesActions.Lambda({
-          function: emailProcessor,
-          invocationType: sesActions.LambdaInvocationType.EVENT,
-        }),
+        'logs:CreateLogGroup',
+        'logs:CreateLogStream',
+        'logs:PutLogEvents'
       ],
-      scanEnabled: true,
+      resources: [`arn:aws:logs:${this.region}:${this.account}:*`],
+    }));
+
+    // Create SES Receipt Rule Set
+    const receiptRuleSet = new ses.ReceiptRuleSet(this, 'ReceiptRuleSet', {
+      receiptRuleSetName: ruleSetName,
     });
 
-    // CloudWatch Alarms
+    // CloudWatch Alarms for monitoring
     new cloudwatch.Alarm(this, 'EmailProcessorErrors', {
       alarmName: 'InboundEmailProcessor-Errors',
       metric: emailProcessor.metricErrors(),
@@ -104,9 +115,18 @@ export class InboundEmailStack extends cdk.Stack {
       alarmDescription: 'Alert when email processor takes more than 30 seconds',
     });
 
-    // Outputs
+    new cloudwatch.Alarm(this, 'EmailProcessorThrottles', {
+      alarmName: 'InboundEmailProcessor-Throttles',
+      metric: emailProcessor.metricThrottles(),
+      threshold: 1,
+      evaluationPeriods: 1,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      alarmDescription: 'Alert when email processor is throttled',
+    });
+
+    // Outputs for application configuration
     new cdk.CfnOutput(this, 'EmailBucketName', {
-      value: emailBucket.bucketName,
+      value: bucketName,
       description: 'S3 bucket for storing emails',
       exportName: 'InboundEmailBucketName',
     });
@@ -117,8 +137,14 @@ export class InboundEmailStack extends cdk.Stack {
       exportName: 'InboundEmailProcessorName',
     });
 
+    new cdk.CfnOutput(this, 'LambdaFunctionArn', {
+      value: emailProcessor.functionArn,
+      description: 'Lambda function ARN',
+      exportName: 'InboundEmailProcessorArn',
+    });
+
     new cdk.CfnOutput(this, 'RuleSetName', {
-      value: ruleSet.receiptRuleSetName,
+      value: ruleSetName,
       description: 'SES receipt rule set name',
       exportName: 'InboundEmailRuleSetName',
     });
@@ -127,6 +153,52 @@ export class InboundEmailStack extends cdk.Stack {
       value: dlq.queueName,
       description: 'Dead letter queue for failed email processing',
       exportName: 'InboundEmailDLQName',
+    });
+
+    new cdk.CfnOutput(this, 'AWSAccountId', {
+      value: this.account,
+      description: 'AWS Account ID',
+      exportName: 'InboundEmailAWSAccountId',
+    });
+
+    new cdk.CfnOutput(this, 'AWSRegion', {
+      value: this.region,
+      description: 'AWS Region',
+      exportName: 'InboundEmailAWSRegion',
+    });
+
+    // Environment variables for .env file
+    new cdk.CfnOutput(this, 'EnvironmentVariables', {
+      value: [
+        '# Add these to your .env file:',
+        `S3_BUCKET_NAME=${bucketName}`,
+        `AWS_ACCOUNT_ID=${this.account}`,
+        `LAMBDA_FUNCTION_NAME=${emailProcessor.functionName}`,
+        `LAMBDA_FUNCTION_ARN=${emailProcessor.functionArn}`,
+        `AWS_REGION=${this.region}`,
+        `SES_RULE_SET_NAME=${ruleSetName}`,
+        '# Make sure you also have:',
+        '# AWS_ACCESS_KEY_ID=your_access_key',
+        '# AWS_SECRET_ACCESS_KEY=your_secret_key',
+        '# SERVICE_API_KEY=your_service_api_key'
+      ].join('\n'),
+      description: 'Environment variables for your application',
+    });
+
+    // Deployment status output
+    new cdk.CfnOutput(this, 'DeploymentStatus', {
+      value: 'SUCCESS',
+      description: 'Deployment completed successfully',
+    });
+
+    new cdk.CfnOutput(this, 'NextSteps', {
+      value: [
+        '1. Copy environment variables to your .env file',
+        '2. Configure domains using /api/inbound/configure-email',
+        '3. Set up MX records for your domains',
+        '4. Test email receiving functionality'
+      ].join(' | '),
+      description: 'Next steps after deployment',
     });
   }
 } 

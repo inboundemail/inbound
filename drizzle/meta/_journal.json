@@ -1,40 +1,33 @@
 {
   "version": "7",
-  "dialect": "mysql",
+  "dialect": "postgresql",
   "entries": [
     {
       "idx": 0,
-      "version": "5",
-      "when": 1748294826021,
-      "tag": "0000_equal_violations",
+      "version": "7",
+      "when": 1748365122611,
+      "tag": "0000_tiny_joshua_kane",
       "breakpoints": true
     },
     {
       "idx": 1,
-      "version": "5",
-      "when": 1748299441349,
-      "tag": "0001_new_thaddeus_ross",
+      "version": "7",
+      "when": 1748369353525,
+      "tag": "0001_glorious_vanisher",
       "breakpoints": true
     },
     {
       "idx": 2,
-      "version": "5",
-      "when": 1748309433706,
-      "tag": "0002_lean_silverclaw",
+      "version": "7",
+      "when": 1748370882204,
+      "tag": "0002_gigantic_james_howlett",
       "breakpoints": true
     },
     {
       "idx": 3,
-      "version": "5",
-      "when": 1748310087811,
-      "tag": "0003_perfect_wallflower",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "5",
-      "when": 1748310398405,
-      "tag": "0004_happy_silver_sable",
+      "version": "7",
+      "when": 1748373075532,
+      "tag": "0003_spotty_captain_flint",
       "breakpoints": true
     }
   ]

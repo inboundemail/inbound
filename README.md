@@ -105,6 +105,33 @@ export AWS_REGION="us-east-2"
 
 ## 📦 Deployment Process
 
+### **New Enhanced Deployment (Recommended)**
+
+The CDK stack now automatically outputs all required environment variables:
+
+```bash
+cd aws/cdk
+npm install
+./deploy.sh  # Full deployment with environment variable extraction
+```
+
+This will deploy the infrastructure and display:
+```bash
+🎉 DEPLOYMENT COMPLETE!
+
+📝 Add these environment variables to your .env file:
+
+# AWS Configuration for Email Processing
+S3_BUCKET_NAME=inbound-emails-123456789012-us-west-2
+AWS_ACCOUNT_ID=123456789012
+LAMBDA_FUNCTION_NAME=inbound-email-processor
+AWS_REGION=us-west-2
+
+# Make sure you also have these (from your AWS credentials):
+# AWS_ACCESS_KEY_ID=your_access_key_here
+# AWS_SECRET_ACCESS_KEY=your_secret_key_here
+```
+
 ### **Build Process Flow**
 ```
 1. Lambda Build    →  2. CDK Synthesis  →  3. AWS Deployment  →  4. Verification

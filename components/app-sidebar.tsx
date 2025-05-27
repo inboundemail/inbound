@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/sidebar"
 import { TeamSwitcher } from "./ui/team-switcher"
 import { useSession } from "@/lib/auth-client"
-import { navigationConfig } from "@/lib/navigation"
+import { navigationConfig, isUserAdmin } from "@/lib/navigation"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: session } = useSession()
@@ -33,10 +33,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     plan: "Pro" // You can get this from subscription data later
   }
 
+  // Check if user is admin
+  const userIsAdmin = isUserAdmin(session.user.role)
+
   const data = {
     user: userData,
     navMain: navigationConfig.main,
     navSecondary: navigationConfig.secondary,
+    navAdmin: userIsAdmin ? navigationConfig.admin : [],
   }
 
   return (
@@ -55,6 +59,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
+        {data.navAdmin.length > 0 && (
+          <div className="mt-4">
+            <span className="text-sm text-muted-foreground ml-2">Admin</span>
+            <NavSecondary items={data.navAdmin} />
+          </div>
+        )}
         {data.navSecondary.length > 0 && (
           <NavSecondary items={data.navSecondary} className="mt-auto" />
         )}

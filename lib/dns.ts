@@ -44,41 +44,128 @@ const PROVIDER_PATTERNS = {
   cloudflare: {
     name: 'Cloudflare',
     icon: 'cloudflare',
-    patterns: ['cloudflare.com', 'ns.cloudflare.com']
+    patterns: ['cloudflare.com', 'ns.cloudflare.com', 'cloudflare.net']
   },
   namecheap: {
     name: 'Namecheap',
     icon: 'namecheap', 
-    patterns: ['registrar-servers.com', 'namecheap.com']
+    patterns: ['registrar-servers.com', 'namecheap.com', 'namecheaphosting.com']
   },
   godaddy: {
     name: 'GoDaddy',
     icon: 'godaddy',
-    patterns: ['domaincontrol.com', 'godaddy.com']
+    patterns: ['domaincontrol.com', 'godaddy.com', 'secureserver.net']
   },
   route53: {
     name: 'AWS Route 53',
     icon: 'aws',
-    patterns: ['awsdns', 'amazonaws.com']
+    patterns: ['awsdns', 'amazonaws.com', 'awsdns-']
   },
   google: {
     name: 'Google Domains',
     icon: 'google',
-    patterns: ['googledomains.com', 'google.com']
+    patterns: ['googledomains.com', 'google.com', 'googlehosted.com']
   },
   vercel: {
     name: 'Vercel',
     icon: 'vercel',
-    patterns: ['vercel-dns.com']
+    patterns: ['vercel-dns.com', 'vercel.app']
+  },
+  digitalocean: {
+    name: 'DigitalOcean',
+    icon: 'digitalocean',
+    patterns: ['digitalocean.com', 'ns1.digitalocean.com', 'ns2.digitalocean.com', 'ns3.digitalocean.com']
+  },
+  netlify: {
+    name: 'Netlify',
+    icon: 'netlify',
+    patterns: ['netlify.com', 'dns1.p01.nsone.net', 'dns2.p01.nsone.net']
+  },
+  dnsimple: {
+    name: 'DNSimple',
+    icon: 'dnsimple',
+    patterns: ['dnsimple.com', 'ns1.dnsimple.com', 'ns2.dnsimple.com']
+  },
+  hover: {
+    name: 'Hover',
+    icon: 'hover',
+    patterns: ['hover.com', 'ns1.hover.com', 'ns2.hover.com']
+  },
+  porkbun: {
+    name: 'Porkbun',
+    icon: 'porkbun',
+    patterns: ['porkbun.com', 'curitiba.porkbun.com', 'fortaleza.porkbun.com']
+  },
+  squarespace: {
+    name: 'Squarespace',
+    icon: 'squarespace',
+    patterns: ['squarespace.com', 'ext-dns.squarespace.com']
   }
 };
 
 /**
- * Detect domain provider based on nameservers
+ * Get all parent domains for a given domain
+ * @param domain - Domain to get parents for
+ * @returns Array of parent domains from most specific to least specific
+ */
+function getParentDomains(domain: string): string[] {
+  const parts = domain.split('.');
+  const parents: string[] = [];
+  
+  // Start from the second level (skip the subdomain)
+  for (let i = 1; i < parts.length; i++) {
+    parents.push(parts.slice(i).join('.'));
+  }
+  
+  return parents;
+}
+
+/**
+ * Detect domain provider based on nameservers with fallback to parent domains
  * @param domain - Domain to check
  * @returns Promise<DomainProvider | null> - Detected provider or null
  */
 export async function detectDomainProvider(domain: string): Promise<DomainProvider | null> {
+  // Try the original domain first
+  const result = await tryDetectProvider(domain);
+  if (result && result.detected) {
+    return result;
+  }
+
+  // If no provider found or low confidence, try parent domains
+  const parentDomains = getParentDomains(domain);
+  
+  for (const parentDomain of parentDomains) {
+    try {
+      const parentResult = await tryDetectProvider(parentDomain);
+      if (parentResult && parentResult.detected) {
+        // Found a provider on parent domain, but mark confidence as medium
+        return {
+          ...parentResult,
+          confidence: parentResult.confidence === 'high' ? 'medium' : 'low'
+        };
+      }
+    } catch (error) {
+      // Continue to next parent domain if this one fails
+      continue;
+    }
+  }
+  
+  // If no provider detected on any level, return the original result or generic
+  return result || {
+    name: 'DNS Provider',
+    icon: 'globe',
+    detected: false,
+    confidence: 'low'
+  };
+}
+
+/**
+ * Try to detect provider for a specific domain
+ * @param domain - Domain to check
+ * @returns Promise<DomainProvider | null> - Detected provider or null
+ */
+async function tryDetectProvider(domain: string): Promise<DomainProvider | null> {
   try {
     const nameservers = await dns.resolveNs(domain);
     
@@ -97,13 +184,17 @@ export async function detectDomainProvider(domain: string): Promise<DomainProvid
       }
     }
     
-    // If no specific provider detected, return generic
-    return {
-      name: 'DNS Provider',
-      icon: 'globe',
-      detected: false,
-      confidence: 'low'
-    };
+    // If nameservers found but no specific provider detected
+    if (nameservers.length > 0) {
+      return {
+        name: 'Custom DNS Provider',
+        icon: 'globe',
+        detected: false,
+        confidence: 'medium'
+      };
+    }
+    
+    return null;
   } catch (error) {
     return null;
   }
@@ -186,6 +277,60 @@ export async function checkMultipleDomainsCanReceiveEmails(
 function isValidDomain(domain: string): boolean {
   const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
   return domainRegex.test(domain) && domain.length <= 253;
+}
+
+/**
+ * Get detailed provider information including nameservers
+ * @param domain - Domain to check
+ * @returns Promise with detailed provider information
+ */
+export async function getDetailedProviderInfo(domain: string): Promise<{
+  domain: string;
+  provider: DomainProvider | null;
+  nameservers: string[];
+  checkedDomains: string[];
+  error?: string;
+}> {
+  const checkedDomains: string[] = [domain];
+  
+  try {
+    // Try original domain first
+    let nameservers: string[] = [];
+    try {
+      nameservers = await dns.resolveNs(domain);
+    } catch (error) {
+      // If original domain fails, try parent domains
+      const parentDomains = getParentDomains(domain);
+      checkedDomains.push(...parentDomains);
+      
+      for (const parentDomain of parentDomains) {
+        try {
+          nameservers = await dns.resolveNs(parentDomain);
+          break; // Use first successful parent domain
+        } catch (parentError) {
+          continue;
+        }
+      }
+    }
+    
+    const provider = await detectDomainProvider(domain);
+    
+    return {
+      domain,
+      provider,
+      nameservers,
+      checkedDomains,
+    };
+  } catch (error) {
+    const dnsError = error as DnsError;
+    return {
+      domain,
+      provider: null,
+      nameservers: [],
+      checkedDomains,
+      error: dnsError.message,
+    };
+  }
 }
 
 /**
