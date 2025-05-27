@@ -50,17 +50,54 @@ export const emailAddresses = pgTable('email_addresses', {
   userId: varchar('user_id', { length: 255 }).notNull(),
 });
 
+// SES Events table - stores raw SES event data
+export const sesEvents = pgTable('ses_events', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  eventSource: varchar('event_source', { length: 100 }).notNull(),
+  eventVersion: varchar('event_version', { length: 50 }).notNull(),
+  messageId: varchar('message_id', { length: 255 }).notNull(),
+  source: varchar('source', { length: 255 }).notNull(),
+  destination: text('destination').notNull(), // JSON array of recipients
+  subject: text('subject'),
+  timestamp: timestamp('timestamp').notNull(),
+  receiptTimestamp: timestamp('receipt_timestamp').notNull(),
+  processingTimeMillis: integer('processing_time_millis'),
+  recipients: text('recipients').notNull(), // JSON array
+  spamVerdict: varchar('spam_verdict', { length: 50 }),
+  virusVerdict: varchar('virus_verdict', { length: 50 }),
+  spfVerdict: varchar('spf_verdict', { length: 50 }),
+  dkimVerdict: varchar('dkim_verdict', { length: 50 }),
+  dmarcVerdict: varchar('dmarc_verdict', { length: 50 }),
+  actionType: varchar('action_type', { length: 50 }),
+  s3BucketName: varchar('s3_bucket_name', { length: 255 }),
+  s3ObjectKey: varchar('s3_object_key', { length: 500 }),
+  emailContent: text('email_content'), // Full email content from S3
+  s3ContentFetched: boolean('s3_content_fetched').default(false),
+  s3ContentSize: integer('s3_content_size'),
+  s3Error: text('s3_error'),
+  commonHeaders: text('common_headers'), // JSON object
+  rawSesEvent: text('raw_ses_event').notNull(), // Complete SES event JSON
+  lambdaContext: text('lambda_context'), // Lambda execution context
+  webhookPayload: text('webhook_payload'), // Complete webhook payload
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 export const receivedEmails = pgTable('received_emails', {
   id: varchar('id', { length: 255 }).primaryKey(),
-  messageId: varchar('message_id', { length: 255 }).notNull().unique(),
+  sesEventId: varchar('ses_event_id', { length: 255 }).notNull(), // Reference to sesEvents table
+  messageId: varchar('message_id', { length: 255 }).notNull(),
   from: varchar('from', { length: 255 }).notNull(),
   to: text('to').notNull(), // JSON string for multiple recipients
+  recipient: varchar('recipient', { length: 255 }).notNull(), // Specific recipient for this record
   subject: text('subject'),
   receivedAt: timestamp('received_at').notNull(),
   processedAt: timestamp('processed_at'),
   status: varchar('status', { length: 50 }).notNull(), // 'received', 'processing', 'forwarded', 'failed'
   metadata: text('metadata'), // JSON string
   userId: varchar('user_id', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 });
 
 export const webhookDeliveries = pgTable('webhook_deliveries', {
@@ -106,6 +143,8 @@ export type EmailDomain = typeof emailDomains.$inferSelect;
 export type NewEmailDomain = typeof emailDomains.$inferInsert;
 export type EmailAddress = typeof emailAddresses.$inferSelect;
 export type NewEmailAddress = typeof emailAddresses.$inferInsert;
+export type SesEvent = typeof sesEvents.$inferSelect;
+export type NewSesEvent = typeof sesEvents.$inferInsert;
 export type ReceivedEmail = typeof receivedEmails.$inferSelect;
 export type NewReceivedEmail = typeof receivedEmails.$inferInsert;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;

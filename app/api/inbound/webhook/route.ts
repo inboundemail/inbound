@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { receivedEmails } from '@/lib/db/schema'
+import { sesEvents, receivedEmails } from '@/lib/db/schema'
 import { nanoid } from 'nanoid'
 
 interface SESEvent {
@@ -144,13 +144,51 @@ export async function POST(request: NextRequest) {
         console.log(`📨 Webhook - Processing email: ${mail.messageId}`);
         console.log(`👥 Webhook - Recipients: ${receipt.recipients.join(', ')}`);
 
-        // Process each recipient
+        // First, store the SES event
+        const sesEventId = nanoid()
+        const sesEventRecord = {
+          id: sesEventId,
+          eventSource: record.eventSource,
+          eventVersion: record.eventVersion,
+          messageId: mail.messageId,
+          source: mail.source,
+          destination: JSON.stringify(mail.destination),
+          subject: mail.commonHeaders.subject || null,
+          timestamp: new Date(mail.timestamp),
+          receiptTimestamp: new Date(receipt.timestamp),
+          processingTimeMillis: receipt.processingTimeMillis,
+          recipients: JSON.stringify(receipt.recipients),
+          spamVerdict: receipt.spamVerdict.status,
+          virusVerdict: receipt.virusVerdict.status,
+          spfVerdict: receipt.spfVerdict.status,
+          dkimVerdict: receipt.dkimVerdict.status,
+          dmarcVerdict: receipt.dmarcVerdict.status,
+          actionType: receipt.action.type,
+          s3BucketName: receipt.action.bucketName,
+          s3ObjectKey: receipt.action.objectKey,
+          emailContent: record.emailContent || null,
+          s3ContentFetched: record.s3Location?.contentFetched || false,
+          s3ContentSize: record.s3Location?.contentSize || null,
+          s3Error: record.s3Error || null,
+          commonHeaders: JSON.stringify(mail.commonHeaders),
+          rawSesEvent: JSON.stringify(record.ses),
+          lambdaContext: JSON.stringify(payload.context),
+          webhookPayload: JSON.stringify(payload),
+          updatedAt: new Date(),
+        }
+
+        await db.insert(sesEvents).values(sesEventRecord)
+        console.log(`✅ Webhook - Stored SES event ${sesEventId} for message ${mail.messageId}`);
+
+        // Then, create a receivedEmail record for each recipient
         for (const recipient of receipt.recipients) {
           const emailRecord = {
             id: nanoid(),
+            sesEventId: sesEventId,
             messageId: mail.messageId,
             from: mail.source,
             to: JSON.stringify(mail.destination),
+            recipient: recipient,
             subject: mail.commonHeaders.subject || 'No Subject',
             receivedAt: new Date(mail.timestamp),
             processedAt: new Date(),
@@ -179,14 +217,15 @@ export async function POST(request: NextRequest) {
                 hasContent: false,
                 s3Error: record.s3Error
               },
-              rawEmailContent: record.emailContent, // Store full email content
             }),
-            userId: 'system' // TODO: Map to actual user based on recipient
+            userId: 'system', // TODO: Map to actual user based on recipient
+            updatedAt: new Date(),
           }
 
           await db.insert(receivedEmails).values(emailRecord)
           processedEmails.push({
             emailId: emailRecord.id,
+            sesEventId: sesEventId,
             messageId: mail.messageId,
             recipient: recipient,
             subject: mail.commonHeaders.subject,
@@ -239,7 +278,8 @@ export async function GET() {
       'Raw SES event processing',
       'S3 email content fetching',
       'Full email content storage',
-      'Enhanced metadata tracking'
+      'Enhanced metadata tracking',
+      'SES event storage in dedicated table'
     ]
   })
 } 
