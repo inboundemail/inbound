@@ -185,7 +185,7 @@ export default function Page() {
                             </CardDescription>
                         </div>
                         <Button asChild>
-                            <a href="/emails/new">
+                            <a href="/addinbound">
                                 <MailIcon className="h-4 w-4" />
                                 Add Email Address
                             </a>

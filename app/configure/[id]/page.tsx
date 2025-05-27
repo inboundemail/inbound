@@ -1,3 +1,6 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
@@ -6,27 +9,63 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CopyIcon, ExternalLinkIcon, SaveIcon, TestTubeIcon } from "lucide-react"
+import { useNavigation } from "@/contexts/navigation-context"
 
 import inboundData from "@/lib/data.json"
 
 interface ConfigurePageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default function ConfigurePage({ params }: ConfigurePageProps) {
-  const config = inboundData.emailConfigurations.find(c => c.id === params.id)
+  const { setCustomTitle } = useNavigation()
+  const [id, setId] = useState<string | null>(null)
+  const [config, setConfig] = useState<any>(null)
+  
+  useEffect(() => {
+    async function loadParams() {
+      const resolvedParams = await params
+      setId(resolvedParams.id)
+      const foundConfig = inboundData.emailConfigurations.find(c => c.id === resolvedParams.id)
+      setConfig(foundConfig)
+      
+      if (foundConfig) {
+        setCustomTitle(`Configure ${foundConfig.name}`)
+      } else {
+        setCustomTitle("Configuration Not Found")
+      }
+    }
+    loadParams()
+  }, [params, setCustomTitle])
+  
+  if (id === null) {
+    return (
+      <SidebarProvider>
+        <AppSidebar variant="inset" />
+        <SidebarInset>
+          <SiteHeader />
+          <div className="flex flex-1 flex-col gap-6 p-6">
+            <Card>
+              <CardContent className="pt-6">
+                <p>Loading...</p>
+              </CardContent>
+            </Card>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    )
+  }
   
   if (!config) {
     return (
       <SidebarProvider>
         <AppSidebar variant="inset" />
         <SidebarInset>
-          <SiteHeader title="Configuration Not Found" />
+          <SiteHeader />
           <div className="flex flex-1 flex-col gap-6 p-6">
             <Card>
               <CardContent className="pt-6">
@@ -46,7 +85,7 @@ export default function ConfigurePage({ params }: ConfigurePageProps) {
     <SidebarProvider>
       <AppSidebar variant="inset" />
       <SidebarInset>
-        <SiteHeader title={`Configure ${config.name}`} />
+        <SiteHeader />
         <div className="flex flex-1 flex-col gap-6 p-6">
           {/* Configuration Overview */}
           <Card>

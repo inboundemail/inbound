@@ -1,0 +1,392 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Better Auth Stripe Integration Guide
+
+This project uses the Better Auth Stripe plugin for payment and subscription functionality. Here are the key patterns and configurations:
+
+## Project Structure
+
+- **Auth Server**: Look for `auth.ts` in the lib directory for server-side Stripe configuration
+- **Auth Client**: [lib/auth-client.ts](mdc:lib/auth-client.ts) - Client-side auth utilities with Stripe client
+- **Database Schema**: [lib/db/schema.ts](mdc:lib/db/schema.ts) - Contains subscription tables and user Stripe fields
+
+## Server-Side Configuration
+
+### Basic Stripe Plugin Setup
+```typescript
+import { betterAuth } from "better-auth"
+import { stripe } from "@better-auth/stripe"
+import Stripe from "stripe"
+
+const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: "2025-02-24.acacia",
+})
+
+export const auth = betterAuth({
+    plugins: [
+        stripe({
+            stripeClient,
+            stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
+            createCustomerOnSignUp: true,
+        })
+    ]
+})
+```
+
+### Subscription Plans Configuration
+```typescript
+// Static plans
+subscription: {
+    enabled: true,
+    plans: [
+        {
+            name: "basic",
+            priceId: "price_1234567890",
+            annualDiscountPriceId: "price_1234567890", // optional
+            limits: {
+                projects: 5,
+                storage: 10
+            }
+        },
+        {
+            name: "pro",
+            priceId: "price_0987654321",
+            limits: {
+                projects: 20,
+                storage: 50
+            },
+            freeTrial: {
+                days: 14,
+            }
+        }
+    ]
+}
+
+// Dynamic plans (from database)
+subscription: {
+    enabled: true,
+    plans: async () => {
+        const plans = await db.query("SELECT * FROM plans");
+        return plans.map(plan => ({
+            name: plan.name,
+            priceId: plan.stripe_price_id,
+            limits: JSON.parse(plan.limits)
+        }));
+    }
+}
+```
+
+## Client-Side Configuration
+
+### Auth Client Setup
+```typescript
+import { createAuthClient } from "better-auth/client"
+import { stripeClient } from "@better-auth/stripe/client"
+
+export const client = createAuthClient({
+    plugins: [
+        stripeClient({
+            subscription: true // enables subscription management
+        })
+    ]
+})
+```
+
+## Subscription Management Patterns
+
+### Creating Subscriptions
+```typescript
+// Basic subscription upgrade
+await client.subscription.upgrade({
+    plan: "pro",
+    successUrl: "/dashboard",
+    cancelUrl: "/pricing",
+    annual: true, // optional: upgrade to annual plan
+    referenceId: "org_123", // optional: defaults to user ID
+    seats: 5 // optional: for team plans
+});
+
+// With error handling
+const { error } = await client.subscription.upgrade({
+    plan: "pro",
+    successUrl: "/dashboard",
+    cancelUrl: "/pricing",
+});
+if(error) {
+    alert(error.message);
+}
+```
+
+### Listing Active Subscriptions
+```typescript
+const { data: subscriptions } = await client.subscription.list();
+
+// Get the active subscription
+const activeSubscription = subscriptions.find(
+    sub => sub.status === "active" || sub.status === "trialing"
+);
+
+// Check subscription limits
+const projectLimit = activeSubscription?.limits?.projects || 0;
+```
+
+### Canceling Subscriptions
+```typescript
+const { data } = await client.subscription.cancel({
+    returnUrl: "/account",
+    referenceId: "org_123" // optional, defaults to userId
+});
+```
+
+### Restoring Canceled Subscriptions
+```typescript
+const { data } = await client.subscription.restore({
+    referenceId: "org_123" // optional, defaults to userId
+});
+```
+
+## Reference System for Organizations
+
+### Team/Organization Subscriptions
+```typescript
+// Create subscription for organization
+await client.subscription.upgrade({
+    plan: "team",
+    referenceId: "org_123456",
+    seats: 10, // team members
+    successUrl: "/org/billing/success",
+    cancelUrl: "/org/billing"
+});
+
+// List organization subscriptions
+const { data: subscriptions } = await client.subscription.list({
+    query: {
+        referenceId: "org_123456"
+    }
+});
+```
+
+### Authorization for Reference IDs
+```typescript
+subscription: {
+    authorizeReference: async ({ user, session, referenceId, action }) => {
+        if (action === "upgrade-subscription" || action === "cancel-subscription" || action === "restore-subscription") {
+            const org = await db.member.findFirst({
+                where: {
+                    organizationId: referenceId,
+                    userId: user.id
+                }   
+            });
+            return org?.role === "owner"
+        }
+        return true;
+    }
+}
+```
+
+## Webhook Configuration
+
+### Required Webhook Events
+Set up webhooks in Stripe dashboard for:
+- `checkout.session.completed`
+- `customer.subscription.updated` 
+- `customer.subscription.deleted`
+
+Webhook URL: `https://your-domain.com/api/auth/stripe/webhook`
+
+### Custom Event Handling
+```typescript
+stripe({
+    onEvent: async (event) => {
+        switch (event.type) {
+            case "invoice.paid":
+                // Handle paid invoice
+                break;
+            case "payment_intent.succeeded":
+                // Handle successful payment
+                break;
+        }
+    }
+})
+```
+
+## Subscription Lifecycle Hooks
+
+```typescript
+subscription: {
+    onSubscriptionComplete: async ({ event, subscription, stripeSubscription, plan }) => {
+        await sendWelcomeEmail(subscription.referenceId, plan.name);
+    },
+    onSubscriptionUpdate: async ({ event, subscription }) => {
+        console.log(`Subscription ${subscription.id} updated`);
+    },
+    onSubscriptionCancel: async ({ event, subscription, stripeSubscription, cancellationDetails }) => {
+        await sendCancellationEmail(subscription.referenceId);
+    },
+    onSubscriptionDeleted: async ({ event, subscription, stripeSubscription }) => {
+        console.log(`Subscription ${subscription.id} deleted`);
+    }
+}
+```
+
+## Trial Periods
+
+```typescript
+{
+    name: "pro",
+    priceId: "price_0987654321",
+    freeTrial: {
+        days: 14,
+        onTrialStart: async (subscription) => {
+            await sendTrialStartEmail(subscription.referenceId);
+        },
+        onTrialEnd: async ({ subscription, user }, request) => {
+            await sendTrialEndEmail(user.email);
+        },
+        onTrialExpired: async (subscription) => {
+            await sendTrialExpiredEmail(subscription.referenceId);
+        }
+    }
+}
+```
+
+## Customer Management
+
+### Custom Customer Creation
+```typescript
+stripe({
+    createCustomerOnSignUp: true,
+    onCustomerCreate: async ({ customer, stripeCustomer, user }, request) => {
+        console.log(`Customer ${customer.id} created for user ${user.id}`);
+    },
+    getCustomerCreateParams: async ({ user, session }, request) => {
+        return {
+            metadata: {
+                referralSource: user.metadata?.referralSource
+            }
+        };
+    }
+})
+```
+
+## Advanced Checkout Customization
+
+```typescript
+getCheckoutSessionParams: async ({ user, session, plan, subscription }, request) => {
+    return {
+        params: {
+            allow_promotion_codes: true,
+            tax_id_collection: {
+                enabled: true
+            },
+            billing_address_collection: "required",
+            custom_text: {
+                submit: {
+                    message: "We'll start your subscription right away"
+                }
+            },
+            metadata: {
+                planType: "business",
+                referralCode: user.metadata?.referralCode
+            }
+        },
+        options: {
+            idempotencyKey: `sub_${user.id}_${plan.name}_${Date.now()}`
+        }
+    };
+}
+```
+
+## Database Schema Integration
+
+The plugin integrates with your existing schema in [lib/db/schema.ts](mdc:lib/db/schema.ts):
+
+### User Table Extensions
+- `stripeCustomerId`: Links user to Stripe customer
+
+### Subscription Table Fields
+- `id`: Unique identifier
+- `plan`: Subscription plan name
+- `referenceId`: Associated entity (user/org ID)
+- `stripeCustomerId`: Stripe customer ID
+- `stripeSubscriptionId`: Stripe subscription ID
+- `status`: Subscription status
+- `periodStart`/`periodEnd`: Billing period
+- `cancelAtPeriodEnd`: Cancellation flag
+- `seats`: Team plan seats
+- `trialStart`/`trialEnd`: Trial period dates
+
+## Environment Variables
+
+Required environment variables:
+- `STRIPE_SECRET_KEY`: Stripe secret key
+- `STRIPE_WEBHOOK_SECRET`: Webhook signing secret
+- `STRIPE_PUBLISHABLE_KEY`: Client-side publishable key
+
+## Common Usage Patterns
+
+### Subscription Status Checks
+```typescript
+const { data: session } = useSession()
+const { data: subscriptions } = await client.subscription.list()
+
+const hasActiveSubscription = subscriptions?.some(
+    sub => sub.status === "active" || sub.status === "trialing"
+)
+
+const canAccessFeature = (feature: string) => {
+    const activeSub = subscriptions?.find(sub => 
+        sub.status === "active" || sub.status === "trialing"
+    )
+    return activeSub?.limits?.[feature] > 0
+}
+```
+
+### Organization Integration
+```typescript
+// With organization plugin
+const { data: activeOrg } = client.useActiveOrganization();
+
+await client.subscription.upgrade({
+    plan: "team",
+    referenceId: activeOrg.id,
+    seats: 10,
+    successUrl: "/org/billing/success",
+    cancelUrl: "/org/billing"
+});
+```
+
+## Best Practices
+
+1. **Always handle errors** from subscription operations
+2. **Use reference IDs** for organization/team subscriptions
+3. **Implement proper authorization** for reference ID operations
+4. **Handle webhook race conditions** - the plugin manages success URL redirects
+5. **Test webhooks locally** using Stripe CLI: `stripe listen --forward-to localhost:3000/api/auth/stripe/webhook`
+6. **Verify webhook signatures** are properly configured
+7. **Use TypeScript types** from your schema for subscription data
+8. **Handle trial periods** appropriately in your UI
+9. **Implement proper loading states** during subscription operations
+10. **Store sensitive config** in environment variables only
+
+## Troubleshooting
+
+### Webhook Issues
+- Verify webhook URL configuration in Stripe dashboard
+- Check webhook signing secret matches environment variable
+- Ensure all required events are selected
+- Check server logs for webhook processing errors
+
+### Subscription Status Issues
+- Verify webhook events are being processed
+- Check `stripeCustomerId` and `stripeSubscriptionId` are populated
+- Ensure reference IDs match between app and Stripe
+
+### Local Development
+Use Stripe CLI for local webhook testing:
+```bash
+stripe listen --forward-to localhost:3000/api/auth/stripe/webhook
+```

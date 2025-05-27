@@ -1,0 +1,162 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Better Auth Integration Guide
+
+This project uses Better Auth for authentication. Here are the key patterns and configurations:
+
+## Project Structure
+
+- **Auth Client**: [lib/auth-client.ts](mdc:lib/auth-client.ts) - Client-side auth utilities
+- **Auth Schema**: [auth-schema.ts](mdc:auth-schema.ts) - Database schema for auth
+- **Auth Configuration**: Look for `auth.ts` or similar in the lib directory for server config
+
+## Client-Side Authentication
+
+### Basic Setup
+The auth client is configured in [lib/auth-client.ts](mdc:lib/auth-client.ts) and exports:
+- `signIn` - For email/password authentication
+- `signUp` - For user registration  
+- `useSession` - React hook for session management
+
+### Usage Patterns
+
+```typescript
+import { signIn, signUp, useSession } from "@/lib/auth-client"
+
+// Email/Password Sign In
+await signIn.email({
+  email: "user@example.com",
+  password: "password"
+})
+
+// Social Sign In
+await signIn.social({
+  provider: "github", // or "google", "apple", etc.
+  callbackURL: "/dashboard",
+  errorCallbackURL: "/error",
+  newUserCallbackURL: "/welcome"
+})
+
+// Sign Out
+await signOut({
+  fetchOptions: {
+    onSuccess: () => {
+      router.push("/login")
+    }
+  }
+})
+```
+
+### Session Management
+
+```typescript
+// Using the hook (preferred)
+const { data: session, isPending, error, refetch } = useSession()
+
+// Direct method
+const { data: session, error } = await getSession()
+```
+
+## Server-Side Authentication
+
+### API Routes
+For server-side authentication in API routes:
+
+```typescript
+import { auth } from "@/lib/auth" // Your Better Auth server instance
+
+// Sign in on server
+const response = await auth.api.signInEmail({
+  body: { email, password },
+  asResponse: true
+})
+
+// Get session on server
+const session = await auth.api.getSession({
+  headers: await headers() // Next.js headers
+})
+```
+
+## Social Providers Configuration
+
+Configure social providers in your auth server setup:
+
+```typescript
+import { betterAuth } from "better-auth"
+
+export const auth = betterAuth({
+  socialProviders: {
+    github: {
+      clientId: process.env.GITHUB_CLIENT_ID!,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET!
+    },
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!
+    }
+  }
+})
+```
+
+## Environment Variables
+
+Required environment variables for social auth:
+- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+- `BETTER_AUTH_SECRET` - For session encryption
+- `BETTER_AUTH_URL` - Your app's URL
+
+## Common Patterns
+
+### Protected Routes
+```typescript
+const { data: session, isPending } = useSession()
+
+if (isPending) return <Loading />
+if (!session) redirect("/login")
+```
+
+### Conditional Rendering
+```typescript
+const { data: session } = useSession()
+
+return (
+  <div>
+    {session ? (
+      <UserDashboard user={session.user} />
+    ) : (
+      <LoginForm />
+    )}
+  </div>
+)
+```
+
+### Error Handling
+```typescript
+const { data: session, error } = useSession()
+
+if (error) {
+  console.error("Auth error:", error)
+  // Handle auth errors appropriately
+}
+```
+
+## Database Integration
+
+Better Auth integrates with your database schema defined in [auth-schema.ts](mdc:auth-schema.ts). Make sure to:
+- Run migrations when auth schema changes
+- Use proper TypeScript types for user/session data
+- Handle database errors in auth flows
+
+## Best Practices
+
+1. **Always check session state** before rendering protected content
+2. **Use TypeScript types** for user and session data
+3. **Handle loading states** with `isPending` from `useSession`
+4. **Implement proper error boundaries** for auth failures
+5. **Use server-side session validation** for sensitive operations
+6. **Configure proper redirect URLs** for social auth flows
+7. **Store sensitive config** in environment variables only

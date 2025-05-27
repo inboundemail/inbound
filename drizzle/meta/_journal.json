@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1748294826021,
+      "tag": "0000_equal_violations",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1748299441349,
+      "tag": "0001_new_thaddeus_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1748309433706,
+      "tag": "0002_lean_silverclaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1748310087811,
+      "tag": "0003_perfect_wallflower",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1748310398405,
+      "tag": "0004_happy_silver_sable",
+      "breakpoints": true
+    }
+  ]
+}

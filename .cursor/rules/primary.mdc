@@ -1,0 +1,12 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Project Rules:
+
+- only use bun for package manager
+- never run `bun run dev` or `bun run build` without my approval
+
+
+- if I ask for it `stripe listen --forward-to http://localhost:3000/api/auth/stripe/webhook` is the stripe webhook command (do not run it)

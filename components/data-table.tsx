@@ -452,7 +452,7 @@ export function DataTable({
         <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="secondary" size="sm">
                 <ColumnsIcon />
                 <span className="hidden lg:inline">Customize Columns</span>
                 <span className="lg:hidden">Columns</span>
@@ -483,7 +483,7 @@ export function DataTable({
                 })}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm">
+          <Button variant="secondary" size="sm">
             <PlusIcon />
             <span className="hidden lg:inline">Add Section</span>
           </Button>
@@ -580,7 +580,7 @@ export function DataTable({
             </div>
             <div className="ml-auto flex items-center gap-2 lg:ml-0">
               <Button
-                variant="outline"
+                variant="secondary"
                 className="hidden h-8 w-8 p-0 lg:flex"
                 onClick={() => table.setPageIndex(0)}
                 disabled={!table.getCanPreviousPage()}
@@ -589,7 +589,7 @@ export function DataTable({
                 <ChevronsLeftIcon />
               </Button>
               <Button
-                variant="outline"
+                variant="secondary"
                 className="size-8"
                 size="icon"
                 onClick={() => table.previousPage()}
@@ -599,7 +599,7 @@ export function DataTable({
                 <ChevronLeftIcon />
               </Button>
               <Button
-                variant="outline"
+                variant="secondary"
                 className="size-8"
                 size="icon"
                 onClick={() => table.nextPage()}
@@ -609,7 +609,7 @@ export function DataTable({
                 <ChevronRightIcon />
               </Button>
               <Button
-                variant="outline"
+                variant="secondary"
                 className="hidden size-8 lg:flex"
                 size="icon"
                 onClick={() => table.setPageIndex(table.getPageCount() - 1)}
@@ -667,7 +667,7 @@ function TableCellViewer({ item }: { item: z.infer<typeof schema> }) {
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button variant="link" className="w-fit px-0 text-left text-foreground">
+        <Button variant="secondary" className="w-fit px-0 text-left text-foreground">
           {item.header}
         </Button>
       </SheetTrigger>
@@ -812,7 +812,7 @@ function TableCellViewer({ item }: { item: z.infer<typeof schema> }) {
         <SheetFooter className="mt-auto flex gap-2 sm:flex-col sm:space-x-0">
           <Button className="w-full">Submit</Button>
           <SheetClose asChild>
-            <Button variant="outline" className="w-full">
+            <Button variant="secondary" className="w-full">
               Done
             </Button>
           </SheetClose>

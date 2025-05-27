@@ -15,25 +15,42 @@ import {
   SidebarMenu,
 } from "@/components/ui/sidebar"
 import { TeamSwitcher } from "./ui/team-switcher"
-import inboundData from "@/lib/data.json"
+import { useSession } from "@/lib/auth-client"
 import { navigationConfig } from "@/lib/navigation"
 
-const data = {
-  user: inboundData.user,
-  navMain: navigationConfig.main,
-  navSecondary: navigationConfig.secondary,
-}
-
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { data: session } = useSession()
+
+  // Don't render sidebar if no session (this shouldn't happen due to layout protection)
+  if (!session?.user) {
+    return null
+  }
+
+  const userData = {
+    name: session.user.name || "User",
+    email: session.user.email,
+    avatar: session.user.image || "/avatars/default.jpg",
+    plan: "Pro" // You can get this from subscription data later
+  }
+
+  const data = {
+    user: userData,
+    navMain: navigationConfig.main,
+    navSecondary: navigationConfig.secondary,
+  }
+
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
+    <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <SidebarMenu>
-          <TeamSwitcher teams={[{
-            name: "Inbound",
-            logo: MailIcon,
-            plan: inboundData.user.plan,
-          }]} />
+        <SidebarMenu className="mb-4">
+          <TeamSwitcher
+            enabled={false}
+            teams={[{
+              name: "Inbound",
+              logo: MailIcon,
+              plan: userData.plan,
+
+            }]} />
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
@@ -41,9 +58,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         {data.navSecondary.length > 0 && (
           <NavSecondary items={data.navSecondary} className="mt-auto" />
         )}
-        <div className={`mb-2 px-3 ${data.navSecondary.length > 0 ? 'mt-4' : 'mt-auto'}`}>
+        {/* <div className={`mb-2 px-3 ${data.navSecondary.length > 0 ? 'mt-4' : 'mt-auto'}`}>
           <HistoricalStatusCard />
-        </div>
+        </div> */}
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={data.user} />

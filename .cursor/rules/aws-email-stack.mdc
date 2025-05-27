@@ -1,0 +1,151 @@
+---
+description: This can help with understanding the AWS Email Stack Implementation
+globs: 
+alwaysApply: false
+---
+# AWS Email Stack Implementation Guide
+
+## Architecture Overview
+
+This project implements a dynamic email receiving and processing system using AWS SES, Lambda, and S3. The system allows programmatic management of email addresses and automatic processing of incoming emails.
+
+### Core Components
+
+1. **AWS CDK Infrastructure** - [aws/cdk/lib/inbound-email-stack.ts](mdc:aws/cdk/lib/inbound-email-stack.ts)
+2. **Lambda Email Processor** - [lambda/email-processor/index.ts](mdc:lambda/email-processor/index.ts)
+3. **Email Processing Library** - [lib/aws-ses.ts](mdc:lib/aws-ses.ts)
+4. **Deployment Scripts** - [scripts/deploy-email-system.ts](mdc:scripts/deploy-email-system.ts)
+
+## AWS SDK Implementation
+
+### S3 Client Usage
+The system uses `@aws-sdk/client-s3` for email storage and retrieval:
+- **GetObjectCommand** - Retrieves email content from S3 bucket
+- **Stream processing** - Converts S3 response streams to buffers
+- **Lifecycle management** - Emails auto-deleted after 90 days
+
+### SES Client Usage
+The system uses `@aws-sdk/client-ses` for email management:
+- **SendBounceCommand** - Sends bounce responses for rejected emails
+- **Receipt rules** - Configured via CDK to trigger Lambda functions
+- **Domain verification** - Manages email domain validation
+
+### Lambda Integration
+- **Runtime**: Node.js 18.x
+- **Handler**: `index.handler` in [lambda/email-processor/index.ts](mdc:lambda/email-processor/index.ts)
+- **Memory**: 512MB
+- **Timeout**: 5 minutes
+- **Environment variables**: SERVICE_API_URL, SERVICE_API_KEY, etc.
+
+## Email Processing Flow
+
+```
+Email Received → SES → S3 Storage → Lambda Trigger → Email Processing → Webhook to API
+```
+
+### Key Processing Steps
+1. **Email validation** - Spam/virus filtering via SES
+2. **Recipient validation** - Check against managed email addresses
+3. **Email parsing** - Extract headers, body, attachments using mailparser
+4. **Webhook delivery** - Send notifications to your API
+5. **S3 cleanup** - Automatic deletion after retention period
+
+## CDK Stack Configuration
+
+The [aws/cdk/lib/inbound-email-stack.ts](mdc:aws/cdk/lib/inbound-email-stack.ts) defines:
+
+### Resources Created
+- **S3 Bucket** - `inbound-emails-{account}-{region}`
+- **Lambda Function** - `inbound-email-processor`
+- **SES Receipt Rule Set** - `inbound-email-rules`
+- **Dead Letter Queue** - `inbound-email-processor-dlq`
+- **CloudWatch Alarms** - Error and duration monitoring
+
+### Environment Variables
+- `SERVICE_API_URL` - Your API endpoint for webhooks
+- `SERVICE_API_KEY` - Authentication key for API calls
+- `EMAIL_DOMAINS` - Comma-separated list of managed domains
+- `AWS_REGION` - Deployment region (default: us-west-2)
+
+## Deployment Process
+
+### Build Order
+1. **Lambda Build** - TypeScript compilation in [lambda/email-processor/](mdc:lambda/email-processor)
+2. **CDK Synthesis** - Infrastructure template generation
+3. **CloudFormation Deployment** - AWS resource creation
+4. **Verification** - Stack and function testing
+
+### Available Commands
+- `bun run deploy:quick` - Full deployment with defaults
+- `bun run deploy:lambda` - Lambda function only
+- `bun run deploy:cdk` - Infrastructure only
+- `bun run test:deployment` - Verification testing
+
+## Email Processing Library
+
+The [lib/aws-ses.ts](mdc:lib/aws-ses.ts) contains the core email processing logic:
+
+### Key Classes
+- **AWSSESEmailProcessor** - Main processing class
+- **EmailProcessingConfig** - Configuration interface
+- **ProcessedEmail** - Processed email data structure
+
+### Key Methods
+- `processEmailEvent()` - Main SES event handler
+- `getEmailFromS3ForAPI()` - Retrieve email for API consumption
+- `sendWebhookToAPI()` - Send notifications to your API
+- `isRecipientManaged()` - Validate email recipients
+
+## TypeScript Configuration
+
+### Lambda TypeScript Setup
+The [lambda/email-processor/tsconfig.json](mdc:lambda/email-processor/tsconfig.json) is configured to:
+- Include parent directory libraries (`../../lib/**/*.ts`)
+- Compile to CommonJS for Lambda compatibility
+- Output to `dist/` directory for deployment
+
+### Import Patterns
+```typescript
+// Correct import from shared library
+import { handleSESEvent, EmailProcessingConfig } from '../../lib/aws-ses';
+
+// AWS SDK imports
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { SESClient, SendBounceCommand } from '@aws-sdk/client-ses';
+```
+
+## Error Handling and Monitoring
+
+### CloudWatch Integration
+- **Log Groups** - `/aws/lambda/inbound-email-processor`
+- **Metrics** - Duration, errors, invocations
+- **Alarms** - Automatic alerting for failures
+
+### Error Handling Patterns
+- **Graceful degradation** - Continue processing other emails on single failures
+- **Dead letter queue** - Failed invocations for manual review
+- **Webhook failure tolerance** - Don't stop email processing on webhook errors
+
+## Security Considerations
+
+### IAM Permissions
+- **S3 Read** - Lambda can read from email bucket
+- **SES Bounce** - Lambda can send bounce responses
+- **CloudWatch Logs** - Lambda can write logs
+
+### Data Protection
+- **Encryption** - S3 bucket uses server-side encryption
+- **Access Control** - Block all public access to S3 bucket
+- **API Authentication** - Bearer token for webhook calls
+
+## Testing and Debugging
+
+### Local Testing
+- Use [scripts/test-deployment.ts](mdc:scripts/test-deployment.ts) for verification
+- Monitor CloudWatch logs for real-time debugging
+- Test with actual email sends after DNS configuration
+
+### Common Issues
+- **Docker dependency** - CDK bundling requires Docker (resolved with pre-built approach)
+- **TypeScript compilation** - Import path issues with shared libraries
+- **Region consistency** - Ensure all resources in same AWS region

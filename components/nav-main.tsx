@@ -30,9 +30,9 @@ export function NavMain({
               className="w-full"
               asChild
             >
-              <a href="/emails/new">
+              <a href="/addinbound" className="flex items-center gap-2">
                 <MailPlusIcon className="h-4 w-4" />
-                <span>New Email Address</span>
+                <span className="group-data-[collapsible=icon]:hidden">new inbound</span>
               </a>
             </Button>
           </SidebarMenuItem>

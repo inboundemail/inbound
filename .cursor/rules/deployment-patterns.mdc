@@ -1,0 +1,181 @@
+---
+description: AWS Deployment Patterns and Configuration Guide
+globs: 
+alwaysApply: false
+---
+# Deployment Patterns and Configuration Guide
+
+## Deployment Scripts Architecture
+
+The project uses a multi-tier deployment approach with three main scripts in [scripts/](mdc:scripts):
+
+### Script Hierarchy
+1. **[scripts/quick-deploy.ts](mdc:scripts/quick-deploy.ts)** - Simple, fast deployment for testing
+2. **[scripts/deploy-email-system.ts](mdc:scripts/deploy-email-system.ts)** - Full-featured deployment with validation
+3. **[scripts/test-deployment.ts](mdc:scripts/test-deployment.ts)** - Post-deployment verification
+
+## Package.json Script Integration
+
+The [package.json](mdc:package.json) defines these deployment commands:
+- `deploy:quick` - Runs [scripts/quick-deploy.ts](mdc:scripts/quick-deploy.ts)
+- `deploy:email` - Runs [scripts/deploy-email-system.ts](mdc:scripts/deploy-email-system.ts)
+- `deploy:lambda` - Lambda-only deployment
+- `deploy:cdk` - CDK infrastructure-only deployment
+- `test:deployment` - Runs [scripts/test-deployment.ts](mdc:scripts/test-deployment.ts)
+
+## Environment Variable Patterns
+
+### Required Variables
+```bash
+SERVICE_API_URL="https://inbound.exon.dev"  # Your API endpoint
+SERVICE_API_KEY="your-secret-key"           # API authentication
+EMAIL_DOMAINS="exon.dev,example.com"        # Managed domains
+AWS_REGION="us-east-2"                      # Deployment region
+```
+
+### CDK Environment Injection
+The [aws/cdk/lib/inbound-email-stack.ts](mdc:aws/cdk/lib/inbound-email-stack.ts) reads environment variables:
+```typescript
+const serviceApiUrl = process.env.SERVICE_API_URL || 'https://inbound.exon.dev';
+const serviceApiKey = process.env.SERVICE_API_KEY || '';
+const emailDomains = process.env.EMAIL_DOMAINS?.split(',') || ['exon.dev'];
+```
+
+## Build Process Dependencies
+
+### Lambda Build Chain
+1. **Source**: [lambda/email-processor/index.ts](mdc:lambda/email-processor/index.ts)
+2. **Config**: [lambda/email-processor/tsconfig.json](mdc:lambda/email-processor/tsconfig.json)
+3. **Dependencies**: [lambda/email-processor/package.json](mdc:lambda/email-processor/package.json)
+4. **Output**: `lambda/email-processor/dist/`
+
+### CDK Build Chain
+1. **Source**: [aws/cdk/lib/inbound-email-stack.ts](mdc:aws/cdk/lib/inbound-email-stack.ts)
+2. **Config**: [aws/cdk/cdk.json](mdc:aws/cdk/cdk.json)
+3. **Dependencies**: [aws/cdk/package.json](mdc:aws/cdk/package.json)
+4. **Output**: `aws/cdk/cdk.out/`
+
+## Docker Bundling Resolution
+
+### Problem
+CDK originally used Docker bundling which required Docker Desktop to be running.
+
+### Solution
+Modified [aws/cdk/lib/inbound-email-stack.ts](mdc:aws/cdk/lib/inbound-email-stack.ts) to use pre-built assets:
+```typescript
+// Before (Docker bundling)
+code: lambda.Code.fromAsset('../../lambda/email-processor', {
+  bundling: { /* Docker commands */ }
+})
+
+// After (Pre-built)
+code: lambda.Code.fromAsset('../../lambda/email-processor/dist')
+```
+
+## TypeScript Compilation Issues
+
+### Import Path Resolution
+The [lambda/email-processor/tsconfig.json](mdc:lambda/email-processor/tsconfig.json) includes:
+```json
+{
+  "compilerOptions": {
+    "rootDir": "../../",
+  },
+  "include": [
+    "**/*.ts",
+    "../../lib/**/*.ts"
+  ]
+}
+```
+
+### Type Safety Fixes
+Fixed type annotations in [lib/aws-ses.ts](mdc:lib/aws-ses.ts):
+```typescript
+// Before
+const result = await response.json();
+
+// After
+const result = await response.json() as { isManaged?: boolean };
+```
+
+## AWS Resource Naming Conventions
+
+### Consistent Naming Pattern
+- **S3 Bucket**: `inbound-emails-{account}-{region}`
+- **Lambda Function**: `inbound-email-processor`
+- **SES Rule Set**: `inbound-email-rules`
+- **DLQ**: `inbound-email-processor-dlq`
+- **CloudWatch Alarms**: `InboundEmailProcessor-{Type}`
+
+### Region Consistency
+All resources deployed to the same region (us-east-2 in current deployment).
+
+## Verification and Testing Patterns
+
+### Deployment Verification Steps
+The [scripts/test-deployment.ts](mdc:scripts/test-deployment.ts) performs:
+1. **AWS Credentials** - Verify authentication
+2. **CloudFormation Stack** - Check deployment status
+3. **Lambda Function** - Verify function state and configuration
+4. **S3 Bucket** - Confirm bucket creation
+5. **SES Rules** - Validate receipt rule configuration
+6. **Lambda Invocation** - Test function execution (expected to fail with mock data)
+
+### Expected Test Outcomes
+- ✅ Infrastructure components exist and are active
+- ❌ Lambda test invocation fails (expected - needs real SES events)
+- ✅ All AWS resources properly configured
+
+## Configuration Management Best Practices
+
+### Environment-Specific Deployments
+```bash
+# Development
+SERVICE_API_URL=https://dev.inbound.exon.dev bun run deploy:quick
+
+# Production
+SERVICE_API_URL=https://inbound.exon.dev \
+SERVICE_API_KEY=prod-secret-key \
+bun run deploy:email
+```
+
+### Multi-Domain Support
+```bash
+EMAIL_DOMAINS="exon.dev,example.com,test.org" bun run deploy:quick
+```
+
+### Region-Specific Deployments
+```bash
+AWS_REGION=us-west-2 bun run deploy:quick
+AWS_REGION=eu-west-1 bun run deploy:quick
+```
+
+## Monitoring and Maintenance
+
+### Log Monitoring Commands
+```bash
+# Real-time logs
+aws logs tail /aws/lambda/inbound-email-processor --follow --region us-east-2
+
+# Error filtering
+aws logs filter-log-events --log-group-name /aws/lambda/inbound-email-processor \
+  --filter-pattern "ERROR" --region us-east-2
+```
+
+### Resource Cleanup
+```bash
+# Destroy all resources
+cd aws/cdk && bun run cdk destroy
+
+# Clean build artifacts
+rm -rf lambda/email-processor/dist aws/cdk/cdk.out
+```
+
+## Troubleshooting Deployment Issues
+
+### Common Failure Points
+1. **AWS CLI not configured** - Run `aws configure`
+2. **CDK not bootstrapped** - Run `cd aws/cdk && bun run cdk bootstrap`
+3. **TypeScript compilation errors** - Check import paths and type annotations
+4. **Docker not running** - Use pre-built deployment approach (already implemented)
+5. **Region mismatch** - Ensure consistent AWS_REGION across all commands

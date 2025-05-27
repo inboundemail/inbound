@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Inbound",
-  description: "Inbound email management platform",
+  title: "inbound",
+  description: "inbound email management platform",
 };
 
 export default function RootLayout({
