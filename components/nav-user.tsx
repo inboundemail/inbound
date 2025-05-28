@@ -68,7 +68,7 @@ export function NavUser({
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(true)
 
   // Check if user is admin
-  const userIsAdmin = isUserAdmin(session?.user?.role)
+  const userIsAdmin = isUserAdmin(session?.user?.role || "user")
 
   // Fetch user's subscription data
   useEffect(() => {
