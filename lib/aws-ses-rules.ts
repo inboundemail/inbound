@@ -30,7 +30,7 @@ export class AWSSESReceiptRuleManager {
   private sesClient: SESClient
   private region: string
 
-  constructor(region: string = 'us-west-2') {
+  constructor(region: string = 'us-east-2') {
     this.region = region
     this.sesClient = new SESClient({ region })
   }

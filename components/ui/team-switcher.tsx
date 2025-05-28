@@ -42,7 +42,7 @@ export function TeamSwitcher({
           <div className="flex items-center justify-center gap-2 w-full mx-auto">
             <InboundIcon className="h-8 w-8 group-data-[collapsible=icon]:h-6 group-data-[collapsible=icon]:w-6" variant="black" />
             <div className="text-left text-xl leading-tight group-data-[collapsible=icon]:hidden">
-              <span className="truncate font-semibold font-outfit">
+              <span className="truncate font-semibold font-outfit text-3xl">
                 inbound
               </span>
             </div>

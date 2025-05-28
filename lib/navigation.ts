@@ -1,4 +1,4 @@
-import { LucideIcon, BarChart3Icon, InboxIcon, WebhookIcon, ActivityIcon, CreditCardIcon, SettingsIcon, HelpCircleIcon, ShieldCheckIcon, PlusIcon } from "lucide-react"
+import { LucideIcon, BarChart3Icon, InboxIcon, WebhookIcon, ActivityIcon, CreditCardIcon, SettingsIcon, HelpCircleIcon, ShieldCheckIcon, PlusIcon, GlobeIcon } from "lucide-react"
 
 export interface NavigationItem {
   title: string
@@ -22,10 +22,10 @@ export const navigationConfig: NavigationConfig = {
       description: "Overview and analytics"
     },
     {
-      title: "Addresses & Domains",
+      title: "Domains",
       url: "/emails",
-      icon: InboxIcon,
-      description: "Manage your email addresses"
+      icon: GlobeIcon,
+      description: "Manage your email domains and addresses"
     },
     {
       title: "Analytics",
@@ -117,19 +117,26 @@ export function getNavigationItemFromUrl(pathname: string): NavigationItem | nul
   return null
 }
 
-// Helper function to check if a navigation item is active
+/**
+ * Check if a navigation item is active based on the current path
+ */
 export function isNavigationItemActive(itemUrl: string, currentPath: string): boolean {
-  if (itemUrl === currentPath) return true
+  // Exact match for root paths
+  if (itemUrl === '/' && currentPath === '/') {
+    return true
+  }
   
-  // For nested routes, check if current path starts with item URL
-  if (currentPath.startsWith(itemUrl) && itemUrl !== '/') {
+  // For non-root paths, check if current path starts with the item URL
+  if (itemUrl !== '/' && currentPath.startsWith(itemUrl)) {
     return true
   }
   
   return false
 }
 
-// Helper function to check if user has admin role
-export function isUserAdmin(userRole: string | null | undefined): boolean {
-  return userRole === 'admin'
+/**
+ * Check if user has admin role
+ */
+export function isUserAdmin(role?: string): boolean {
+  return role === 'admin'
 } 

@@ -24,7 +24,7 @@ export async function createDomainVerification(
   }
 ): Promise<EmailDomain> {
   const domainRecord: NewEmailDomain = {
-    id: nanoid(),
+    id: `indm_${nanoid()}`,
     domain,
     userId,
     status: 'pending',
@@ -66,7 +66,7 @@ export async function updateDomainSesVerification(
   // Insert or update DNS records
   for (const record of dnsRecords) {
     const dnsRecord: NewDomainDnsRecord = {
-      id: nanoid(),
+      id: `dns_${nanoid()}`,
       domainId,
       recordType: record.type,
       name: record.name,
@@ -165,7 +165,7 @@ export async function createEmailAddress(
   userId: string
 ): Promise<EmailAddress> {
   const emailRecord: NewEmailAddress = {
-    id: nanoid(),
+    id: `email_${nanoid()}`,
     address,
     domainId,
     userId,

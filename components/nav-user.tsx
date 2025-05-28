@@ -129,7 +129,7 @@ export function NavUser({
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              className="data-[state=open]:bg-gray-100 data-[state=open]:text-gray-900 hover:bg-gray-100 focus:ring-0 focus:outline-none"
+              className="data-[state=open]:bg-[#151516] data-[state=open]:text-white hover:bg-[#1c1c1e] focus:ring-0 focus:outline-none"
             >
               <Avatar className="h-8 w-8 rounded-lg">
                 <AvatarImage src={user.avatar} alt={user.name} />
@@ -141,7 +141,7 @@ export function NavUser({
                 <div className="flex items-center gap-2">
                   <span className="truncate font-medium">{user.name}</span>
                   {userIsAdmin && (
-                    <Badge variant="secondary" className="text-xs px-1.5 py-0.5 h-5 flex items-center gap-1">
+                    <Badge variant="secondary" className="text-xs px-1.5 py-0.5 h-5 flex items-center gap-1 bg-[#151516] text-white">
                       <ShieldCheckIcon className="h-3 w-3" />
                       Admin
                     </Badge>
@@ -155,7 +155,7 @@ export function NavUser({
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
+            className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg bg-[#151516] text-white border-[#2c2c2e]"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}
@@ -171,12 +171,6 @@ export function NavUser({
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-medium">{user.name}</span>
-                    {userIsAdmin && (
-                      <Badge variant="secondary" className="text-xs px-1.5 py-0.5 h-5 flex items-center gap-1">
-                        <ShieldCheckIcon className="h-3 w-3" />
-                        Admin
-                      </Badge>
-                    )}
                   </div>
                   <span className="truncate text-xs text-muted-foreground">
                     {user.email}
@@ -187,7 +181,7 @@ export function NavUser({
                 </div>
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator className="bg-[#2c2c2e]" />
             <DropdownMenuItem 
               onClick={() => router.push("/subscription")} 
               className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 focus:ring-0 focus:outline-none"
@@ -195,7 +189,7 @@ export function NavUser({
               <CreditCardIcon className="h-4 w-4" />
               Manage Subscription
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator className="bg-[#2c2c2e]" />
             <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 focus:ring-0 focus:outline-none">
               <LogOutIcon className="h-4 w-4" />
               Log out

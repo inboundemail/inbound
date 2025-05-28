@@ -224,7 +224,7 @@ Options:
   --service-api-url <url>     Your service API URL (required)
   --service-api-key <key>     Your service API key
   --email-domains <domains>   Comma-separated list of domains (default: exon.dev)
-  --aws-region <region>       AWS region (default: us-west-2)
+  --aws-region <region>       AWS region (default: us-east-2)
   --aws-profile <profile>     AWS profile to use
   --help, -h                  Show this help message
 
@@ -247,7 +247,7 @@ Examples:
     serviceApiUrl: getArg('--service-api-url') || process.env.SERVICE_API_URL || '',
     serviceApiKey: getArg('--service-api-key') || process.env.SERVICE_API_KEY || '',
     emailDomains: (getArg('--email-domains') || process.env.EMAIL_DOMAINS || 'exon.dev').split(','),
-    awsRegion: getArg('--aws-region') || process.env.AWS_REGION || 'us-west-2',
+    awsRegion: getArg('--aws-region') || process.env.AWS_REGION || 'us-east-2',
     awsProfile: getArg('--aws-profile') || process.env.AWS_PROFILE,
   };
 

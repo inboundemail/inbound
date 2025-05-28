@@ -4,7 +4,7 @@ import { execSync } from 'child_process';
 
 console.log('🧪 Testing Email System Deployment\n');
 
-const awsRegion = process.env.AWS_REGION || 'us-west-2';
+const awsRegion = process.env.AWS_REGION || 'us-east-2';
 const awsProfile = process.env.AWS_PROFILE ? `--profile ${process.env.AWS_PROFILE}` : '';
 
 async function testDeployment() {

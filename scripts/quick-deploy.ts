@@ -9,7 +9,7 @@ const config = {
   serviceApiUrl: process.env.SERVICE_API_URL || 'https://inbound.exon.dev',
   serviceApiKey: process.env.SERVICE_API_KEY || 'test-key',
   emailDomains: process.env.EMAIL_DOMAINS || 'exon.dev',
-  awsRegion: process.env.AWS_REGION || 'us-west-2',
+  awsRegion: process.env.AWS_REGION || 'us-east-2',
 };
 
 console.log('📋 Configuration:');

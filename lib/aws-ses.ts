@@ -157,8 +157,8 @@ export class AWSSESEmailProcessor {
 
   constructor(config: EmailProcessingConfig = {}) {
     this.config = {
-      s3Region: process.env.AWS_REGION || 'us-west-2',
-      sesRegion: process.env.AWS_REGION || 'us-west-2',
+      s3Region: process.env.AWS_REGION || 'us-east-2',
+      sesRegion: process.env.AWS_REGION || 'us-east-2',
       allowedDomains: [],
       blockedSenders: [],
       maxAttachmentSize: 10 * 1024 * 1024, // 10MB default

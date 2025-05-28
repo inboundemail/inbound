@@ -34,7 +34,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }
 
   // Check if user is admin
-  const userIsAdmin = isUserAdmin(session.user.role)
+  const userIsAdmin = isUserAdmin(session.user.role || "user")
 
   const data = {
     user: userData,

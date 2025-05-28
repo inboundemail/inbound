@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get AWS configuration
-    const awsRegion = process.env.AWS_REGION || 'us-west-2'
+    const awsRegion = process.env.AWS_REGION || 'us-east-2'
     const lambdaFunctionName = process.env.LAMBDA_FUNCTION_NAME || 'email-processor'
     const s3BucketName = process.env.S3_BUCKET_NAME
     const awsAccountId = process.env.AWS_ACCOUNT_ID

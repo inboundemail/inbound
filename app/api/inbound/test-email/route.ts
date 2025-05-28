@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses'
 
 // Check if AWS credentials are available
-const awsRegion = process.env.AWS_REGION || 'us-west-2'
+const awsRegion = process.env.AWS_REGION || 'us-east-2'
 const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID
 const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY
 

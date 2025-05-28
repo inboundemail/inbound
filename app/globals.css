@@ -58,19 +58,19 @@
     --radius: 0.5rem
   ;
 
-    --sidebar-background: 0 0% 92.2%;
+    --sidebar-background: 240, 10%, 4%;
+    
+    --sidebar-foreground: 0 0% 92.2%;
 
-    --sidebar-foreground: 0 0% 10.2%;
-
-    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary: 240, 3%, 11%;
 
     --sidebar-primary-foreground: 0 0% 98%;
 
-    --sidebar-accent: 0 0% 98%;
+    --sidebar-accent: 240, 3%, 11%;
 
-    --sidebar-accent-foreground: 0 0% 10.2%;
+    --sidebar-accent-foreground: 0 0% 98%;
 
-    --sidebar-border: 220 13% 91%;
+    --sidebar-border: 240, 3%, 11%;
 
     --sidebar-ring: 217.2 91.2% 59.8%}
   .dark {

@@ -1,6 +1,6 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 
-const s3Client = new S3Client({ region: process.env.AWS_REGION || 'us-west-2' });
+const s3Client = new S3Client({ region: process.env.AWS_REGION || 'us-east-2' });
 
 /**
  * Fetch email content from S3

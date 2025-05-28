@@ -151,3 +151,43 @@ export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 export type NewWebhookDelivery = typeof webhookDeliveries.$inferInsert;
 export type DomainDnsRecord = typeof domainDnsRecords.$inferSelect;
 export type NewDomainDnsRecord = typeof domainDnsRecords.$inferInsert;
+
+// Domain status enums
+export const DOMAIN_STATUS = {
+  PENDING: 'pending',
+  DNS_VERIFIED: 'dns_verified', 
+  SES_VERIFIED: 'ses_verified',
+  FAILED: 'failed'
+} as const;
+
+export const SES_VERIFICATION_STATUS = {
+  PENDING: 'Pending',
+  SUCCESS: 'Success', 
+  FAILED: 'Failed'
+} as const;
+
+export const PROVIDER_CONFIDENCE = {
+  HIGH: 'high',
+  MEDIUM: 'medium',
+  LOW: 'low'
+} as const;
+
+export const EMAIL_STATUS = {
+  RECEIVED: 'received',
+  PROCESSING: 'processing',
+  FORWARDED: 'forwarded',
+  FAILED: 'failed'
+} as const;
+
+export const WEBHOOK_STATUS = {
+  PENDING: 'pending',
+  SUCCESS: 'success',
+  FAILED: 'failed'
+} as const;
+
+// Type definitions
+export type DomainStatus = typeof DOMAIN_STATUS[keyof typeof DOMAIN_STATUS];
+export type SesVerificationStatus = typeof SES_VERIFICATION_STATUS[keyof typeof SES_VERIFICATION_STATUS];
+export type ProviderConfidence = typeof PROVIDER_CONFIDENCE[keyof typeof PROVIDER_CONFIDENCE];
+export type EmailStatus = typeof EMAIL_STATUS[keyof typeof EMAIL_STATUS];
+export type WebhookStatus = typeof WEBHOOK_STATUS[keyof typeof WEBHOOK_STATUS];

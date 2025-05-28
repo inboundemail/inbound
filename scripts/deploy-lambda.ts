@@ -40,16 +40,51 @@ try {
   }
 
   // Update environment variables first
+  // Ask user to select environment
+  console.log('🌍 Select deployment environment:');
+  console.log('1. Development (dev)');
+  console.log('2. Production (prod)');
+  
+  const readline = require('readline');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+  
+  const environment = await new Promise<string>((resolve) => {
+    rl.question('Enter your choice (1 or 2): ', (answer: string) => {
+      rl.close();
+      if (answer === '1' || answer.toLowerCase() === 'dev') {
+        resolve('dev');
+      } else if (answer === '2' || answer.toLowerCase() === 'prod') {
+        resolve('prod');
+      } else {
+        console.log('Invalid choice, defaulting to development');
+        resolve('dev');
+      }
+    });
+  });
+  
+  // Set the appropriate API URL based on environment selection
+  let SELECTED_SERVICE_API_URL: string;
+  if (environment === 'prod') {
+    SELECTED_SERVICE_API_URL = process.env.PROD_SERVICE_API_URL || '';
+    console.log(`🚀 Deploying to PRODUCTION environment`);
+  } else {
+    SELECTED_SERVICE_API_URL = SERVICE_API_URL;
+    console.log(`🛠️  Deploying to DEVELOPMENT environment`);
+  }
+  
   console.log('🔧 Updating Lambda environment variables...');
   
-  if (!SERVICE_API_URL || !SERVICE_API_KEY) {
+  if (!SELECTED_SERVICE_API_URL || !SERVICE_API_KEY) {
     console.warn('⚠️  Warning: SERVICE_API_URL or SERVICE_API_KEY not set in environment');
     console.warn('   Lambda will use default values or existing configuration');
   }
   
   const envVarsCommand = `aws lambda update-function-configuration \
     --function-name ${LAMBDA_FUNCTION_NAME} \
-    --environment "Variables={SERVICE_API_URL=${SERVICE_API_URL},SERVICE_API_KEY=${SERVICE_API_KEY},S3_BUCKET_NAME=${S3_BUCKET_NAME}}" \
+    --environment "Variables={SERVICE_API_URL=${SELECTED_SERVICE_API_URL},SERVICE_API_KEY=${SERVICE_API_KEY},S3_BUCKET_NAME=${S3_BUCKET_NAME}}" \
     --region ${AWS_REGION}`;
   
   try {
