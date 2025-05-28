@@ -4,9 +4,11 @@ import { emailDomains, domainDnsRecords, emailAddresses, sesEvents } from '@/lib
 import { eq, and, gte, sql } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
-import { initiateDomainVerification } from '@/lib/domain-verification'
+import { initiateDomainVerification, deleteDomainFromSES } from '@/lib/domain-verification'
 import { detectDomainProvider } from '@/lib/dns'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
+import { deleteDomainFromDatabase } from '@/lib/db/domains'
+import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
 
 export async function GET(
   request: NextRequest,
@@ -197,6 +199,116 @@ export async function GET(
     console.error('Error fetching domain details:', error)
     return NextResponse.json(
       { error: 'Failed to fetch domain details' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // Get user session
+    const session = await auth.api.getSession({
+      headers: await headers()
+    })
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const { id: domainId } = await params
+
+    if (!domainId) {
+      return NextResponse.json(
+        { error: 'Domain ID is required' },
+        { status: 400 }
+      )
+    }
+
+    // Get domain record to verify ownership and get domain name
+    const domainRecord = await db
+      .select()
+      .from(emailDomains)
+      .where(and(eq(emailDomains.id, domainId), eq(emailDomains.userId, session.user.id)))
+      .limit(1)
+
+    if (!domainRecord[0]) {
+      return NextResponse.json(
+        { error: 'Domain not found' },
+        { status: 404 }
+      )
+    }
+
+    const domain = domainRecord[0]
+
+    console.log(`🗑️ Starting domain deletion process for: ${domain.domain}`)
+
+    // Step 1: Remove SES receipt rules first (if domain is verified)
+    if (domain.status === DOMAIN_STATUS.SES_VERIFIED) {
+      try {
+        const sesRuleManager = new AWSSESReceiptRuleManager()
+        const ruleRemoved = await sesRuleManager.removeEmailReceiving(domain.domain)
+        
+        if (ruleRemoved) {
+          console.log(`✅ SES receipt rules removed for: ${domain.domain}`)
+        } else {
+          console.log(`⚠️ Failed to remove SES receipt rules for: ${domain.domain}`)
+        }
+      } catch (error) {
+        console.error('Error removing SES receipt rules:', error)
+        // Continue with deletion even if receipt rule removal fails
+      }
+    }
+
+    // Step 2: Delete domain identity from SES
+    const sesDeleteResult = await deleteDomainFromSES(domain.domain)
+    
+    if (!sesDeleteResult.success) {
+      console.error(`❌ Failed to delete domain from SES: ${sesDeleteResult.error}`)
+      return NextResponse.json(
+        { 
+          error: 'Failed to delete domain from AWS SES',
+          details: sesDeleteResult.error,
+          domain: domain.domain
+        },
+        { status: 500 }
+      )
+    }
+
+    console.log(`✅ Domain deleted from SES: ${domain.domain}`)
+
+    // Step 3: Delete domain and related records from database
+    const dbDeleteResult = await deleteDomainFromDatabase(domainId, session.user.id)
+    
+    if (!dbDeleteResult.success) {
+      console.error(`❌ Failed to delete domain from database: ${dbDeleteResult.error}`)
+      return NextResponse.json(
+        { 
+          error: 'Failed to delete domain from database',
+          details: dbDeleteResult.error,
+          domain: domain.domain
+        },
+        { status: 500 }
+      )
+    }
+
+    console.log(`✅ Domain deletion completed successfully: ${domain.domain}`)
+
+    return NextResponse.json({
+      success: true,
+      message: 'Domain deleted successfully',
+      domain: domain.domain
+    })
+
+  } catch (error) {
+    console.error('Error deleting domain:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete domain' },
       { status: 500 }
     )
   }

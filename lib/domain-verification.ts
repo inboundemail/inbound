@@ -1,4 +1,4 @@
-import { SESClient, VerifyDomainIdentityCommand, GetIdentityVerificationAttributesCommand } from '@aws-sdk/client-ses'
+import { SESClient, VerifyDomainIdentityCommand, GetIdentityVerificationAttributesCommand, DeleteIdentityCommand } from '@aws-sdk/client-ses'
 import { getDomainWithRecords, updateDomainSesVerification } from '@/lib/db/domains'
 
 // Check if AWS credentials are available
@@ -153,5 +153,65 @@ export async function initiateDomainVerification(
     }
 
     throw new Error('Failed to verify domain with AWS SES')
+  }
+}
+
+/**
+ * Delete domain identity from AWS SES
+ */
+export async function deleteDomainFromSES(domain: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Check if AWS credentials are configured
+    if (!sesClient) {
+      return {
+        success: false,
+        error: 'AWS SES not configured. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.'
+      }
+    }
+
+    // Validate domain format
+    const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/
+    if (!domainRegex.test(domain) || domain.length > 253) {
+      return {
+        success: false,
+        error: 'Invalid domain format'
+      }
+    }
+
+    console.log(`🗑️ Deleting domain identity from SES: ${domain}`)
+
+    // Delete domain identity from AWS SES
+    const deleteCommand = new DeleteIdentityCommand({
+      Identity: domain
+    })
+
+    await sesClient.send(deleteCommand)
+
+    console.log(`✅ Successfully deleted domain identity from SES: ${domain}`)
+
+    return { success: true }
+
+  } catch (error) {
+    console.error('SES domain deletion error:', error)
+    
+    // Handle specific AWS errors
+    if (error instanceof Error) {
+      if (error.name === 'InvalidParameterValue') {
+        return {
+          success: false,
+          error: 'Invalid domain parameter'
+        }
+      }
+      if (error.name === 'NotFoundException') {
+        // Domain not found in SES, consider this a success
+        console.log(`⚠️ Domain not found in SES (already deleted): ${domain}`)
+        return { success: true }
+      }
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete domain from AWS SES'
+    }
   }
 } 

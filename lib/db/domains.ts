@@ -236,4 +236,53 @@ export async function getDomainWithRecordsAndEmails(domain: string, userId: stri
     dnsRecords,
     emailAddresses: emailAddressList,
   }
+}
+
+/**
+ * Delete a domain and all its related records from the database
+ */
+export async function deleteDomainFromDatabase(domainId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Verify the domain belongs to the user
+    const domainRecord = await db
+      .select()
+      .from(emailDomains)
+      .where(and(eq(emailDomains.id, domainId), eq(emailDomains.userId, userId)))
+      .limit(1)
+
+    if (!domainRecord[0]) {
+      return {
+        success: false,
+        error: 'Domain not found or access denied'
+      }
+    }
+
+    console.log(`🗑️ Deleting domain from database: ${domainRecord[0].domain}`)
+
+    // Delete all email addresses for this domain
+    await db
+      .delete(emailAddresses)
+      .where(eq(emailAddresses.domainId, domainId))
+
+    // Delete all DNS records for this domain
+    await db
+      .delete(domainDnsRecords)
+      .where(eq(domainDnsRecords.domainId, domainId))
+
+    // Delete the domain record
+    await db
+      .delete(emailDomains)
+      .where(eq(emailDomains.id, domainId))
+
+    console.log(`✅ Successfully deleted domain from database: ${domainRecord[0].domain}`)
+
+    return { success: true }
+
+  } catch (error) {
+    console.error('Database domain deletion error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete domain from database'
+    }
+  }
 } 

@@ -42,11 +42,16 @@ import {
   TrendingUpIcon,
   CalendarIcon,
   RefreshCwIcon,
-  ExternalLinkIcon
+  ExternalLinkIcon,
+  ArrowUpDownIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  CloudIcon
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { DOMAIN_STATUS, SES_VERIFICATION_STATUS } from '@/lib/db/schema'
+import { shouldShowSyncButton } from '@/lib/feature-flags'
 
 interface DomainStats {
   id: string
@@ -67,6 +72,9 @@ interface DomainStatsResponse {
   totalEmailsLast24h: number
 }
 
+type SortField = 'domain' | 'status' | 'emailAddressCount' | 'emailsLast24h' | 'createdAt'
+type SortDirection = 'asc' | 'desc'
+
 export default function EmailsPage() {
   const { data: session } = useSession()
   const router = useRouter()
@@ -78,11 +86,19 @@ export default function EmailsPage() {
   const [regionFilter, setRegionFilter] = useState('all')
   const [filteredDomains, setFilteredDomains] = useState<DomainStats[]>([])
 
+  // Sorting state
+  const [sortField, setSortField] = useState<SortField>('createdAt')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+
   // Add domain modal state
   const [isAddDomainOpen, setIsAddDomainOpen] = useState(false)
   const [newDomain, setNewDomain] = useState('')
   const [isAddingDomain, setIsAddingDomain] = useState(false)
   const [addDomainError, setAddDomainError] = useState<string | null>(null)
+
+  // Sync with AWS state
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncingDomainId, setSyncingDomainId] = useState<string | null>(null)
 
   useEffect(() => {
     if (session?.user) {
@@ -92,7 +108,7 @@ export default function EmailsPage() {
 
   useEffect(() => {
     if (domainStats) {
-      const filtered = domainStats.domains.filter(domain => {
+      let filtered = domainStats.domains.filter(domain => {
         const matchesSearch = domain.domain.toLowerCase().includes(searchQuery.toLowerCase())
         
         const matchesStatus = statusFilter === 'all' || 
@@ -105,9 +121,56 @@ export default function EmailsPage() {
         
         return matchesSearch && matchesStatus && matchesRegion
       })
+
+      // Apply sorting
+      filtered.sort((a, b) => {
+        let aValue: any = a[sortField]
+        let bValue: any = b[sortField]
+
+        // Handle special cases
+        if (sortField === 'status') {
+          // Sort by verification status first, then by status
+          const statusOrder = {
+            [DOMAIN_STATUS.SES_VERIFIED]: 4,
+            [DOMAIN_STATUS.DNS_VERIFIED]: 3,
+            [DOMAIN_STATUS.PENDING]: 2,
+            [DOMAIN_STATUS.FAILED]: 1
+          }
+          aValue = statusOrder[a.status as keyof typeof statusOrder] || 0
+          bValue = statusOrder[b.status as keyof typeof statusOrder] || 0
+        } else if (sortField === 'createdAt') {
+          aValue = new Date(a.createdAt).getTime()
+          bValue = new Date(b.createdAt).getTime()
+        }
+
+        if (sortDirection === 'asc') {
+          return aValue > bValue ? 1 : -1
+        } else {
+          return aValue < bValue ? 1 : -1
+        }
+      })
+
       setFilteredDomains(filtered)
     }
-  }, [domainStats, searchQuery, statusFilter, regionFilter])
+  }, [domainStats, searchQuery, statusFilter, regionFilter, sortField, sortDirection])
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDownIcon className="h-3 w-3 text-muted-foreground" />
+    }
+    return sortDirection === 'asc' 
+      ? <ArrowUpIcon className="h-3 w-3 text-purple-600" />
+      : <ArrowDownIcon className="h-3 w-3 text-purple-600" />
+  }
 
   const fetchDomainStats = async () => {
     try {
@@ -130,8 +193,35 @@ export default function EmailsPage() {
     }
   }
 
-  const handleRowClick = (domainId: string) => {
-    router.push(`/emails/${domainId}`)
+  const handleRowClick = async (domainId: string) => {
+    try {
+      setSyncingDomainId(domainId)
+      
+      // Auto-sync with AWS before navigating
+      const response = await fetch('/api/domains/stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ syncWithAWS: true })
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.synced > 0) {
+          toast.success(`Synced ${result.synced} domains with AWS SES`)
+          // Refresh the domain stats after sync
+          await fetchDomainStats()
+        }
+      }
+      
+      // Navigate to domain detail page
+      router.push(`/emails/${domainId}`)
+    } catch (error) {
+      console.error('Auto-sync error:', error)
+      // Still navigate even if sync fails
+      router.push(`/emails/${domainId}`)
+    } finally {
+      setSyncingDomainId(null)
+    }
   }
 
   const handleAddDomain = () => {
@@ -186,7 +276,7 @@ export default function EmailsPage() {
   const getStatusBadge = (domain: DomainStats) => {
     if (domain.isVerified) {
       return (
-        <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-200 transition-colors">
+        <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
           <CheckCircleIcon className="h-3 w-3 mr-1" />
           Verified
         </Badge>
@@ -196,39 +286,76 @@ export default function EmailsPage() {
     switch (domain.status) {
       case DOMAIN_STATUS.PENDING:
         return (
-          <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200 transition-colors">
+          <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200 transition-colors">
             <ClockIcon className="h-3 w-3 mr-1" />
             Pending
           </Badge>
         )
       case DOMAIN_STATUS.DNS_VERIFIED:
         return (
-          <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200 transition-colors">
+          <Badge className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 transition-colors">
             <ClockIcon className="h-3 w-3 mr-1" />
             SES Pending
           </Badge>
         )
       case DOMAIN_STATUS.SES_VERIFIED:
         return (
-          <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-200 transition-colors">
+          <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
             <CheckCircleIcon className="h-3 w-3 mr-1" />
             Verified
           </Badge>
         )
       case DOMAIN_STATUS.FAILED:
         return (
-          <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-200 transition-colors">
+          <Badge className="bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-200 transition-colors">
             <XCircleIcon className="h-3 w-3 mr-1" />
             Failed
           </Badge>
         )
       default:
         return (
-          <Badge variant="outline" className="hover:bg-muted transition-colors">
+          <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors">
             <ClockIcon className="h-3 w-3 mr-1" />
             {domain.status}
           </Badge>
         )
+    }
+  }
+
+  const getGlobeIconColor = (domain: DomainStats) => {
+    if (domain.isVerified || domain.status === DOMAIN_STATUS.SES_VERIFIED) {
+      return {
+        bgColor: 'bg-purple-100',
+        borderColor: 'border-purple-200',
+        iconColor: 'text-purple-600'
+      }
+    }
+    
+    switch (domain.status) {
+      case DOMAIN_STATUS.PENDING:
+        return {
+          bgColor: 'bg-amber-100',
+          borderColor: 'border-amber-200',
+          iconColor: 'text-amber-600'
+        }
+      case DOMAIN_STATUS.DNS_VERIFIED:
+        return {
+          bgColor: 'bg-blue-100',
+          borderColor: 'border-blue-200',
+          iconColor: 'text-blue-600'
+        }
+      case DOMAIN_STATUS.FAILED:
+        return {
+          bgColor: 'bg-rose-100',
+          borderColor: 'border-rose-200',
+          iconColor: 'text-rose-600'
+        }
+      default:
+        return {
+          bgColor: 'bg-slate-100',
+          borderColor: 'border-slate-200',
+          iconColor: 'text-slate-600'
+        }
     }
   }
 
@@ -247,26 +374,63 @@ export default function EmailsPage() {
     }
   }
 
+  const syncWithAWS = async () => {
+    try {
+      setIsSyncing(true)
+      
+      const response = await fetch('/api/domains/stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ syncWithAWS: true })
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        toast.success(`Synced ${result.synced || 0} domains with AWS SES`)
+        
+        // Refresh the domain stats after sync
+        await fetchDomainStats()
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to sync with AWS SES')
+      }
+    } catch (error) {
+      console.error('Sync error:', error)
+      toast.error('Failed to sync with AWS SES')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Domains</h1>
-            <p className="text-muted-foreground">
-              Manage your email domains and monitor their performance
-            </p>
+        {/* Header with Gradient */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-8 text-white shadow-xl">
+          <div className="absolute inset-0 bg-black/10"></div>
+          <div className="relative z-10">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-4xl font-bold tracking-tight mb-2">Domains</h1>
+                <p className="text-purple-100 text-lg">
+                  Manage your email domains and monitor their performance
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button variant="secondary" disabled className="bg-white/20 border-white/30 text-white hover:bg-white/30">
+                  <RefreshCwIcon className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+                <Button disabled className="bg-white text-purple-700 hover:bg-white/90 font-semibold">
+                  <PlusIcon className="h-4 w-4 mr-2" />
+                  Add Domain
+                </Button>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" disabled>
-              <RefreshCwIcon className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
-            <Button disabled variant="primary">
-              <PlusIcon className="h-4 w-4 mr-2" />
-              Add Domain
-            </Button>
-          </div>
+          {/* Decorative elements */}
+          <div className="absolute -top-4 -right-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+          <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
         </div>
 
         {/* Loading Table */}
@@ -306,28 +470,68 @@ export default function EmailsPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Domains</h1>
-          <p className="text-muted-foreground">
-            Manage your email domains and monitor their performance
-          </p>
+      {/* Header with Gradient */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-8 text-white shadow-xl">
+        <div className="absolute inset-0 bg-black/10"></div>
+        <div className="relative z-10">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-bold tracking-tight mb-2">Domains</h1>
+              <p className="text-purple-100 text-lg">
+                Manage your email domains and monitor their performance
+              </p>
+              {domainStats && (
+                <div className="flex items-center gap-6 mt-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-white rounded-full"></div>
+                    <span className="text-purple-100">{domainStats.totalDomains} Total Domains</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-300 rounded-full"></div>
+                    <span className="text-purple-100">{domainStats.verifiedDomains} Verified</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-300 rounded-full"></div>
+                    <span className="text-purple-100">{domainStats.totalEmailAddresses} Email Addresses</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="secondary"
+                onClick={fetchDomainStats}
+                disabled={isLoading}
+                className="bg-white/20 border-white/30 text-white hover:bg-white/30 backdrop-blur-sm"
+              >
+                <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              {shouldShowSyncButton() && (
+                <Button
+                  variant="secondary"
+                  onClick={syncWithAWS}
+                  disabled={isSyncing || isLoading}
+                  className="bg-white/20 border-white/30 text-white hover:bg-white/30 backdrop-blur-sm"
+                >
+                  <CloudIcon className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-pulse' : ''}`} />
+                  {isSyncing ? 'Syncing...' : 'Sync with AWS'}
+                </Button>
+              )}
+              <Button 
+                onClick={handleAddDomain}
+                className="bg-white text-purple-700 hover:bg-white/90 font-semibold shadow-lg"
+              >
+                <PlusIcon className="h-4 w-4 mr-2" />
+                Add Domain
+              </Button>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            onClick={fetchDomainStats}
-            disabled={isLoading}
-          >
-            <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          <Button variant="primary" onClick={handleAddDomain}>
-            <PlusIcon className="h-4 w-4 mr-2" />
-            Add Domain
-          </Button>
-        </div>
+        {/* Decorative elements */}
+        <div className="absolute -top-4 -right-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+        <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
+        <div className="absolute top-1/2 right-1/4 w-16 h-16 bg-white/5 rounded-full blur-lg"></div>
       </div>
 
       {/* Error State */}
@@ -374,18 +578,6 @@ export default function EmailsPage() {
               <SelectItem value={DOMAIN_STATUS.FAILED}>Failed</SelectItem>
             </SelectContent>
           </Select>
-          {/* <Select value={regionFilter} onValueChange={setRegionFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="All Regions" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Regions</SelectItem>
-              <SelectItem value="us-east-2">Ohio (us-east-2)</SelectItem>
-              <SelectItem value="us-east-1">North Virginia (us-east-1)</SelectItem>
-              <SelectItem value="us-west-2">Oregon (us-west-2)</SelectItem>
-              <SelectItem value="eu-west-1">Ireland (eu-west-1)</SelectItem>
-            </SelectContent>
-          </Select> */}
         </div>
 
         {filteredDomains.length === 0 ? (
@@ -406,14 +598,44 @@ export default function EmailsPage() {
           </div>
         ) : (
           <div className="overflow-hidden">
-            {/* Table Header with Rounded Border */}
-            <div className="border border-border bg-muted/30 rounded-lg px-6 py-2">
+            {/* Table Header with Rounded Border and Sorting */}
+            <div className="border border-border bg-muted/30 rounded-lg px-6 py-3">
               <div className="grid grid-cols-5 gap-4 text-sm font-medium text-muted-foreground">
-                <div>Domain</div>
-                <div>Status</div>
-                <div>Email Addresses</div>
-                <div>Emails (24h)</div>
-                <div>Created</div>
+                <button 
+                  className="flex items-center gap-2 hover:text-foreground transition-colors text-left"
+                  onClick={() => handleSort('domain')}
+                >
+                  <span>Domain</span>
+                  {getSortIcon('domain')}
+                </button>
+                <button 
+                  className="flex items-center gap-2 hover:text-foreground transition-colors text-left"
+                  onClick={() => handleSort('status')}
+                >
+                  <span>Status</span>
+                  {getSortIcon('status')}
+                </button>
+                <button 
+                  className="flex items-center gap-2 hover:text-foreground transition-colors text-left"
+                  onClick={() => handleSort('emailAddressCount')}
+                >
+                  <span>Email Addresses</span>
+                  {getSortIcon('emailAddressCount')}
+                </button>
+                <button 
+                  className="flex items-center gap-2 hover:text-foreground transition-colors text-left"
+                  onClick={() => handleSort('emailsLast24h')}
+                >
+                  <span>Emails (24h)</span>
+                  {getSortIcon('emailsLast24h')}
+                </button>
+                <button 
+                  className="flex items-center gap-2 hover:text-foreground transition-colors text-left"
+                  onClick={() => handleSort('createdAt')}
+                >
+                  <span>Created</span>
+                  {getSortIcon('createdAt')}
+                </button>
               </div>
             </div>
             
@@ -421,55 +643,82 @@ export default function EmailsPage() {
             <div className="">
               <Table>
                 <TableBody>
-                  {filteredDomains.map((domain, index) => (
-                    <TableRow 
-                      key={domain.id} 
-                      className={`hover:bg-muted/50 cursor-pointer transition-colors ${
-                        index < filteredDomains.length - 1 ? 'border-b border-border/50' : ''
-                      }`}
-                      onClick={() => handleRowClick(domain.id)}
-                    >
-                      <TableCell className="w-1/5">
-                        <div className="flex items-center gap-3">
-                          {/* <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100">
-                            <GlobeIcon className="h-4 w-4 text-blue-600" />
-                          </div> */}
-                          <div>
-                            <div className="font-medium text-base py-2">{domain.domain}</div>
-                            {/* <div className="text-sm text-muted-foreground flex items-center gap-1">
-                              <ExternalLinkIcon className="h-3 w-3" />
-                              Click to manage
-                            </div> */}
+                  {filteredDomains.map((domain, index) => {
+                    const iconColors = getGlobeIconColor(domain)
+                    return (
+                      <TableRow 
+                        key={domain.id} 
+                        className={`hover:bg-muted/50 cursor-pointer transition-colors ${
+                          index < filteredDomains.length - 1 ? 'border-b border-border/50' : ''
+                        } ${syncingDomainId === domain.id ? 'opacity-60' : ''}`}
+                        onClick={() => handleRowClick(domain.id)}
+                      >
+                        <TableCell className="w-1/5">
+                          <div className="flex items-center gap-3">
+                            <div className={`flex items-center justify-center w-8 h-8 rounded-md ${iconColors.bgColor} border-2 ${iconColors.borderColor}`}>
+                              {syncingDomainId === domain.id ? (
+                                <RefreshCwIcon className="h-4 w-4 text-purple-600 animate-spin" />
+                              ) : (
+                                <GlobeIcon className={`h-4 w-4 ${iconColors.iconColor}`} />
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-medium text-base py-2">
+                                {domain.domain}
+                                {syncingDomainId === domain.id && (
+                                  <span className="text-xs text-muted-foreground ml-2">Syncing...</span>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-1/5">
-                        {getStatusBadge(domain)}
-                      </TableCell>
-                      <TableCell className="w-1/5">
-                        <div className="flex items-center gap-2">
-                          <MailIcon className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-medium">{domain.emailAddressCount}</span>
-                          <span className="text-sm text-muted-foreground">addresses</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-1/5">
-                        <div className="flex items-center gap-2">
-                          <TrendingUpIcon className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-medium">{domain.emailsLast24h}</span>
-                          <span className="text-sm text-muted-foreground">emails</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-1/5">
-                        <div className="flex items-center gap-2">
-                          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">
-                            {formatDistanceToNow(new Date(domain.createdAt), { addSuffix: true })}
-                          </span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell className="w-1/5">
+                          {getStatusBadge(domain)}
+                        </TableCell>
+                        <TableCell className="w-1/5">
+                          <div className="flex items-center gap-2">
+                            <MailIcon className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">{domain.emailAddressCount}</span>
+                            <span className="text-sm text-muted-foreground">addresses</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="w-1/5">
+                          <div className="flex items-center gap-2">
+                            <TrendingUpIcon className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">{domain.emailsLast24h}</span>
+                            <span className="text-sm text-muted-foreground">emails</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="w-1/5">
+                          <div className="flex items-center gap-2">
+                            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm">
+                              {(() => {
+                                const createdAt = new Date(domain.createdAt);
+                                const now = new Date();
+                                const diffInDays = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+                                let colorClass = 'text-muted-foreground';
+                                if (diffInDays < 1) {
+                                  colorClass = 'text-purple-500';
+                                } else if (diffInDays < 7) {
+                                  colorClass = 'text-purple-600';
+                                } else if (diffInDays < 30) {
+                                  colorClass = 'text-purple-800';
+                                } else {
+                                  colorClass = 'text-purple-800';
+                                }
+                                return (
+                                  <span className={colorClass}>
+                                    {formatDistanceToNow(createdAt, { addSuffix: true })}
+                                  </span>
+                                );
+                              })()}
+                            </span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>

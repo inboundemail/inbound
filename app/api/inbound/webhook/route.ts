@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { sesEvents, receivedEmails } from '@/lib/db/schema'
+import { sesEvents, receivedEmails, emailDomains } from '@/lib/db/schema'
 import { nanoid } from 'nanoid'
+import { eq } from 'drizzle-orm'
 
 interface SESEvent {
   Records: Array<{
@@ -92,6 +93,71 @@ interface WebhookPayload {
     functionName: string
     functionVersion: string
     requestId: string
+  }
+}
+
+/**
+ * Extract domain from email address
+ */
+function extractDomain(email: string): string {
+  return email.split('@')[1]?.toLowerCase() || ''
+}
+
+/**
+ * Map recipient email to user ID by looking up domain owner
+ * This function handles the mapping of email recipients to user IDs by:
+ * 1. Extracting the domain from the recipient email
+ * 2. Looking up the domain owner in the emailDomains table
+ * 3. Returning the userId or 'system' as fallback
+ */
+async function mapRecipientToUserId(recipient: string): Promise<string> {
+  try {
+    // Validate email format first
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(recipient)) {
+      console.warn(`⚠️ Webhook - Invalid email format: ${recipient}`)
+      return 'system'
+    }
+
+    const domain = extractDomain(recipient)
+    
+    if (!domain) {
+      console.warn(`⚠️ Webhook - Could not extract domain from recipient: ${recipient}`)
+      return 'system'
+    }
+
+    console.log(`🔍 Webhook - Looking up domain owner for: ${domain}`)
+
+    // Look up the domain in the emailDomains table to find the owner
+    const domainRecord = await db
+      .select({ 
+        userId: emailDomains.userId,
+        status: emailDomains.status,
+        canReceiveEmails: emailDomains.canReceiveEmails
+      })
+      .from(emailDomains)
+      .where(eq(emailDomains.domain, domain))
+      .limit(1)
+
+    if (domainRecord[0]?.userId) {
+      const { userId, status, canReceiveEmails } = domainRecord[0]
+      
+      // Log domain status for debugging
+      console.log(`✅ Webhook - Found domain ${domain}: status=${status}, canReceiveEmails=${canReceiveEmails}, userId=${userId}`)
+      
+      // Check if domain is properly configured to receive emails
+      if (!canReceiveEmails) {
+        console.warn(`⚠️ Webhook - Domain ${domain} is not configured to receive emails, but processing anyway`)
+      }
+      
+      return userId
+    } else {
+      console.warn(`⚠️ Webhook - No domain owner found for ${domain} (recipient: ${recipient}), using system`)
+      return 'system'
+    }
+  } catch (error) {
+    console.error(`❌ Webhook - Error mapping recipient ${recipient} to user:`, error)
+    return 'system'
   }
 }
 
@@ -218,7 +284,7 @@ export async function POST(request: NextRequest) {
                 s3Error: record.s3Error
               },
             }),
-            userId: 'system', // TODO: Map to actual user based on recipient
+            userId: await mapRecipientToUserId(recipient),
             updatedAt: new Date(),
           }
 

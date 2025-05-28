@@ -20,6 +20,15 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
 import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog'
+import {
     CheckCircleIcon,
     XCircleIcon,
     ClockIcon,
@@ -103,6 +112,11 @@ export default function DomainDetailPage() {
     const [newEmailAddress, setNewEmailAddress] = useState('')
     const [isAddingEmail, setIsAddingEmail] = useState(false)
     const [emailError, setEmailError] = useState<string | null>(null)
+
+    // Domain deletion state
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+    const [isDeleting, setIsDeleting] = useState(false)
+    const [deleteConfirmText, setDeleteConfirmText] = useState('')
 
     useEffect(() => {
         if (session?.user && domainId) {
@@ -240,10 +254,45 @@ export default function DomainDetailPage() {
         }
     }
 
+    const deleteDomain = async () => {
+        if (!domainDetails) return
+
+        // Verify the user typed the domain name correctly
+        if (deleteConfirmText !== domainDetails.domain.domain) {
+            toast.error('Please type the domain name exactly to confirm deletion')
+            return
+        }
+
+        setIsDeleting(true)
+        try {
+            const response = await fetch(`/api/domains/${domainId}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            })
+
+            const result = await response.json()
+
+            if (response.ok) {
+                toast.success('Domain deleted successfully')
+                setIsDeleteDialogOpen(false)
+                // Redirect to domains list
+                router.push('/emails')
+            } else {
+                toast.error(result.error || 'Failed to delete domain')
+                console.error('Delete domain error:', result)
+            }
+        } catch (error) {
+            console.error('Error deleting domain:', error)
+            toast.error('Network error occurred')
+        } finally {
+            setIsDeleting(false)
+        }
+    }
+
     const getStatusBadge = (status: string, sesStatus?: string) => {
         if (status === DOMAIN_STATUS.SES_VERIFIED) {
             return (
-                <Badge className="bg-green-100 text-green-800 border-green-200">
+                <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
                     <CheckCircleIcon className="h-3 w-3 mr-1" />
                     Verified
                 </Badge>
@@ -253,28 +302,28 @@ export default function DomainDetailPage() {
         switch (status) {
             case DOMAIN_STATUS.PENDING:
                 return (
-                    <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                    <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200 transition-colors">
                         <ClockIcon className="h-3 w-3 mr-1" />
                         Pending
                     </Badge>
                 )
             case DOMAIN_STATUS.DNS_VERIFIED:
                 return (
-                    <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+                    <Badge className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 transition-colors">
                         <ClockIcon className="h-3 w-3 mr-1" />
                         SES Pending
                     </Badge>
                 )
             case DOMAIN_STATUS.FAILED:
                 return (
-                    <Badge className="bg-red-100 text-red-800 border-red-200">
+                    <Badge className="bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-200 transition-colors">
                         <XCircleIcon className="h-3 w-3 mr-1" />
                         Failed
                     </Badge>
                 )
             default:
                 return (
-                    <Badge variant="outline">
+                    <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors">
                         <ClockIcon className="h-3 w-3 mr-1" />
                         {status}
                     </Badge>
@@ -373,6 +422,87 @@ export default function DomainDetailPage() {
                         <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                         Refresh
                     </Button>
+                    
+                    {/* Delete Domain Button */}
+                    <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                            >
+                                <TrashIcon className="h-4 w-4 mr-2" />
+                                Delete Domain
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Delete Domain</DialogTitle>
+                                <DialogDescription>
+                                    This action cannot be undone. This will permanently delete the domain "{domain.domain}" 
+                                    and all associated email addresses, DNS records, and email data from both AWS SES and our database.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                                    <h4 className="font-semibold text-red-800 mb-2">What will be deleted:</h4>
+                                    <ul className="text-sm text-red-700 space-y-1">
+                                        <li>• Domain identity from AWS SES</li>
+                                        <li>• All SES receipt rules for this domain</li>
+                                        <li>• {stats.totalEmailAddresses} email address(es)</li>
+                                        <li>• All DNS verification records</li>
+                                        <li>• All email history and statistics</li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <Label htmlFor="delete-confirm">
+                                        Type <strong>{domain.domain}</strong> to confirm deletion:
+                                    </Label>
+                                    <Input
+                                        id="delete-confirm"
+                                        value={deleteConfirmText}
+                                        onChange={(e) => setDeleteConfirmText(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && deleteConfirmText === domain.domain && !isDeleting) {
+                                                deleteDomain()
+                                            }
+                                        }}
+                                        placeholder={domain.domain}
+                                        className="mt-2"
+                                        disabled={isDeleting}
+                                    />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => {
+                                        setIsDeleteDialogOpen(false)
+                                        setDeleteConfirmText('')
+                                    }}
+                                    disabled={isDeleting}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="destructive"
+                                    onClick={deleteDomain}
+                                    disabled={isDeleting || deleteConfirmText !== domain.domain}
+                                >
+                                    {isDeleting ? (
+                                        <>
+                                            <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" />
+                                            Deleting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <TrashIcon className="h-4 w-4 mr-2" />
+                                            Delete Domain
+                                        </>
+                                    )}
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </div>
             </div>
 
@@ -722,12 +852,12 @@ export default function DomainDetailPage() {
                                                 <TableCell>
                                                     <div className="flex items-center gap-2">
                                                         {email.isReceiptRuleConfigured ? (
-                                                            <Badge className="bg-green-100 text-green-800 border-green-200">
+                                                            <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
                                                                 <CheckCircleIcon className="h-3 w-3 mr-1" />
                                                                 Active
                                                             </Badge>
                                                         ) : (
-                                                            <Badge variant="secondary">
+                                                            <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors">
                                                                 <ClockIcon className="h-3 w-3 mr-1" />
                                                                 Pending
                                                             </Badge>
