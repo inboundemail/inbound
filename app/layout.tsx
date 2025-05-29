@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Outfit, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next"
+import { AutumnProvider } from "autumn-js/react";
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -30,8 +31,10 @@ export default function RootLayout({
         className={`${outfit.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
-        {children}
-        <Analytics />
+        <AutumnProvider backendUrl={process.env.BETTER_AUTH_URL || ""}>
+          {children}
+          <Analytics />
+        </AutumnProvider>
       </body>
     </html>
   );

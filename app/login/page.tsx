@@ -21,7 +21,7 @@ export default function LoginPage() {
         <div className="flex flex-col gap-4 p-6 md:p-10 lg:rounded-r-3xl lg:bg-white/95 lg:backdrop-blur-sm">
           <div className="flex justify-center gap-2 md:justify-start">
             <a href="#" className="flex items-center gap-2">
-              <InboundIcon className="w-7 h-7" variant="black" />
+              <InboundIcon className="w-7 h-7" variant="white" />
               <span className="text-3xl font-bold -ml-1">inbound</span>
             </a>
           </div>
