@@ -42,9 +42,30 @@ export const emailAddresses = pgTable('email_addresses', {
   id: varchar('id', { length: 255 }).primaryKey(),
   address: varchar('address', { length: 255 }).notNull().unique(),
   domainId: varchar('domain_id', { length: 255 }).notNull(),
+  webhookId: varchar('webhook_id', { length: 255 }), // Link to webhooks table
   isActive: boolean('is_active').default(true),
   isReceiptRuleConfigured: boolean('is_receipt_rule_configured').default(false),
   receiptRuleName: varchar('receipt_rule_name', { length: 255 }),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+  userId: varchar('user_id', { length: 255 }).notNull(),
+});
+
+// Webhooks table - stores webhook configurations
+export const webhooks = pgTable('webhooks', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(), // User-friendly name
+  url: text('url').notNull(), // Webhook URL
+  secret: varchar('secret', { length: 255 }), // For webhook verification
+  isActive: boolean('is_active').default(true),
+  description: text('description'), // Optional description
+  headers: text('headers'), // JSON string for custom headers
+  timeout: integer('timeout').default(30), // Timeout in seconds
+  retryAttempts: integer('retry_attempts').default(3),
+  lastUsed: timestamp('last_used'),
+  totalDeliveries: integer('total_deliveries').default(0),
+  successfulDeliveries: integer('successful_deliveries').default(0),
+  failedDeliveries: integer('failed_deliveries').default(0),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
   userId: varchar('user_id', { length: 255 }).notNull(),
@@ -103,13 +124,18 @@ export const receivedEmails = pgTable('received_emails', {
 export const webhookDeliveries = pgTable('webhook_deliveries', {
   id: varchar('id', { length: 255 }).primaryKey(),
   emailId: varchar('email_id', { length: 255 }),
-  endpoint: varchar('endpoint', { length: 500 }).notNull(),
+  webhookId: varchar('webhook_id', { length: 255 }).notNull(), // Reference to webhooks table
+  endpoint: varchar('endpoint', { length: 500 }).notNull(), // Keep for backward compatibility
+  payload: text('payload'), // JSON payload sent
   status: varchar('status', { length: 50 }).notNull(), // 'pending', 'success', 'failed'
   attempts: integer('attempts').default(0),
   lastAttemptAt: timestamp('last_attempt_at'),
   responseCode: integer('response_code'),
+  responseBody: text('response_body'),
   error: text('error'),
+  deliveryTime: integer('delivery_time'), // Time in milliseconds
   createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 });
 
 export const domainDnsRecords = pgTable('domain_dns_records', {
@@ -143,6 +169,8 @@ export type EmailDomain = typeof emailDomains.$inferSelect;
 export type NewEmailDomain = typeof emailDomains.$inferInsert;
 export type EmailAddress = typeof emailAddresses.$inferSelect;
 export type NewEmailAddress = typeof emailAddresses.$inferInsert;
+export type Webhook = typeof webhooks.$inferSelect;
+export type NewWebhook = typeof webhooks.$inferInsert;
 export type SesEvent = typeof sesEvents.$inferSelect;
 export type NewSesEvent = typeof sesEvents.$inferInsert;
 export type ReceivedEmail = typeof receivedEmails.$inferSelect;

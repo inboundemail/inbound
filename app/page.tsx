@@ -3,14 +3,17 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import InboundIcon from "@/components/InboundIcon"
+import { PricingTable } from "@/components/autumn/pricing-table"
 import { FaArrowRight, FaEnvelope, FaGlobe, FaLock, FaCheckCircle, FaBolt, FaArrowDown, FaTimes, FaStar } from "react-icons/fa"
 import { useState } from "react"
 import Image from "next/image"
 import { Sparkle, Sparkles } from "lucide-react"
+import { useSession } from "@/lib/auth-client"
 
 export default function HomePage() {
   const [email, setEmail] = useState("")
   const [domain, setDomain] = useState("")
+  const { data: session, isPending } = useSession()
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
@@ -27,8 +30,8 @@ export default function HomePage() {
 
   const handleGetStarted = () => {
     if (email && email.includes("@")) {
-      // Redirect to the add inbound page with the email pre-filled
-      window.location.href = `/addinbound?email=${encodeURIComponent(email)}`
+      // Redirect to the login page
+      window.location.href = `/login`
     }
   }
 
@@ -41,11 +44,22 @@ export default function HomePage() {
             <img src="/inbound-logo-3.png" alt="Email" width={32} height={32} className="inline-block align-bottom" />
             <span className="text-2xl font-bold text-black">inbound</span>
           </div>
-          <Button variant="primary" asChild>
-            <a href="/login" className="text-white hover:text-gray-900">
-              Sign In
-            </a>
-          </Button>
+          {/* Conditionally show Sign In or Go to Dashboard based on auth state */}
+          {isPending ? (
+            <div className="w-20 h-10 bg-gray-200 animate-pulse rounded"></div>
+          ) : session ? (
+            <Button variant="primary" asChild>
+              <a href="/dashboard" className="text-white hover:text-gray-900">
+                Go to Dashboard
+              </a>
+            </Button>
+          ) : (
+            <Button variant="primary" asChild>
+              <a href="/login" className="text-white hover:text-gray-900">
+                Sign In
+              </a>
+            </Button>
+          )}
         </div>
       </header>
 
@@ -55,21 +69,29 @@ export default function HomePage() {
           {/* Hero Section */}
           <div className="mb-16">
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
-              the best way to receive
-              <img src="/mail-icon.png" alt="Email" width={48} height={48} className="inline-block ml-4 mr-2 align-bottom" />
-              <span className="text-[#6C47FF]">emails</span> for
+              the easiest way to turn
               <br />
-              any
+
+              <img src="/mail-icon.png" alt="Email" width={48} height={48} className="inline-block ml-4 mr-2 align-bottom" />
+              <span className="text-[#6C47FF]">emails</span> into
+
               <img src="/domain-icon.png" alt="Email" width={48} height={48} className="inline-block ml-4 mr-2 align-bottom" />
-              <span className="text-[#1C2894]">domain</span>
+              <span className="text-[#1C2894]">webhooks</span>
             </h1>
             <p className="text-xl text-gray-600 mb-12 max-w-2xl mx-auto leading-relaxed">
-              Set up email receiving for your domain in minutes.
-              Get webhooks when emails arrive, with automatic spam filtering and secure processing.
+              set up email receiving for your domain in minutes.
+              get webhooks when emails arrive, with automatic spam filtering and secure processing.
             </p>
 
+            <Button variant="primary" asChild className="text-white hover:text-gray-900">
+              <a href="/login" className="text-white hover:text-gray-900">
+                Get Started (its free)
+                <FaArrowRight className="ml-2 w-3 h-3" />
+              </a>
+            </Button>
+
             {/* Email Input Section */}
-            <div className="max-w-lg mx-auto mb-12">
+            {/* <div className="max-w-lg mx-auto mb-12">
               <div className="flex flex-col sm:flex-row gap-3 p-2 ">
                 <div className="flex-1">
                   <Input
@@ -99,7 +121,7 @@ export default function HomePage() {
                   We'll help you set up email receiving for <span className="font-mono font-medium text-gray-700">{domain}</span>
                 </p>
               )}
-            </div>
+            </div> */}
           </div>
 
           {/* Interactive Demo Section */}
@@ -176,12 +198,12 @@ export default function HomePage() {
                           <path d="M38.125 190.625V152.5H0V38.125H38.125V0H152.5V38.125H190.625V152.5H152.5V190.625H38.125ZM38.125 114.375H76.25V150.975H152.5V76.25H114.375V114.375H76.25V76.25H114.375V39.65H38.125V114.375Z" fill="white" />
                         </svg>
                         <button className="flex items-center gap-1 text-white text-sm bg-[#2B2B2B] px-2 py-1 rounded-md border-purple-500 border">
-                        <Sparkles className="w-4 h-4" />
-                        Generate
-                      </button>
+                          <Sparkles className="w-4 h-4" />
+                          Generate
+                        </button>
 
                       </div>
-                      
+
                     </div>
                   </div>
                 </div>
@@ -278,46 +300,13 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* How it works */}
-          <div className="bg-gray-50 rounded-2xl p-8 md:p-12">
-            <h2 className="text-2xl font-bold text-gray-900 mb-8">How it works</h2>
-            <div className="grid md:grid-cols-3 gap-8 text-left">
-              <div className="flex gap-4">
-                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 mt-1">
-                  1
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-2">Enter your email</h3>
-                  <p className="text-gray-600 text-sm">
-                    Provide the email address you want to receive emails for
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 mt-1">
-                  2
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-2">Update DNS</h3>
-                  <p className="text-gray-600 text-sm">
-                    Add the provided MX record to your domain's DNS settings
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 mt-1">
-                  3
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-2">Receive emails</h3>
-                  <p className="text-gray-600 text-sm">
-                    Start receiving emails with automatic webhook notifications
-                  </p>
-                </div>
-              </div>
-            </div>
+          {/* Pricing */}
+          <div className="">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4 text-center">Simple Pricing</h2>
+            <p className="text-lg text-gray-600 mb-12 text-center max-w-2xl mx-auto">
+              Choose the plan that's right for your needs. Start with our free tier and upgrade as you grow.
+            </p>
+            <PricingTable />
           </div>
         </div>
       </main>
@@ -326,13 +315,14 @@ export default function HomePage() {
       <footer className="border-t border-gray-100 px-6 py-8">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between">
           <div className="flex items-center gap-2 mb-4 md:mb-0">
-            <InboundIcon className="w-6 h-6" variant="black" />
+            <img src="/inbound-logo-3.png" alt="Inbound Logo" className="w-6 h-6" />
             <span className="text-lg font-bold text-gray-900">inbound</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-gray-500">
-            <a href="#" className="hover:text-gray-700 transition-colors">Privacy</a>
-            <a href="#" className="hover:text-gray-700 transition-colors">Terms</a>
-            <a href="#" className="hover:text-gray-700 transition-colors">Support</a>
+            <a href="/privacy" className="hover:text-gray-700 transition-colors">Privacy</a>
+            <a href="/terms" className="hover:text-gray-700 transition-colors">Terms</a>
+            <a href="/docs" className="hover:text-gray-700 transition-colors">Docs</a>
+            <a href="mailto:support@inbound.exon.dev" className="hover:text-gray-700 transition-colors">Support</a>
           </div>
         </div>
       </footer>

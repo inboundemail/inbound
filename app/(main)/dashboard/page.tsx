@@ -240,6 +240,10 @@ export default function Page() {
     router.push(`/emails/${domainId}`)
   }
 
+  const handleEmailClick = (emailId: string) => {
+    router.push(`/analytics?emailid=${emailId}`)
+  }
+
   // Filter domains based on search
   const filteredDomains = domainStats?.domains.filter(domain =>
     domain.domain.toLowerCase().includes(searchQuery.toLowerCase())
@@ -607,11 +611,11 @@ export default function Page() {
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {[...Array(3)].map((_, i) => (
-                  <div key={i} className="flex items-start justify-between p-3 rounded-lg border">
+                  <div key={i} className="flex items-start justify-between py-4">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-2">
                         <Skeleton className="h-4 w-32" />
                         <Skeleton className="h-5 w-16 rounded-full" />
                       </div>
@@ -628,11 +632,12 @@ export default function Page() {
                 <p className="text-sm text-muted-foreground">No recent emails</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {filteredEmails.map((email) => (
+              <div className="divide-y divide-border">
+                {filteredEmails.map((email, index) => (
                   <div 
                     key={email.id}
-                    className="flex items-start justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                    className="py-4 hover:bg-muted/30 cursor-pointer transition-colors -mx-6 px-6"
+                    onClick={() => handleEmailClick(email.id)}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
@@ -652,7 +657,7 @@ export default function Page() {
                   </div>
                 ))}
                 {analyticsData && analyticsData.recentEmails.length > 5 && (
-                  <div className="text-center pt-2">
+                  <div className="text-center pt-4">
                     <Button variant="ghost" size="sm" asChild>
                       <a href="/analytics">
                         View {analyticsData.recentEmails.length - 5} more emails
@@ -665,46 +670,6 @@ export default function Page() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Subscription Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Subscription</CardTitle>
-          <CardDescription>
-            Current plan and usage information
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium">{subscription.plan} Plan</p>
-              {isLoading ? (
-                <>
-                  <Skeleton className="h-4 w-48 mb-2" />
-                  <Skeleton className="h-2 w-full rounded-full" />
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    {analyticsData?.stats.totalEmails?.toLocaleString() || 0} / {subscription.monthlyLimit.toLocaleString()} emails this month
-                  </p>
-                  <div className="mt-2 w-full bg-secondary rounded-full h-2">
-                    <div 
-                      className="bg-primary h-2 rounded-full" 
-                      style={{ width: `${((analyticsData?.stats.totalEmails || 0) / subscription.monthlyLimit) * 100}%` }}
-                    ></div>
-                  </div>
-                </>
-              )}
-            </div>
-            <Button variant="secondary" asChild>
-              <a href="/subscription">
-                Manage Subscription
-              </a>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { MailIcon } from "lucide-react"
+import Link from "next/link"
 
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
@@ -47,14 +48,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         <SidebarMenu className="mb-4">
-          <TeamSwitcher
-            enabled={false}
-            teams={[{
-              name: "Inbound",
-              logo: MailIcon,
-              plan: userData.plan,
+          <Link href="/">
+            <TeamSwitcher
+              enabled={false}
+              teams={[{
+                name: "Inbound",
+                logo: MailIcon,
+                plan: userData.plan,
 
-            }]} />
+              }]} />
+          </Link>
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>

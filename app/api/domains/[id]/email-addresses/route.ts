@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { emailDomains, emailAddresses } from '@/lib/db/schema'
+import { emailDomains, emailAddresses, webhooks } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
@@ -26,7 +26,9 @@ export async function POST(
     }
 
     const { id: domainId } = await params
-    const { emailAddress } = await request.json()
+    const { emailAddress, webhookId } = await request.json()
+
+    console.log('📧 Creating email address:', { emailAddress, webhookId, domainId })
 
     if (!domainId || !emailAddress) {
       return NextResponse.json(
@@ -42,6 +44,32 @@ export async function POST(
         { error: 'Invalid email address format' },
         { status: 400 }
       )
+    }
+
+    // If webhookId is provided, verify it exists and belongs to the user
+    if (webhookId) {
+      const webhookRecord = await db
+        .select()
+        .from(webhooks)
+        .where(and(
+          eq(webhooks.id, webhookId),
+          eq(webhooks.userId, session.user.id)
+        ))
+        .limit(1)
+
+      if (!webhookRecord[0]) {
+        return NextResponse.json(
+          { error: 'Webhook not found or does not belong to user' },
+          { status: 400 }
+        )
+      }
+
+      if (!webhookRecord[0].isActive) {
+        return NextResponse.json(
+          { error: 'Selected webhook is disabled' },
+          { status: 400 }
+        )
+      }
     }
 
     // Get domain record
@@ -96,6 +124,7 @@ export async function POST(
       id: nanoid(),
       address: emailAddress,
       domainId: domainId,
+      webhookId: webhookId || null,
       userId: session.user.id,
       isActive: true,
       isReceiptRuleConfigured: false,

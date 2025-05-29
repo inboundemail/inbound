@@ -9,7 +9,7 @@ import * as schema from "./db/schema";
 const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 export const auth = betterAuth({
-    trustedOrigins: [process.env.VERCEL_URL!],
+    trustedOrigins: process.env.VERCEL_URL ? [process.env.VERCEL_URL] : ["http://localhost:3000"],
     database: drizzleAdapter(db, {
         provider: "pg",
         schema: schema

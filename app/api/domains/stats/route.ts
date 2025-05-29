@@ -5,6 +5,7 @@ import { eq, and, count, sql, gte } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { SESClient, GetIdentityVerificationAttributesCommand } from '@aws-sdk/client-ses'
+import { Autumn as autumn } from 'autumn-js'
 
 const sesClient = new SESClient({
   region: process.env.AWS_REGION || 'us-east-1',
@@ -26,6 +27,16 @@ export async function GET(request: NextRequest) {
         { error: 'Unauthorized' },
         { status: 401 }
       )
+    }
+
+    // Check user's domain limits
+    const { data: domainLimits, error: limitsError } = await autumn.check({
+      customer_id: session.user.id,
+      feature_id: "domains",
+    })
+
+    if (limitsError) {
+      console.error('Failed to check domain limits:', limitsError)
     }
 
     // Calculate 24 hours ago
@@ -79,7 +90,14 @@ export async function GET(request: NextRequest) {
       totalDomains: transformedDomains.length,
       verifiedDomains: transformedDomains.filter(d => d.isVerified).length,
       totalEmailAddresses: transformedDomains.reduce((sum, d) => sum + d.emailAddressCount, 0),
-      totalEmailsLast24h: transformedDomains.reduce((sum, d) => sum + d.emailsLast24h, 0)
+      totalEmailsLast24h: transformedDomains.reduce((sum, d) => sum + d.emailsLast24h, 0),
+      limits: domainLimits ? {
+        allowed: domainLimits.allowed,
+        unlimited: domainLimits.unlimited,
+        balance: domainLimits.balance,
+        current: transformedDomains.length,
+        remaining: domainLimits.unlimited ? null : Math.max(0, (domainLimits.balance || 0) - transformedDomains.length)
+      } : null
     })
 
   } catch (error) {

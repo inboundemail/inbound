@@ -36,6 +36,13 @@
       "when": 1748388390281,
       "tag": "0004_lovely_namor",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1748487663832,
+      "tag": "0005_clever_spencer_smythe",
+      "breakpoints": true
     }
   ]
 }

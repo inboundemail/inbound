@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useSession } from '@/lib/auth-client'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -91,6 +92,8 @@ interface AnalyticsData {
 
 export default function AnalyticsPage() {
   const { data: session } = useSession()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -108,6 +111,15 @@ export default function AnalyticsPage() {
       fetchAnalyticsData()
     }
   }, [session])
+
+  // Handle URL parameters for email ID
+  useEffect(() => {
+    const emailId = searchParams.get('emailid')
+    if (emailId && analyticsData) {
+      setSelectedEmailId(emailId)
+      setIsSheetOpen(true)
+    }
+  }, [searchParams, analyticsData])
 
   useEffect(() => {
     if (analyticsData) {
@@ -228,11 +240,20 @@ export default function AnalyticsPage() {
   const handleEmailClick = (emailId: string) => {
     setSelectedEmailId(emailId)
     setIsSheetOpen(true)
+    // Update URL with emailid parameter
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('emailid', emailId)
+    router.push(`/analytics?${params.toString()}`)
   }
 
   const handleSheetClose = () => {
     setIsSheetOpen(false)
     setSelectedEmailId(null)
+    // Remove emailid parameter from URL
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('emailid')
+    const newUrl = params.toString() ? `/analytics?${params.toString()}` : '/analytics'
+    router.push(newUrl)
   }
 
   if (isLoading) {

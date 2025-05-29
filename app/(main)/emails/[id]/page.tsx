@@ -44,11 +44,22 @@ import {
     CheckIcon,
     TrashIcon,
     ServerIcon,
-    InfoIcon
+    InfoIcon,
+    SettingsIcon,
+    LinkIcon,
+    ExternalLinkIcon
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 
 interface DnsRecord {
     type: string
@@ -65,8 +76,19 @@ interface EmailAddress {
     isActive: boolean
     isReceiptRuleConfigured: boolean
     receiptRuleName?: string
+    webhookId?: string
+    webhookName?: string
     createdAt: string
     emailsLast24h: number
+}
+
+interface Webhook {
+    id: string
+    name: string
+    url: string
+    isActive: boolean
+    description?: string
+    createdAt: string
 }
 
 interface DomainDetails {
@@ -110,19 +132,144 @@ export default function DomainDetailPage() {
 
     // Email address management state
     const [newEmailAddress, setNewEmailAddress] = useState('')
+    const [selectedWebhookId, setSelectedWebhookId] = useState<string>('none')
     const [isAddingEmail, setIsAddingEmail] = useState(false)
     const [emailError, setEmailError] = useState<string | null>(null)
+
+    // Webhook management state
+    const [userWebhooks, setUserWebhooks] = useState<Webhook[]>([])
+    const [isLoadingWebhooks, setIsLoadingWebhooks] = useState(false)
 
     // Domain deletion state
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
     const [isDeleting, setIsDeleting] = useState(false)
     const [deleteConfirmText, setDeleteConfirmText] = useState('')
 
+    // Background polling state
+    const [isBackgroundPolling, setIsBackgroundPolling] = useState(false)
+
+    // Webhook management dialog state
+    const [isWebhookDialogOpen, setIsWebhookDialogOpen] = useState(false)
+    const [selectedEmailForWebhook, setSelectedEmailForWebhook] = useState<EmailAddress | null>(null)
+    const [webhookDialogSelectedId, setWebhookDialogSelectedId] = useState<string>('none')
+    const [isUpdatingWebhook, setIsUpdatingWebhook] = useState(false)
+
+    // Create webhook dialog state
+    const [isCreateWebhookOpen, setIsCreateWebhookOpen] = useState(false)
+    const [isCreatingWebhook, setIsCreatingWebhook] = useState(false)
+    const [createWebhookForm, setCreateWebhookForm] = useState({
+        name: '',
+        url: '',
+        description: '',
+        timeout: 30,
+        retryAttempts: 3
+    })
+    const [createWebhookError, setCreateWebhookError] = useState<string | null>(null)
+
     useEffect(() => {
         if (session?.user && domainId) {
             fetchDomainDetails()
+            fetchWebhooks()
         }
     }, [session, domainId])
+
+    // Background polling for status changes
+    useEffect(() => {
+        if (!session?.user || !domainId || !domainDetails) return
+
+        // Don't poll if domain is already fully verified
+        if (domainDetails.domain.status === DOMAIN_STATUS.SES_VERIFIED) {
+            setIsBackgroundPolling(false)
+            return
+        }
+
+        let pollInterval: NodeJS.Timeout
+
+        const pollForStatusChanges = async () => {
+            // Skip if tab is not visible to be server-friendly
+            if (document.hidden) return
+
+            try {
+                // Silently fetch domain details without showing loading states
+                const response = await fetch(`/api/domains/${domainId}?refreshProvider=true`)
+                
+                if (response.ok) {
+                    const data: DomainDetails = await response.json()
+                    
+                    // Only update UI if there's been a meaningful change
+                    const hasStatusChanged = data.domain.status !== domainDetails.domain.status
+                    const hasSesStatusChanged = data.domain.sesVerificationStatus !== domainDetails.domain.sesVerificationStatus
+                    
+                    // Check for DNS records changes more robustly
+                    const currentDnsMap = new Map(domainDetails.dnsRecords.map(r => [`${r.type}-${r.name}`, r.isVerified]))
+                    const newDnsMap = new Map(data.dnsRecords.map(r => [`${r.type}-${r.name}`, r.isVerified]))
+                    
+                    let hasDnsRecordsChanged = false
+                    // Check if any verification status changed
+                    for (const [key, isVerified] of newDnsMap) {
+                        if (currentDnsMap.get(key) !== isVerified) {
+                            hasDnsRecordsChanged = true
+                            break
+                        }
+                    }
+                    // Check if any records were added or removed
+                    if (!hasDnsRecordsChanged && currentDnsMap.size !== newDnsMap.size) {
+                        hasDnsRecordsChanged = true
+                    }
+                    
+                    if (hasStatusChanged || hasSesStatusChanged || hasDnsRecordsChanged) {
+                        console.log(`🔄 Status change detected for ${data.domain.domain}:`, {
+                            statusChanged: hasStatusChanged ? `${domainDetails.domain.status} → ${data.domain.status}` : 'No change',
+                            sesStatusChanged: hasSesStatusChanged ? `${domainDetails.domain.sesVerificationStatus} → ${data.domain.sesVerificationStatus}` : 'No change',
+                            dnsChanged: hasDnsRecordsChanged
+                        })
+                        
+                        // Update the UI state
+                        setDomainDetails(data)
+                        
+                        // Show appropriate toast notification
+                        if (hasStatusChanged) {
+                            if (data.domain.status === DOMAIN_STATUS.SES_VERIFIED) {
+                                toast.success(`🎉 Domain ${data.domain.domain} is now fully verified!`)
+                            } else if (data.domain.status === DOMAIN_STATUS.DNS_VERIFIED) {
+                                toast.success(`✅ DNS verification complete! SES verification in progress...`)
+                            } else if (data.domain.status === DOMAIN_STATUS.FAILED) {
+                                toast.error(`❌ Domain verification failed. Please check your DNS records.`)
+                            }
+                        } else if (hasDnsRecordsChanged) {
+                            const verifiedCount = data.dnsRecords.filter(r => r.isVerified).length
+                            const totalCount = data.dnsRecords.length
+                            toast.success(`📋 DNS records updated (${verifiedCount}/${totalCount} verified)`)
+                        }
+                        
+                        // Stop polling if domain is now fully verified
+                        if (data.domain.status === DOMAIN_STATUS.SES_VERIFIED) {
+                            clearInterval(pollInterval)
+                            setIsBackgroundPolling(false)
+                            console.log(`✅ Stopping background polling - domain fully verified`)
+                        }
+                    }
+                }
+            } catch (error) {
+                // Silently handle errors in background polling to avoid disrupting the UI
+                console.error('Background polling error (silent):', error)
+            }
+        }
+
+        // Start polling every 10 seconds
+        setIsBackgroundPolling(true)
+        pollInterval = setInterval(pollForStatusChanges, 10000)
+        console.log(`🔄 Started background polling for domain status changes every 10 seconds`)
+
+        // Cleanup on unmount
+        return () => {
+            if (pollInterval) {
+                clearInterval(pollInterval)
+                setIsBackgroundPolling(false)
+                console.log(`🛑 Stopped background polling`)
+            }
+        }
+    }, [session, domainId, domainDetails?.domain.status, domainDetails?.domain.sesVerificationStatus])
 
     const fetchDomainDetails = async () => {
         try {
@@ -148,6 +295,22 @@ export default function DomainDetailPage() {
         }
     }
 
+    const fetchWebhooks = async () => {
+        try {
+            setIsLoadingWebhooks(true)
+            const response = await fetch('/api/webhooks')
+            
+            if (response.ok) {
+                const data = await response.json()
+                setUserWebhooks(data.webhooks || [])
+            }
+        } catch (error) {
+            console.error('Error fetching webhooks:', error)
+        } finally {
+            setIsLoadingWebhooks(false)
+        }
+    }
+
     const copyToClipboard = async (text: string, key: string) => {
         try {
             await navigator.clipboard.writeText(text)
@@ -160,12 +323,14 @@ export default function DomainDetailPage() {
         }
     }
 
-    const refreshDnsRecords = async () => {
+    const performFullRefresh = async () => {
         if (!domainDetails) return
 
         setIsRefreshing(true)
         try {
-            const response = await fetch('/api/inbound/check-dns-records', {
+            // First check DNS records
+            toast.loading('Checking DNS records...', { id: 'refresh-toast' })
+            const dnsResponse = await fetch('/api/inbound/check-dns-records', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -174,15 +339,17 @@ export default function DomainDetailPage() {
                 })
             })
 
-            if (response.ok) {
-                await fetchDomainDetails() // Refresh the entire page data
-                toast.success('DNS records refreshed successfully')
+            if (dnsResponse.ok) {
+                // Then refresh all domain details (which includes comprehensive SES status check)
+                toast.loading('Checking AWS SES verification status...', { id: 'refresh-toast' })
+                await fetchDomainDetails()
+                toast.success('Domain status refreshed successfully', { id: 'refresh-toast' })
             } else {
-                toast.error('Failed to refresh DNS records')
+                toast.error('Failed to refresh domain status', { id: 'refresh-toast' })
             }
         } catch (error) {
-            console.error('Error refreshing DNS records:', error)
-            toast.error('Failed to refresh DNS records')
+            console.error('Error refreshing domain status:', error)
+            toast.error('Failed to refresh domain status', { id: 'refresh-toast' })
         } finally {
             setIsRefreshing(false)
         }
@@ -202,13 +369,17 @@ export default function DomainDetailPage() {
             const response = await fetch(`/api/domains/${domainId}/email-addresses`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ emailAddress: fullEmailAddress })
+                body: JSON.stringify({ 
+                    emailAddress: fullEmailAddress,
+                    webhookId: selectedWebhookId === 'none' ? null : selectedWebhookId
+                })
             })
 
             const result = await response.json()
 
             if (response.ok) {
                 setNewEmailAddress('')
+                setSelectedWebhookId('none')
                 await fetchDomainDetails() // Refresh the data
                 toast.success('Email address added successfully')
                 if (result.warning) {
@@ -286,6 +457,110 @@ export default function DomainDetailPage() {
             toast.error('Network error occurred')
         } finally {
             setIsDeleting(false)
+        }
+    }
+
+    const updateEmailWebhook = async () => {
+        if (!selectedEmailForWebhook) return
+
+        setIsUpdatingWebhook(true)
+        try {
+            const response = await fetch(`/api/domains/${domainId}/email-addresses/${selectedEmailForWebhook.id}/webhook`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ webhookId: webhookDialogSelectedId === 'none' ? null : webhookDialogSelectedId })
+            })
+
+            const result = await response.json()
+
+            if (response.ok) {
+                toast.success(result.message)
+                setIsWebhookDialogOpen(false)
+                setSelectedEmailForWebhook(null)
+                setWebhookDialogSelectedId('none')
+                await fetchDomainDetails() // Refresh the data
+            } else {
+                toast.error(result.error || 'Failed to update webhook assignment')
+            }
+        } catch (error) {
+            console.error('Error updating webhook assignment:', error)
+            toast.error('Network error occurred')
+        } finally {
+            setIsUpdatingWebhook(false)
+        }
+    }
+
+    const openWebhookDialog = (email: EmailAddress) => {
+        setSelectedEmailForWebhook(email)
+        setWebhookDialogSelectedId(email.webhookId || 'none')
+        setIsWebhookDialogOpen(true)
+    }
+
+    const createWebhook = async () => {
+        if (!createWebhookForm.name.trim() || !createWebhookForm.url.trim()) {
+            setCreateWebhookError('Name and URL are required')
+            return
+        }
+
+        setIsCreatingWebhook(true)
+        setCreateWebhookError(null)
+
+        try {
+            const response = await fetch('/api/webhooks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(createWebhookForm)
+            })
+
+            const result = await response.json()
+
+            if (response.ok) {
+                toast.success('Webhook created successfully!')
+                setIsCreateWebhookOpen(false)
+                setCreateWebhookForm({
+                    name: '',
+                    url: '',
+                    description: '',
+                    timeout: 30,
+                    retryAttempts: 3
+                })
+                setCreateWebhookError(null)
+                
+                // Refresh webhooks and auto-select the new one
+                await fetchWebhooks()
+                
+                // Auto-select the new webhook in the appropriate form
+                const newWebhookId = result.webhook.id
+                setSelectedWebhookId(newWebhookId)
+                
+                // If we're in the management dialog, also update that selection
+                if (isWebhookDialogOpen) {
+                    setWebhookDialogSelectedId(newWebhookId)
+                }
+            } else {
+                setCreateWebhookError(result.error || 'Failed to create webhook')
+            }
+        } catch (error) {
+            console.error('Error creating webhook:', error)
+            setCreateWebhookError('Network error occurred')
+        } finally {
+            setIsCreatingWebhook(false)
+        }
+    }
+
+    const handleWebhookSelection = (value: string) => {
+        if (value === 'create-new') {
+            setIsCreateWebhookOpen(true)
+        } else {
+            setSelectedWebhookId(value)
+        }
+    }
+
+    const handleWebhookDialogSelection = (value: string) => {
+        if (value === 'create-new') {
+            setIsCreateWebhookOpen(true)
+        } else {
+            setWebhookDialogSelectedId(value)
         }
     }
 
@@ -413,13 +688,19 @@ export default function DomainDetailPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     {getStatusBadge(domain.status, domain.sesVerificationStatus)}
+                    {isBackgroundPolling && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                            <span>Auto-checking</span>
+                        </div>
+                    )}
                     <Button
                         variant="secondary"
                         size="sm"
-                        onClick={fetchDomainDetails}
-                        disabled={isLoading}
+                        onClick={performFullRefresh}
+                        disabled={isRefreshing}
                     >
-                        <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                        <RefreshCwIcon className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                         Refresh
                     </Button>
                     
@@ -565,6 +846,17 @@ export default function DomainDetailPage() {
                 </div>
             )}
 
+            {/* MX Records Warning - Show if domain has MX records */}
+            {domain.hasMxRecords && (
+                <Alert className="border-amber-200 bg-amber-50">
+                    <AlertTriangleIcon className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="text-amber-800">
+                        <strong>Warning:</strong> This domain has existing MX records for email receiving. 
+                        This may conflict with other email services. If you experience issues, consider using a subdomain instead.
+                    </AlertDescription>
+                </Alert>
+            )}
+
             {/* SES Verification Status - Show for DNS verified domains */}
             {(domain.status === DOMAIN_STATUS.PENDING || domain.status === DOMAIN_STATUS.DNS_VERIFIED || domain.status === DOMAIN_STATUS.FAILED) && (
                 <Card>
@@ -589,15 +881,6 @@ export default function DomainDetailPage() {
                                         Provider: {domain.domainProvider}
                                     </div>
                                 )}
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={refreshDnsRecords}
-                                    disabled={isRefreshing}
-                                >
-                                    <RefreshCwIcon className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                                    Test DNS Records
-                                </Button>
                             </div>
                         </div>
                     </CardHeader>
@@ -614,7 +897,7 @@ export default function DomainDetailPage() {
 
                                 <Alert className="border-blue-200 bg-blue-50">
                                     <AlertDescription className="text-blue-800">
-                                        <strong>Add these DNS records to your domain:</strong> Once added, use the "Test DNS Records" button to verify they're working correctly.
+                                        <strong>Add these DNS records to your domain:</strong> Once added, use the "Refresh" button above to verify DNS records and check AWS SES status.
                                     </AlertDescription>
                                 </Alert>
 
@@ -777,10 +1060,6 @@ export default function DomainDetailPage() {
                                     Manage email addresses that can receive emails for this domain
                                 </CardDescription>
                             </div>
-                            <Button onClick={() => setNewEmailAddress('')}>
-                                <PlusIcon className="h-4 w-4 mr-2" />
-                                Add Email
-                            </Button>
                         </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -788,31 +1067,91 @@ export default function DomainDetailPage() {
                             {/* Add Email Form */}
                             <div className="p-4 border rounded-lg bg-gray-50">
                                 <Label htmlFor="new-email">Add New Email Address</Label>
-                                <div className="flex gap-2 mt-2">
-                                    <div className="flex-1 flex items-center border rounded-md bg-white">
-                                        <Input
-                                            id="new-email"
-                                            type="text"
-                                            placeholder="user"
-                                            value={newEmailAddress}
-                                            onChange={(e) => setNewEmailAddress(e.target.value)}
-                                            className="border-0 rounded-r-none focus:ring-0 focus:border-0"
-                                            disabled={isAddingEmail}
-                                        />
-                                        <div className="px-3 py-2 bg-gray-50 border-l text-sm text-gray-600 rounded-r-md">
-                                            @{domain.domain}
+                                <div className="space-y-3 mt-2">
+                                    <div className="flex gap-2">
+                                        <div className="flex-1 flex items-center border rounded-md bg-white">
+                                            <Input
+                                                id="new-email"
+                                                type="text"
+                                                placeholder="user"
+                                                value={newEmailAddress}
+                                                onChange={(e) => setNewEmailAddress(e.target.value)}
+                                                className="border-0 rounded-r-none focus:ring-0 focus:border-0"
+                                                disabled={isAddingEmail}
+                                            />
+                                            <div className="px-3 py-2 bg-gray-50 border-l text-sm text-gray-600 rounded-r-md">
+                                                @{domain.domain}
+                                            </div>
                                         </div>
+                                        <Button
+                                            onClick={addEmailAddress}
+                                            disabled={isAddingEmail || !newEmailAddress.trim()}
+                                        >
+                                            {isAddingEmail ? (
+                                                <RefreshCwIcon className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <PlusIcon className="h-4 w-4" />
+                                            )}
+                                        </Button>
                                     </div>
-                                    <Button
-                                        onClick={addEmailAddress}
-                                        disabled={isAddingEmail || !newEmailAddress.trim()}
-                                    >
-                                        {isAddingEmail ? (
-                                            <RefreshCwIcon className="h-4 w-4 animate-spin" />
-                                        ) : (
-                                            <PlusIcon className="h-4 w-4" />
+                                    
+                                    {/* Webhook Selection */}
+                                    <div>
+                                        <Label htmlFor="webhook-select" className="text-sm">
+                                            Webhook (optional)
+                                        </Label>
+                                        <Select 
+                                            value={selectedWebhookId} 
+                                            onValueChange={handleWebhookSelection}
+                                            disabled={isAddingEmail || isLoadingWebhooks}
+                                        >
+                                            <SelectTrigger className="mt-1">
+                                                <SelectValue placeholder="No webhook - emails stored only" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">No webhook - emails stored only</SelectItem>
+                                                <SelectItem value="create-new" className="text-blue-600 font-medium">
+                                                    <div className="flex items-center gap-2">
+                                                        <PlusIcon className="h-4 w-4" />
+                                                        Create New Webhook
+                                                    </div>
+                                                </SelectItem>
+                                                {userWebhooks.length > 0 && (
+                                                    <>
+                                                        <div className="px-2 py-1 text-xs font-medium text-muted-foreground border-t">
+                                                            Existing Webhooks
+                                                        </div>
+                                                        {userWebhooks.map((webhook) => (
+                                                            <SelectItem key={webhook.id} value={webhook.id}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className={`w-2 h-2 rounded-full ${webhook.isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
+                                                                    {webhook.name}
+                                                                </div>
+                                                            </SelectItem>
+                                                        ))}
+                                                    </>
+                                                )}
+                                            </SelectContent>
+                                        </Select>
+                                        {selectedWebhookId && selectedWebhookId !== 'none' && (
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                Emails received will be sent to this webhook URL
+                                            </p>
                                         )}
-                                    </Button>
+                                        {userWebhooks.length > 0 && (
+                                            <div className="flex items-center gap-1 mt-2">
+                                                <ExternalLinkIcon className="h-3 w-3 text-muted-foreground" />
+                                                <a 
+                                                    href="/webhooks" 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer"
+                                                    className="text-xs text-blue-600 hover:text-blue-700 underline"
+                                                >
+                                                    Manage all webhooks
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                                 {emailError && (
                                     <p className="text-sm text-red-600 mt-2">{emailError}</p>
@@ -838,55 +1177,83 @@ export default function DomainDetailPage() {
                                         <TableRow>
                                             <TableHead>Email Address</TableHead>
                                             <TableHead>Status</TableHead>
+                                            <TableHead>Webhook</TableHead>
                                             <TableHead>Emails (24h)</TableHead>
                                             <TableHead>Created</TableHead>
                                             <TableHead className="text-right">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {emailAddresses.map((email) => (
-                                            <TableRow key={email.id}>
-                                                <TableCell>
-                                                    <div className="font-mono">{email.address}</div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2">
-                                                        {email.isReceiptRuleConfigured ? (
-                                                            <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
-                                                                <CheckCircleIcon className="h-3 w-3 mr-1" />
-                                                                Active
-                                                            </Badge>
-                                                        ) : (
-                                                            <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors">
-                                                                <ClockIcon className="h-3 w-3 mr-1" />
-                                                                Pending
-                                                            </Badge>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2">
-                                                        <TrendingUpIcon className="h-4 w-4 text-muted-foreground" />
-                                                        <span className="font-medium">{email.emailsLast24h}</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <span className="text-sm">
-                                                        {formatDistanceToNow(new Date(email.createdAt), { addSuffix: true })}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => deleteEmailAddress(email.id, email.address)}
-                                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                                    >
-                                                        <TrashIcon className="h-4 w-4" />
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
+                                        {emailAddresses.map((email) => {
+                                            return (
+                                                <TableRow key={email.id}>
+                                                    <TableCell>
+                                                        <div className="font-mono">{email.address}</div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-2">
+                                                            {email.isReceiptRuleConfigured ? (
+                                                                <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
+                                                                    <CheckCircleIcon className="h-3 w-3 mr-1" />
+                                                                    Active
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors">
+                                                                    <ClockIcon className="h-3 w-3 mr-1" />
+                                                                    Pending
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-2">
+                                                            {email.webhookId && email.webhookName ? (
+                                                                <>
+                                                                    <LinkIcon className="h-4 w-4 text-blue-600" />
+                                                                    <div className="flex items-center gap-1">
+                                                                        <div className="w-2 h-2 rounded-full bg-green-500" />
+                                                                        <span className="text-sm font-medium">{email.webhookName}</span>
+                                                                    </div>
+                                                                </>
+                                                            ) : (
+                                                                <span className="text-sm text-muted-foreground">No webhook</span>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-2">
+                                                            <TrendingUpIcon className="h-4 w-4 text-muted-foreground" />
+                                                            <span className="font-medium">{email.emailsLast24h}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <span className="text-sm">
+                                                            {formatDistanceToNow(new Date(email.createdAt), { addSuffix: true })}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <div className="flex items-center gap-1 justify-end">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => openWebhookDialog(email)}
+                                                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                                            >
+                                                                <SettingsIcon className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => deleteEmailAddress(email.id, email.address)}
+                                                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                            >
+                                                                <TrashIcon className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )
+                                        })}
                                     </TableBody>
                                 </Table>
                             </div>
@@ -894,6 +1261,196 @@ export default function DomainDetailPage() {
                     </CardContent>
                 </Card>
             )}
+
+            {/* Webhook Management Dialog */}
+            <Dialog open={isWebhookDialogOpen} onOpenChange={setIsWebhookDialogOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Manage Webhook</DialogTitle>
+                        <DialogDescription>
+                            Configure webhook delivery for {selectedEmailForWebhook?.address}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="webhook-assignment">Webhook Assignment</Label>
+                            <Select 
+                                value={webhookDialogSelectedId} 
+                                onValueChange={handleWebhookDialogSelection}
+                                disabled={isUpdatingWebhook || isLoadingWebhooks}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="No webhook - emails stored only" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">No webhook - emails stored only</SelectItem>
+                                    <SelectItem value="create-new" className="text-blue-600 font-medium">
+                                        <div className="flex items-center gap-2">
+                                            <PlusIcon className="h-4 w-4" />
+                                            Create New Webhook
+                                        </div>
+                                    </SelectItem>
+                                    {userWebhooks.length > 0 && (
+                                        <>
+                                            <div className="px-2 py-1 text-xs font-medium text-muted-foreground border-t">
+                                                Existing Webhooks
+                                            </div>
+                                            {userWebhooks.map((webhook) => (
+                                                <SelectItem key={webhook.id} value={webhook.id}>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className={`w-2 h-2 rounded-full ${webhook.isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
+                                                        <span>{webhook.name}</span>
+                                                        {!webhook.isActive && <span className="text-xs text-muted-foreground">(disabled)</span>}
+                                                    </div>
+                                                </SelectItem>
+                                            ))}
+                                        </>
+                                    )}
+                                </SelectContent>
+                            </Select>
+                            {webhookDialogSelectedId && webhookDialogSelectedId !== 'none' && (
+                                <p className="text-xs text-muted-foreground">
+                                    Emails received at this address will be sent to the selected webhook URL
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="secondary"
+                            onClick={() => {
+                                setIsWebhookDialogOpen(false)
+                                setSelectedEmailForWebhook(null)
+                                setWebhookDialogSelectedId('none')
+                            }}
+                            disabled={isUpdatingWebhook}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={updateEmailWebhook}
+                            disabled={isUpdatingWebhook}
+                        >
+                            {isUpdatingWebhook ? (
+                                <>
+                                    <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" />
+                                    Updating...
+                                </>
+                            ) : (
+                                'Update Webhook'
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Create Webhook Dialog */}
+            <Dialog open={isCreateWebhookOpen} onOpenChange={setIsCreateWebhookOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Create New Webhook</DialogTitle>
+                        <DialogDescription>
+                            Enter the details for the new webhook
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="webhook-name">Webhook Name</Label>
+                            <Input
+                                id="webhook-name"
+                                value={createWebhookForm.name}
+                                onChange={(e) => setCreateWebhookForm(prev => ({ ...prev, name: e.target.value }))}
+                                placeholder="My Email Webhook"
+                                disabled={isCreatingWebhook}
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="webhook-url">Webhook URL</Label>
+                            <Input
+                                id="webhook-url"
+                                value={createWebhookForm.url}
+                                onChange={(e) => setCreateWebhookForm(prev => ({ ...prev, url: e.target.value }))}
+                                placeholder="https://api.example.com/webhooks/email"
+                                disabled={isCreatingWebhook}
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="webhook-description">Description (optional)</Label>
+                            <Textarea
+                                id="webhook-description"
+                                value={createWebhookForm.description}
+                                onChange={(e) => setCreateWebhookForm(prev => ({ ...prev, description: e.target.value }))}
+                                placeholder="Optional description for this webhook"
+                                disabled={isCreatingWebhook}
+                                rows={3}
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="webhook-timeout">Timeout (seconds)</Label>
+                                <Input
+                                    id="webhook-timeout"
+                                    type="number"
+                                    min="1"
+                                    max="300"
+                                    value={createWebhookForm.timeout}
+                                    onChange={(e) => setCreateWebhookForm(prev => ({ ...prev, timeout: parseInt(e.target.value) || 30 }))}
+                                    disabled={isCreatingWebhook}
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="webhook-retry-attempts">Retry Attempts</Label>
+                                <Input
+                                    id="webhook-retry-attempts"
+                                    type="number"
+                                    min="0"
+                                    max="10"
+                                    value={createWebhookForm.retryAttempts}
+                                    onChange={(e) => setCreateWebhookForm(prev => ({ ...prev, retryAttempts: parseInt(e.target.value) || 3 }))}
+                                    disabled={isCreatingWebhook}
+                                />
+                            </div>
+                        </div>
+                        {createWebhookError && (
+                            <div className="flex items-center gap-2 text-red-600 text-sm">
+                                <AlertTriangleIcon className="h-4 w-4" />
+                                <span>{createWebhookError}</span>
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="secondary"
+                            onClick={() => {
+                                setIsCreateWebhookOpen(false)
+                                setCreateWebhookForm({
+                                    name: '',
+                                    url: '',
+                                    description: '',
+                                    timeout: 30,
+                                    retryAttempts: 3
+                                })
+                            }}
+                            disabled={isCreatingWebhook}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={createWebhook}
+                            disabled={isCreatingWebhook}
+                        >
+                            {isCreatingWebhook ? (
+                                <>
+                                    <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" />
+                                    Creating...
+                                </>
+                            ) : (
+                                'Create Webhook'
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 } 

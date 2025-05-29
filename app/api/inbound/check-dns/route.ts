@@ -3,6 +3,10 @@ import { checkDomainCanReceiveEmails } from '@/lib/dns'
 import { createDomainVerification, getDomainWithRecords } from '@/lib/db/domains'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
+import { Autumn as autumn } from 'autumn-js'
+import { db } from '@/lib/db'
+import { emailDomains } from '@/lib/db/schema'
+import { eq, count } from 'drizzle-orm'
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,6 +48,46 @@ export async function POST(request: NextRequest) {
         ...existingDomain,
         timestamp: new Date()
       })
+    }
+
+    // Check Autumn domain limits before proceeding
+    const { data: domainCheck, error: domainCheckError } = await autumn.check({
+      customer_id: session.user.id,
+      feature_id: "domains",
+    })
+
+    if (domainCheckError) {
+      console.error('Autumn domain check error:', domainCheckError)
+      return NextResponse.json(
+        { error: 'Failed to check domain limits' },
+        { status: 500 }
+      )
+    }
+
+    if (!domainCheck?.allowed) {
+      return NextResponse.json(
+        { error: 'Domain limit reached. Please upgrade your plan to add more domains.' },
+        { status: 403 }
+      )
+    }
+
+    // Count current domains for the user to compare against balance
+    const [currentDomainCount] = await db
+      .select({ count: count() })
+      .from(emailDomains)
+      .where(eq(emailDomains.userId, session.user.id))
+
+    const userDomainCount = currentDomainCount?.count || 0
+    const domainBalance = domainCheck.balance || 0
+
+    // Check if user has reached their domain limit
+    if (!domainCheck.unlimited && userDomainCount >= domainBalance) {
+      return NextResponse.json(
+        { 
+          error: `Domain limit reached (${userDomainCount}/${domainBalance}). Please upgrade your plan to add more domains.` 
+        },
+        { status: 403 }
+      )
     }
 
     // Check DNS records using server-side DNS utilities

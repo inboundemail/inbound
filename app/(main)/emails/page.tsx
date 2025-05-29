@@ -46,7 +46,8 @@ import {
   ArrowUpDownIcon,
   ArrowUpIcon,
   ArrowDownIcon,
-  CloudIcon
+  CloudIcon,
+  AlertTriangleIcon,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
@@ -70,6 +71,13 @@ interface DomainStatsResponse {
   verifiedDomains: number
   totalEmailAddresses: number
   totalEmailsLast24h: number
+  limits?: {
+    allowed: boolean
+    unlimited: boolean
+    balance: number | null
+    current: number
+    remaining: number | null
+  } | null
 }
 
 type SortField = 'domain' | 'status' | 'emailAddressCount' | 'emailsLast24h' | 'createdAt'
@@ -99,6 +107,13 @@ export default function EmailsPage() {
   // Sync with AWS state
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncingDomainId, setSyncingDomainId] = useState<string | null>(null)
+
+  // MX records conflict error state
+  const [mxConflictError, setMxConflictError] = useState<{
+    domain: string
+    suggestedSubdomains: string[]
+    mxRecords?: Array<{ exchange: string; priority: number }>
+  } | null>(null)
 
   useEffect(() => {
     if (session?.user) {
@@ -263,11 +278,50 @@ export default function EmailsPage() {
         // Redirect to the domain detail page
         router.push(`/emails/${result.domain.id}`)
       } else {
-        setAddDomainError(result.error || 'Failed to add domain')
+        // Check if this is an MX records conflict error
+        if (result.hasMxRecords && result.suggestedSubdomains) {
+          setMxConflictError({
+            domain: newDomain.trim().toLowerCase(),
+            suggestedSubdomains: result.suggestedSubdomains,
+            mxRecords: result.mxRecords
+          })
+          setIsAddDomainOpen(false) // Close the add domain dialog
+        } else {
+          setAddDomainError(result.error || 'Failed to add domain')
+        }
       }
     } catch (error) {
       console.error('Error adding domain:', error)
       setAddDomainError('Network error occurred')
+    } finally {
+      setIsAddingDomain(false)
+    }
+  }
+
+  const handleAddSubdomain = async (subdomain: string) => {
+    setIsAddingDomain(true)
+    
+    try {
+      const response = await fetch('/api/domains', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: subdomain })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        toast.success(`Subdomain ${subdomain} added successfully!`)
+        setMxConflictError(null)
+        
+        // Redirect to the domain detail page
+        router.push(`/emails/${result.domain.id}`)
+      } else {
+        toast.error(result.error || `Failed to add subdomain ${subdomain}`)
+      }
+    } catch (error) {
+      console.error('Error adding subdomain:', error)
+      toast.error('Network error occurred')
     } finally {
       setIsAddingDomain(false)
     }
@@ -421,10 +475,6 @@ export default function EmailsPage() {
                   <RefreshCwIcon className="h-4 w-4 mr-2" />
                   Refresh
                 </Button>
-                <Button disabled className="bg-white text-purple-700 hover:bg-white/90 font-semibold">
-                  <PlusIcon className="h-4 w-4 mr-2" />
-                  Add Domain
-                </Button>
               </div>
             </div>
           </div>
@@ -518,9 +568,10 @@ export default function EmailsPage() {
                   {isSyncing ? 'Syncing...' : 'Sync with AWS'}
                 </Button>
               )}
-              <Button 
+              <Button
                 onClick={handleAddDomain}
-                className="bg-white text-purple-700 hover:bg-white/90 font-semibold shadow-lg"
+                disabled={isLoading || (domainStats?.limits ? !domainStats.limits.allowed : false)}
+                className="bg-white text-purple-700 hover:bg-white/90 border-white/30 backdrop-blur-sm font-medium"
               >
                 <PlusIcon className="h-4 w-4 mr-2" />
                 Add Domain
@@ -590,10 +641,38 @@ export default function EmailsPage() {
                 : 'Get started by adding your first domain.'}
             </p>
             {!searchQuery && statusFilter === 'all' && regionFilter === 'all' && (
-              <Button variant="primary" onClick={handleAddDomain}>
-                <PlusIcon className="h-4 w-4 mr-2" />
-                Add Your First Domain
-              </Button>
+              <div className="max-w-md mx-auto">
+                <div className="p-4 border rounded-lg bg-gray-50">
+                  <Label htmlFor="quick-domain">Add Your First Domain</Label>
+                  <div className="flex gap-2 mt-2">
+                    <Input
+                      id="quick-domain"
+                      placeholder="example.com"
+                      value={newDomain}
+                      onChange={(e) => setNewDomain(e.target.value)}
+                      disabled={isAddingDomain}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleAddDomainSubmit()
+                        }
+                      }}
+                    />
+                    <Button
+                      onClick={handleAddDomainSubmit}
+                      disabled={isAddingDomain || !newDomain.trim()}
+                    >
+                      {isAddingDomain ? (
+                        <RefreshCwIcon className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <PlusIcon className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  {addDomainError && (
+                    <p className="text-sm text-red-600 mt-2">{addDomainError}</p>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         ) : (
@@ -732,7 +811,13 @@ export default function EmailsPage() {
           <DialogHeader>
             <DialogTitle>Add New Domain</DialogTitle>
             <DialogDescription>
-              Enter your domain name to start receiving emails. You'll need to add DNS records to verify ownership.
+              {domainStats?.limits && !domainStats.limits.allowed ? (
+                <span className="text-red-600">
+                  You've reached your domain limit ({domainStats.limits.current}/{domainStats.limits.balance}). Please upgrade your plan to add more domains.
+                </span>
+              ) : (
+                "Enter your domain name to start receiving emails. You'll need to add DNS records to verify ownership."
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -743,7 +828,7 @@ export default function EmailsPage() {
                 placeholder="example.com"
                 value={newDomain}
                 onChange={(e) => setNewDomain(e.target.value)}
-                disabled={isAddingDomain}
+                disabled={isAddingDomain || (domainStats?.limits ? !domainStats.limits.allowed : false)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     handleAddDomainSubmit()
@@ -752,6 +837,11 @@ export default function EmailsPage() {
               />
               {addDomainError && (
                 <p className="text-sm text-red-600">{addDomainError}</p>
+              )}
+              {domainStats?.limits && !domainStats.limits.unlimited && (
+                <p className="text-xs text-muted-foreground">
+                  {domainStats.limits.remaining} domain{domainStats.limits.remaining !== 1 ? 's' : ''} remaining on your plan
+                </p>
               )}
             </div>
           </div>
@@ -765,7 +855,7 @@ export default function EmailsPage() {
             </Button>
             <Button
               onClick={handleAddDomainSubmit}
-              disabled={isAddingDomain || !newDomain.trim()}
+              disabled={isAddingDomain || !newDomain.trim() || (domainStats?.limits ? !domainStats.limits.allowed : false)}
             >
               {isAddingDomain ? (
                 <>
@@ -778,6 +868,88 @@ export default function EmailsPage() {
                   Add Domain
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MX Records Conflict Dialog */}
+      <Dialog open={!!mxConflictError} onOpenChange={() => setMxConflictError(null)}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangleIcon className="h-5 w-5 text-amber-600" />
+              Domain Already Has Email Setup
+            </DialogTitle>
+            <DialogDescription>
+              The domain <strong>{mxConflictError?.domain}</strong> already has MX records configured for email receiving. 
+              Adding our email service would conflict with your existing setup.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {mxConflictError?.mxRecords && mxConflictError.mxRecords.length > 0 && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <h4 className="font-semibold text-amber-800 mb-2">Existing MX Records:</h4>
+                <div className="space-y-1">
+                  {mxConflictError.mxRecords.map((record, index) => (
+                    <div key={index} className="text-sm text-amber-700 font-mono">
+                      {record.priority} {record.exchange}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="p-4 border border-blue-200 bg-blue-50 rounded-lg">
+              <h4 className="font-semibold text-blue-800 mb-2">Recommended Solution: Use a Subdomain</h4>
+              <p className="text-sm text-blue-700 mb-3">
+                Instead of using your main domain, you can use a subdomain for inbound emails. 
+                This won't conflict with your existing email setup.
+              </p>
+              
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-blue-800">
+                  Choose a subdomain to configure for inbound emails:
+                </Label>
+                {mxConflictError?.suggestedSubdomains.map((subdomain) => (
+                  <div key={subdomain} className="flex items-center justify-between p-2 bg-white border border-blue-200 rounded">
+                    <span className="font-mono text-sm">{subdomain}</span>
+                    <Button
+                      size="sm"
+                      onClick={() => handleAddSubdomain(subdomain)}
+                      disabled={isAddingDomain}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      {isAddingDomain ? (
+                        <RefreshCwIcon className="h-3 w-3 animate-spin" />
+                      ) : (
+                        'Use This Subdomain'
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <h4 className="font-semibold text-gray-800 mb-1">Why use a subdomain?</h4>
+              <ul className="text-sm text-gray-700 space-y-1">
+                <li>• Your existing email setup (like Gmail, Outlook) continues to work normally</li>
+                <li>• You can still receive emails at your regular addresses (@{mxConflictError?.domain})</li>
+                <li>• Inbound emails will be received at the subdomain (e.g., contact@mail.{mxConflictError?.domain})</li>
+                <li>• No conflicts or downtime with your current email service</li>
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => setMxConflictError(null)}
+              disabled={isAddingDomain}
+            >
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>

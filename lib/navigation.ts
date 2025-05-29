@@ -28,6 +28,12 @@ export const navigationConfig: NavigationConfig = {
       description: "Manage your email domains and addresses"
     },
     {
+      title: "Webhooks",
+      url: "/webhooks",
+      icon: WebhookIcon,
+      description: "Manage webhook endpoints for email notifications"
+    },
+    {
       title: "Analytics",
       url: "/analytics",
       icon: ActivityIcon,

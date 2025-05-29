@@ -37,19 +37,35 @@ import { useRouter } from "next/navigation"
 import { isUserAdmin } from "@/lib/navigation"
 import { useEffect, useState } from "react"
 
-// Import the auth client to access subscription methods
-import { createAuthClient } from "better-auth/react"
-import { stripeClient } from "@better-auth/stripe/client"
-import { adminClient } from "better-auth/client/plugins"
-
-const authClient = createAuthClient({
-  plugins: [
-    stripeClient({
-      subscription: true
-    }),
-    adminClient()
-  ]
-})
+interface AutumnCustomer {
+  id: string
+  created_at: number
+  name: string
+  email: string
+  stripe_id: string
+  env: string
+  products: Array<{
+    id: string
+    name: string
+    group: string | null
+    status: string
+    canceled_at: number | null
+    started_at: number
+  }>
+  features: {
+    [key: string]: {
+      id: string
+      name: string
+      unlimited: boolean
+      balance: number
+      usage: number
+      included_usage: number
+      next_reset_at: number | null
+      interval: string
+    }
+  }
+  metadata: any
+}
 
 export function NavUser({
   user,
@@ -70,50 +86,52 @@ export function NavUser({
   // Check if user is admin
   const userIsAdmin = isUserAdmin(session?.user?.role || "user")
 
-  // Fetch user's subscription data
+  // Fetch user's subscription data from Autumn
   useEffect(() => {
-    const fetchSubscription = async () => {
+    const fetchCustomerData = async () => {
       if (!session?.user) {
         setIsLoadingSubscription(false)
         return
       }
 
       try {
-        const { data: subscriptions } = await authClient.subscription.list()
+        const response = await fetch('/api/customer')
         
-        // Find active subscription
-        const activeSubscription = subscriptions?.find(
-          sub => sub.status === "active" || sub.status === "trialing"
-        )
+        if (response.ok) {
+          const data = await response.json()
+          const customer: AutumnCustomer = data.customer
+          
+          // Find active product
+          const activeProduct = customer.products?.find(
+            product => product.status === "active" && !product.canceled_at
+          )
 
-        if (activeSubscription) {
-          // Capitalize the plan name
-          const planName = activeSubscription.plan.charAt(0).toUpperCase() + 
-                          activeSubscription.plan.slice(1)
-          setSubscriptionPlan(planName)
+          if (activeProduct) {
+            // Capitalize the product name
+            const planName = activeProduct.name.charAt(0).toUpperCase() + 
+                            activeProduct.name.slice(1)
+            setSubscriptionPlan(planName)
+          } else {
+            setSubscriptionPlan("Free")
+          }
         } else {
+          console.error("Failed to fetch customer data:", response.statusText)
           setSubscriptionPlan("Free")
         }
       } catch (error) {
-        console.error("Error fetching subscription:", error)
+        console.error("Error fetching customer data:", error)
         setSubscriptionPlan("Free")
       } finally {
         setIsLoadingSubscription(false)
       }
     }
 
-    fetchSubscription()
+    fetchCustomerData()
   }, [session?.user])
 
   const handleLogout = async () => {
     try {
-      await signOut({
-        fetchOptions: {
-          onSuccess: () => {
-            router.push("/login")
-          }
-        }
-      })
+      await signOut()
     } catch (error) {
       console.error("Logout error:", error)
     }
@@ -183,7 +201,7 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-[#2c2c2e]" />
             <DropdownMenuItem 
-              onClick={() => router.push("/subscription")} 
+              onClick={() => router.push("/settings")} 
               className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 focus:ring-0 focus:outline-none"
             >
               <CreditCardIcon className="h-4 w-4" />

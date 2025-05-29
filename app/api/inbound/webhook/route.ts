@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { sesEvents, receivedEmails, emailDomains } from '@/lib/db/schema'
+import { sesEvents, receivedEmails, emailDomains, emailAddresses, webhooks, webhookDeliveries } from '@/lib/db/schema'
 import { nanoid } from 'nanoid'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
+import { Autumn as autumn } from 'autumn-js'
+import { createHmac } from 'crypto'
+import { parseEmailContent, sanitizeHtml } from '@/lib/email-parser'
 
 interface SESEvent {
   Records: Array<{
@@ -161,6 +164,281 @@ async function mapRecipientToUserId(recipient: string): Promise<string> {
   }
 }
 
+/**
+ * Check and track inbound trigger usage for a user
+ */
+async function checkAndTrackInboundTrigger(userId: string, recipient: string): Promise<{ allowed: boolean; error?: string }> {
+  // Skip tracking for system emails
+  if (userId === 'system') {
+    console.log(`📧 Webhook - Skipping inbound trigger check for system email: ${recipient}`)
+    return { allowed: true }
+  }
+
+  try {
+    // Check if user can use inbound triggers
+    const { data: triggerCheck, error: triggerCheckError } = await autumn.check({
+      customer_id: userId,
+      feature_id: "inbound_triggers",
+    })
+
+    if (triggerCheckError) {
+      console.error(`❌ Webhook - Autumn inbound trigger check error for user ${userId}:`, triggerCheckError)
+      return { 
+        allowed: false, 
+        error: `Failed to check inbound trigger limits: ${triggerCheckError}` 
+      }
+    }
+
+    if (!triggerCheck?.allowed) {
+      console.warn(`⚠️ Webhook - User ${userId} not allowed to use inbound triggers for email: ${recipient}`)
+      return { 
+        allowed: false, 
+        error: 'Inbound trigger limit reached. Please upgrade your plan to process more emails.' 
+      }
+    }
+
+    // Track the inbound trigger usage if allowed and not unlimited
+    if (!triggerCheck.unlimited) {
+      const { error: trackError } = await autumn.track({
+        customer_id: userId,
+        feature_id: "inbound_triggers",
+        value: 1,
+      })
+
+      if (trackError) {
+        console.error(`❌ Webhook - Failed to track inbound trigger usage for user ${userId}:`, trackError)
+        return { 
+          allowed: false, 
+          error: `Failed to track inbound trigger usage: ${trackError}` 
+        }
+      }
+
+      console.log(`📊 Webhook - Tracked inbound trigger usage for user ${userId}, email: ${recipient}`)
+    } else {
+      console.log(`♾️ Webhook - User ${userId} has unlimited inbound triggers, no tracking needed for: ${recipient}`)
+    }
+
+    return { allowed: true }
+  } catch (error) {
+    console.error(`❌ Webhook - Error checking/tracking inbound trigger for user ${userId}:`, error)
+    return { 
+      allowed: false, 
+      error: `Inbound trigger check failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
+    }
+  }
+}
+
+/**
+ * Forward email to configured webhook for the recipient
+ */
+async function forwardToWebhook(emailRecord: any, sesRecord: ProcessedSESRecord): Promise<void> {
+  try {
+    console.log(`🔗 Webhook - Looking up webhook for recipient: ${emailRecord.recipient}`)
+
+    // Look up the email address to find the configured webhook
+    const emailAddressRecord = await db
+      .select({
+        webhookId: emailAddresses.webhookId,
+        address: emailAddresses.address,
+        isActive: emailAddresses.isActive,
+      })
+      .from(emailAddresses)
+      .where(and(
+        eq(emailAddresses.address, emailRecord.recipient),
+        eq(emailAddresses.isActive, true)
+      ))
+      .limit(1)
+
+    if (!emailAddressRecord[0]?.webhookId) {
+      console.log(`ℹ️ Webhook - No webhook configured for ${emailRecord.recipient}, skipping forwarding`)
+      return
+    }
+
+    const webhookId = emailAddressRecord[0].webhookId
+
+    // Get the webhook configuration
+    const webhookRecord = await db
+      .select()
+      .from(webhooks)
+      .where(and(
+        eq(webhooks.id, webhookId),
+        eq(webhooks.isActive, true)
+      ))
+      .limit(1)
+
+    if (!webhookRecord[0]) {
+      console.warn(`⚠️ Webhook - Webhook ${webhookId} not found or disabled for ${emailRecord.recipient}`)
+      return
+    }
+
+    const webhook = webhookRecord[0]
+
+    console.log(`📤 Webhook - Forwarding email ${emailRecord.messageId} to webhook: ${webhook.name} (${webhook.url})`)
+
+    // Parse email content using the same logic as analytics dashboard
+    const parsedEmail = await parseEmailContent(sesRecord.emailContent || '')
+    
+    // Create cleaned content with sanitized HTML and formatted text
+    const cleanedContent = {
+      html: parsedEmail.htmlBody ? sanitizeHtml(parsedEmail.htmlBody) : null,
+      text: parsedEmail.textBody || null,
+      hasHtml: !!parsedEmail.htmlBody,
+      hasText: !!parsedEmail.textBody,
+      attachments: parsedEmail.attachments,
+      headers: parsedEmail.headers
+    }
+
+    // Create webhook payload
+    const webhookPayload = {
+      event: 'email.received',
+      timestamp: new Date().toISOString(),
+      email: {
+        id: emailRecord.id,
+        messageId: emailRecord.messageId,
+        from: emailRecord.from,
+        to: JSON.parse(emailRecord.to),
+        recipient: emailRecord.recipient,
+        subject: emailRecord.subject,
+        receivedAt: emailRecord.receivedAt,
+        content: sesRecord.emailContent || null, // Raw content
+        cleanedContent: cleanedContent, // Parsed and cleaned content (same as analytics)
+        headers: sesRecord.ses.mail.commonHeaders,
+        s3Location: sesRecord.s3Location || {
+          bucket: sesRecord.ses.receipt.action.bucketName,
+          key: sesRecord.ses.receipt.action.objectKey
+        },
+        authResults: {
+          spf: sesRecord.ses.receipt.spfVerdict.status,
+          dkim: sesRecord.ses.receipt.dkimVerdict.status,
+          dmarc: sesRecord.ses.receipt.dmarcVerdict.status,
+          spam: sesRecord.ses.receipt.spamVerdict.status,
+          virus: sesRecord.ses.receipt.virusVerdict.status,
+        }
+      },
+      webhook: {
+        id: webhook.id,
+        name: webhook.name
+      }
+    }
+
+    const payloadString = JSON.stringify(webhookPayload)
+
+    // Create webhook signature if secret exists
+    let signature = null
+    if (webhook.secret) {
+      const hmac = createHmac('sha256', webhook.secret)
+      hmac.update(payloadString)
+      signature = `sha256=${hmac.digest('hex')}`
+    }
+
+    // Prepare headers
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'InboundEmail-Webhook/1.0',
+      'X-Webhook-Event': 'email.received',
+      'X-Webhook-ID': webhook.id,
+      'X-Webhook-Timestamp': webhookPayload.timestamp,
+      'X-Email-ID': emailRecord.id,
+      'X-Message-ID': emailRecord.messageId,
+    }
+
+    if (signature) {
+      headers['X-Webhook-Signature'] = signature
+    }
+
+    // Add custom headers if any
+    if (webhook.headers) {
+      try {
+        const customHeaders = JSON.parse(webhook.headers)
+        Object.assign(headers, customHeaders)
+      } catch (error) {
+        console.error('Error parsing custom headers:', error)
+      }
+    }
+
+    // Create delivery record
+    const deliveryId = nanoid()
+    
+    // Send the webhook
+    const startTime = Date.now()
+    let deliverySuccess = false
+    let responseCode = 0
+    let responseBody = ''
+    let errorMessage = ''
+    let deliveryTime = 0
+
+    try {
+      const response = await fetch(webhook.url, {
+        method: 'POST',
+        headers,
+        body: payloadString,
+        signal: AbortSignal.timeout((webhook.timeout || 30) * 1000)
+      })
+
+      deliveryTime = Date.now() - startTime
+      responseCode = response.status
+      responseBody = await response.text().catch(() => 'Unable to read response body')
+      deliverySuccess = response.ok
+
+      console.log(`${deliverySuccess ? '✅' : '❌'} Webhook - Delivery ${deliverySuccess ? 'succeeded' : 'failed'} for ${emailRecord.recipient}: ${responseCode} in ${deliveryTime}ms`)
+
+    } catch (error) {
+      deliveryTime = Date.now() - startTime
+      deliverySuccess = false
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = `Request timeout after ${webhook.timeout}s`
+        } else {
+          errorMessage = error.message
+        }
+      } else {
+        errorMessage = 'Unknown error'
+      }
+
+      console.error(`❌ Webhook - Delivery failed for ${emailRecord.recipient}:`, errorMessage)
+    }
+
+    // Create final delivery record with all data
+    const deliveryRecord = {
+      id: deliveryId,
+      emailId: emailRecord.id,
+      webhookId: webhook.id,
+      endpoint: webhook.url,
+      payload: payloadString,
+      status: deliverySuccess ? 'success' as const : 'failed' as const,
+      attempts: 1,
+      lastAttemptAt: new Date(),
+      responseCode: responseCode || null,
+      responseBody: responseBody ? responseBody.substring(0, 2000) : null, // Limit response body size
+      deliveryTime: deliveryTime,
+      error: errorMessage || null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+
+    // Store delivery record
+    await db.insert(webhookDeliveries).values(deliveryRecord)
+
+    // Update webhook stats
+    await db
+      .update(webhooks)
+      .set({
+        lastUsed: new Date(),
+        totalDeliveries: (webhook.totalDeliveries || 0) + 1,
+        successfulDeliveries: deliverySuccess ? (webhook.successfulDeliveries || 0) + 1 : (webhook.successfulDeliveries || 0),
+        failedDeliveries: deliverySuccess ? (webhook.failedDeliveries || 0) : (webhook.failedDeliveries || 0) + 1,
+        updatedAt: new Date()
+      })
+      .where(eq(webhooks.id, webhook.id))
+
+    console.log(`📊 Webhook - Updated webhook stats for ${webhook.name}`)
+
+  } catch (error) {
+    console.error(`❌ Webhook - Error forwarding email ${emailRecord.messageId} for ${emailRecord.recipient}:`, error)
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.log('📧 Webhook - Received email event from Lambda');
@@ -199,6 +477,7 @@ export async function POST(request: NextRequest) {
     }
 
     const processedEmails = []
+    const rejectedEmails = []
 
     // Process each enhanced SES record
     for (const record of payload.processedRecords) {
@@ -248,6 +527,23 @@ export async function POST(request: NextRequest) {
 
         // Then, create a receivedEmail record for each recipient
         for (const recipient of receipt.recipients) {
+          const userId = await mapRecipientToUserId(recipient)
+
+          // Check and track inbound trigger usage
+          const triggerResult = await checkAndTrackInboundTrigger(userId, recipient)
+          
+          if (!triggerResult.allowed) {
+            console.warn(`⚠️ Webhook - Rejected email for ${recipient} due to inbound trigger limits: ${triggerResult.error}`)
+            rejectedEmails.push({
+              messageId: mail.messageId,
+              recipient: recipient,
+              userId: userId,
+              reason: triggerResult.error || 'Inbound trigger limit reached',
+              subject: mail.commonHeaders.subject,
+            })
+            continue // Skip processing this recipient
+          }
+
           const emailRecord = {
             id: nanoid(),
             sesEventId: sesEventId,
@@ -283,8 +579,9 @@ export async function POST(request: NextRequest) {
                 hasContent: false,
                 s3Error: record.s3Error
               },
+              inboundTriggerTracked: true, // Flag to indicate this email was tracked for inbound triggers
             }),
-            userId: await mapRecipientToUserId(recipient),
+            userId: userId,
             updatedAt: new Date(),
           }
 
@@ -298,6 +595,9 @@ export async function POST(request: NextRequest) {
           })
 
           console.log(`✅ Webhook - Stored email ${mail.messageId} for ${recipient}`);
+
+          // Forward email to configured webhook
+          await forwardToWebhook(emailRecord, record)
         }
       } catch (recordError) {
         console.error('❌ Webhook - Error processing SES record:', recordError);
@@ -308,12 +608,14 @@ export async function POST(request: NextRequest) {
     const response = {
       success: true,
       processedEmails: processedEmails.length,
+      rejectedEmails: rejectedEmails.length,
       emails: processedEmails,
+      rejected: rejectedEmails,
       timestamp: new Date(),
       lambdaContext: payload.context,
     }
 
-    console.log(`✅ Webhook - Successfully processed ${processedEmails.length} emails`);
+    console.log(`✅ Webhook - Successfully processed ${processedEmails.length} emails, rejected ${rejectedEmails.length} emails`);
 
     return NextResponse.json(response)
   } catch (error) {
@@ -345,7 +647,8 @@ export async function GET() {
       'S3 email content fetching',
       'Full email content storage',
       'Enhanced metadata tracking',
-      'SES event storage in dedicated table'
+      'SES event storage in dedicated table',
+      'Autumn inbound trigger limits and tracking'
     ]
   })
 } 

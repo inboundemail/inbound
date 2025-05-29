@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { emailDomains, domainDnsRecords, emailAddresses, sesEvents } from '@/lib/db/schema'
+import { emailDomains, domainDnsRecords, emailAddresses, sesEvents, webhooks } from '@/lib/db/schema'
 import { eq, and, gte, sql } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
@@ -9,6 +9,24 @@ import { detectDomainProvider } from '@/lib/dns'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
 import { deleteDomainFromDatabase } from '@/lib/db/domains'
 import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
+import { SESClient, GetIdentityVerificationAttributesCommand } from '@aws-sdk/client-ses'
+
+// AWS SES Client setup
+const awsRegion = process.env.AWS_REGION || 'us-east-2'
+const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID
+const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY
+
+let sesClient: SESClient | null = null
+
+if (awsAccessKeyId && awsSecretAccessKey) {
+  sesClient = new SESClient({ 
+    region: awsRegion,
+    credentials: {
+      accessKeyId: awsAccessKeyId,
+      secretAccessKey: awsSecretAccessKey,
+    }
+  })
+}
 
 export async function GET(
   request: NextRequest,
@@ -90,29 +108,101 @@ export async function GET(
       }
     }
 
-    // Auto-check SES verification if domain is in dns_verified status
+    // Perform comprehensive SES verification check if refreshProvider=true
     let updatedDomain = domain
-    if (domain.status === DOMAIN_STATUS.DNS_VERIFIED) {
+    if (refreshProvider && sesClient) {
       try {
-        console.log(`Auto-checking SES verification for domain: ${domain.domain}`)
-        const verificationResult = await initiateDomainVerification(domain.domain, session.user.id)
+        console.log(`🔍 Performing comprehensive SES verification check for domain: ${domain.domain}`)
         
-        // If status changed, get the updated domain record
-        if (verificationResult.status !== domain.status) {
-          const updatedDomainRecord = await db
-            .select()
-            .from(emailDomains)
-            .where(and(eq(emailDomains.id, domainId), eq(emailDomains.userId, session.user.id)))
-            .limit(1)
+        // Get current verification status from AWS SES
+        const getAttributesCommand = new GetIdentityVerificationAttributesCommand({
+          Identities: [domain.domain]
+        })
+
+        const attributesResponse = await sesClient.send(getAttributesCommand)
+        const attributes = attributesResponse.VerificationAttributes?.[domain.domain]
+
+        if (attributes) {
+          const sesStatus = attributes.VerificationStatus || 'Pending'
+          console.log(`📊 AWS SES verification status for ${domain.domain}: ${sesStatus}`)
           
-          if (updatedDomainRecord[0]) {
-            updatedDomain = updatedDomainRecord[0]
-            console.log(`Domain status updated from ${domain.status} to ${updatedDomain.status}`)
+          // Determine new domain status based on SES response
+          let newStatus = domain.status
+          if (sesStatus === 'Success') {
+            newStatus = DOMAIN_STATUS.SES_VERIFIED
+          } else if (sesStatus === 'Failed') {
+            newStatus = DOMAIN_STATUS.FAILED
           }
+          
+          // Update domain record if status changed
+          if (newStatus !== domain.status || domain.sesVerificationStatus !== sesStatus) {
+            console.log(`📝 Updating domain status from ${domain.status} to ${newStatus}, SES status: ${sesStatus}`)
+            
+            const [updated] = await db
+              .update(emailDomains)
+              .set({
+                status: newStatus,
+                sesVerificationStatus: sesStatus,
+                lastSesCheck: new Date(),
+                updatedAt: new Date()
+              })
+              .where(eq(emailDomains.id, domainId))
+              .returning()
+            
+            if (updated) {
+              updatedDomain = updated
+              console.log(`✅ Updated domain status successfully`)
+            }
+          } else {
+            console.log(`ℹ️ Domain status unchanged, updating last check time`)
+            
+            // Still update the last check time
+            const [updated] = await db
+              .update(emailDomains)
+              .set({
+                lastSesCheck: new Date(),
+                updatedAt: new Date()
+              })
+              .where(eq(emailDomains.id, domainId))
+              .returning()
+              
+            if (updated) {
+              updatedDomain = updated
+            }
+          }
+        } else {
+          console.log(`⚠️ No verification attributes found for domain: ${domain.domain}`)
         }
       } catch (error) {
-        console.error('Error auto-checking SES verification:', error)
-        // Continue with original domain data if verification check fails
+        console.error('Error performing comprehensive SES verification check:', error)
+        // Continue with existing domain data if SES check fails
+      }
+    } else if (refreshProvider && !sesClient) {
+      console.log(`⚠️ SES client not available for comprehensive verification check`)
+    } else {
+      // Auto-check SES verification if domain is in dns_verified status
+      if (domain.status === DOMAIN_STATUS.DNS_VERIFIED) {
+        try {
+          console.log(`Auto-checking SES verification for domain: ${domain.domain}`)
+          const verificationResult = await initiateDomainVerification(domain.domain, session.user.id)
+          
+          // If status changed, get the updated domain record
+          if (verificationResult.status !== domain.status) {
+            const updatedDomainRecord = await db
+              .select()
+              .from(emailDomains)
+              .where(and(eq(emailDomains.id, domainId), eq(emailDomains.userId, session.user.id)))
+              .limit(1)
+            
+            if (updatedDomainRecord[0]) {
+              updatedDomain = updatedDomainRecord[0]
+              console.log(`Domain status updated from ${domain.status} to ${updatedDomain.status}`)
+            }
+          }
+        } catch (error) {
+          console.error('Error auto-checking SES verification:', error)
+          // Continue with original domain data if verification check fails
+        }
       }
     }
 
@@ -125,11 +215,13 @@ export async function GET(
     // Calculate 24 hours ago
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
-    // Get email addresses with their statistics
+    // Get email addresses with their statistics and webhook information
     const emailAddressesWithStats = await db
       .select({
         id: emailAddresses.id,
         address: emailAddresses.address,
+        webhookId: emailAddresses.webhookId,
+        webhookName: webhooks.name,
         isActive: emailAddresses.isActive,
         isReceiptRuleConfigured: emailAddresses.isReceiptRuleConfigured,
         receiptRuleName: emailAddresses.receiptRuleName,
@@ -147,6 +239,7 @@ export async function GET(
         )`}, 0)`
       })
       .from(emailAddresses)
+      .leftJoin(webhooks, eq(emailAddresses.webhookId, webhooks.id))
       .where(eq(emailAddresses.domainId, domainId))
       .orderBy(emailAddresses.createdAt)
 
