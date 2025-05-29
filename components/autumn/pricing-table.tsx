@@ -5,6 +5,7 @@ import {
 import { Loader2 } from "lucide-react";
 
 import { useAutumn, usePricingTable } from "autumn-js/react";
+import ProductChangeDialog from "./product-change-dialog";
 
 export const PricingTable = () => {
   const { attach } = useAutumn();
@@ -35,6 +36,7 @@ export const PricingTable = () => {
                   await attach({
                     productId: product.id,
                     successUrl: `${process.env.NEXT_PUBLIC_BETTER_AUTH_URL}/settings?upgrade=true`,
+                    dialog: ProductChangeDialog,
                   });
                 },
               }}
