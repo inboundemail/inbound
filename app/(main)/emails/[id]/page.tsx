@@ -43,8 +43,6 @@ import {
     CopyIcon,
     CheckIcon,
     TrashIcon,
-    ServerIcon,
-    InfoIcon,
     SettingsIcon,
     LinkIcon,
     ExternalLinkIcon
@@ -129,7 +127,6 @@ export default function DomainDetailPage() {
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [copiedValues, setCopiedValues] = useState<Record<string, boolean>>({})
-    const [isRefreshing, setIsRefreshing] = useState(false)
 
     // Email address management state
     const [newEmailAddress, setNewEmailAddress] = useState('')
@@ -146,8 +143,8 @@ export default function DomainDetailPage() {
     const [isDeleting, setIsDeleting] = useState(false)
     const [deleteConfirmText, setDeleteConfirmText] = useState('')
 
-    // Background polling state
-    const [isBackgroundPolling, setIsBackgroundPolling] = useState(false)
+    // Refresh/verification state
+    const [isRefreshing, setIsRefreshing] = useState(false)
 
     // Webhook management dialog state
     const [isWebhookDialogOpen, setIsWebhookDialogOpen] = useState(false)
@@ -174,104 +171,6 @@ export default function DomainDetailPage() {
         }
     }, [session, domainId])
 
-    // Background polling for status changes
-    useEffect(() => {
-        if (!session?.user || !domainId || !domainDetails) return
-
-        // Don't poll if domain is already fully verified
-        if (domainDetails.domain.status === DOMAIN_STATUS.VERIFIED) {
-            setIsBackgroundPolling(false)
-            return
-        }
-
-        let pollInterval: NodeJS.Timeout
-
-        const pollForStatusChanges = async () => {
-            // Skip if tab is not visible to be server-friendly
-            if (document.hidden) return
-
-            try {
-                // Silently fetch domain details without showing loading states
-                const response = await fetch(`/api/domains/${domainId}?refreshProvider=true`)
-                
-                if (response.ok) {
-                    const data: DomainDetails = await response.json()
-                    
-                    // Only update UI if there's been a meaningful change
-                    const hasStatusChanged = data.domain.status !== domainDetails.domain.status
-                    const hasSesStatusChanged = data.domain.sesVerificationStatus !== domainDetails.domain.sesVerificationStatus
-                    
-                    // Check for DNS records changes more robustly
-                    const currentDnsMap = new Map(domainDetails.dnsRecords.map(r => [`${r.type}-${r.name}`, r.isVerified]))
-                    const newDnsMap = new Map(data.dnsRecords.map(r => [`${r.type}-${r.name}`, r.isVerified]))
-                    
-                    let hasDnsRecordsChanged = false
-                    // Check if any verification status changed
-                    for (const [key, isVerified] of newDnsMap) {
-                        if (currentDnsMap.get(key) !== isVerified) {
-                            hasDnsRecordsChanged = true
-                            break
-                        }
-                    }
-                    // Check if any records were added or removed
-                    if (!hasDnsRecordsChanged && currentDnsMap.size !== newDnsMap.size) {
-                        hasDnsRecordsChanged = true
-                    }
-                    
-                    if (hasStatusChanged || hasSesStatusChanged || hasDnsRecordsChanged) {
-                        console.log(`🔄 Status change detected for ${data.domain.domain}:`, {
-                            statusChanged: hasStatusChanged ? `${domainDetails.domain.status} → ${data.domain.status}` : 'No change',
-                            sesStatusChanged: hasSesStatusChanged ? `${domainDetails.domain.sesVerificationStatus} → ${data.domain.sesVerificationStatus}` : 'No change',
-                            dnsChanged: hasDnsRecordsChanged
-                        })
-                        
-                        // Update the UI state
-                        setDomainDetails(data)
-                        
-                        // Show appropriate toast notification
-                        if (hasStatusChanged) {
-                            if (data.domain.status === DOMAIN_STATUS.VERIFIED) {
-                                toast.success(`🎉 Domain ${data.domain.domain} is now fully verified!`)
-                            } else if (data.domain.status === DOMAIN_STATUS.VERIFIED) {
-                                toast.success(`✅ DNS verification complete! SES verification in progress...`)
-                            } else if (data.domain.status === DOMAIN_STATUS.FAILED) {
-                                toast.error(`❌ Domain verification failed. Please check your DNS records.`)
-                            }
-                        } else if (hasDnsRecordsChanged) {
-                            const verifiedCount = data.dnsRecords.filter(r => r.isVerified).length
-                            const totalCount = data.dnsRecords.length
-                            toast.success(`📋 DNS records updated (${verifiedCount}/${totalCount} verified)`)
-                        }
-                        
-                        // Stop polling if domain is now fully verified
-                        if (data.domain.status === DOMAIN_STATUS.VERIFIED) {
-                            clearInterval(pollInterval)
-                            setIsBackgroundPolling(false)
-                            console.log(`✅ Stopping background polling - domain fully verified`)
-                        }
-                    }
-                }
-            } catch (error) {
-                // Silently handle errors in background polling to avoid disrupting the UI
-                console.error('Background polling error (silent):', error)
-            }
-        }
-
-        // Start polling every 10 seconds
-        setIsBackgroundPolling(true)
-        pollInterval = setInterval(pollForStatusChanges, 10000)
-        console.log(`🔄 Started background polling for domain status changes every 10 seconds`)
-
-        // Cleanup on unmount
-        return () => {
-            if (pollInterval) {
-                clearInterval(pollInterval)
-                setIsBackgroundPolling(false)
-                console.log(`🛑 Stopped background polling`)
-            }
-        }
-    }, [session, domainId, domainDetails?.domain.status, domainDetails?.domain.sesVerificationStatus])
-
     const fetchDomainDetails = async () => {
         try {
             setIsLoading(true)
@@ -296,6 +195,28 @@ export default function DomainDetailPage() {
         }
     }
 
+    // Background refresh function that doesn't trigger main loading state
+    const fetchDomainDetailsBackground = async () => {
+        try {
+            setError(null)
+            const response = await fetch(`/api/domains/${domainId}?refreshProvider=true`)
+
+            if (!response.ok) {
+                if (response.status === 404) {
+                    throw new Error('Domain not found')
+                }
+                throw new Error('Failed to fetch domain details')
+            }
+
+            const data: DomainDetails = await response.json()
+            setDomainDetails(data)
+        } catch (error) {
+            console.error('Error fetching domain details:', error)
+            setError(error instanceof Error ? error.message : 'Failed to load domain details')
+            toast.error('Failed to load domain details')
+        }
+    }
+
     const fetchWebhooks = async () => {
         try {
             setIsLoadingWebhooks(true)
@@ -312,6 +233,49 @@ export default function DomainDetailPage() {
         }
     }
 
+    const refreshVerification = async () => {
+        if (!domainDetails) return
+
+        setIsRefreshing(true)
+        try {
+            // Call the domain verification API to check verification status
+            const response = await fetch('/api/domain/verifications', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'checkVerification',
+                    domain: domainDetails.domain.domain,
+                    domainId: domainDetails.domain.id
+                })
+            })
+
+            const result = await response.json()
+
+            if (response.ok) {
+                // Show appropriate success message based on verification status
+                if (result.allVerified) {
+                    toast.success('Domain fully verified! You can now manage email addresses.')
+                } else if (result.dnsVerified && !result.sesVerified) {
+                    toast.success('DNS records verified! SES verification in progress.')
+                } else if (!result.dnsVerified) {
+                    toast.warning('DNS records not yet propagated. Please wait and try again.')
+                } else {
+                    toast.info('Verification status updated.')
+                }
+
+                // Refresh the domain details to show updated status
+                await fetchDomainDetailsBackground()
+            } else {
+                toast.error(result.error || 'Failed to check verification status')
+            }
+        } catch (error) {
+            console.error('Error checking verification:', error)
+            toast.error('Network error occurred while checking verification')
+        } finally {
+            setIsRefreshing(false)
+        }
+    }
+
     const copyToClipboard = async (text: string, key: string) => {
         try {
             await navigator.clipboard.writeText(text)
@@ -321,38 +285,6 @@ export default function DomainDetailPage() {
             }, 2000)
         } catch (err) {
             console.error('Failed to copy text: ', err)
-        }
-    }
-
-    const performFullRefresh = async () => {
-        if (!domainDetails) return
-
-        setIsRefreshing(true)
-        try {
-            // First check DNS records
-            toast.loading('Checking DNS records...', { id: 'refresh-toast' })
-            const dnsResponse = await fetch('/api/inbound/check-dns-records', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    domain: domainDetails.domain.domain,
-                    domainId: domainDetails.domain.id
-                })
-            })
-
-            if (dnsResponse.ok) {
-                // Then refresh all domain details (which includes comprehensive SES status check)
-                toast.loading('Checking AWS SES verification status...', { id: 'refresh-toast' })
-                await fetchDomainDetails()
-                toast.success('Domain status refreshed successfully', { id: 'refresh-toast' })
-            } else {
-                toast.error('Failed to refresh domain status', { id: 'refresh-toast' })
-            }
-        } catch (error) {
-            console.error('Error refreshing domain status:', error)
-            toast.error('Failed to refresh domain status', { id: 'refresh-toast' })
-        } finally {
-            setIsRefreshing(false)
         }
     }
 
@@ -381,7 +313,7 @@ export default function DomainDetailPage() {
             if (response.ok) {
                 setNewEmailAddress('')
                 setSelectedWebhookId('none')
-                await fetchDomainDetails() // Refresh the data
+                await fetchDomainDetailsBackground() // Refresh the data
                 toast.success('Email address added successfully')
                 if (result.warning) {
                     toast.warning(result.warning)
@@ -414,7 +346,7 @@ export default function DomainDetailPage() {
             })
 
             if (response.ok) {
-                await fetchDomainDetails() // Refresh the data
+                await fetchDomainDetailsBackground() // Refresh the data
                 toast.success('Email address deleted successfully')
             } else {
                 const result = await response.json()
@@ -479,7 +411,7 @@ export default function DomainDetailPage() {
                 setIsWebhookDialogOpen(false)
                 setSelectedEmailForWebhook(null)
                 setWebhookDialogSelectedId('none')
-                await fetchDomainDetails() // Refresh the data
+                await fetchDomainDetailsBackground() // Refresh the data
             } else {
                 toast.error(result.error || 'Failed to update webhook assignment')
             }
@@ -610,22 +542,81 @@ export default function DomainDetailPage() {
     if (isLoading) {
         return (
             <div className="flex flex-1 flex-col gap-6 p-6">
-                <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="sm" disabled>
-                        <ArrowLeftIcon className="h-4 w-4 mr-2" />
-                        Back to Domains
-                    </Button>
-                    <div>
-                        <div className="h-8 w-48 bg-muted animate-pulse rounded" />
-                        <div className="h-4 w-32 bg-muted animate-pulse rounded mt-2" />
+                {/* Header Skeleton */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div>
+                            <div className="flex items-center gap-2 mb-2">
+                                <div className="h-4 w-4 bg-muted animate-pulse rounded" />
+                                <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+                            </div>
+                            <div className="h-8 w-48 bg-muted animate-pulse rounded mb-2" />
+                            <div className="h-4 w-64 bg-muted animate-pulse rounded" />
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="h-6 w-20 bg-muted animate-pulse rounded" />
+                        <div className="h-8 w-20 bg-muted animate-pulse rounded" />
+                        <div className="h-8 w-28 bg-muted animate-pulse rounded" />
                     </div>
                 </div>
 
-                <div className="flex items-center justify-center">
-                    <div className="flex items-center gap-2">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                        <span className="text-muted-foreground">Loading domain details...</span>
+                {/* Domain Status Card Skeleton */}
+                <div className="border border-border rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <div>
+                            <div className="flex items-center gap-2 mb-2">
+                                <div className="h-5 w-5 bg-muted animate-pulse rounded" />
+                                <div className="h-6 w-48 bg-muted animate-pulse rounded" />
+                            </div>
+                            <div className="h-4 w-72 bg-muted animate-pulse rounded" />
+                        </div>
                     </div>
+                    
+                    {/* DNS Records Table Skeleton */}
+                    <div className="space-y-4">
+                        <div className="h-4 w-96 bg-muted animate-pulse rounded" />
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="p-4 bg-gray-50 rounded-lg border">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-5 w-12 bg-muted animate-pulse rounded" />
+                                        <div className="h-4 w-4 bg-muted animate-pulse rounded-full" />
+                                    </div>
+                                    <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+                                </div>
+                                <div className="space-y-3">
+                                    <div>
+                                        <div className="h-3 w-8 bg-muted animate-pulse rounded mb-2" />
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex-1 h-10 bg-white border rounded animate-pulse" />
+                                            <div className="h-8 w-8 bg-muted animate-pulse rounded" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="h-3 w-10 bg-muted animate-pulse rounded mb-2" />
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex-1 h-10 bg-white border rounded animate-pulse" />
+                                            <div className="h-8 w-8 bg-muted animate-pulse rounded" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Stats Cards Skeleton */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="border border-border rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-2">
+                                <div className="h-4 w-4 bg-muted animate-pulse rounded" />
+                                <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+                            </div>
+                            <div className="h-8 w-12 bg-muted animate-pulse rounded" />
+                        </div>
+                    ))}
                 </div>
             </div>
         )
@@ -688,20 +679,14 @@ export default function DomainDetailPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     {getStatusBadge(domain.status, domain.sesVerificationStatus)}
-                    {isBackgroundPolling && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                            <span>Auto-checking</span>
-                        </div>
-                    )}
                     <Button
                         variant="secondary"
                         size="sm"
-                        onClick={performFullRefresh}
+                        onClick={refreshVerification}
                         disabled={isRefreshing}
                     >
                         <RefreshCwIcon className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                        Refresh
+                        {isRefreshing ? 'Checking...' : 'Refresh'}
                     </Button>
                     
                     {/* Delete Domain Button */}
@@ -870,10 +855,10 @@ export default function DomainDetailPage() {
                             isVerified: record.isVerified
                         }))}
                         preloadedStep={1} // Start at DNS records step
-                        onRefresh={performFullRefresh}
+                        preloadedProvider={domain.domainProvider}
                         onSuccess={(domainId) => {
                             // Refresh domain details when form succeeds
-                            fetchDomainDetails()
+                            fetchDomainDetailsBackground()
                         }}
                     />
                 </div>

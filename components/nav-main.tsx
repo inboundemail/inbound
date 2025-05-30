@@ -23,20 +23,20 @@ export function NavMain({
   return (
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-2">
-        {/* <SidebarMenu>
+        <SidebarMenu>
           <SidebarMenuItem className="flex items-center gap-2">
             <Button
               variant="primary"
               className="w-full"
               asChild
             >
-              <a href="/addinbound" className="flex items-center gap-2">
+              <a href="/add" className="flex items-center gap-2">
                 <MailPlusIcon className="h-4 w-4" />
                 <span className="group-data-[collapsible=icon]:hidden">new inbound</span>
               </a>
             </Button>
           </SidebarMenuItem>
-        </SidebarMenu> */}
+        </SidebarMenu>
         <SidebarMenu>
           {items.map((item) => {
             const isActive = isNavigationItemActive(item.url, currentPath)

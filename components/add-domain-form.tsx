@@ -2,15 +2,16 @@
 
 import type React from "react"
 
-import { useState, useEffect, type FormEvent } from "react"
+import { useState, useEffect, useMemo, type FormEvent } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Globe2, ListChecks, BadgeCheck, CheckCircle2, ArrowRight, ClipboardCopy, Loader2, RefreshCw } from "lucide-react"
+import { Globe2, ListChecks, BadgeCheck, CheckCircle2, ArrowRight, ClipboardCopy, LoaderIcon, RefreshCw, Clock, AlertCircle, GlobeIcon, ExternalLinkIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { toast } from "sonner"
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table"
 
 interface StepConfig {
   id: string
@@ -54,9 +55,30 @@ interface AddDomainFormProps {
   preloadedDomainId?: string
   preloadedDnsRecords?: DnsRecord[]
   preloadedStep?: number
+  preloadedProvider?: string
   onRefresh?: () => void
   // Optional callback when domain is successfully added/verified
   onSuccess?: (domainId: string) => void
+}
+
+// Provider documentation mapping
+const getProviderDocUrl = (provider: string): string | null => {
+  const providerMap: Record<string, string> = {
+    'route53': 'https://resend.com/docs/knowledge-base/route53',
+    'amazon route 53': 'https://resend.com/docs/knowledge-base/route53',
+    'aws': 'https://resend.com/docs/knowledge-base/route53',
+    'cloudflare': 'https://resend.com/docs/knowledge-base/cloudflare',
+    'namecheap': 'https://resend.com/docs/knowledge-base/namecheap',
+    'vercel': 'https://resend.com/docs/knowledge-base/vercel',
+    'squarespace': 'https://resend.com/docs/knowledge-base/squarespace',
+    'hostzinger': 'https://resend.com/docs/knowledge-base/hostzinger',
+    'ionos': 'https://resend.com/docs/knowledge-base/ionos',
+    'gandi': 'https://resend.com/docs/knowledge-base/gandi',
+    'porkbun': 'https://resend.com/docs/knowledge-base/porkbun'
+  }
+  
+  const normalizedProvider = provider.toLowerCase().trim()
+  return providerMap[normalizedProvider] || null
 }
 
 export default function AddDomainForm({ 
@@ -64,6 +86,7 @@ export default function AddDomainForm({
   preloadedDomainId = "",
   preloadedDnsRecords = [],
   preloadedStep = 0,
+  preloadedProvider = "",
   onRefresh,
   onSuccess
 }: AddDomainFormProps) {
@@ -71,17 +94,24 @@ export default function AddDomainForm({
   const [domainName, setDomainName] = useState(preloadedDomain)
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [verificationStatus, setVerificationStatus] = useState<'pending' | 'verified' | 'failed' | null>(null)
   const [dnsRecords, setDnsRecords] = useState<DnsRecord[]>(preloadedDnsRecords)
   const [domainId, setDomainId] = useState(preloadedDomainId)
   const router = useRouter()
+
+  // Memoize the DNS records to prevent unnecessary re-renders
+  const memoizedPreloadedDnsRecords = useMemo(() => preloadedDnsRecords, [
+    JSON.stringify(preloadedDnsRecords)
+  ])
 
   // Update state when props change (for when component is reused with different data)
   useEffect(() => {
     setCurrentStepIdx(preloadedStep)
     setDomainName(preloadedDomain)
-    setDnsRecords(preloadedDnsRecords)
+    setDnsRecords(memoizedPreloadedDnsRecords)
     setDomainId(preloadedDomainId)
-  }, [preloadedStep, preloadedDomain, preloadedDnsRecords, preloadedDomainId])
+  }, [preloadedStep, preloadedDomain, memoizedPreloadedDnsRecords, preloadedDomainId])
 
   const handleNext = () => {
     if (currentStepIdx === 0 && !domainName.trim()) {
@@ -155,9 +185,12 @@ export default function AddDomainForm({
         return
       }
 
+      console.log("addResult", addResult)
+
       // Success - move to next step
       setDnsRecords(addResult.dnsRecords)
       setDomainId(addResult.domainId)
+      setVerificationStatus(addResult.status)
       setCurrentStepIdx(1)
 
       // Call success callback if provided
@@ -173,12 +206,63 @@ export default function AddDomainForm({
     }
   }
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     if (onRefresh) {
       onRefresh()
-    } else {
-      // Default refresh behavior - just show a toast for now
-      toast.info("Refresh functionality will be implemented soon")
+      return
+    }
+
+    if (!domainId) {
+      toast.error("No domain ID available for verification")
+      return
+    }
+
+    setIsRefreshing(true)
+    setError("")
+
+    try {
+      const response = await fetch('/api/domain/verifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'checkVerification',
+          domainId: domainId
+        })
+      })
+
+      const result: ApiResponse = await response.json()
+
+      console.log("result", result)
+
+      if (!result.success) {
+        setError(result.error || 'Failed to check verification status')
+        toast.error("Failed to refresh status")
+        return
+      }
+
+      // Update verification status
+      setVerificationStatus(result.status)
+      
+      if (result.status === 'verified') {
+        toast.success("Domain verified successfully!")
+        setCurrentStepIdx(2)
+      } else if (result.status === 'failed') {
+        toast.error("Domain verification failed")
+      } else {
+        toast.info("Domain verification still pending")
+      }
+
+      // Update DNS records if provided
+      if (result.dnsRecords) {
+        setDnsRecords(result.dnsRecords)
+      }
+
+    } catch (err) {
+      console.error('Error checking verification:', err)
+      setError('An unexpected error occurred while checking verification status.')
+      toast.error("Failed to refresh status")
+    } finally {
+      setIsRefreshing(false)
     }
   }
 
@@ -197,7 +281,7 @@ export default function AddDomainForm({
   const isStepFuture = (index: number) => index > currentStepIdx
 
   return (
-    <div className="flex min-h-screen flex-col bg-background py-12">
+    <div className="flex min-h-screen flex-col bg-background">
       <div className="w-full max-w-4xl px-2  mx-auto">
         <header className="mb-8 flex items-center space-x-4">
           {/* <div className="rounded-lg bg-iconBg">
@@ -311,7 +395,7 @@ export default function AddDomainForm({
                     <Button type="submit" variant="primary" className="mt-4 w-full md:w-auto" disabled={isLoading}>
                       {isLoading ? (
                         <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          <LoaderIcon className="mr-2 h-4 w-4 animate-spin" />
                           Adding Domain...
                         </>
                       ) : (
@@ -328,64 +412,168 @@ export default function AddDomainForm({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <h2 className="text-lg font-semibold text-darkText">{stepsConfig[1].name}</h2>
+                    {preloadedProvider && (
+                      <div className="flex items-center gap-2">
+                        {getProviderDocUrl(preloadedProvider) ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => window.open(getProviderDocUrl(preloadedProvider)!, '_blank')}
+                            className="flex items-center gap-2 text-sm border"
+                          >
+                            <GlobeIcon className="h-4 w-4" />
+                            <span>{preloadedProvider} Setup Guide</span>
+                            <ExternalLinkIcon className="h-3 w-3" />
+                          </Button>
+                        ) : (
+                          <div className="flex items-center gap-1 text-sm text-mediumText">
+                            <GlobeIcon className="h-4 w-4" />
+                            <span>Provider: <span className="font-medium">{preloadedProvider}</span></span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <p className="mb-6 text-sm text-mediumText">{stepsConfig[1].description}</p>
 
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm border border-gray-200 rounded-lg">
-                      <thead>
-                        <tr className="bg-gray-50">
-                          <th className="px-4 py-3 text-left font-medium text-gray-900 border-b border-gray-200">
-                            Record name
-                          </th>
-                          <th className="px-4 py-3 text-left font-medium text-gray-900 border-b border-gray-200">
-                            Type
-                          </th>
-                          <th className="px-4 py-3 text-left font-medium text-gray-900 border-b border-gray-200">
-                            TTL
-                          </th>
-                          <th className="px-4 py-3 text-left font-medium text-gray-900 border-b border-gray-200">
-                            Value
-                          </th>
-                          <th className="px-4 py-3 w-16 border-b border-gray-200"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white">
-                        {dnsRecords.map((record, idx) => (
-                          <tr key={`${record.type}-${idx}`} className="border-b border-gray-100 last:border-b-0">
-                            <td className="px-4 py-3 font-mono text-sm text-gray-900">
-                              {record.name.replace(`.${domainName}`, '')}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">
-                              {record.type}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">
-                              Auto
-                            </td>
-                            <td className="px-4 py-3 font-mono text-sm text-gray-900 max-w-xs truncate">
-                              {record.value}
-                            </td>
-                            <td className="px-4 py-3">
+                  {/* Provider Information Note */}
+                  {preloadedProvider && (
+                    <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm text-blue-800">
+                        <strong>Detected Provider:</strong> We've identified your domain is managed by {preloadedProvider}. 
+                        {getProviderDocUrl(preloadedProvider) ? (
+                          <>
+                            {' '}Follow our step-by-step guide above or add the DNS records below to your {preloadedProvider} control panel.
+                          </>
+                        ) : (
+                          <>
+                            {' '}Add the DNS records below to your {preloadedProvider} control panel or DNS management interface.
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Verification Status Indicator */}
+                  {verificationStatus && (
+                    <div className={cn(
+                      "mb-6 rounded-lg p-4 border",
+                      {
+                        "bg-yellow-50 border-yellow-200": verificationStatus === 'pending',
+                        "bg-green-50 border-green-200": verificationStatus === 'verified',
+                        "bg-red-50 border-red-200": verificationStatus === 'failed',
+                      }
+                    )}>
+                      <div className="flex items-center">
+                        {verificationStatus === 'pending' && (
+                          <>
+                            <Clock className="h-4 w-4 text-yellow-600 mr-2" />
+                            <span className="text-sm font-medium text-yellow-800">
+                              Verification Pending
+                            </span>
+                            {isRefreshing && (
+                              <LoaderIcon className="ml-2 h-4 w-4 animate-spin text-yellow-600" />
+                            )}
+                          </>
+                        )}
+                        {verificationStatus === 'verified' && (
+                          <>
+                            <CheckCircle2 className="h-4 w-4 text-green-600 mr-2" />
+                            <span className="text-sm font-medium text-green-800">
+                              Domain Verified
+                            </span>
+                          </>
+                        )}
+                        {verificationStatus === 'failed' && (
+                          <>
+                            <AlertCircle className="h-4 w-4 text-red-600 mr-2" />
+                            <span className="text-sm font-medium text-red-800">
+                              Verification Failed
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {verificationStatus === 'pending' && "DNS records are being verified. This may take a few minutes."}
+                        {verificationStatus === 'verified' && "Your domain has been successfully verified and is ready to use."}
+                        {verificationStatus === 'failed' && "Please check your DNS records and try again."}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="overflow-hidden border border-border rounded-lg">
+                    {/* Table Header */}
+                    <div className="bg-muted/30 border-b border-border">
+                      <div className="flex text-sm font-medium text-muted-foreground px-4 py-3">
+                        <span className="w-[25%]">Record name</span>
+                        <span className="w-[25%]">Type</span>
+                        <span className="w-[25%]">TTL</span>
+                        <span className="w-[25%]">Value</span>
+                      </div>
+                    </div>
+                    
+                    {/* Table Body */}
+                    <div className="bg-white">
+                      {dnsRecords.map((record, idx) => (
+                        <div key={`${record.type}-${idx}`} className={`flex hover:bg-muted/50 transition-colors px-4 py-3 ${
+                          idx < dnsRecords.length - 1 ? 'border-b border-border/50' : ''
+                        }`}>
+                          <div className="w-[25%] pr-4">
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-sm truncate">{
+                                record.name.includes(`.${domainName}`) 
+                                  ? record.name.replace(`.${domainName}`, '') 
+                                  : record.name === domainName.split('.').slice(-2).join('.') 
+                                    ? '*' 
+                                    : record.name.replace(/\.[^.]+\.[^.]+$/, '')
+                              }</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => copyToClipboard(record.name.replace(`.${domainName}`, ''))}
+                                className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded flex-shrink-0 ml-2"
+                              >
+                                <ClipboardCopy size={16} className="text-gray-600" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="w-[25%] pr-4">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm">{record.type}</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => copyToClipboard(record.type)}
+                                className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded flex-shrink-0 ml-2"
+                              >
+                                <ClipboardCopy size={16} className="text-gray-600" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="w-[25%] pr-4">
+                            <span className="text-sm">Auto</span>
+                          </div>
+                          <div className="w-[25%]">
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-sm truncate opacity-50">{record.value}</span>
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => copyToClipboard(record.value)}
-                                className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded"
+                                className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded flex-shrink-0 ml-2"
                               >
                                 <ClipboardCopy size={16} className="text-gray-600" />
                               </Button>
-                            </td>
-                          </tr>
-                        ))}
-                        {dnsRecords.length === 0 && (
-                          <tr>
-                            <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
-                              No DNS records available yet.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {dnsRecords.length === 0 && (
+                        <div className="text-center py-8 text-gray-500">
+                          No DNS records available yet.
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
@@ -394,19 +582,10 @@ export default function AddDomainForm({
                     onClick={handleRefresh} 
                     variant="primary" 
                     className="mt-10 w-full md:w-auto"
-                    disabled={isLoading}
+                    disabled={isRefreshing}
                   >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Refreshing...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Refresh Status
-                      </>
-                    )}
+                    <RefreshCw className={cn("mr-2 h-4 w-4", { "animate-spin": isRefreshing })} />
+                    Refresh Status
                   </Button>
                 </div>
               )}

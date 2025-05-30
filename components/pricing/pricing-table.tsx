@@ -5,7 +5,7 @@ import { createContext, useContext, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { Check, Loader2 } from "lucide-react";
+import { Check, LoaderIcon } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
 import Link from "next/link";
 
@@ -310,7 +310,7 @@ export const PricingCardButton = React.forwardRef<
       {...props}
     >
       {loading ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <LoaderIcon className="h-4 w-4 animate-spin" />
       ) : (
         children
       )}

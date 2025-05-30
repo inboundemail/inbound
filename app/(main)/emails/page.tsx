@@ -106,7 +106,6 @@ export default function EmailsPage() {
 
   // Sync with AWS state
   const [isSyncing, setIsSyncing] = useState(false)
-  const [syncingDomainId, setSyncingDomainId] = useState<string | null>(null)
 
   // MX records conflict error state
   const [mxConflictError, setMxConflictError] = useState<{
@@ -207,35 +206,9 @@ export default function EmailsPage() {
     }
   }
 
-  const handleRowClick = async (domainId: string) => {
-    try {
-      setSyncingDomainId(domainId)
-      
-      // Auto-sync with AWS before navigating
-      const response = await fetch('/api/domains/stats', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ syncWithAWS: true })
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        if (result.synced > 0) {
-          toast.success(`Synced ${result.synced} domains with AWS SES`)
-          // Refresh the domain stats after sync
-          await fetchDomainStats()
-        }
-      }
-      
-      // Navigate to domain detail page
-      router.push(`/emails/${domainId}`)
-    } catch (error) {
-      console.error('Auto-sync error:', error)
-      // Still navigate even if sync fails
-      router.push(`/emails/${domainId}`)
-    } finally {
-      setSyncingDomainId(null)
-    }
+  const handleRowClick = (domainId: string) => {
+    // Navigate directly to domain detail page
+    router.push(`/emails/${domainId}`)
   }
 
   const handleAddDomain = () => {
@@ -687,24 +660,17 @@ export default function EmailsPage() {
                         key={domain.id} 
                         className={`hover:bg-muted/50 cursor-pointer transition-colors ${
                           index < filteredDomains.length - 1 ? 'border-b border-border/50' : ''
-                        } ${syncingDomainId === domain.id ? 'opacity-60' : ''}`}
+                        }`}
                         onClick={() => handleRowClick(domain.id)}
                       >
                         <TableCell className="w-1/5">
                           <div className="flex items-center gap-3">
                             <div className={`flex items-center justify-center w-8 h-8 rounded-md ${iconColors.bgColor} border-2 ${iconColors.borderColor}`}>
-                              {syncingDomainId === domain.id ? (
-                                <RefreshCwIcon className="h-4 w-4 text-purple-600 animate-spin" />
-                              ) : (
-                                <GlobeIcon className={`h-4 w-4 ${iconColors.iconColor}`} />
-                              )}
+                              <GlobeIcon className={`h-4 w-4 ${iconColors.iconColor}`} />
                             </div>
                             <div>
                               <div className="font-medium text-base py-2">
                                 {domain.domain}
-                                {syncingDomainId === domain.id && (
-                                  <span className="text-xs text-muted-foreground ml-2">Syncing...</span>
-                                )}
                               </div>
                             </div>
                           </div>

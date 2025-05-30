@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { LoaderIcon } from "lucide-react";
 import {
   PricingDialog,
   PricingDialogTitle,
@@ -134,7 +134,7 @@ export default function ProductChangeDialog(params?: ProductChangeDialogProps) {
           }}
           disabled={loading}
         >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm"}
+          {loading ? <LoaderIcon className="w-4 h-4 animate-spin" /> : "Confirm"}
         </PricingDialogButton>
       </PricingDialogFooter>
     </PricingDialog>

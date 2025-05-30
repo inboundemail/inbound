@@ -8,7 +8,7 @@ import {
   PricingDialogTitle,
   Information,
 } from "@/components/pricing/pricing-dialog";
-import { Loader2 } from "lucide-react";
+import { LoaderIcon } from "lucide-react";
 
 import { getPaywallDialogTexts } from "@/lib/autumn/get-paywall-texts";
 import { type CheckFeatureFormattedPreview } from "autumn-js";
@@ -57,7 +57,7 @@ export default function PaywallDialog(params?: PaywallDialogProps) {
             }
           }}
         >
-          {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+          {loading && <LoaderIcon className="w-4 h-4 mr-2 animate-spin" />}
 
           {products.length > 0
             ? products[0].is_add_on
