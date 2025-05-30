@@ -35,6 +35,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.env.vault
 
 # vercel
 .vercel
@@ -46,3 +47,4 @@ next-env.d.ts
 .flaskenv*
 !.env.project
 !.env.vault
+.env.vault
