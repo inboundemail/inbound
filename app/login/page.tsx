@@ -38,13 +38,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-svh">
+    <div className="relative h-screen">
       {/* Background image - full screen */}
-      <div className="absolute inset-0 hidden lg:block">
+      <div className="absolute inset-0 hidden lg:block h-screen">
         <img
           src="/login.png"
           alt="Image"
-          className="h-full w-full object-cover blur-sm scale-110 dark:brightness-[0.2] dark:grayscale"
+          className="h-screen w-screen object-cover blur-[3px] inside-border border-purple-500"
         />
       </div>
       

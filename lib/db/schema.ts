@@ -23,10 +23,8 @@ export const subscriptions = pgTable('subscriptions', {
 export const emailDomains = pgTable('email_domains', {
   id: varchar('id', { length: 255 }).primaryKey(),
   domain: varchar('domain', { length: 255 }).notNull().unique(),
-  status: varchar('status', { length: 50 }).notNull(), // 'pending', 'dns_verified', 'ses_verified', 'failed'
+  status: varchar('status', { length: 50 }).notNull(), // 'pending', 'verified', 'failed'
   verificationToken: varchar('verification_token', { length: 255 }),
-  sesVerificationStatus: varchar('ses_verification_status', { length: 50 }), // 'Pending', 'Success', 'Failed'
-  dnsCheckPassed: boolean('dns_check_passed').default(false),
   canReceiveEmails: boolean('can_receive_emails').default(false),
   hasMxRecords: boolean('has_mx_records').default(false),
   domainProvider: varchar('domain_provider', { length: 100 }),
@@ -183,8 +181,7 @@ export type NewDomainDnsRecord = typeof domainDnsRecords.$inferInsert;
 // Domain status enums
 export const DOMAIN_STATUS = {
   PENDING: 'pending',
-  DNS_VERIFIED: 'dns_verified', 
-  SES_VERIFIED: 'ses_verified',
+  VERIFIED: 'verified',
   FAILED: 'failed'
 } as const;
 
