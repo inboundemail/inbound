@@ -129,20 +129,19 @@ export async function GET(
           // Determine new domain status based on SES response
           let newStatus = domain.status
           if (sesStatus === 'Success') {
-            newStatus = DOMAIN_STATUS.SES_VERIFIED
+            newStatus = DOMAIN_STATUS.VERIFIED
           } else if (sesStatus === 'Failed') {
             newStatus = DOMAIN_STATUS.FAILED
           }
           
           // Update domain record if status changed
-          if (newStatus !== domain.status || domain.sesVerificationStatus !== sesStatus) {
+          if (newStatus !== domain.status) {
             console.log(`📝 Updating domain status from ${domain.status} to ${newStatus}, SES status: ${sesStatus}`)
             
             const [updated] = await db
               .update(emailDomains)
               .set({
                 status: newStatus,
-                sesVerificationStatus: sesStatus,
                 lastSesCheck: new Date(),
                 updatedAt: new Date()
               })
@@ -181,13 +180,13 @@ export async function GET(
       console.log(`⚠️ SES client not available for comprehensive verification check`)
     } else {
       // Auto-check SES verification if domain is in dns_verified status
-      if (domain.status === DOMAIN_STATUS.DNS_VERIFIED) {
+      if (domain.status === DOMAIN_STATUS.VERIFIED) {
         try {
           console.log(`Auto-checking SES verification for domain: ${domain.domain}`)
           const verificationResult = await initiateDomainVerification(domain.domain, session.user.id)
           
           // If status changed, get the updated domain record
-          if (verificationResult.status !== domain.status) {
+          if (verificationResult.status === DOMAIN_STATUS.VERIFIED) {
             const updatedDomainRecord = await db
               .select()
               .from(emailDomains)
@@ -258,15 +257,14 @@ export async function GET(
       .filter(record => record.isRequired)
       .every(record => record.isVerified)
 
-    const canProceed = updatedDomain.status === 'ses_verified' || 
-      (updatedDomain.status === 'dns_verified' && allRequiredDnsVerified)
+    const canProceed = updatedDomain.status === DOMAIN_STATUS.VERIFIED || 
+      (updatedDomain.status === DOMAIN_STATUS.VERIFIED && allRequiredDnsVerified)
 
     return NextResponse.json({
       domain: {
         id: updatedDomain.id,
         domain: updatedDomain.domain,
         status: updatedDomain.status,
-        sesVerificationStatus: updatedDomain.sesVerificationStatus,
         verificationToken: updatedDomain.verificationToken,
         canReceiveEmails: updatedDomain.canReceiveEmails,
         hasMxRecords: updatedDomain.hasMxRecords,
@@ -342,7 +340,7 @@ export async function DELETE(
     console.log(`🗑️ Starting domain deletion process for: ${domain.domain}`)
 
     // Step 1: Remove SES receipt rules first (if domain is verified)
-    if (domain.status === DOMAIN_STATUS.SES_VERIFIED) {
+    if (domain.status === DOMAIN_STATUS.VERIFIED) {
       try {
         const sesRuleManager = new AWSSESReceiptRuleManager()
         const ruleRemoved = await sesRuleManager.removeEmailReceiving(domain.domain)

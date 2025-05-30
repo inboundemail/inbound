@@ -48,7 +48,6 @@ export async function GET(request: NextRequest) {
         id: emailDomains.id,
         domain: emailDomains.domain,
         status: emailDomains.status,
-        sesVerificationStatus: emailDomains.sesVerificationStatus,
         canReceiveEmails: emailDomains.canReceiveEmails,
         createdAt: emailDomains.createdAt,
         updatedAt: emailDomains.updatedAt,
@@ -78,7 +77,7 @@ export async function GET(request: NextRequest) {
       id: domain.id,
       domain: domain.domain,
       status: domain.status,
-      isVerified: domain.sesVerificationStatus === SES_VERIFICATION_STATUS.SUCCESS && domain.canReceiveEmails,
+      isVerified: domain.status === DOMAIN_STATUS.VERIFIED && domain.canReceiveEmails,
       emailAddressCount: domain.emailAddressCount,
       emailsLast24h: domain.emailsLast24h,
       createdAt: domain.createdAt,
@@ -141,7 +140,6 @@ export async function POST(request: NextRequest) {
         id: emailDomains.id,
         domain: emailDomains.domain,
         status: emailDomains.status,
-        sesVerificationStatus: emailDomains.sesVerificationStatus,
         canReceiveEmails: emailDomains.canReceiveEmails
       })
       .from(emailDomains)
@@ -172,28 +170,21 @@ export async function POST(request: NextRequest) {
       
       if (sesStatus) {
         const isVerified = sesStatus.VerificationStatus === 'Success'
-        const newSesVerificationStatus = sesStatus.VerificationStatus === 'Success' 
-          ? SES_VERIFICATION_STATUS.SUCCESS 
-          : sesStatus.VerificationStatus === 'Failed'
-          ? SES_VERIFICATION_STATUS.FAILED
-          : SES_VERIFICATION_STATUS.PENDING
 
-        const newStatus = isVerified ? DOMAIN_STATUS.SES_VERIFIED : domain.status
+        const newStatus = isVerified ? DOMAIN_STATUS.VERIFIED : domain.status
         const canReceiveEmails = isVerified
         const dnsCheckPassed = isVerified
 
         // Update the domain if there are changes
         if (
-          domain.sesVerificationStatus !== newSesVerificationStatus ||
+          domain.status !== newStatus ||
           domain.canReceiveEmails !== canReceiveEmails ||
           domain.status !== newStatus
         ) {
           await db
             .update(emailDomains)
             .set({
-              sesVerificationStatus: newSesVerificationStatus,
               canReceiveEmails,
-              dnsCheckPassed,
               status: newStatus,
               lastSesCheck: new Date(),
               updatedAt: new Date()
@@ -203,15 +194,15 @@ export async function POST(request: NextRequest) {
           syncedCount++
           syncResults.push({
             domain: domain.domain,
-            oldStatus: domain.sesVerificationStatus,
-            newStatus: newSesVerificationStatus,
+            oldStatus: domain.status,
+            newStatus: newStatus,
             canReceiveEmails,
             updated: true
           })
         } else {
           syncResults.push({
             domain: domain.domain,
-            status: domain.sesVerificationStatus,
+            status: domain.status,
             canReceiveEmails: domain.canReceiveEmails,
             updated: false
           })

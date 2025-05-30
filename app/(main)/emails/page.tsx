@@ -146,8 +146,7 @@ export default function EmailsPage() {
         if (sortField === 'status') {
           // Sort by verification status first, then by status
           const statusOrder = {
-            [DOMAIN_STATUS.SES_VERIFIED]: 4,
-            [DOMAIN_STATUS.DNS_VERIFIED]: 3,
+            [DOMAIN_STATUS.VERIFIED]: 4,
             [DOMAIN_STATUS.PENDING]: 2,
             [DOMAIN_STATUS.FAILED]: 1
           }
@@ -345,18 +344,11 @@ export default function EmailsPage() {
             Pending
           </Badge>
         )
-      case DOMAIN_STATUS.DNS_VERIFIED:
+      case DOMAIN_STATUS.VERIFIED:
         return (
           <Badge className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 transition-colors">
             <ClockIcon className="h-3 w-3 mr-1" />
             SES Pending
-          </Badge>
-        )
-      case DOMAIN_STATUS.SES_VERIFIED:
-        return (
-          <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
-            <CheckCircleIcon className="h-3 w-3 mr-1" />
-            Verified
           </Badge>
         )
       case DOMAIN_STATUS.FAILED:
@@ -377,7 +369,7 @@ export default function EmailsPage() {
   }
 
   const getGlobeIconColor = (domain: DomainStats) => {
-    if (domain.isVerified || domain.status === DOMAIN_STATUS.SES_VERIFIED) {
+    if (domain.isVerified || domain.status === DOMAIN_STATUS.VERIFIED) {
       return {
         bgColor: 'bg-purple-100',
         borderColor: 'border-purple-200',
@@ -392,7 +384,7 @@ export default function EmailsPage() {
           borderColor: 'border-amber-200',
           iconColor: 'text-amber-600'
         }
-      case DOMAIN_STATUS.DNS_VERIFIED:
+      case DOMAIN_STATUS.VERIFIED:
         return {
           bgColor: 'bg-blue-100',
           borderColor: 'border-blue-200',

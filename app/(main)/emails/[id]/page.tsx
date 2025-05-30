@@ -178,7 +178,7 @@ export default function DomainDetailPage() {
         if (!session?.user || !domainId || !domainDetails) return
 
         // Don't poll if domain is already fully verified
-        if (domainDetails.domain.status === DOMAIN_STATUS.SES_VERIFIED) {
+        if (domainDetails.domain.status === DOMAIN_STATUS.VERIFIED) {
             setIsBackgroundPolling(false)
             return
         }
@@ -229,9 +229,9 @@ export default function DomainDetailPage() {
                         
                         // Show appropriate toast notification
                         if (hasStatusChanged) {
-                            if (data.domain.status === DOMAIN_STATUS.SES_VERIFIED) {
+                            if (data.domain.status === DOMAIN_STATUS.VERIFIED) {
                                 toast.success(`🎉 Domain ${data.domain.domain} is now fully verified!`)
-                            } else if (data.domain.status === DOMAIN_STATUS.DNS_VERIFIED) {
+                            } else if (data.domain.status === DOMAIN_STATUS.VERIFIED) {
                                 toast.success(`✅ DNS verification complete! SES verification in progress...`)
                             } else if (data.domain.status === DOMAIN_STATUS.FAILED) {
                                 toast.error(`❌ Domain verification failed. Please check your DNS records.`)
@@ -243,7 +243,7 @@ export default function DomainDetailPage() {
                         }
                         
                         // Stop polling if domain is now fully verified
-                        if (data.domain.status === DOMAIN_STATUS.SES_VERIFIED) {
+                        if (data.domain.status === DOMAIN_STATUS.VERIFIED) {
                             clearInterval(pollInterval)
                             setIsBackgroundPolling(false)
                             console.log(`✅ Stopping background polling - domain fully verified`)
@@ -565,7 +565,7 @@ export default function DomainDetailPage() {
     }
 
     const getStatusBadge = (status: string, sesStatus?: string) => {
-        if (status === DOMAIN_STATUS.SES_VERIFIED) {
+        if (status === DOMAIN_STATUS.VERIFIED) {
             return (
                 <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
                     <CheckCircleIcon className="h-3 w-3 mr-1" />
@@ -582,7 +582,7 @@ export default function DomainDetailPage() {
                         Pending
                     </Badge>
                 )
-            case DOMAIN_STATUS.DNS_VERIFIED:
+            case DOMAIN_STATUS.VERIFIED:
                 return (
                     <Badge className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 transition-colors">
                         <ClockIcon className="h-3 w-3 mr-1" />
@@ -665,7 +665,7 @@ export default function DomainDetailPage() {
     const { domain, dnsRecords, emailAddresses, stats } = domainDetails
 
     // Determine what to show based on domain status
-    const showEmailSection = domain.status === DOMAIN_STATUS.SES_VERIFIED
+    const showEmailSection = domain.status === DOMAIN_STATUS.VERIFIED
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-6">
@@ -680,8 +680,7 @@ export default function DomainDetailPage() {
                         <h1 className="text-3xl font-bold tracking-tight">{domain.domain}</h1>
                         <p className="text-muted-foreground">
                             {domain.status === DOMAIN_STATUS.PENDING && "Add DNS records to complete verification"}
-                            {domain.status === DOMAIN_STATUS.DNS_VERIFIED && "SES verification in progress - this may take a few minutes"}
-                            {domain.status === DOMAIN_STATUS.SES_VERIFIED && "Domain verified - manage email addresses below"}
+                            {domain.status === DOMAIN_STATUS.VERIFIED && "Domain verified - manage email addresses below"}
                             {domain.status === DOMAIN_STATUS.FAILED && "Domain verification failed - please check your DNS records"}
                         </p>
                     </div>
@@ -858,7 +857,7 @@ export default function DomainDetailPage() {
             )}
 
             {/* SES Verification Status - Show for DNS verified domains */}
-            {(domain.status === DOMAIN_STATUS.PENDING || domain.status === DOMAIN_STATUS.DNS_VERIFIED || domain.status === DOMAIN_STATUS.FAILED) && (
+            {(domain.status === DOMAIN_STATUS.PENDING || domain.status === DOMAIN_STATUS.VERIFIED || domain.status === DOMAIN_STATUS.FAILED) && (
                 <Card>
                     <CardHeader>
                         <div className="flex items-center justify-between">
@@ -866,12 +865,12 @@ export default function DomainDetailPage() {
                                 <CardTitle className="flex items-center gap-2">
                                     <ClockIcon className="h-5 w-5 text-blue-600" />
                                     {domain.status === DOMAIN_STATUS.PENDING && "Domain Verification Required"}
-                                    {domain.status === DOMAIN_STATUS.DNS_VERIFIED && "SES Verification in Progress"}
+                                    {domain.status === DOMAIN_STATUS.VERIFIED && "SES Verification in Progress"}
                                     {domain.status === DOMAIN_STATUS.FAILED && "Domain Verification Failed"}
                                 </CardTitle>
                                 <CardDescription>
                                     {domain.status === DOMAIN_STATUS.PENDING && "Add the DNS records below to complete domain verification for email receiving."}
-                                    {domain.status === DOMAIN_STATUS.DNS_VERIFIED && "DNS records verified. Waiting for SES to complete domain verification."}
+                                    {domain.status === DOMAIN_STATUS.VERIFIED && "DNS records verified. Waiting for SES to complete domain verification."}
                                     {domain.status === DOMAIN_STATUS.FAILED && "DNS verification failed. Please check and update your DNS records below."}
                                 </CardDescription>
                             </div>
@@ -1024,7 +1023,7 @@ export default function DomainDetailPage() {
             )}
 
             {/* SES Verification Complete - Show when all DNS records are verified */}
-            {domain.status === DOMAIN_STATUS.DNS_VERIFIED && dnsRecords.every(record => record.isVerified) && (
+            {domain.status === DOMAIN_STATUS.VERIFIED && dnsRecords.every(record => record.isVerified) && (
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">

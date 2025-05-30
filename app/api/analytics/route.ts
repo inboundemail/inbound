@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { receivedEmails, sesEvents, emailDomains, emailAddresses, SES_VERIFICATION_STATUS } from '@/lib/db/schema'
+import { receivedEmails, sesEvents, emailDomains, emailAddresses, SES_VERIFICATION_STATUS, DOMAIN_STATUS } from '@/lib/db/schema'
 import { eq, and, gte, desc, sql, count } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
         .from(emailDomains)
         .where(and(
           eq(emailDomains.userId, userId),
-          eq(emailDomains.sesVerificationStatus, SES_VERIFICATION_STATUS.SUCCESS),
+          eq(emailDomains.status, DOMAIN_STATUS.VERIFIED),
           eq(emailDomains.canReceiveEmails, true)
         )),
       

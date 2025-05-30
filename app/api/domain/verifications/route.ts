@@ -330,7 +330,7 @@ async function handleAddDomain(
     
     // Map old status values to new simplified enum
     let mappedStatus: 'pending' | 'verified' | 'failed' = 'pending'
-    if (verificationResult.status === 'ses_verified') {
+    if (verificationResult.status === 'verified') {
       mappedStatus = 'verified'
     } else if (verificationResult.status === 'failed') {
       mappedStatus = 'failed'

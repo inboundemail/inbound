@@ -24,7 +24,7 @@ export interface DomainVerificationResult {
   domain: string
   domainId: string
   verificationToken: string
-  status: 'pending' | 'dns_verified' | 'ses_verified' | 'failed'
+  status: 'pending' | 'verified' | 'failed'
   sesStatus?: string
   dnsRecords: Array<{
     type: string
@@ -89,10 +89,10 @@ export async function initiateDomainVerification(
 
     // Determine verification status
     const sesStatus = attributes?.VerificationStatus || 'Pending'
-    let status: 'pending' | 'dns_verified' | 'ses_verified' | 'failed' = 'pending'
+    let status: 'pending' | 'verified' | 'failed' = 'pending'
     
     if (sesStatus === 'Success') {
-      status = 'ses_verified'
+      status = 'verified'
     } else if (sesStatus === 'Failed') {
       status = 'failed'
     }
@@ -136,7 +136,7 @@ export async function initiateDomainVerification(
       status,
       sesStatus,
       dnsRecords,
-      canProceed: status === 'ses_verified'
+      canProceed: status === 'verified'
     }
 
   } catch (error) {

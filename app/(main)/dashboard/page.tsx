@@ -165,20 +165,14 @@ export default function Page() {
             Pending
           </Badge>
         )
-      case DOMAIN_STATUS.DNS_VERIFIED:
+      case DOMAIN_STATUS.VERIFIED:
         return (
           <Badge className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 transition-colors">
             <ClockIcon className="h-3 w-3 mr-1" />
             SES Pending
           </Badge>
         )
-      case DOMAIN_STATUS.SES_VERIFIED:
-        return (
-          <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
-            <CheckCircleIcon className="h-3 w-3 mr-1" />
-            Verified
-          </Badge>
-        )
+
       case DOMAIN_STATUS.FAILED:
         return (
           <Badge className="bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-200 transition-colors">

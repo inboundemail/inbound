@@ -28,7 +28,6 @@ export async function createDomainVerification(
     domain,
     userId,
     status: 'pending',
-    dnsCheckPassed: dnsCheckResult.canReceiveEmails,
     canReceiveEmails: dnsCheckResult.canReceiveEmails,
     hasMxRecords: dnsCheckResult.hasMxRecords,
     domainProvider: dnsCheckResult.provider?.name,
@@ -55,8 +54,7 @@ export async function updateDomainSesVerification(
     .update(emailDomains)
     .set({
       verificationToken,
-      sesVerificationStatus: sesStatus,
-      status: sesStatus === 'Success' ? 'ses_verified' : 'dns_verified',
+      status: sesStatus === 'Success' ? 'verified' : 'pending',
       lastSesCheck: new Date(),
       updatedAt: new Date(),
     })

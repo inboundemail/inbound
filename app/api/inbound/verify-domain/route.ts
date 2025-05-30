@@ -55,8 +55,8 @@ export async function POST(request: NextRequest) {
           const allDnsVerified = dnsChecks.every(check => check.isVerified)
           
           if (allDnsVerified) {
-            verificationResult.status = 'ses_verified'
-            await updateDomainStatus(domainRecord.id, 'ses_verified')
+            verificationResult.status = 'verified'
+            await updateDomainStatus(domainRecord.id, 'verified')
           }
 
           // Update DNS records status with actual verification results
