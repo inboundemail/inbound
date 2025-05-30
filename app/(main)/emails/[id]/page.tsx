@@ -60,6 +60,7 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import AddDomainForm from '@/components/add-domain-form'
 
 interface DnsRecord {
     type: string
@@ -620,7 +621,7 @@ export default function DomainDetailPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center justify-center py-12">
+                <div className="flex items-center justify-center">
                     <div className="flex items-center gap-2">
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
                         <span className="text-muted-foreground">Loading domain details...</span>
@@ -856,20 +857,40 @@ export default function DomainDetailPage() {
                 </Alert>
             )}
 
-            {/* SES Verification Status - Show for DNS verified domains */}
-            {(domain.status === DOMAIN_STATUS.PENDING || domain.status === DOMAIN_STATUS.VERIFIED || domain.status === DOMAIN_STATUS.FAILED) && (
+            {/* Show AddDomainForm for pending domains */}
+            {domain.status === DOMAIN_STATUS.PENDING && (
+                <div>
+                    <AddDomainForm
+                        preloadedDomain={domain.domain}
+                        preloadedDomainId={domain.id}
+                        preloadedDnsRecords={dnsRecords.map(record => ({
+                            name: record.name,
+                            type: record.type as "TXT" | "MX",
+                            value: record.value,
+                            isVerified: record.isVerified
+                        }))}
+                        preloadedStep={1} // Start at DNS records step
+                        onRefresh={performFullRefresh}
+                        onSuccess={(domainId) => {
+                            // Refresh domain details when form succeeds
+                            fetchDomainDetails()
+                        }}
+                    />
+                </div>
+            )}
+
+            {/* SES Verification Status - Show for non-pending domains */}
+            {(domain.status === DOMAIN_STATUS.VERIFIED || domain.status === DOMAIN_STATUS.FAILED) && (
                 <Card>
                     <CardHeader>
                         <div className="flex items-center justify-between">
                             <div>
                                 <CardTitle className="flex items-center gap-2">
                                     <ClockIcon className="h-5 w-5 text-blue-600" />
-                                    {domain.status === DOMAIN_STATUS.PENDING && "Domain Verification Required"}
                                     {domain.status === DOMAIN_STATUS.VERIFIED && "SES Verification in Progress"}
                                     {domain.status === DOMAIN_STATUS.FAILED && "Domain Verification Failed"}
                                 </CardTitle>
                                 <CardDescription>
-                                    {domain.status === DOMAIN_STATUS.PENDING && "Add the DNS records below to complete domain verification for email receiving."}
                                     {domain.status === DOMAIN_STATUS.VERIFIED && "DNS records verified. Waiting for SES to complete domain verification."}
                                     {domain.status === DOMAIN_STATUS.FAILED && "DNS verification failed. Please check and update your DNS records below."}
                                 </CardDescription>

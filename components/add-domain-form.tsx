@@ -2,12 +2,15 @@
 
 import type React from "react"
 
-import { useState, type FormEvent } from "react"
+import { useState, useEffect, type FormEvent } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Globe2, ListChecks, BadgeCheck, CheckCircle2, ArrowRight, ClipboardCopy } from "lucide-react"
+import { Globe2, ListChecks, BadgeCheck, CheckCircle2, ArrowRight, ClipboardCopy, Loader2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { useRouter } from "next/navigation"
+import Image from "next/image"
+import { toast } from "sonner"
 
 interface StepConfig {
   id: string
@@ -32,28 +35,53 @@ interface DnsRecord {
   name: string
   type: "TXT" | "MX"
   value: string
-  priority?: number
+  isVerified: boolean
 }
 
-export default function AddDomainForm() {
-  const [currentStepIdx, setCurrentStepIdx] = useState(0)
-  const [domainName, setDomainName] = useState("")
-  const [error, setError] = useState("")
+interface ApiResponse {
+  success: boolean
+  domain: string
+  domainId: string
+  verificationToken: string
+  status: 'pending' | 'verified' | 'failed'
+  dnsRecords: DnsRecord[]
+  error?: string
+}
 
-  const dnsRecords: DnsRecord[] = domainName
-    ? [
-        {
-          name: `_amazonses.${domainName}`,
-          type: "TXT",
-          value: "pM9+uA+xL0k4v5zT+wP8qR7sT9uV+wX8yZ0=",
-        },
-        {
-          name: domainName,
-          type: "MX",
-          value: "10 feedback-smtp.us-east-1.amazonses.com",
-        },
-      ]
-    : []
+interface AddDomainFormProps {
+  // Optional props for preloading existing domain data
+  preloadedDomain?: string
+  preloadedDomainId?: string
+  preloadedDnsRecords?: DnsRecord[]
+  preloadedStep?: number
+  onRefresh?: () => void
+  // Optional callback when domain is successfully added/verified
+  onSuccess?: (domainId: string) => void
+}
+
+export default function AddDomainForm({ 
+  preloadedDomain = "",
+  preloadedDomainId = "",
+  preloadedDnsRecords = [],
+  preloadedStep = 0,
+  onRefresh,
+  onSuccess
+}: AddDomainFormProps) {
+  const [currentStepIdx, setCurrentStepIdx] = useState(preloadedStep)
+  const [domainName, setDomainName] = useState(preloadedDomain)
+  const [error, setError] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [dnsRecords, setDnsRecords] = useState<DnsRecord[]>(preloadedDnsRecords)
+  const [domainId, setDomainId] = useState(preloadedDomainId)
+  const router = useRouter()
+
+  // Update state when props change (for when component is reused with different data)
+  useEffect(() => {
+    setCurrentStepIdx(preloadedStep)
+    setDomainName(preloadedDomain)
+    setDnsRecords(preloadedDnsRecords)
+    setDomainId(preloadedDomainId)
+  }, [preloadedStep, preloadedDomain, preloadedDnsRecords, preloadedDomainId])
 
   const handleNext = () => {
     if (currentStepIdx === 0 && !domainName.trim()) {
@@ -72,18 +100,95 @@ export default function AddDomainForm() {
     }
   }
 
-  const handleSubmitDomain = (e: FormEvent) => {
+  const handleSubmitDomain = async (e: FormEvent) => {
     e.preventDefault()
-    handleNext()
+    if (!domainName.trim()) {
+      setError("Please enter a valid domain name.")
+      return
+    }
+
+    if (!/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(domainName)) {
+      setError("Please enter a valid domain format (e.g., example.com).")
+      return
+    }
+
+    setIsLoading(true)
+    setError("")
+
+    try {
+      // First check if domain can be used
+      const checkResponse = await fetch('/api/domain/verifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'canDomainBeUsed',
+          domain: domainName
+        })
+      })
+
+      const checkResult = await checkResponse.json()
+
+      if (!checkResult.success) {
+        setError(checkResult.error || 'Failed to check domain')
+        return
+      }
+
+      if (!checkResult.canBeUsed) {
+        setError('This domain cannot be used. It may have conflicting DNS records.')
+        return
+      }
+
+      // If domain can be used, add it
+      const addResponse = await fetch('/api/domain/verifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'addDomain',
+          domain: domainName
+        })
+      })
+
+      const addResult: ApiResponse = await addResponse.json()
+
+      if (!addResult.success) {
+        setError(addResult.error || 'Failed to add domain')
+        return
+      }
+
+      // Success - move to next step
+      setDnsRecords(addResult.dnsRecords)
+      setDomainId(addResult.domainId)
+      setCurrentStepIdx(1)
+
+      // Call success callback if provided
+      if (onSuccess) {
+        onSuccess(addResult.domainId)
+      }
+
+    } catch (err) {
+      console.error('Error adding domain:', err)
+      setError('An unexpected error occurred. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleRefresh = () => {
+    if (onRefresh) {
+      onRefresh()
+    } else {
+      // Default refresh behavior - just show a toast for now
+      toast.info("Refresh functionality will be implemented soon")
+    }
   }
 
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)
-      alert("Copied to clipboard!") // Consider using a toast notification for better UX
+      toast.success("Copied to clipboard")
     } catch (err) {
       console.error("Failed to copy text: ", err)
-      alert("Failed to copy text.")
+      toast.error("Failed to copy to clipboard")
     }
   }
 
@@ -93,260 +198,251 @@ export default function AddDomainForm() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background py-12">
-      <div className="w-full max-w-4xl px-6 md:px-10 lg:px-16 mx-auto">
-        <header className="mb-16 flex items-center space-x-4">
-          <div className="rounded-lg bg-iconBg p-3">
-            <Globe2 className="h-8 w-8 text-brandPurple" />
-          </div>
-          <div>
+      <div className="w-full max-w-4xl px-2  mx-auto">
+        <header className="mb-8 flex items-center space-x-4">
+          {/* <div className="rounded-lg bg-iconBg">
+            <Image src="/domain-icon.png" alt="Logo" width={48} height={48} className="p-2" />
+          </div> */}
+          {/* <div>
             <h1 className="text-3xl font-semibold text-darkText">Add Domain</h1>
             <p className="text-base text-mediumText">Use a domain you own to send emails.</p>
-          </div>
+          </div> */}
         </header>
-        <div className="flex flex-col md:flex-row">
-          {/* Sidebar Stepper */}
-          <nav className="relative mb-10 md:mb-0 md:mr-20 md:w-1/4">
-            <div className="absolute left-5 top-0 h-6 w-px bg-gradient-to-b from-transparent via-mediumBorder/20 to-mediumBorder/60" />
+
+        {/* Top Horizontal Stepper */}
+        <div className="w-full mb-8">
+          <nav className="flex items-center justify-center">
             {stepsConfig.map((step, index) => {
-              const IconComponent = step.icon
               const completed = isStepCompleted(index)
               const current = isStepCurrent(index)
               const future = isStepFuture(index)
 
+              // Determine which icon to use based on step and state
+              let iconSrc = ""
+              if (index === 0) {
+                iconSrc = "/domain-icon.png"
+              } else if (index === 1) {
+                iconSrc = completed || current ? "/dns-icon.png" : "/dns-icon-greyed.png"
+              } else if (index === 2) {
+                iconSrc = completed || current ? "/verified-icon.png" : "/verified-icon-greyed.png"
+              }
+
               return (
-                <div key={step.id} className="relative flex items-start pb-24 last:pb-0">
-                  {index < stepsConfig.length - 1 && (
-                    <div
-                      className={cn("absolute left-5 top-12 h-[calc(100%-3rem)] w-px transition-colors duration-300", {
-                        "bg-brandPurple": completed && !current,
-                        "bg-mediumBorder": current || future,
-                      })}
+                <div key={step.id} className="flex items-center">
+                  <motion.div
+                    className="flex h-10 w-10 items-center justify-center"
+                    initial={{ scale: current ? 1.1 : 1 }}
+                    animate={{ scale: current ? 1.1 : 1 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <Image 
+                      src={iconSrc} 
+                      alt={step.name} 
+                      width={40} 
+                      height={40}
+                      className="object-contain"
                     />
-                  )}
-                  <div className="relative z-10 flex items-center space-x-3">
-                    <motion.div
-                      className={cn("flex h-10 w-10 items-center justify-center rounded-full", {
-                        "bg-brandPurple/10": completed,
-                        "bg-brandPurple": current,
-                        "bg-gray-100 dark:bg-gray-800": future,
-                      })}
-                      initial={{ scale: current ? 1.1 : 1 }}
-                      animate={{ scale: current ? 1.1 : 1 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <IconComponent
-                        className={cn("h-5 w-5", {
+                  </motion.div>
+                  {/* Arrow between steps */}
+                  {index < stepsConfig.length - 1 && (
+                    <div className="mx-8">
+                      <ArrowRight 
+                        className={cn("h-5 w-5 transition-colors duration-300", {
                           "text-brandPurple": completed,
-                          "text-white": current,
-                          "text-mediumText": future,
-                        })}
+                          "text-gray-400": !completed,
+                        })} 
                       />
-                    </motion.div>
-                    <div className="flex items-center space-x-2">
-                      <h3
-                        className={cn("text-md font-medium transition-colors duration-300", {
-                          "text-brandPurple": current,
-                          "text-darkText": completed,
-                          "text-mediumText": future,
-                        })}
-                      >
-                        {step.name}
-                      </h3>
-                      {completed && !current && <CheckCircle2 className="h-5 w-5 text-brandPurple" />}
                     </div>
-                  </div>
+                  )}
                 </div>
               )
             })}
           </nav>
+        </div>
 
-          {/* Main Content Area */}
-          <main className="flex-1">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={currentStepIdx}
-                variants={stepVariants}
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-                transition={{ duration: 0.3, type: "tween" }}
-                className="pt-1"
-              >
-                {currentStepIdx > 0 && (
-                  <div className="mb-10 rounded-lg bg-green-50 p-5 border border-green-200">
-                    <div className="flex items-center mb-1">
-                      <h2 className="text-lg font-semibold text-gray-800">{stepsConfig[0].name}</h2>
-                      <CheckCircle2 size={18} className="ml-2 text-green-600" />
-                    </div>
-                    <p className="text-sm text-gray-600 mb-3">{stepsConfig[0].description}</p>
-                    <div className="flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 shadow-sm">
-                      <Globe2 size={16} className="mr-2 text-gray-500" />
-                      <span className="font-mono text-sm text-gray-700">{domainName}</span>
-                    </div>
+        {/* Main Content Area */}
+        <div className="w-full max-w-2xl mx-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentStepIdx}
+              variants={stepVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              transition={{ duration: 0.3, type: "tween" }}
+              className="pt-1"
+            >
+              {currentStepIdx > 0 && (
+                <div className="mb-10 rounded-lg bg-green-50 p-5 border border-green-200">
+                  <div className="flex items-center mb-1">
+                    <h2 className="text-lg font-semibold text-gray-800">{stepsConfig[0].name}</h2>
+                    <CheckCircle2 size={18} className="ml-2 text-green-600" />
                   </div>
-                )}
-
-                {currentStepIdx === 0 && (
-                  <div>
-                    <h2 className="mb-1 text-lg font-semibold text-darkText">{stepsConfig[0].name}</h2>
-                    <p className="mb-5 text-sm text-mediumText">{stepsConfig[0].description}</p>
-                    <form onSubmit={handleSubmitDomain}>
-                      <label htmlFor="domainName" className="mb-1.5 block text-sm font-medium text-darkText">
-                        Name
-                      </label>
-                      <Input
-                        id="domainName"
-                        type="text"
-                        value={domainName}
-                        onChange={(e) => {
-                          setDomainName(e.target.value)
-                          if (error) setError("")
-                        }}
-                        placeholder="yourdomain.com"
-                        className="mb-2 w-full font-mono text-sm"
-                        aria-label="Domain Name"
-                      />
-                      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
-                      <Button type="submit" variant="primary" className="mt-4 w-full md:w-auto">
-                        Add Domain <ArrowRight size={16} className="ml-1.5" />
-                      </Button>
-                    </form>
+                  <p className="text-sm text-gray-600 mb-3">{stepsConfig[0].description}</p>
+                  <div className="flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 shadow-sm">
+                    {/* <Image src="/domain-icon.png" alt="Logo" width={16} height={16} /> */}
+                    <span className="font-mono text-sm text-gray-700">{domainName}</span>
                   </div>
-                )}
+                </div>
+              )}
 
-                {currentStepIdx === 1 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <h2 className="text-lg font-semibold text-darkText">{stepsConfig[1].name}</h2>
-                    </div>
-                    <p className="mb-6 text-sm text-mediumText">{stepsConfig[1].description}</p>
-
-                    <div className="space-y-8">
-                      <div>
-                        <h3 className="text-md font-semibold text-darkText mb-1">TXT Record</h3>
-                        <p className="text-xs text-mediumText mb-4">For domain ownership verification.</p>
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full text-sm">
-                            <thead className="rounded-md">
-                              <tr className="bg-lightBg rounded-md">
-                                <th className="whitespace-nowrap rounded-l-md px-4 py-2.5 text-left font-medium text-darkText">
-                                  Name/Host
-                                </th>
-                                <th className="whitespace-nowrap rounded-r-md px-4 py-2.5 text-left font-medium text-darkText">
-                                  Value/Points to
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-mediumBorder">
-                              {dnsRecords
-                                .filter((r) => r.type === "TXT")
-                                .map((record, idx) => (
-                                  <tr key={`txt-${idx}`}>
-                                    <td className="px-4 py-3.5 font-mono text-darkText break-all">{record.name}</td>
-                                    <td className="px-4 py-3.5 font-mono text-darkText break-all">
-                                      <div className="flex items-center justify-between">
-                                        <span>{record.value}</span>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => copyToClipboard(record.value)}
-                                          className="text-xs text-brandPurple hover:text-brandPurple/80 flex items-center ml-4 shrink-0"
-                                        >
-                                          <ClipboardCopy size={14} className="mr-1" /> Copy
-                                        </Button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              {dnsRecords.filter((r) => r.type === "TXT").length === 0 && (
-                                <tr>
-                                  <td colSpan={2} className="px-4 py-3.5 text-center text-mediumText">
-                                    No TXT records for this domain yet.
-                                  </td>
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                      <div>
-                        <h3 className="text-md font-semibold text-darkText mb-1">MX Record</h3>
-                        <p className="text-xs text-mediumText mb-4">For receiving feedback and bounces.</p>
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full text-sm">
-                            <thead className="rounded-md">
-                              <tr className="bg-lightBg rounded-md">
-                                <th className="whitespace-nowrap rounded-l-md px-4 py-2.5 text-left font-medium text-darkText">
-                                  Name/Host
-                                </th>
-                                <th className="whitespace-nowrap rounded-r-md px-4 py-2.5 text-left font-medium text-darkText">
-                                  Value/Points to
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-mediumBorder">
-                              {dnsRecords
-                                .filter((r) => r.type === "MX")
-                                .map((record, idx) => (
-                                  <tr key={`mx-${idx}`}>
-                                    <td className="px-4 py-3.5 font-mono text-darkText break-all">{record.name}</td>
-                                    <td className="px-4 py-3.5 font-mono text-darkText break-all">
-                                      <div className="flex items-center justify-between">
-                                        <span>{record.value}</span>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => copyToClipboard(record.value)}
-                                          className="text-xs text-brandPurple hover:text-brandPurple/80 flex items-center ml-4 shrink-0"
-                                        >
-                                          <ClipboardCopy size={14} className="mr-1" /> Copy
-                                        </Button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              {dnsRecords.filter((r) => r.type === "MX").length === 0 && (
-                                <tr>
-                                  <td colSpan={2} className="px-4 py-3.5 text-center text-mediumText">
-                                    No MX records for this domain yet.
-                                  </td>
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Button onClick={handleNext} variant="primary" className="mt-10 w-full md:w-auto">
-                      I've added the records
+              {currentStepIdx === 0 && (
+                <div className="">
+                  <h2 className="mb-1 text-lg font-semibold text-darkText">{stepsConfig[0].name}</h2>
+                  <p className="mb-5 text-sm text-mediumText">{stepsConfig[0].description}</p>
+                  <form onSubmit={handleSubmitDomain}>
+                    <label htmlFor="domainName" className="mb-1.5 block text-sm font-medium text-darkText">
+                      Name
+                    </label>
+                    <Input
+                      id="domainName"
+                      type="text"
+                      value={domainName}
+                      onChange={(e) => {
+                        setDomainName(e.target.value)
+                        if (error) setError("")
+                      }}
+                      placeholder="0.email"
+                      className="mb-2 w-full font-mono text-sm"
+                      aria-label="Domain Name"
+                      disabled={isLoading || !!preloadedDomain} // Disable if preloaded
+                    />
+                    {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+                    <Button type="submit" variant="primary" className="mt-4 w-full md:w-auto" disabled={isLoading}>
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Adding Domain...
+                        </>
+                      ) : (
+                        <>
+                          Add Domain <ArrowRight size={16} className="ml-1.5" />
+                        </>
+                      )}
                     </Button>
-                  </div>
-                )}
+                  </form>
+                </div>
+              )}
 
-                {currentStepIdx === 2 && (
-                  <div className="text-center py-8">
-                    <BadgeCheck className="mx-auto mb-5 h-20 w-20 text-successGreen" />
-                    <h2 className="mb-2 text-2xl font-semibold text-darkText">Domain Verified!</h2>
-                    <p className="text-mediumText mb-1">
-                      Your domain <span className="font-semibold text-darkText">{domainName}</span> is now ready.
-                    </p>
-                    <p className="text-sm text-mediumText">{stepsConfig[2].description}</p>
+              {currentStepIdx === 1 && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <h2 className="text-lg font-semibold text-darkText">{stepsConfig[1].name}</h2>
+                  </div>
+                  <p className="mb-6 text-sm text-mediumText">{stepsConfig[1].description}</p>
+
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm border border-gray-200 rounded-lg">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="px-4 py-3 text-left font-medium text-gray-900 border-b border-gray-200">
+                            Record name
+                          </th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-900 border-b border-gray-200">
+                            Type
+                          </th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-900 border-b border-gray-200">
+                            TTL
+                          </th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-900 border-b border-gray-200">
+                            Value
+                          </th>
+                          <th className="px-4 py-3 w-16 border-b border-gray-200"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white">
+                        {dnsRecords.map((record, idx) => (
+                          <tr key={`${record.type}-${idx}`} className="border-b border-gray-100 last:border-b-0">
+                            <td className="px-4 py-3 font-mono text-sm text-gray-900">
+                              {record.name.replace(`.${domainName}`, '')}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {record.type}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              Auto
+                            </td>
+                            <td className="px-4 py-3 font-mono text-sm text-gray-900 max-w-xs truncate">
+                              {record.value}
+                            </td>
+                            <td className="px-4 py-3">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => copyToClipboard(record.value)}
+                                className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded"
+                              >
+                                <ClipboardCopy size={16} className="text-gray-600" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                        {dnsRecords.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                              No DNS records available yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+
+                  <Button 
+                    onClick={handleRefresh} 
+                    variant="primary" 
+                    className="mt-10 w-full md:w-auto"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Refreshing...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Refresh Status
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {currentStepIdx === 2 && (
+                <div className="text-center py-8">
+                  <BadgeCheck className="mx-auto mb-5 h-20 w-20 text-successGreen" />
+                  <h2 className="mb-2 text-2xl font-semibold text-darkText">Domain Verified!</h2>
+                  <p className="text-mediumText mb-1">
+                    Your domain <span className="font-semibold text-darkText">{domainName}</span> is now ready.
+                  </p>
+                  <p className="text-sm text-mediumText">{stepsConfig[2].description}</p>
+                  <div className="flex gap-4 justify-center mt-10">
+                    <Button
+                      onClick={() => router.push('/emails')}
+                      variant="primary"
+                    >
+                      View Domains
+                    </Button>
                     <Button
                       onClick={() => {
                         setCurrentStepIdx(0)
                         setDomainName("")
+                        setDnsRecords([])
+                        setDomainId("")
+                        setError("")
                       }}
                       variant="secondary"
-                      className="mt-10"
                     >
                       Add Another Domain
                     </Button>
                   </div>
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </main>
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </div>

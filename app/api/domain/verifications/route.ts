@@ -3,9 +3,14 @@ import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { checkDomainCanReceiveEmails } from '@/lib/dns'
 import { verifyDnsRecords } from '@/lib/dns-verification'
-import { initiateDomainVerification } from '@/lib/domain-verification'
-import { getDomainWithRecords, updateDomainStatus, createDomainVerification } from '@/lib/db/domains'
+import { initiateDomainVerification, deleteDomainFromSES } from '@/lib/domain-verification'
+import { getDomainWithRecords, updateDomainStatus, createDomainVerification, deleteDomainFromDatabase } from '@/lib/db/domains'
 import { SESClient, GetIdentityVerificationAttributesCommand } from '@aws-sdk/client-ses'
+import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
+import { Autumn as autumn } from 'autumn-js'
+import { db } from '@/lib/db'
+import { emailDomains } from '@/lib/db/schema'
+import { eq, count, and } from 'drizzle-orm'
 
 // AWS SES Client setup
 const awsRegion = process.env.AWS_REGION || 'us-east-2'
@@ -15,7 +20,7 @@ const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY
 let sesClient: SESClient | null = null
 
 if (awsAccessKeyId && awsSecretAccessKey) {
-  sesClient = new SESClient({ 
+  sesClient = new SESClient({
     region: awsRegion,
     credentials: {
       accessKeyId: awsAccessKeyId,
@@ -25,7 +30,7 @@ if (awsAccessKeyId && awsSecretAccessKey) {
 }
 
 interface VerificationRequest {
-  action: 'canDomainBeUsed' | 'addDomain' | 'checkVerification'
+  action: 'canDomainBeUsed' | 'addDomain' | 'checkVerification' | 'deleteDomain'
   domain: string
   domainId?: string
 }
@@ -90,13 +95,22 @@ interface CheckVerificationResponse {
   timestamp: Date
 }
 
+interface DeleteDomainResponse {
+  success: boolean
+  domain: string
+  domainId: string
+  message: string
+  error?: string
+  timestamp: Date
+}
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
   let requestData: VerificationRequest | null = null
-  
+
   try {
     console.log('🔍 Domain Verification API - Starting request processing')
-    
+
     // Get user session
     const session = await auth.api.getSession({
       headers: await headers()
@@ -156,10 +170,10 @@ export async function POST(request: NextRequest) {
     switch (action) {
       case 'canDomainBeUsed':
         return await handleCanDomainBeUsed(domain, session.user.id, startTime)
-      
+
       case 'addDomain':
         return await handleAddDomain(domain, session.user.id, startTime)
-      
+
       case 'checkVerification':
         if (!domainId) {
           console.log('⚠️ Domain Verification API - Missing domainId for checkVerification action')
@@ -169,11 +183,21 @@ export async function POST(request: NextRequest) {
           )
         }
         return await handleCheckVerification(domain, domainId, session.user.id, startTime)
-      
+
+      case 'deleteDomain':
+        if (!domainId) {
+          console.log('⚠️ Domain Verification API - Missing domainId for deleteDomain action')
+          return NextResponse.json(
+            { success: false, error: 'domainId is required for deleteDomain action' },
+            { status: 400 }
+          )
+        }
+        return await handleDeleteDomain(domain, domainId, session.user.id, startTime)
+
       default:
         console.log(`⚠️ Domain Verification API - Invalid action: ${action}`)
         return NextResponse.json(
-          { success: false, error: `Invalid action: ${action}. Must be one of: canDomainBeUsed, addDomain, checkVerification` },
+          { success: false, error: `Invalid action: ${action}. Must be one of: canDomainBeUsed, addDomain, checkVerification, deleteDomain` },
           { status: 400 }
         )
     }
@@ -182,7 +206,7 @@ export async function POST(request: NextRequest) {
     const duration = Date.now() - startTime
     const domain = requestData?.domain || 'unknown'
     const action = requestData?.action || 'unknown'
-    
+
     console.error(`💥 Domain Verification API - Error processing ${action} for domain ${domain} after ${duration}ms:`, error)
     console.error(`   Error details:`, {
       message: error instanceof Error ? error.message : 'Unknown error',
@@ -191,10 +215,10 @@ export async function POST(request: NextRequest) {
       action,
       timestamp: new Date().toISOString()
     })
-    
+
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: 'Internal server error occurred during domain verification',
         domain,
         timestamp: new Date()
@@ -205,16 +229,16 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleCanDomainBeUsed(
-  domain: string, 
-  userId: string, 
+  domain: string,
+  userId: string,
   startTime: number
 ): Promise<NextResponse<CanDomainBeUsedResponse>> {
   try {
     console.log(`🔍 Can Domain Be Used - Checking domain: ${domain}`)
-    
+
     // Check DNS records using server-side DNS utilities
     const dnsResult = await checkDomainCanReceiveEmails(domain)
-    
+
     console.log(`📊 Can Domain Be Used - DNS check results for ${domain}:`, {
       canReceiveEmails: dnsResult.canReceiveEmails,
       hasMxRecords: dnsResult.hasMxRecords,
@@ -262,7 +286,7 @@ async function handleCanDomainBeUsed(
   } catch (error) {
     const duration = Date.now() - startTime
     console.error(`💥 Can Domain Be Used - Error for domain ${domain} after ${duration}ms:`, error)
-    
+
     const response: CanDomainBeUsedResponse = {
       success: false,
       domain,
@@ -279,13 +303,13 @@ async function handleCanDomainBeUsed(
 }
 
 async function handleAddDomain(
-  domain: string, 
-  userId: string, 
+  domain: string,
+  userId: string,
   startTime: number
 ): Promise<NextResponse<AddDomainResponse>> {
   try {
     console.log(`🚀 Add Domain - Starting domain addition for domain: ${domain}`)
-    
+
     // Check if domain exists in database
     const existingDomain = await getDomainWithRecords(domain, userId)
     if (existingDomain) {
@@ -309,10 +333,59 @@ async function handleAddDomain(
       return NextResponse.json(response, { status: 400 })
     }
 
+    // Check Autumn domain limits before proceeding
+    console.log(`🔍 Add Domain - Checking Autumn domain limits for user: ${userId}`)
+    const { data: domainCheck, error: domainCheckError } = await autumn.check({
+      customer_id: userId,
+      feature_id: "domains",
+    })
+
+    console.log(await autumn.check({customer_id: userId, feature_id: "domains"}))
+
+    if (domainCheckError) {
+      console.error('Add Domain - Autumn domain check error:', domainCheckError)
+      const response: AddDomainResponse = {
+        success: false,
+        domain,
+        domainId: '',
+        verificationToken: '',
+        status: 'failed',
+        dnsRecords: [],
+        canProceed: false,
+        error: 'Failed to check domain limits',
+        timestamp: new Date()
+      }
+      return NextResponse.json(response, { status: 500 })
+    }
+
+    console.log('domainCheck', domainCheck)
+
+    if (!domainCheck?.allowed) {
+      console.log(`❌ Add Domain - Domain limit reached for user: ${userId}`)
+      const response: AddDomainResponse = {
+        success: false,
+        domain,
+        domainId: '',
+        verificationToken: '',
+        status: 'failed',
+        dnsRecords: [],
+        canProceed: false,
+        error: 'Domain limit reached. Please upgrade your plan to add more domains.',
+        timestamp: new Date()
+      }
+      return NextResponse.json(response, { status: 403 })
+    }
+
+    console.log(`✅ Add Domain - Domain limits check passed for user: ${userId}`, {
+      allowed: domainCheck.allowed,
+      balance: domainCheck.balance,
+      unlimited: domainCheck.unlimited
+    })
+
     // Step 1: Check DNS records first
     console.log(`🔍 Add Domain - Checking DNS records for ${domain}`)
     const dnsResult = await checkDomainCanReceiveEmails(domain)
-    
+
     // Step 2: Create domain record in database with pending status
     console.log(`💾 Add Domain - Creating domain record in database`)
     const domainRecord = await createDomainVerification(
@@ -327,7 +400,27 @@ async function handleAddDomain(
 
     // Step 3: Use the shared verification function to initiate SES verification
     const verificationResult = await initiateDomainVerification(domain, userId)
-    
+
+    // Step 4: Track domain usage with Autumn (only if not unlimited)
+    if (!domainCheck.unlimited) {
+      console.log(`📊 Add Domain - Tracking domain usage with Autumn for user: ${userId}`)
+      const { error: trackError } = await autumn.track({
+        customer_id: userId,
+        feature_id: "domains",
+        value: 1,
+      })
+
+      if (trackError) {
+        console.error('Add Domain - Failed to track domain usage:', trackError)
+        // Don't fail the domain creation if tracking fails, just log it
+        console.warn(`⚠️ Add Domain - Domain created but usage tracking failed for user: ${userId}`)
+      } else {
+        console.log(`✅ Add Domain - Successfully tracked domain usage for user: ${userId}`)
+      }
+    } else {
+      console.log(`♾️ Add Domain - User has unlimited domains, no tracking needed for user: ${userId}`)
+    }
+
     // Map old status values to new simplified enum
     let mappedStatus: 'pending' | 'verified' | 'failed' = 'pending'
     if (verificationResult.status === 'verified') {
@@ -337,7 +430,7 @@ async function handleAddDomain(
     } else {
       mappedStatus = 'pending'
     }
-    
+
     const duration = Date.now() - startTime
     console.log(`🏁 Add Domain - Completed for ${domain} in ${duration}ms - Status: ${mappedStatus}`)
 
@@ -359,7 +452,7 @@ async function handleAddDomain(
   } catch (error) {
     const duration = Date.now() - startTime
     console.error(`💥 Add Domain - Error for domain ${domain} after ${duration}ms:`, error)
-    
+
     const response: AddDomainResponse = {
       success: false,
       domain,
@@ -377,14 +470,14 @@ async function handleAddDomain(
 }
 
 async function handleCheckVerification(
-  domain: string, 
-  domainId: string, 
-  userId: string, 
+  domain: string,
+  domainId: string,
+  userId: string,
   startTime: number
 ): Promise<NextResponse<CheckVerificationResponse>> {
   try {
     console.log(`✅ Check Verification - Checking verification status for domain: ${domain}`)
-    
+
     // Get domain record from database
     const domainRecord = await getDomainWithRecords(domain, userId)
     if (!domainRecord) {
@@ -447,7 +540,7 @@ async function handleCheckVerification(
 
     console.log(`🔎 Check Verification - Verifying ${recordsToCheck.length} DNS records`)
     const dnsChecks = await verifyDnsRecords(recordsToCheck)
-    
+
     // Log DNS verification results
     console.log(`📊 Check Verification - DNS verification results:`)
     dnsChecks.forEach((check, index) => {
@@ -509,7 +602,7 @@ async function handleCheckVerification(
   } catch (error) {
     const duration = Date.now() - startTime
     console.error(`💥 Check Verification - Error for domain ${domain} after ${duration}ms:`, error)
-    
+
     const response: CheckVerificationResponse = {
       success: false,
       domain,
@@ -527,4 +620,132 @@ async function handleCheckVerification(
 
     return NextResponse.json(response, { status: 500 })
   }
-} 
+}
+
+async function handleDeleteDomain(
+  domain: string,
+  domainId: string,
+  userId: string,
+  startTime: number
+): Promise<NextResponse<DeleteDomainResponse>> {
+  try {
+    console.log(`🗑️ Delete Domain - Starting domain deletion for domain: ${domain}, domainId: ${domainId}`)
+
+    // Verify domain ownership first
+    const domainRecord = await getDomainWithRecords(domain, userId)
+    if (!domainRecord || domainRecord.id !== domainId) {
+      console.log(`❌ Delete Domain - Domain not found or access denied: ${domain}`)
+      const response: DeleteDomainResponse = {
+        success: false,
+        domain,
+        domainId,
+        message: '',
+        error: 'Domain not found or access denied',
+        timestamp: new Date()
+      }
+      return NextResponse.json(response, { status: 404 })
+    }
+
+    console.log(`✅ Delete Domain - Domain ownership verified for: ${domain}`)
+
+    // Step 1: Remove SES receipt rules first (if domain is verified)
+    if (domainRecord.status === 'verified') {
+      try {
+        console.log(`🔧 Delete Domain - Removing SES receipt rules for: ${domain}`)
+        const sesRuleManager = new AWSSESReceiptRuleManager()
+        const ruleRemoved = await sesRuleManager.removeEmailReceiving(domain)
+
+        if (ruleRemoved) {
+          console.log(`✅ Delete Domain - SES receipt rules removed for: ${domain}`)
+        } else {
+          console.log(`⚠️ Delete Domain - Failed to remove SES receipt rules for: ${domain}`)
+        }
+      } catch (error) {
+        console.error('Delete Domain - Error removing SES receipt rules:', error)
+        // Continue with deletion even if receipt rule removal fails
+      }
+    }
+
+    // Step 2: Delete domain identity from SES
+    console.log(`🗑️ Delete Domain - Deleting domain identity from SES: ${domain}`)
+    const sesDeleteResult = await deleteDomainFromSES(domain)
+
+    if (!sesDeleteResult.success) {
+      console.error(`❌ Delete Domain - Failed to delete domain from SES: ${sesDeleteResult.error}`)
+      const response: DeleteDomainResponse = {
+        success: false,
+        domain,
+        domainId,
+        message: '',
+        error: `Failed to delete domain from AWS SES: ${sesDeleteResult.error}`,
+        timestamp: new Date()
+      }
+      return NextResponse.json(response, { status: 500 })
+    }
+
+    console.log(`✅ Delete Domain - Domain deleted from SES: ${domain}`)
+
+    // Step 3: Delete domain and related records from database
+    console.log(`🗑️ Delete Domain - Deleting domain from database: ${domain}`)
+    const dbDeleteResult = await deleteDomainFromDatabase(domainId, userId)
+
+    if (!dbDeleteResult.success) {
+      console.error(`❌ Delete Domain - Failed to delete domain from database: ${dbDeleteResult.error}`)
+      const response: DeleteDomainResponse = {
+        success: false,
+        domain,
+        domainId,
+        message: '',
+        error: `Failed to delete domain from database: ${dbDeleteResult.error}`,
+        timestamp: new Date()
+      }
+      return NextResponse.json(response, { status: 500 })
+    }
+
+    console.log(`✅ Delete Domain - Domain deleted from database: ${domain}`)
+
+    // Step 4: Track domain deletion with Autumn to free up domain spot
+    console.log(`📊 Delete Domain - Tracking domain deletion with Autumn for user: ${userId}`)
+    const { error: trackError } = await autumn.track({
+      customer_id: userId,
+      feature_id: "domains",
+      value: -1,
+    })
+
+    if (trackError) {
+      console.error('Delete Domain - Failed to track domain deletion:', trackError)
+      // Don't fail the deletion if tracking fails, just log it
+      console.warn(`⚠️ Delete Domain - Domain deleted but usage tracking failed for user: ${userId}`)
+    } else {
+      console.log(`✅ Delete Domain - Successfully tracked domain deletion for user: ${userId}`)
+    }
+
+    const duration = Date.now() - startTime
+    console.log(`🏁 Delete Domain - Completed deletion for ${domain} in ${duration}ms`)
+
+    const response: DeleteDomainResponse = {
+      success: true,
+      domain,
+      domainId,
+      message: 'Domain deleted successfully',
+      timestamp: new Date()
+    }
+
+    return NextResponse.json(response)
+
+  } catch (error) {
+    const duration = Date.now() - startTime
+    console.error(`💥 Delete Domain - Error for domain ${domain} after ${duration}ms:`, error)
+
+    const response: DeleteDomainResponse = {
+      success: false,
+      domain,
+      domainId,
+      message: '',
+      error: error instanceof Error ? error.message : 'Failed to delete domain',
+      timestamp: new Date()
+    }
+
+    return NextResponse.json(response, { status: 500 })
+  }
+}   

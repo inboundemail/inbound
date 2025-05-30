@@ -632,40 +632,6 @@ export default function EmailsPage() {
                 ? 'No domains match your search criteria.' 
                 : 'Get started by adding your first domain.'}
             </p>
-            {!searchQuery && statusFilter === 'all' && regionFilter === 'all' && (
-              <div className="max-w-md mx-auto">
-                <div className="p-4 border rounded-lg bg-gray-50">
-                  <Label htmlFor="quick-domain">Add Your First Domain</Label>
-                  <div className="flex gap-2 mt-2">
-                    <Input
-                      id="quick-domain"
-                      placeholder="example.com"
-                      value={newDomain}
-                      onChange={(e) => setNewDomain(e.target.value)}
-                      disabled={isAddingDomain}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleAddDomainSubmit()
-                        }
-                      }}
-                    />
-                    <Button
-                      onClick={handleAddDomainSubmit}
-                      disabled={isAddingDomain || !newDomain.trim()}
-                    >
-                      {isAddingDomain ? (
-                        <RefreshCwIcon className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <PlusIcon className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                  {addDomainError && (
-                    <p className="text-sm text-red-600 mt-2">{addDomainError}</p>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         ) : (
           <div className="overflow-hidden">
