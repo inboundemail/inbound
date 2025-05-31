@@ -89,7 +89,7 @@ export async function POST(
     const domain = domainRecord[0]
 
     // Check if domain is verified
-    if (domain.status !== 'ses_verified') {
+    if (domain.status !== 'verified') {
       return NextResponse.json(
         { error: 'Domain must be fully verified before adding email addresses' },
         { status: 400 }

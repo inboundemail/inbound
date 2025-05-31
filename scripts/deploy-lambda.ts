@@ -28,7 +28,7 @@ try {
     process.exit(1);
   }
 
-  // Check if Lambda function exists
+  // Check if Lambda function exists1`
   try {
     execSync(`aws lambda get-function --function-name ${LAMBDA_FUNCTION_NAME} --region ${AWS_REGION}`, { 
       stdio: 'ignore' 
