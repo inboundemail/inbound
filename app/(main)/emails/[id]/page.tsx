@@ -867,7 +867,7 @@ export default function DomainDetailPage() {
             
 
             {/* SES Verification Complete - Show when all DNS records are verified */}
-            {domain.status === DOMAIN_STATUS.VERIFIED && dnsRecords.every(record => record.isVerified) && (
+            {/* {domain.status === DOMAIN_STATUS.VERIFIED && dnsRecords.every(record => record.isVerified) && (
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
@@ -887,7 +887,7 @@ export default function DomainDetailPage() {
                         </Alert>
                     </CardContent>
                 </Card>
-            )}
+            )} */}
 
             {/* Email Addresses Section - Only show for SES verified domains */}
             {showEmailSection && (
@@ -923,6 +923,11 @@ export default function DomainDetailPage() {
                                                     placeholder="user"
                                                     value={newEmailAddress}
                                                     onChange={(e) => setNewEmailAddress(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' && newEmailAddress.trim() && !isAddingEmail) {
+                                                            addEmailAddress()
+                                                        }
+                                                    }}
                                                     className="border-0 rounded-r-none focus:ring-0 focus:border-0 flex-1 min-w-0 h-full"
                                                     disabled={isAddingEmail}
                                                 />
@@ -971,11 +976,11 @@ export default function DomainDetailPage() {
                                                 )}
                                             </SelectContent>
                                         </Select>
-                                        {selectedWebhookId && selectedWebhookId !== 'none' && (
+                                        {/* {selectedWebhookId && selectedWebhookId !== 'none' && (
                                             <p className="text-xs text-muted-foreground mt-1">
                                                 Emails received will be sent to this webhook URL
                                             </p>
-                                        )}
+                                        )} */}
                                         {userWebhooks.length > 0 && (
                                             <div className="flex items-center gap-1 mt-2">
                                                 <ExternalLinkIcon className="h-3 w-3 text-muted-foreground" />
@@ -992,7 +997,7 @@ export default function DomainDetailPage() {
                                     </div>
 
                                     {/* Add Button */}
-                                    <div className="flex flex-col justify-end">
+                                    <div className="flex flex-col justify-center">
                                         <div className="mt-2">
                                             <Button
                                                 onClick={addEmailAddress}
@@ -1163,11 +1168,7 @@ export default function DomainDetailPage() {
                                     )}
                                 </SelectContent>
                             </Select>
-                            {webhookDialogSelectedId && webhookDialogSelectedId !== 'none' && (
-                                <p className="text-xs text-muted-foreground">
-                                    Emails received at this address will be sent to the selected webhook URL
-                                </p>
-                            )}
+                            
                         </div>
                     </div>
                     <DialogFooter>
