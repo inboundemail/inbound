@@ -76,12 +76,12 @@ const getProviderDocUrl = (provider: string): string | null => {
     'gandi': 'https://resend.com/docs/knowledge-base/gandi',
     'porkbun': 'https://resend.com/docs/knowledge-base/porkbun'
   }
-  
+
   const normalizedProvider = provider.toLowerCase().trim()
   return providerMap[normalizedProvider] || null
 }
 
-export default function AddDomainForm({ 
+export default function AddDomainForm({
   preloadedDomain = "",
   preloadedDomainId = "",
   preloadedDnsRecords = [],
@@ -112,6 +112,19 @@ export default function AddDomainForm({
     setDnsRecords(memoizedPreloadedDnsRecords)
     setDomainId(preloadedDomainId)
   }, [preloadedStep, preloadedDomain, memoizedPreloadedDnsRecords, preloadedDomainId])
+
+  // Lazy refresh status when component loads with preloaded data (pending domain)
+  useEffect(() => {
+    if (preloadedDomainId && preloadedDomain && preloadedStep === 1) {
+      // Add a small delay to let the component fully mount
+      const timer = setTimeout(() => {
+        console.log("🔄 Auto-refreshing domain verification status for:", preloadedDomain)
+        handleRefresh()
+      }, 500) // 2 second delay
+
+      return () => clearTimeout(timer)
+    }
+  }, [preloadedDomainId, preloadedDomain, preloadedStep])
 
   const handleNext = () => {
     if (currentStepIdx === 0 && !domainName.trim()) {
@@ -220,12 +233,15 @@ export default function AddDomainForm({
     setIsRefreshing(true)
     setError("")
 
+    console.log("domainId", domainId)
+
     try {
       const response = await fetch('/api/domain/verifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'checkVerification',
+          domain: domainName,
           domainId: domainId
         })
       })
@@ -242,7 +258,7 @@ export default function AddDomainForm({
 
       // Update verification status
       setVerificationStatus(result.status)
-      
+
       if (result.status === 'verified') {
         toast.success("Domain verified successfully!")
         setCurrentStepIdx(2)
@@ -274,6 +290,25 @@ export default function AddDomainForm({
       console.error("Failed to copy text: ", err)
       toast.error("Failed to copy to clipboard")
     }
+  }
+
+  const extractRecordName = (recordName: string, domainName: string) => {
+    // Extract root domain from domainName (get last 2 parts: domain.tld)
+    const domainParts = domainName.split('.')
+    const rootDomain = domainParts.slice(-2).join('.')
+    
+    // If the record name is exactly the root domain, return "*"
+    if (recordName === rootDomain) {
+      return "*"
+    }
+    
+    // If the record name ends with the root domain, extract the subdomain part
+    if (recordName.endsWith(`.${rootDomain}`)) {
+      return recordName.replace(`.${rootDomain}`, '')
+    }
+    
+    // Fallback: if no match found, return the original record name
+    return recordName
   }
 
   const isStepCompleted = (index: number) => index < currentStepIdx
@@ -319,10 +354,10 @@ export default function AddDomainForm({
                     animate={{ scale: current ? 1.1 : 1 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <Image 
-                      src={iconSrc} 
-                      alt={step.name} 
-                      width={40} 
+                    <Image
+                      src={iconSrc}
+                      alt={step.name}
+                      width={40}
                       height={40}
                       className="object-contain"
                     />
@@ -330,11 +365,11 @@ export default function AddDomainForm({
                   {/* Arrow between steps */}
                   {index < stepsConfig.length - 1 && (
                     <div className="mx-8">
-                      <ArrowRight 
+                      <ArrowRight
                         className={cn("h-5 w-5 transition-colors duration-300", {
                           "text-brandPurple": completed,
                           "text-gray-400": !completed,
-                        })} 
+                        })}
                       />
                     </div>
                   )}
@@ -437,10 +472,10 @@ export default function AddDomainForm({
                   <p className="mb-6 text-sm text-mediumText">{stepsConfig[1].description}</p>
 
                   {/* Provider Information Note */}
-                  {preloadedProvider && (
+                  {/* {preloadedProvider && (
                     <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                       <p className="text-sm text-blue-800">
-                        <strong>Detected Provider:</strong> We've identified your domain is managed by {preloadedProvider}. 
+                        <strong>Detected Provider:</strong> We've identified your domain is managed by {preloadedProvider}.
                         {getProviderDocUrl(preloadedProvider) ? (
                           <>
                             {' '}Follow our step-by-step guide above or add the DNS records below to your {preloadedProvider} control panel.
@@ -452,7 +487,7 @@ export default function AddDomainForm({
                         )}
                       </p>
                     </div>
-                  )}
+                  )} */}
 
                   {/* Verification Status Indicator */}
                   {verificationStatus && (
@@ -511,26 +546,27 @@ export default function AddDomainForm({
                         <span className="w-[25%]">Value</span>
                       </div>
                     </div>
-                    
+
                     {/* Table Body */}
                     <div className="bg-white">
                       {dnsRecords.map((record, idx) => (
-                        <div key={`${record.type}-${idx}`} className={`flex hover:bg-muted/50 transition-colors px-4 py-3 ${
-                          idx < dnsRecords.length - 1 ? 'border-b border-border/50' : ''
-                        }`}>
+                        <div key={`${record.type}-${idx}`} className={cn(
+                          "flex transition-colors px-4 py-3",
+                          {
+                            "bg-green-50 hover:bg-green-100": record.isVerified,
+                            "bg-white hover:bg-muted/50": !record.isVerified,
+                            "border-b border-border/50": idx < dnsRecords.length - 1
+                          }
+                        )}>
                           <div className="w-[25%] pr-4">
                             <div className="flex items-center justify-between">
-                              <span className="font-mono text-sm truncate">{
-                                record.name.includes(`.${domainName}`) 
-                                  ? record.name.replace(`.${domainName}`, '') 
-                                  : record.name === domainName.split('.').slice(-2).join('.') 
-                                    ? '*' 
-                                    : record.name.replace(/\.[^.]+\.[^.]+$/, '')
-                              }</span>
+                              <span className="font-mono text-sm truncate">
+                                {extractRecordName(record.name, domainName)}
+                              </span>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => copyToClipboard(record.name.replace(`.${domainName}`, ''))}
+                                onClick={() => copyToClipboard(extractRecordName(record.name, domainName))}
                                 className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded flex-shrink-0 ml-2"
                               >
                                 <ClipboardCopy size={16} className="text-gray-600" />
@@ -539,7 +575,12 @@ export default function AddDomainForm({
                           </div>
                           <div className="w-[25%] pr-4">
                             <div className="flex items-center justify-between">
-                              <span className="text-sm">{record.type}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm">{record.type}</span>
+                                {record.isVerified && (
+                                  <CheckCircle2 size={16} className="text-green-600" />
+                                )}
+                              </div>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -578,9 +619,9 @@ export default function AddDomainForm({
 
                   {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
-                  <Button 
-                    onClick={handleRefresh} 
-                    variant="primary" 
+                  <Button
+                    onClick={handleRefresh}
+                    variant="primary"
                     className="mt-10 w-full md:w-auto"
                     disabled={isRefreshing}
                   >

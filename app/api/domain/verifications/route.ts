@@ -127,6 +127,7 @@ export async function POST(request: NextRequest) {
     // Parse request data
     try {
       requestData = await request.json()
+      console.log('📥 Domain Verification API - Raw request data:', JSON.stringify(requestData, null, 2))
     } catch (parseError) {
       console.log('❌ Domain Verification API - Invalid JSON in request body')
       return NextResponse.json(
@@ -145,7 +146,8 @@ export async function POST(request: NextRequest) {
 
     const { action, domain, domainId } = requestData
 
-    console.log(`🌐 Domain Verification API - Processing action: ${action} for domain: ${domain} by user: ${session.user.email}`)
+
+    console.log(`🌐 Domain Verification API - Processing action: ${action} for domain: ${domain} by user: ${session.user.email} and domainId: ${domainId}`)
 
     // Validate required fields
     if (!action || !domain) {
@@ -175,8 +177,8 @@ export async function POST(request: NextRequest) {
         return await handleAddDomain(domain, session.user.id, startTime)
 
       case 'checkVerification':
-        if (!domainId) {
-          console.log('⚠️ Domain Verification API - Missing domainId for checkVerification action')
+        if (!domainId || domainId.trim() === '') {
+          console.log('⚠️ Domain Verification API - Missing domainId for checkVerification action. domainId:', domainId)
           return NextResponse.json(
             { success: false, error: 'domainId is required for checkVerification action' },
             { status: 400 }

@@ -369,6 +369,7 @@ export default function DomainDetailPage() {
 
         setIsDeleting(true)
         try {
+            // Need to update this to the /api/domain/verifications
             const response = await fetch(`/api/domains/${domainId}`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' }
@@ -863,170 +864,7 @@ export default function DomainDetailPage() {
                     />
                 </div>
             )}
-
-            {/* SES Verification Status - Show for non-pending domains */}
-            {(domain.status === DOMAIN_STATUS.VERIFIED || domain.status === DOMAIN_STATUS.FAILED) && (
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle className="flex items-center gap-2">
-                                    <ClockIcon className="h-5 w-5 text-blue-600" />
-                                    {domain.status === DOMAIN_STATUS.VERIFIED && "SES Verification in Progress"}
-                                    {domain.status === DOMAIN_STATUS.FAILED && "Domain Verification Failed"}
-                                </CardTitle>
-                                <CardDescription>
-                                    {domain.status === DOMAIN_STATUS.VERIFIED && "DNS records verified. Waiting for SES to complete domain verification."}
-                                    {domain.status === DOMAIN_STATUS.FAILED && "DNS verification failed. Please check and update your DNS records below."}
-                                </CardDescription>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                {domain.domainProvider && (
-                                    <div className="text-sm text-muted-foreground">
-                                        Provider: {domain.domainProvider}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {dnsRecords.length === 0 ? (
-                            <Alert>
-                                <AlertTriangleIcon className="h-4 w-4" />
-                                <AlertDescription>
-                                    No DNS records found. Please refresh to load verification records.
-                                </AlertDescription>
-                            </Alert>
-                        ) : (
-                            <div className="space-y-4">
-
-                                <Alert className="border-blue-200 bg-blue-50">
-                                    <AlertDescription className="text-blue-800">
-                                        <strong>Add these DNS records to your domain:</strong> Once added, use the "Refresh" button above to verify DNS records and check AWS SES status.
-                                    </AlertDescription>
-                                </Alert>
-
-                                {dnsRecords.map((record, index) => (
-                                    <div key={index} className="p-4 bg-gray-50 rounded-lg border">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className="flex items-center gap-2">
-                                                <Badge variant="secondary" className="text-sm font-medium">{record.type}</Badge>
-                                                {record.isVerified ? (
-                                                    <CheckCircleIcon className="h-4 w-4 text-green-600" />
-                                                ) : (
-                                                    <XCircleIcon className="h-4 w-4 text-red-600" />
-                                                )}
-                                            </div>
-                                            <span className="text-sm text-muted-foreground">
-                                                {record.isVerified ? 'Verified' : 'Not Found'}
-                                            </span>
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            {/* Name Field */}
-                                            <div>
-                                                <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Name</label>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <div className="flex-1 p-2 bg-white border rounded font-mono text-sm break-all">
-                                                        {record.name}
-                                                    </div>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="secondary"
-                                                        onClick={() => copyToClipboard(record.name, `name-${index}`)}
-                                                        className="shrink-0"
-                                                    >
-                                                        {copiedValues[`name-${index}`] ? (
-                                                            <CheckIcon className="h-3 w-3" />
-                                                        ) : (
-                                                            <CopyIcon className="h-3 w-3" />
-                                                        )}
-                                                    </Button>
-                                                </div>
-                                            </div>
-
-                                            {/* MX Record - Special handling for priority and value */}
-                                            {record.type === 'MX' ? (
-                                                <>
-                                                    <div>
-                                                        <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Priority</label>
-                                                        <div className="flex items-center gap-2 mt-1">
-                                                            <div className="flex-1 p-2 bg-white border rounded font-mono text-sm break-all">
-                                                                {record.value.split(' ')[0]}
-                                                            </div>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="secondary"
-                                                                onClick={() => copyToClipboard(record.value.split(' ')[0], `priority-${index}`)}
-                                                                className="shrink-0"
-                                                            >
-                                                                {copiedValues[`priority-${index}`] ? (
-                                                                    <CheckIcon className="h-3 w-3" />
-                                                                ) : (
-                                                                    <CopyIcon className="h-3 w-3" />
-                                                                )}
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Value</label>
-                                                        <div className="flex items-center gap-2 mt-1">
-                                                            <div className="flex-1 p-2 bg-white border rounded font-mono text-sm break-all">
-                                                                {record.value.split(' ').slice(1).join(' ')}
-                                                            </div>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="secondary"
-                                                                onClick={() => copyToClipboard(record.value.split(' ').slice(1).join(' '), `mx-value-${index}`)}
-                                                                className="shrink-0"
-                                                            >
-                                                                {copiedValues[`mx-value-${index}`] ? (
-                                                                    <CheckIcon className="h-3 w-3" />
-                                                                ) : (
-                                                                    <CopyIcon className="h-3 w-3" />
-                                                                )}
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                </>
-                                            ) : (
-                                                /* Non-MX Record - Standard Value Field */
-                                                <div>
-                                                    <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Value</label>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <div className="flex-1 p-2 bg-white border rounded font-mono text-sm break-all">
-                                                            {record.value}
-                                                        </div>
-                                                        <Button
-                                                            size="sm"
-                                                            variant="secondary"
-                                                            onClick={() => copyToClipboard(record.value, `value-${index}`)}
-                                                            className="shrink-0"
-                                                        >
-                                                            {copiedValues[`value-${index}`] ? (
-                                                                <CheckIcon className="h-3 w-3" />
-                                                            ) : (
-                                                                <CopyIcon className="h-3 w-3" />
-                                                            )}
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-
-                                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
-                                    <p className="text-sm text-blue-800">
-                                        <strong>Instructions:</strong> Add these DNS records to your domain registrar or DNS provider.
-                                        Use the copy buttons to easily copy each value. DNS changes may take up to 24 hours to propagate.
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-            )}
+            
 
             {/* SES Verification Complete - Show when all DNS records are verified */}
             {domain.status === DOMAIN_STATUS.VERIFIED && dnsRecords.every(record => record.isVerified) && (
@@ -1070,39 +908,34 @@ export default function DomainDetailPage() {
                     <CardContent className="space-y-4">
                         <div className="space-y-4">
                             {/* Add Email Form */}
-                            <div className="p-4 border rounded-lg bg-gray-50">
-                                <Label htmlFor="new-email">Add New Email Address</Label>
-                                <div className="space-y-3 mt-2">
-                                    <div className="flex gap-2">
-                                        <div className="flex-1 flex items-center border rounded-md bg-white">
-                                            <Input
-                                                id="new-email"
-                                                type="text"
-                                                placeholder="user"
-                                                value={newEmailAddress}
-                                                onChange={(e) => setNewEmailAddress(e.target.value)}
-                                                className="border-0 rounded-r-none focus:ring-0 focus:border-0"
-                                                disabled={isAddingEmail}
-                                            />
-                                            <div className="px-3 py-2 bg-gray-50 border-l text-sm text-gray-600 rounded-r-md">
-                                                @{domain.domain}
+                            <div>
+                                <div className="flex gap-4">
+                                    {/* Email Input Section */}
+                                    <div className="flex-1 min-w-0">
+                                        <Label htmlFor="new-email" className="text-sm font-medium">
+                                            Add New Email Address
+                                        </Label>
+                                        <div className="mt-2">
+                                            <div className="flex-1 flex items-center border rounded-md bg-white min-w-0 h-10">
+                                                <Input
+                                                    id="new-email"
+                                                    type="text"
+                                                    placeholder="user"
+                                                    value={newEmailAddress}
+                                                    onChange={(e) => setNewEmailAddress(e.target.value)}
+                                                    className="border-0 rounded-r-none focus:ring-0 focus:border-0 flex-1 min-w-0 h-full"
+                                                    disabled={isAddingEmail}
+                                                />
+                                                <div className="px-3 bg-gray-50 border-l text-sm text-gray-600 rounded-r-md whitespace-nowrap flex items-center h-full" >
+                                                    @{domain.domain}
+                                                </div>
                                             </div>
                                         </div>
-                                        <Button
-                                            onClick={addEmailAddress}
-                                            disabled={isAddingEmail || !newEmailAddress.trim()}
-                                        >
-                                            {isAddingEmail ? (
-                                                <RefreshCwIcon className="h-4 w-4 animate-spin" />
-                                            ) : (
-                                                <PlusIcon className="h-4 w-4" />
-                                            )}
-                                        </Button>
                                     </div>
                                     
-                                    {/* Webhook Selection */}
-                                    <div>
-                                        <Label htmlFor="webhook-select" className="text-sm">
+                                    {/* Webhook Selection Section */}
+                                    <div className="flex-1 min-w-0">
+                                        <Label htmlFor="webhook-select" className="text-sm font-medium">
                                             Webhook (optional)
                                         </Label>
                                         <Select 
@@ -1110,7 +943,7 @@ export default function DomainDetailPage() {
                                             onValueChange={handleWebhookSelection}
                                             disabled={isAddingEmail || isLoadingWebhooks}
                                         >
-                                            <SelectTrigger className="mt-1">
+                                            <SelectTrigger className="mt-2 h-10">
                                                 <SelectValue placeholder="No webhook - emails stored only" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -1156,6 +989,23 @@ export default function DomainDetailPage() {
                                                 </a>
                                             </div>
                                         )}
+                                    </div>
+
+                                    {/* Add Button */}
+                                    <div className="flex flex-col justify-end">
+                                        <div className="mt-2">
+                                            <Button
+                                                onClick={addEmailAddress}
+                                                disabled={isAddingEmail || !newEmailAddress.trim()}
+                                                className="shrink-0 h-10"
+                                            >
+                                                {isAddingEmail ? (
+                                                    <RefreshCwIcon className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <PlusIcon className="h-4 w-4" />
+                                                )}
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                                 {emailError && (
