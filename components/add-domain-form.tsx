@@ -297,9 +297,9 @@ export default function AddDomainForm({
     const domainParts = domainName.split('.')
     const rootDomain = domainParts.slice(-2).join('.')
     
-    // If the record name is exactly the root domain, return "*"
+    // If the record name is exactly the root domain, return "@"
     if (recordName === rootDomain) {
-      return "*"
+      return "@"
     }
     
     // If the record name ends with the root domain, extract the subdomain part
@@ -529,7 +529,7 @@ export default function AddDomainForm({
                         )}
                       </div>
                       <p className="text-xs text-gray-600 mt-1">
-                        {verificationStatus === 'pending' && "DNS records are being verified. This may take a few minutes."}
+                        {verificationStatus === 'pending' && "DNS records are being verified. This may take a few hours."}
                         {verificationStatus === 'verified' && "Your domain has been successfully verified and is ready to use."}
                         {verificationStatus === 'failed' && "Please check your DNS records and try again."}
                       </p>
