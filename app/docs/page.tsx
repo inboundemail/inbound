@@ -1,501 +1,1144 @@
 "use client"
 
-import { useState } from "react"
-import { FaCopy, FaCheck, FaCode, FaLink, FaLock, FaClock, FaDatabase } from "react-icons/fa"
+import { useState, useEffect } from 'react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Input } from '@/components/ui/input'
+import { 
+  CodeIcon, 
+  CopyIcon, 
+  CheckIcon,
+  BookOpenIcon,
+  TerminalIcon,
+  KeyIcon,
+  GlobeIcon,
+  MailIcon,
+  WebhookIcon,
+  RefreshCwIcon,
+  PlusIcon,
+  SearchIcon,
+  HashIcon
+} from 'lucide-react'
+import { toast } from 'sonner'
+import { useSession } from '@/lib/auth-client'
+import Link from 'next/link'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 export default function DocsPage() {
-  const [copied, setCopied] = useState(false)
+  const [copiedCode, setCopiedCode] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [activeSection, setActiveSection] = useState('')
+  const { data: session, isPending } = useSession()
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  // Navigation sections
+  const sections = [
+    { id: 'quick-start', title: 'Quick Start', icon: KeyIcon },
+    { id: 'authentication', title: 'Authentication', icon: KeyIcon },
+    { id: 'domains', title: 'Domains', icon: GlobeIcon },
+    { id: 'email-addresses', title: 'Email Addresses', icon: MailIcon },
+    { id: 'webhooks', title: 'Webhooks', icon: WebhookIcon },
+    { id: 'error-handling', title: 'Error Handling', icon: CodeIcon },
+    { id: 'complete-example', title: 'Complete Example', icon: TerminalIcon }
+  ]
+
+  // Filter sections based on search
+  const filteredSections = sections.filter(section =>
+    section.title.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  // Scroll to section
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' })
+      setActiveSection(sectionId)
+    }
   }
 
-  const webhookPayload = `{
-  "id": "em_1o2jaosd8daks",
-  "messageId": "0000014a-deb8-4e72-9e83-123456789012",
-  "from": "sender@example.com",
-  "to": ["user@yourdomain.com", "team@yourdomain.com"],
-  "recipient": "user@yourdomain.com",
-  "subject": "Welcome to our platform!",
-  "receivedAt": "2025-01-28T12:00:00.000Z",
-  "status": "received",
-  "sesVerdict": {
-    "spamVerdict": "PASS",
-    "virusVerdict": "PASS",
-    "spfVerdict": "PASS",
-    "dkimVerdict": "PASS",
-    "dmarcVerdict": "PASS"
-  },
-  "processingTimeMillis": 127,
-  "metadata": {
-    "userId": "usr_1o2jaosd8daks",
-    "domainId": "dom_1o2jaosd8daks",
-    "s3BucketName": "inbound-emails-prod",
-    "s3ObjectKey": "emails/2025/01/0000014a-deb8-4e72.txt"
+  // Track active section on scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      const sectionElements = sections.map(section => ({
+        id: section.id,
+        element: document.getElementById(section.id)
+      }))
+
+      const currentSection = sectionElements.find(({ element }) => {
+        if (!element) return false
+        const rect = element.getBoundingClientRect()
+        return rect.top <= 100 && rect.bottom >= 100
+      })
+
+      if (currentSection) {
+        setActiveSection(currentSection.id)
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [sections])
+
+  const copyToClipboard = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedCode(id)
+      toast.success('Copied to clipboard')
+      setTimeout(() => setCopiedCode(null), 2000)
+    } catch (error) {
+      toast.error('Failed to copy to clipboard')
+    }
   }
-}`
 
-  const typeDefinitions = `interface WebhookPayload {
-  id: string;                    // Unique email identifier
-  messageId: string;             // AWS SES message ID
-  from: string;                  // Sender email address
-  to: string[];                  // Array of recipient addresses
-  recipient: string;             // Primary recipient (your domain)
-  subject: string;               // Email subject line
-  receivedAt: string;            // ISO 8601 timestamp
-  status: "received" | "processing" | "delivered" | "failed";
-  sesVerdict: SESVerdict;        // Security verification results
-  processingTimeMillis: number;  // Processing time in milliseconds
-  metadata: EmailMetadata;       // Additional metadata
-}
-
-interface SESVerdict {
-  spamVerdict: "PASS" | "FAIL" | "GRAY" | "PROCESSING_FAILED";
-  virusVerdict: "PASS" | "FAIL" | "GRAY" | "PROCESSING_FAILED";
-  spfVerdict: "PASS" | "FAIL" | "GRAY" | "PROCESSING_FAILED";
-  dkimVerdict: "PASS" | "FAIL" | "GRAY" | "PROCESSING_FAILED";
-  dmarcVerdict: "PASS" | "FAIL" | "GRAY" | "PROCESSING_FAILED";
-}
-
-interface EmailMetadata {
-  userId: string;          // Your user ID in our system
-  domainId: string;        // Domain configuration ID
-  s3BucketName: string;    // S3 bucket containing email content
-  s3ObjectKey: string;     // S3 object key for full email content
-}`
-
-  const curlExample = `curl -X POST https://your-webhook-endpoint.com/emails \\
-  -H "Content-Type: application/json" \\
-  -H "X-Inbound-Signature: sha256=..." \\
-  -d '${webhookPayload.replace(/\n/g, '\\n').replace(/"/g, '\\"')}'`
-
-  const nodeExample = `// Express.js webhook handler
-app.post('/webhooks/inbound', express.json(), (req, res) => {
-  const email = req.body;
-  
-  // Verify webhook signature (recommended)
-  const signature = req.headers['x-inbound-signature'];
-  if (!verifySignature(signature, req.body)) {
-    return res.status(401).send('Invalid signature');
-  }
-  
-  // Process the email
-  console.log(\`New email from \${email.from}: \${email.subject}\`);
-  
-  // Check security verdicts
-  if (email.sesVerdict.spamVerdict === 'PASS') {
-    // Email passed spam check
-    await processLegitimateEmail(email);
-  }
-  
-  // Download full email content from S3 (optional)
-  const emailContent = await downloadFromS3(
-    email.metadata.s3BucketName, 
-    email.metadata.s3ObjectKey
-  );
-  
-  res.status(200).send('OK');
-});`
-
-  const pythonExample = `# Flask webhook handler
-from flask import Flask, request, jsonify
-import hmac
-import hashlib
-
-@app.route('/webhooks/inbound', methods=['POST'])
-def handle_inbound_email():
-    email_data = request.json
-    
-    # Verify webhook signature
-    signature = request.headers.get('X-Inbound-Signature', '')
-    if not verify_signature(signature, request.data):
-        return 'Invalid signature', 401
-    
-    # Extract email information
-    sender = email_data['from']
-    subject = email_data['subject']
-    recipient = email_data['recipient']
-    
-    # Check if email passed security checks
-    verdicts = email_data['sesVerdict']
-    if all(v == 'PASS' for v in verdicts.values()):
-        print(f"Secure email from {sender}: {subject}")
-        
-    # Process based on recipient
-    if recipient == 'support@yourdomain.com':
-        create_support_ticket(email_data)
-    elif recipient == 'orders@yourdomain.com':
-        process_order_email(email_data)
-    
-    return jsonify({'status': 'processed'}), 200`
+  const CodeBlock = ({ 
+    children, 
+    language = 'bash', 
+    copyId 
+  }: { 
+    children: string
+    language?: string
+    copyId: string 
+  }) => (
+    <div className="relative">
+      <SyntaxHighlighter
+        language={language}
+        style={oneDark}
+        customStyle={{
+          margin: 0,
+          borderRadius: '0.5rem',
+          fontSize: '0.875rem',
+          lineHeight: '1.25rem'
+        }}
+        showLineNumbers={false}
+        wrapLines={true}
+        wrapLongLines={true}
+      >
+        {children}
+      </SyntaxHighlighter>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="absolute top-2 right-2 h-8 w-8 p-0 text-slate-400 hover:text-slate-100 bg-slate-800/50 hover:bg-slate-700/50"
+        onClick={() => copyToClipboard(children, copyId)}
+      >
+        {copiedCode === copyId ? (
+          <CheckIcon className="h-4 w-4" />
+        ) : (
+          <CopyIcon className="h-4 w-4" />
+        )}
+      </Button>
+    </div>
+  )
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header */}
-      <header className="px-6 py-6 border-b border-gray-100">
-        <div className="flex items-center justify-between max-w-6xl mx-auto">
-          <div className="flex items-center gap-2">
-            <img src="/inbound-logo-3.png" alt="Inbound Logo" width={32} height={32} className="inline-block align-bottom" />
+    <div className="flex flex-1 flex-col">
+      {/* Header with Gradient */}
+      <header className="px-6 py-6 border-b border-gray-100 sticky top-0 bg-white z-50">
+        <div className="flex items-center justify-between max-w-7xl mx-auto">
+          <Link href="/" className="flex items-center gap-2">
+            <img src="/inbound-logo-3.png" alt="Email" width={32} height={32} className="inline-block align-bottom" />
             <span className="text-2xl font-bold text-black">inbound</span>
-          </div>
-          <a href="/" className="text-gray-600 hover:text-gray-900 transition-colors">
-            ← Back to Home
-          </a>
+          </Link>
+          {/* Conditionally show Sign In or Go to Dashboard based on auth state */}
+          {isPending ? (
+            <div className="w-20 h-10 bg-gray-200 animate-pulse rounded"></div>
+          ) : session ? (
+            <Button variant="primary" asChild>
+              <a href="/dashboard" className="text-white hover:text-gray-900">
+                Go to Dashboard
+              </a>
+            </Button>
+          ) : (
+            <Button variant="primary" asChild>
+              <a href="/login" className="text-white hover:text-gray-900">
+                Sign In
+              </a>
+            </Button>
+          )}
         </div>
       </header>
 
-      {/* Content */}
-      <main className="px-6 py-12">
-        <div className="max-w-6xl mx-auto">
-          <div className="mb-16">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">API Documentation</h1>
-            <p className="text-xl text-gray-600 max-w-3xl">
-              Learn how to integrate with Inbound's webhook system to receive and process emails for your domains.
-            </p>
-          </div>
-
-          {/* Quick Overview */}
-          <section className="mb-16">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">How it Works</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-blue-50 p-6 rounded-xl border border-blue-200">
-                <FaLink className="w-8 h-8 text-blue-600 mb-4" />
-                <h3 className="text-lg font-semibold text-blue-900 mb-2">1. Configure Webhook</h3>
-                <p className="text-blue-700">Set up your webhook endpoint URL in the Inbound dashboard to receive email notifications.</p>
-              </div>
-              <div className="bg-green-50 p-6 rounded-xl border border-green-200">
-                <FaLock className="w-8 h-8 text-green-600 mb-4" />
-                <h3 className="text-lg font-semibold text-green-900 mb-2">2. Email Processing</h3>
-                <p className="text-green-700">We automatically process incoming emails, run security checks, and prepare the payload.</p>
-              </div>
-              <div className="bg-purple-50 p-6 rounded-xl border border-purple-200">
-                <FaCode className="w-8 h-8 text-purple-600 mb-4" />
-                <h3 className="text-lg font-semibold text-purple-900 mb-2">3. Webhook Delivery</h3>
-                <p className="text-purple-700">Receive structured JSON data with email details, security verdicts, and metadata.</p>
-              </div>
-            </div>
-          </section>
-
-          {/* Webhook Payload */}
-          <section className="mb-16">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Webhook Payload Structure</h2>
-            <p className="text-gray-600 mb-6">
-              When an email is received for your domain, we'll send a POST request to your webhook endpoint with the following JSON payload:
-            </p>
-            
+      <div className="flex flex-1 max-w-7xl mx-auto w-full">
+        {/* Left Sidebar - Navigation */}
+        <aside className="w-64 flex-shrink-0 border-r border-gray-200 bg-gray-50/50 p-6 sticky top-[89px] h-[calc(100vh-89px)] overflow-y-auto">
+          <div className="space-y-4">
+            {/* Search */}
             <div className="relative">
-              <div className="bg-gray-900 rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-                  <span className="text-white font-semibold">Example Webhook Payload</span>
+              <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search docs..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 bg-white"
+              />
+            </div>
+
+            {/* Navigation */}
+            <nav className="space-y-1">
+              {filteredSections.map((section) => {
+                const Icon = section.icon
+                const isActive = activeSection === section.id
+                return (
                   <button
-                    onClick={() => copyToClipboard(webhookPayload)}
-                    className="flex items-center gap-2 px-3 py-1 bg-gray-800 hover:bg-gray-700 text-white rounded-md text-sm transition-colors"
+                    key={section.id}
+                    onClick={() => scrollToSection(section.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-left ${
+                      isActive
+                        ? 'bg-purple-100 text-purple-700 font-medium'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    }`}
                   >
-                    {copied ? <FaCheck className="w-4 h-4" /> : <FaCopy className="w-4 h-4" />}
-                    {copied ? 'Copied!' : 'Copy'}
+                    <Icon className="h-4 w-4 flex-shrink-0" />
+                    <span>{section.title}</span>
                   </button>
-                </div>
-                <pre className="p-6 text-sm text-gray-300 overflow-x-auto">
-                  <code>{webhookPayload}</code>
-                </pre>
-              </div>
-            </div>
-          </section>
-
-          {/* Type Definitions */}
-          <section className="mb-16">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">TypeScript Definitions</h2>
-            <p className="text-gray-600 mb-6">
-              Use these TypeScript interfaces to ensure type safety in your webhook handlers:
-            </p>
-            
-            <div className="relative">
-              <div className="bg-gray-900 rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-                  <span className="text-white font-semibold">TypeScript Types</span>
-                  <button
-                    onClick={() => copyToClipboard(typeDefinitions)}
-                    className="flex items-center gap-2 px-3 py-1 bg-gray-800 hover:bg-gray-700 text-white rounded-md text-sm transition-colors"
-                  >
-                    <FaCopy className="w-4 h-4" />
-                    Copy Types
-                  </button>
-                </div>
-                <pre className="p-6 text-sm text-gray-300 overflow-x-auto">
-                  <code>{typeDefinitions}</code>
-                </pre>
-              </div>
-            </div>
-          </section>
-
-          {/* Field Descriptions */}
-          <section className="mb-16">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Field Descriptions</h2>
-            <div className="overflow-hidden bg-white border border-gray-200 rounded-xl">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Field</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  <tr>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">id</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">string</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">Unique identifier for this email (prefixed with "em_")</td>
-                  </tr>
-                  <tr className="bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">messageId</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">string</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">AWS SES message ID for tracking and debugging</td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">from</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">string</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">Email address of the sender</td>
-                  </tr>
-                  <tr className="bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">to</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">string[]</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">Array of all recipient email addresses</td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">recipient</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">string</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">Primary recipient address (from your domain)</td>
-                  </tr>
-                  <tr className="bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">subject</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">string</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">Email subject line</td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">receivedAt</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">string</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">ISO 8601 timestamp when email was received</td>
-                  </tr>
-                  <tr className="bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">status</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">string</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">Processing status: "received", "processing", "delivered", or "failed"</td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">sesVerdict</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">object</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">Security verification results from AWS SES</td>
-                  </tr>
-                  <tr className="bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">processingTimeMillis</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">number</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">Time taken to process the email (in milliseconds)</td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">metadata</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">object</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">Additional metadata including S3 storage information</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* Security Verdicts */}
-          <section className="mb-16">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Security Verdict Explanations</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-blue-50 p-6 rounded-xl border border-blue-200">
-                <h3 className="text-lg font-semibold text-blue-900 mb-3">Spam Verdict</h3>
-                <p className="text-blue-700 text-sm mb-3">Determines if the email is likely spam based on content analysis and sender reputation.</p>
-                <ul className="text-blue-700 text-sm space-y-1">
-                  <li><strong>PASS:</strong> Not spam</li>
-                  <li><strong>FAIL:</strong> Likely spam</li>
-                  <li><strong>GRAY:</strong> Uncertain</li>
-                </ul>
-              </div>
-              
-              <div className="bg-green-50 p-6 rounded-xl border border-green-200">
-                <h3 className="text-lg font-semibold text-green-900 mb-3">Virus Verdict</h3>
-                <p className="text-green-700 text-sm mb-3">Scans attachments and content for malicious software and viruses.</p>
-                <ul className="text-green-700 text-sm space-y-1">
-                  <li><strong>PASS:</strong> No viruses found</li>
-                  <li><strong>FAIL:</strong> Virus detected</li>
-                  <li><strong>GRAY:</strong> Scan inconclusive</li>
-                </ul>
-              </div>
-              
-              <div className="bg-purple-50 p-6 rounded-xl border border-purple-200">
-                <h3 className="text-lg font-semibold text-purple-900 mb-3">SPF Verdict</h3>
-                <p className="text-purple-700 text-sm mb-3">Sender Policy Framework authentication check to verify sender authorization.</p>
-                <ul className="text-purple-700 text-sm space-y-1">
-                  <li><strong>PASS:</strong> SPF record valid</li>
-                  <li><strong>FAIL:</strong> SPF check failed</li>
-                  <li><strong>GRAY:</strong> No SPF record</li>
-                </ul>
-              </div>
-              
-              <div className="bg-orange-50 p-6 rounded-xl border border-orange-200">
-                <h3 className="text-lg font-semibold text-orange-900 mb-3">DKIM/DMARC Verdicts</h3>
-                <p className="text-orange-700 text-sm mb-3">Domain-based authentication checks for email integrity and sender verification.</p>
-                <ul className="text-orange-700 text-sm space-y-1">
-                  <li><strong>PASS:</strong> Authentication successful</li>
-                  <li><strong>FAIL:</strong> Authentication failed</li>
-                  <li><strong>GRAY:</strong> No policy found</li>
-                </ul>
-              </div>
-            </div>
-          </section>
-
-          {/* Code Examples */}
-          <section className="mb-16">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Implementation Examples</h2>
-            
-            {/* Node.js Example */}
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Node.js / Express</h3>
-              <div className="relative">
-                <div className="bg-gray-900 rounded-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-                    <span className="text-white font-medium">Webhook Handler</span>
-                    <button
-                      onClick={() => copyToClipboard(nodeExample)}
-                      className="flex items-center gap-2 px-3 py-1 bg-gray-800 hover:bg-gray-700 text-white rounded-md text-sm transition-colors"
-                    >
-                      <FaCopy className="w-4 h-4" />
-                      Copy
-                    </button>
-                  </div>
-                  <pre className="p-6 text-sm text-gray-300 overflow-x-auto">
-                    <code>{nodeExample}</code>
-                  </pre>
-                </div>
-              </div>
-            </div>
-
-            {/* Python Example */}
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Python / Flask</h3>
-              <div className="relative">
-                <div className="bg-gray-900 rounded-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-                    <span className="text-white font-medium">Webhook Handler</span>
-                    <button
-                      onClick={() => copyToClipboard(pythonExample)}
-                      className="flex items-center gap-2 px-3 py-1 bg-gray-800 hover:bg-gray-700 text-white rounded-md text-sm transition-colors"
-                    >
-                      <FaCopy className="w-4 h-4" />
-                      Copy
-                    </button>
-                  </div>
-                  <pre className="p-6 text-sm text-gray-300 overflow-x-auto">
-                    <code>{pythonExample}</code>
-                  </pre>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Best Practices */}
-          <section className="mb-16">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Best Practices</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <FaLock className="w-5 h-5 text-green-600 mt-1 flex-shrink-0" />
-                  <div>
-                    <h3 className="font-semibold text-gray-900">Verify Webhook Signatures</h3>
-                    <p className="text-gray-600 text-sm">Always verify the X-Inbound-Signature header to ensure webhooks are from Inbound.</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-3">
-                  <FaClock className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
-                  <div>
-                    <h3 className="font-semibold text-gray-900">Respond Quickly</h3>
-                    <p className="text-gray-600 text-sm">Return a 200 status code within 10 seconds to avoid webhook timeouts.</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-3">
-                  <FaDatabase className="w-5 h-5 text-purple-600 mt-1 flex-shrink-0" />
-                  <div>
-                    <h3 className="font-semibold text-gray-900">Handle Duplicates</h3>
-                    <p className="text-gray-600 text-sm">Use the email ID to implement idempotent processing and avoid duplicate handling.</p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <FaCheck className="w-5 h-5 text-green-600 mt-1 flex-shrink-0" />
-                  <div>
-                    <h3 className="font-semibold text-gray-900">Check Security Verdicts</h3>
-                    <p className="text-gray-600 text-sm">Always check sesVerdict fields before processing emails to ensure security.</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-3">
-                  <FaCode className="w-5 h-5 text-orange-600 mt-1 flex-shrink-0" />
-                  <div>
-                    <h3 className="font-semibold text-gray-900">Implement Retry Logic</h3>
-                    <p className="text-gray-600 text-sm">Handle temporary failures gracefully with exponential backoff retry mechanisms.</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-3">
-                  <FaDatabase className="w-5 h-5 text-indigo-600 mt-1 flex-shrink-0" />
-                  <div>
-                    <h3 className="font-semibold text-gray-900">Download Full Content</h3>
-                    <p className="text-gray-600 text-sm">Use S3 metadata to download full email content including attachments when needed.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Support */}
-          <section className="bg-gray-50 rounded-xl p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Need Help?</h2>
-            <p className="text-gray-600 mb-6">
-              If you have questions about implementing webhooks or need assistance with your integration, 
-              we're here to help.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <a 
-                href="mailto:support@inbound.exon.dev" 
-                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Contact Support
-              </a>
-              <a 
-                href="/dashboard" 
-                className="inline-flex items-center px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Go to Dashboard
-              </a>
-            </div>
-          </section>
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-gray-100 px-6 py-8">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between">
-          <div className="flex items-center gap-2 mb-4 md:mb-0">
-            <img src="/inbound-logo-3.png" alt="Inbound Logo" className="w-6 h-6" />
-            <span className="text-lg font-bold text-gray-900">inbound</span>
+                )
+              })}
+            </nav>
           </div>
-          <div className="flex items-center gap-6 text-sm text-gray-500">
-            <a href="/privacy" className="hover:text-gray-700 transition-colors">Privacy</a>
-            <a href="/terms" className="hover:text-gray-700 transition-colors">Terms</a>
-            <a href="/docs" className="hover:text-gray-700 transition-colors">Docs</a>
-            <a href="mailto:support@inbound.exon.dev" className="hover:text-gray-700 transition-colors">Support</a>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 px-6 py-8 min-w-0">
+          <div className="max-w-4xl space-y-12">
+            {/* Quick Start */}
+            <section id="quick-start">
+          <div className="flex items-center gap-2 mb-6">
+            <KeyIcon className="h-6 w-6 text-purple-600" />
+            <h2 className="text-3xl font-bold">SDK and API Docs</h2>
           </div>
-        </div>
-      </footer>
+          <p className="text-xl text-muted-foreground mb-8">
+            Get started with the Inbound Email API in minutes
+          </p>
+          
+          <div className="space-y-8">
+            <div>
+              <h3 className="text-xl font-semibold mb-4">1. Get Your API Key</h3>
+              <p className="text-muted-foreground mb-4">
+                Create an API key from your <a href="/settings" className="text-purple-600 hover:underline">Settings page</a>.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-semibold mb-4">2. Install the SDK (Optional)</h3>
+              <Tabs defaultValue="npm" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="npm">npm</TabsTrigger>
+                  <TabsTrigger value="yarn">yarn</TabsTrigger>
+                  <TabsTrigger value="pnpm">pnpm</TabsTrigger>
+                  <TabsTrigger value="bun">bun</TabsTrigger>
+                </TabsList>
+                <TabsContent value="npm">
+                  <CodeBlock copyId="install-npm">npm install exon-inbound</CodeBlock>
+                </TabsContent>
+                <TabsContent value="yarn">
+                  <CodeBlock copyId="install-yarn">yarn add exon-inbound</CodeBlock>
+                </TabsContent>
+                <TabsContent value="pnpm">
+                  <CodeBlock copyId="install-pnpm">pnpm add exon-inbound</CodeBlock>
+                </TabsContent>
+                <TabsContent value="bun">
+                  <CodeBlock copyId="install-bun">bun add exon-inbound</CodeBlock>
+                </TabsContent>
+              </Tabs>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-semibold mb-4">3. Make Your First Request</h3>
+              <Tabs defaultValue="typescript" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="typescript">TypeScript</TabsTrigger>
+                  <TabsTrigger value="curl">cURL</TabsTrigger>
+                </TabsList>
+                <TabsContent value="typescript">
+                  <CodeBlock language="typescript" copyId="quick-start-ts">
+{`import { createInboundClient } from 'exon-inbound'
+
+const inbound = createInboundClient({
+  apiKey: 'your_api_key_here'
+})
+
+// List your domains
+const domains = await inbound.getDomains()
+console.log('Your domains:', domains)
+
+// Find a verified domain
+const verifiedDomain = domains.find(d => 
+  d.status === 'verified' && d.canReceiveEmails
+)
+
+if (verifiedDomain) {
+  console.log('Ready to use:', verifiedDomain.domain)
+}`}
+                  </CodeBlock>
+                </TabsContent>
+                <TabsContent value="curl">
+                  <CodeBlock language="bash" copyId="quick-start-curl">
+{`curl -X GET https://your-domain.com/api/v1/domains \\
+  -H "Authorization: Bearer your_api_key_here"`}
+                  </CodeBlock>
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
+        </section>
+
+            {/* Authentication */}
+            <section id="authentication">
+          <div className="flex items-center gap-2 mb-6">
+            <KeyIcon className="h-6 w-6 text-purple-600" />
+            <h2 className="text-3xl font-bold">Authentication</h2>
+          </div>
+          <p className="text-xl text-muted-foreground mb-8">
+            All API requests require authentication using an API key
+          </p>
+          
+          <div className="space-y-6">
+            <p>Include your API key in the <code className="bg-slate-100 px-2 py-1 rounded">Authorization</code> header:</p>
+            <CodeBlock language="bash" copyId="auth-header">Authorization: Bearer your_api_key_here</CodeBlock>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <p className="text-amber-800 text-sm">
+                <strong>Security:</strong> Keep your API keys secure and never expose them in client-side code.
+              </p>
+            </div>
+          </div>
+        </section>
+
+            {/* Domains */}
+            <section id="domains">
+          <div className="flex items-center gap-2 mb-6">
+            <GlobeIcon className="h-6 w-6 text-purple-600" />
+            <h2 className="text-3xl font-bold">Domains</h2>
+          </div>
+          <p className="text-xl text-muted-foreground mb-8">
+            Manage your email domains and get domain information for email operations
+          </p>
+          
+          <div className="space-y-8">
+            {/* List Domains */}
+            <div>
+              <h3 className="text-xl font-semibold mb-4">List Domains</h3>
+              <p className="text-muted-foreground mb-6">Get all domains for your account with their IDs and status information.</p>
+              
+              <Tabs defaultValue="typescript" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="typescript">TypeScript</TabsTrigger>
+                  <TabsTrigger value="curl">cURL</TabsTrigger>
+                </TabsList>
+                <TabsContent value="typescript" className="space-y-6">
+                  <div>
+                    <h4 className="font-medium mb-3">Request</h4>
+                    <CodeBlock language="typescript" copyId="list-domains-ts">
+{`// Get just the domains array
+const domains = await inbound.getDomains()
+
+// or use the explicit method
+const domains = await inbound.listDomains()
+
+// Find a specific domain by name
+const myDomain = domains.find(d => d.domain === 'example.com')
+console.log('Domain ID:', myDomain?.id) // Use this ID for email operations`}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Response</h4>
+                    <CodeBlock language="json" copyId="list-domains-response">
+{`[
+  {
+    "id": "indm_abc123",
+    "domain": "example.com",
+    "status": "verified",
+    "canReceiveEmails": true,
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "indm_def456",
+    "domain": "myapp.com",
+    "status": "pending",
+    "canReceiveEmails": false,
+    "createdAt": "2024-01-02T00:00:00.000Z",
+    "updatedAt": "2024-01-02T00:00:00.000Z"
+  }
+]`}
+                    </CodeBlock>
+                  </div>
+                </TabsContent>
+                <TabsContent value="curl" className="space-y-6">
+                  <div>
+                    <h4 className="font-medium mb-3">Request</h4>
+                    <CodeBlock language="bash" copyId="list-domains-curl">
+{`curl -X GET https://your-domain.com/api/v1/domains \\
+  -H "Authorization: Bearer your_api_key"`}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Response</h4>
+                    <CodeBlock language="json" copyId="list-domains-curl-response">
+{`{
+  "success": true,
+  "data": [
+    {
+      "id": "indm_abc123",
+      "domain": "example.com",
+      "status": "verified",
+      "canReceiveEmails": true,
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "indm_def456",
+      "domain": "myapp.com",
+      "status": "pending",
+      "canReceiveEmails": false,
+      "createdAt": "2024-01-02T00:00:00.000Z",
+      "updatedAt": "2024-01-02T00:00:00.000Z"
+    }
+  ]
+}`}
+                    </CodeBlock>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+
+            {/* Domain Status Information */}
+            <div>
+              <h3 className="text-xl font-semibold mb-4">Domain Status</h3>
+              <p className="text-muted-foreground mb-6">Understanding domain status values and what they mean.</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 p-3 rounded-lg border">
+                    <Badge className="bg-green-100 text-green-800 border-green-200">verified</Badge>
+                    <span className="text-sm">Domain is verified and can receive emails</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 rounded-lg border">
+                    <Badge className="bg-amber-100 text-amber-800 border-amber-200">pending</Badge>
+                    <span className="text-sm">Domain verification is in progress</span>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 p-3 rounded-lg border">
+                    <Badge className="bg-red-100 text-red-800 border-red-200">failed</Badge>
+                    <span className="text-sm">Domain verification failed</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 rounded-lg border">
+                    <Badge className="bg-blue-100 text-blue-800 border-blue-200">ses_pending</Badge>
+                    <span className="text-sm">Waiting for AWS SES verification</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-blue-800 text-sm">
+                  <strong>Note:</strong> Only domains with <code className="bg-blue-100 px-1 rounded">status: "verified"</code> and <code className="bg-blue-100 px-1 rounded">canReceiveEmails: true</code> can be used to create email addresses.
+                </p>
+              </div>
+            </div>
+
+            {/* Using Domain Information */}
+            <div>
+              <h3 className="text-xl font-semibold mb-4">Using Domain Information</h3>
+              <p className="text-muted-foreground mb-6">How to use domain data for email address operations.</p>
+              
+              <CodeBlock language="typescript" copyId="using-domain-info">
+{`// Complete workflow: List domains and create email addresses
+async function setupEmailAddresses() {
+  // 1. Get all domains
+  const domains = await inbound.getDomains()
+  
+  // 2. Find verified domains that can receive emails
+  const verifiedDomains = domains.filter(d => 
+    d.status === 'verified' && d.canReceiveEmails
+  )
+  
+  if (verifiedDomains.length === 0) {
+    throw new Error('No verified domains available')
+  }
+  
+  // 3. Use the first verified domain
+  const domain = verifiedDomains[0]
+  console.log(\`Using domain: \${domain.domain} (ID: \${domain.id})\`)
+  
+  // 4. Create email addresses on this domain
+  const emails = [
+    'support@' + domain.domain,
+    'hello@' + domain.domain,
+    'contact@' + domain.domain
+  ]
+  
+  for (const emailAddress of emails) {
+    const email = await inbound.addEmail(
+      domain.domain,  // Use domain name
+      emailAddress,   // Full email address
+      'webhook_123'   // Optional webhook ID
+    )
+    console.log(\`Created: \${email.address}\`)
+  }
+  
+  return { domain, emailsCreated: emails.length }
+}`}
+              </CodeBlock>
+            </div>
+          </div>
+        </section>
+
+            {/* Email Addresses */}
+            <section id="email-addresses">
+          <div className="flex items-center gap-2 mb-6">
+            <MailIcon className="h-6 w-6 text-purple-600" />
+            <h2 className="text-3xl font-bold">Email Addresses</h2>
+          </div>
+          <p className="text-xl text-muted-foreground mb-8">
+            Create and manage email addresses on your domains
+          </p>
+          
+          <div className="space-y-12">
+            {/* Create Email */}
+            <div>
+              <h3 className="text-xl font-semibold mb-4">Create Email Address</h3>
+              <p className="text-muted-foreground mb-6">Add a new email address to a verified domain.</p>
+              
+              <Tabs defaultValue="typescript" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="typescript">TypeScript</TabsTrigger>
+                  <TabsTrigger value="curl">cURL</TabsTrigger>
+                </TabsList>
+                <TabsContent value="typescript" className="space-y-6">
+                  <div>
+                    <h4 className="font-medium mb-3">Request</h4>
+                    <CodeBlock language="typescript" copyId="create-email-ts">
+{`// Method 1: Using createEmail
+const email = await inbound.createEmail({
+  domain: 'example.com',
+  email: 'hello@example.com',
+  webhookId: 'webhook_123' // optional
+})
+
+// Method 2: Using convenience method
+const email = await inbound.addEmail(
+  'example.com',
+  'hello@example.com',
+  'webhook_123' // optional
+)`}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Response</h4>
+                    <CodeBlock language="json" copyId="create-email-response">
+{`{
+  "id": "email_abc123",
+  "address": "hello@example.com",
+  "domainId": "indm_abc123",
+  "webhookId": "webhook_123",
+  "isActive": true,
+  "createdAt": "2024-01-01T00:00:00.000Z"
+}`}
+                    </CodeBlock>
+                  </div>
+                </TabsContent>
+                <TabsContent value="curl" className="space-y-6">
+                  <div>
+                    <h4 className="font-medium mb-3">Request</h4>
+                    <CodeBlock language="bash" copyId="create-email-curl">
+{`curl -X POST https://your-domain.com/api/v1/domains \\
+  -H "Authorization: Bearer your_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "domain": "example.com",
+    "email": "hello@example.com",
+    "webhookId": "webhook_123"
+  }'`}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Response</h4>
+                    <CodeBlock language="json" copyId="create-email-curl-response">
+{`{
+  "success": true,
+  "data": {
+    "id": "email_abc123",
+    "address": "hello@example.com",
+    "domainId": "indm_abc123",
+    "webhookId": "webhook_123",
+    "isActive": true,
+    "createdAt": "2024-01-01T00:00:00.000Z"
+  }
+}`}
+                    </CodeBlock>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+
+            {/* List Emails */}
+            <div>
+              <h3 className="text-xl font-semibold mb-4">List Email Addresses</h3>
+              <p className="text-muted-foreground mb-6">Get all email addresses for a specific domain.</p>
+              
+              <Tabs defaultValue="typescript" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="typescript">TypeScript</TabsTrigger>
+                  <TabsTrigger value="curl">cURL</TabsTrigger>
+                </TabsList>
+                <TabsContent value="typescript" className="space-y-6">
+                  <div>
+                    <h4 className="font-medium mb-3">Request</h4>
+                    <CodeBlock language="typescript" copyId="list-emails-ts">
+{`// Get just the emails array
+const emails = await inbound.getEmails('example.com')
+
+// Get full response with domain info
+const response = await inbound.listEmails('example.com')
+console.log(response.domain) // 'example.com'
+console.log(response.emails) // EmailAddress[]`}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Response</h4>
+                    <CodeBlock language="json" copyId="list-emails-response">
+{`[
+  {
+    "id": "email_abc123",
+    "address": "hello@example.com",
+    "webhookId": "webhook_123",
+    "isActive": true,
+    "isReceiptRuleConfigured": true,
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+]`}
+                    </CodeBlock>
+                  </div>
+                </TabsContent>
+                <TabsContent value="curl" className="space-y-6">
+                  <div>
+                    <h4 className="font-medium mb-3">Request</h4>
+                    <CodeBlock language="bash" copyId="list-emails-curl">
+{`curl -X GET https://your-domain.com/api/v1/domains/example.com/emails \\
+  -H "Authorization: Bearer your_api_key"`}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Response</h4>
+                    <CodeBlock language="json" copyId="list-emails-curl-response">
+{`{
+  "success": true,
+  "data": {
+    "domain": "example.com",
+    "emails": [
+      {
+        "id": "email_abc123",
+        "address": "hello@example.com",
+        "webhookId": "webhook_123",
+        "isActive": true,
+        "isReceiptRuleConfigured": true,
+        "createdAt": "2024-01-01T00:00:00.000Z",
+        "updatedAt": "2024-01-01T00:00:00.000Z"
+      }
+    ]
+  }
+}`}
+                    </CodeBlock>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+
+            {/* Delete Email */}
+            <div>
+              <h3 className="text-xl font-semibold mb-4">Delete Email Address</h3>
+              <p className="text-muted-foreground mb-6">Remove an email address from a domain.</p>
+              
+              <Tabs defaultValue="typescript" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="typescript">TypeScript</TabsTrigger>
+                  <TabsTrigger value="curl">cURL</TabsTrigger>
+                </TabsList>
+                <TabsContent value="typescript" className="space-y-6">
+                  <div>
+                    <h4 className="font-medium mb-3">Request</h4>
+                    <CodeBlock language="typescript" copyId="delete-email-ts">
+{`const result = await inbound.deleteEmail('example.com', 'hello@example.com')
+// or
+const result = await inbound.removeEmail('example.com', 'hello@example.com')
+
+console.log(result.message)`}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Response</h4>
+                    <CodeBlock language="json" copyId="delete-email-response">
+{`{
+  "message": "Email address hello@example.com removed from domain example.com"
+}`}
+                    </CodeBlock>
+                  </div>
+                </TabsContent>
+                <TabsContent value="curl" className="space-y-6">
+                  <div>
+                    <h4 className="font-medium mb-3">Request</h4>
+                    <CodeBlock language="bash" copyId="delete-email-curl">
+{`curl -X DELETE https://your-domain.com/api/v1/domains/example.com/emails \\
+  -H "Authorization: Bearer your_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "email": "hello@example.com"
+  }'`}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Response</h4>
+                    <CodeBlock language="json" copyId="delete-email-curl-response">
+{`{
+  "success": true,
+  "message": "Email address hello@example.com removed from domain example.com"
+}`}
+                    </CodeBlock>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
+        </section>
+
+            {/* Webhooks */}
+            <section id="webhooks">
+          <div className="flex items-center gap-2 mb-6">
+            <WebhookIcon className="h-6 w-6 text-purple-600" />
+            <h2 className="text-3xl font-bold">Webhooks</h2>
+          </div>
+          <p className="text-xl text-muted-foreground mb-8">
+            Create and manage webhook endpoints for email processing
+          </p>
+          
+          <div className="space-y-12">
+            {/* Create Webhook */}
+            <div>
+              <h3 className="text-xl font-semibold mb-4">Create Webhook</h3>
+              <p className="text-muted-foreground mb-6">Create a new webhook endpoint to receive email notifications.</p>
+              
+              <Tabs defaultValue="typescript" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="typescript">TypeScript</TabsTrigger>
+                  <TabsTrigger value="curl">cURL</TabsTrigger>
+                </TabsList>
+                <TabsContent value="typescript" className="space-y-6">
+                  <div>
+                    <h4 className="font-medium mb-3">Request</h4>
+                    <CodeBlock language="typescript" copyId="create-webhook-ts">
+{`// Method 1: Using createWebhook
+const webhook = await inbound.createWebhook({
+  name: 'Email Processor',
+  endpoint: 'https://api.example.com/webhook',
+  description: 'Processes incoming emails',
+  retry: 3,
+  timeout: 30
+})
+
+// Method 2: Using convenience method
+const webhook = await inbound.addWebhook(
+  'Email Processor',
+  'https://api.example.com/webhook',
+  {
+    description: 'Processes incoming emails',
+    retry: 3,
+    timeout: 30
+  }
+)`}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Response</h4>
+                    <CodeBlock language="json" copyId="create-webhook-response">
+{`{
+  "id": "webhook_abc123",
+  "name": "Email Processor",
+  "url": "https://api.example.com/webhook",
+  "secret": "webhook_secret_for_verification",
+  "description": "Processes incoming emails",
+  "isActive": true,
+  "timeout": 30,
+  "retryAttempts": 3,
+  "createdAt": "2024-01-01T00:00:00.000Z"
+}`}
+                    </CodeBlock>
+                  </div>
+                </TabsContent>
+                <TabsContent value="curl" className="space-y-6">
+                  <div>
+                    <h4 className="font-medium mb-3">Request</h4>
+                    <CodeBlock language="bash" copyId="create-webhook-curl">
+{`curl -X POST https://your-domain.com/api/v1/webhooks \\
+  -H "Authorization: Bearer your_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "name": "Email Processor",
+    "endpoint": "https://api.example.com/webhook",
+    "description": "Processes incoming emails",
+    "retry": 3,
+    "timeout": 30
+  }'`}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Response</h4>
+                    <CodeBlock language="json" copyId="create-webhook-curl-response">
+{`{
+  "success": true,
+  "data": {
+    "id": "webhook_abc123",
+    "name": "Email Processor",
+    "url": "https://api.example.com/webhook",
+    "secret": "webhook_secret_for_verification",
+    "description": "Processes incoming emails",
+    "isActive": true,
+    "timeout": 30,
+    "retryAttempts": 3,
+    "createdAt": "2024-01-01T00:00:00.000Z"
+  }
+}`}
+                    </CodeBlock>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+
+            {/* List Webhooks */}
+            <div>
+              <h3 className="text-xl font-semibold mb-4">List Webhooks</h3>
+              <p className="text-muted-foreground mb-6">Get all webhooks for your account.</p>
+              
+              <Tabs defaultValue="typescript" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="typescript">TypeScript</TabsTrigger>
+                  <TabsTrigger value="curl">cURL</TabsTrigger>
+                </TabsList>
+                <TabsContent value="typescript" className="space-y-6">
+                  <div>
+                    <h4 className="font-medium mb-3">Request</h4>
+                    <CodeBlock language="typescript" copyId="list-webhooks-ts">
+{`const webhooks = await inbound.getWebhooks()
+// or
+const webhooks = await inbound.listWebhooks()`}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Response</h4>
+                    <CodeBlock language="json" copyId="list-webhooks-response">
+{`[
+  {
+    "id": "webhook_abc123",
+    "name": "Email Processor",
+    "url": "https://api.example.com/webhook",
+    "description": "Processes incoming emails",
+    "isActive": true,
+    "timeout": 30,
+    "retryAttempts": 3,
+    "totalDeliveries": 150,
+    "successfulDeliveries": 145,
+    "failedDeliveries": 5,
+    "lastUsed": "2024-01-01T00:00:00.000Z",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+]`}
+                    </CodeBlock>
+                  </div>
+                </TabsContent>
+                <TabsContent value="curl" className="space-y-6">
+                  <div>
+                    <h4 className="font-medium mb-3">Request</h4>
+                    <CodeBlock language="bash" copyId="list-webhooks-curl">
+{`curl -X GET https://your-domain.com/api/v1/webhooks \\
+  -H "Authorization: Bearer your_api_key"`}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Response</h4>
+                    <CodeBlock language="json" copyId="list-webhooks-curl-response">
+{`{
+  "success": true,
+  "data": [
+    {
+      "id": "webhook_abc123",
+      "name": "Email Processor",
+      "url": "https://api.example.com/webhook",
+      "description": "Processes incoming emails",
+      "isActive": true,
+      "timeout": 30,
+      "retryAttempts": 3,
+      "totalDeliveries": 150,
+      "successfulDeliveries": 145,
+      "failedDeliveries": 5,
+      "lastUsed": "2024-01-01T00:00:00.000Z",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}`}
+                    </CodeBlock>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+
+            {/* Delete Webhook */}
+            <div>
+              <h3 className="text-xl font-semibold mb-4">Delete Webhook</h3>
+              <p className="text-muted-foreground mb-6">Remove a webhook by name.</p>
+              
+              <Tabs defaultValue="typescript" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="typescript">TypeScript</TabsTrigger>
+                  <TabsTrigger value="curl">cURL</TabsTrigger>
+                </TabsList>
+                <TabsContent value="typescript" className="space-y-6">
+                  <div>
+                    <h4 className="font-medium mb-3">Request</h4>
+                    <CodeBlock language="typescript" copyId="delete-webhook-ts">
+{`const result = await inbound.deleteWebhook('Email Processor')
+// or
+const result = await inbound.removeWebhook('Email Processor')
+
+console.log(result.message)`}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Response</h4>
+                    <CodeBlock language="json" copyId="delete-webhook-response">
+{`{
+  "message": "Webhook 'Email Processor' has been removed"
+}`}
+                    </CodeBlock>
+                  </div>
+                </TabsContent>
+                <TabsContent value="curl" className="space-y-6">
+                  <div>
+                    <h4 className="font-medium mb-3">Request</h4>
+                    <CodeBlock language="bash" copyId="delete-webhook-curl">
+{`curl -X DELETE https://your-domain.com/api/v1/webhooks \\
+  -H "Authorization: Bearer your_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "name": "Email Processor"
+  }'`}
+                    </CodeBlock>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Response</h4>
+                    <CodeBlock language="json" copyId="delete-webhook-curl-response">
+{`{
+  "success": true,
+  "message": "Webhook 'Email Processor' has been removed"
+}`}
+                    </CodeBlock>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
+        </section>
+
+            {/* Error Handling */}
+            <section id="error-handling">
+          <div className="flex items-center gap-2 mb-6">
+            <CodeIcon className="h-6 w-6 text-purple-600" />
+            <h2 className="text-3xl font-bold">Error Handling</h2>
+          </div>
+          <p className="text-xl text-muted-foreground mb-8">
+            Understanding API errors and how to handle them
+          </p>
+          
+          <div className="space-y-8">
+            <div>
+              <h3 className="text-xl font-semibold mb-4">HTTP Status Codes</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="default">200</Badge>
+                    <span>Success</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="default">201</Badge>
+                    <span>Created</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="destructive">400</Badge>
+                    <span>Bad Request</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="destructive">401</Badge>
+                    <span>Unauthorized</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="destructive">404</Badge>
+                    <span>Not Found</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="destructive">409</Badge>
+                    <span>Conflict</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="destructive">500</Badge>
+                    <span>Internal Server Error</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-semibold mb-4">Error Response Format</h3>
+              <CodeBlock language="json" copyId="error-format">
+{`{
+  "error": "Error message describing what went wrong"
+}`}
+              </CodeBlock>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-semibold mb-4">TypeScript Error Handling</h3>
+              <CodeBlock language="typescript" copyId="error-handling-ts">
+{`import { InboundError } from 'exon-inbound'
+
+try {
+  const email = await inbound.createEmail({
+    domain: 'nonexistent.com',
+    email: 'test@nonexistent.com'
+  })
+} catch (error) {
+  if (error instanceof InboundError) {
+    console.error('API Error:', error.message)
+    console.error('Status:', error.status)
+    console.error('Code:', error.code)
+  } else {
+    console.error('Unexpected error:', error)
+  }
+}`}
+              </CodeBlock>
+            </div>
+          </div>
+        </section>
+
+            {/* Complete Example */}
+            <section id="complete-example">
+          <div className="flex items-center gap-2 mb-6">
+            <TerminalIcon className="h-6 w-6 text-purple-600" />
+            <h2 className="text-3xl font-bold">Complete Example</h2>
+          </div>
+          <p className="text-xl text-muted-foreground mb-8">
+            A full example showing how to set up email infrastructure
+          </p>
+          
+          <CodeBlock language="typescript" copyId="complete-example">
+{`import { createInboundClient, InboundError } from 'exon-inbound'
+
+async function setupEmailInfrastructure() {
+  const inbound = createInboundClient({
+    apiKey: process.env.INBOUND_API_KEY!
+  })
+
+  try {
+    // 1. List existing domains and find verified ones
+    const domains = await inbound.getDomains()
+    console.log('Available domains:', domains.map(d => \`\${d.domain} (\${d.status})\`))
+    
+    // Find a verified domain that can receive emails
+    const verifiedDomain = domains.find(d => 
+      d.status === 'verified' && d.canReceiveEmails
+    )
+    
+    if (!verifiedDomain) {
+      throw new Error('No verified domains available. Please verify a domain first.')
+    }
+    
+    console.log(\`Using domain: \${verifiedDomain.domain} (ID: \${verifiedDomain.id})\`)
+
+    // 2. Create a webhook
+    const webhook = await inbound.addWebhook(
+      'Email Processor',
+      'https://api.myapp.com/process-email',
+      {
+        description: 'Processes all incoming emails',
+        timeout: 30,
+        retry: 3
+      }
+    )
+    console.log('Created webhook:', webhook.name)
+    console.log('Webhook secret:', webhook.secret)
+
+    // 3. Create email addresses on the verified domain
+    const emailPrefixes = ['support', 'hello', 'contact']
+    const createdEmails = []
+
+    for (const prefix of emailPrefixes) {
+      const emailAddress = \`\${prefix}@\${verifiedDomain.domain}\`
+      const email = await inbound.addEmail(
+        verifiedDomain.domain,  // Use the domain name
+        emailAddress,           // Full email address
+        webhook.id              // Assign the webhook
+      )
+      createdEmails.push(email)
+      console.log(\`Created email: \${email.address}\`)
+    }
+
+    // 4. List all emails for the domain
+    const domainEmails = await inbound.getEmails(verifiedDomain.domain)
+    console.log(\`Total emails for \${verifiedDomain.domain}: \${domainEmails.length}\`)
+
+    // 5. List all webhooks
+    const allWebhooks = await inbound.getWebhooks()
+    console.log(\`Total webhooks: \${allWebhooks.length}\`)
+
+    // 6. Summary
+    console.log('\\n📊 Setup Summary:')
+    console.log(\`✅ Domain: \${verifiedDomain.domain}\`)
+    console.log(\`✅ Webhook: \${webhook.name}\`)
+    console.log(\`✅ Email addresses: \${createdEmails.length}\`)
+    
+    return {
+      domain: verifiedDomain,
+      webhook,
+      emails: createdEmails
+    }
+
+  } catch (error) {
+    if (error instanceof InboundError) {
+      console.error('Inbound API Error:', error.message)
+      if (error.status) {
+        console.error('HTTP Status:', error.status)
+      }
+    } else {
+      console.error('Unexpected error:', error)
+    }
+    throw error
+  }
+}
+
+setupEmailInfrastructure()`}
+          </CodeBlock>
+        </section>
+
+            {/* Footer */}
+            <div className="text-center py-8 border-t">
+              <p className="text-muted-foreground">
+                Need help? Check out our <a href="/settings" className="text-purple-600 hover:underline">Settings page</a> to create API keys or contact support.
+              </p>
+            </div>
+          </div>
+        </main>
+
+        {/* Right Sidebar - Reserved for future use */}
+        <aside className="w-64 flex-shrink-0 border-l border-gray-200 bg-gray-50/50 p-6 sticky top-[89px] h-[calc(100vh-89px)] overflow-y-auto">
+          <div className="text-center text-gray-500 text-sm">
+            {/* Reserved for future content */}
+          </div>
+        </aside>
+      </div>
     </div>
   )
 } 

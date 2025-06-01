@@ -1,0 +1,41 @@
+# Source files
+src/
+tsconfig.json
+tsup.config.ts
+
+# Development files
+.eslintrc.js
+.eslintrc.json
+jest.config.js
+*.test.ts
+*.spec.ts
+__tests__/
+coverage/
+
+# Build tools
+node_modules/
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock 

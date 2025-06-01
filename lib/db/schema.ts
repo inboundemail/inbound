@@ -1,5 +1,5 @@
 import { pgTable, varchar, text, timestamp, boolean, integer } from 'drizzle-orm/pg-core';
-import { user, session, account, verification } from './auth-schema';
+import { user, session, account, verification, apikey } from './auth-schema';
 
 // Additional app-specific tables
 export const subscriptions = pgTable('subscriptions', {
@@ -149,7 +149,7 @@ export const domainDnsRecords = pgTable('domain_dns_records', {
 });
 
 // Export types for Better Auth tables (using the imported tables)
-export { user, session, account, verification };
+export { user, session, account, verification, apikey };
 
 export type User = typeof user.$inferSelect;
 export type NewUser = typeof user.$inferInsert;
@@ -159,6 +159,8 @@ export type Account = typeof account.$inferSelect;
 export type NewAccount = typeof account.$inferInsert;
 export type Verification = typeof verification.$inferSelect;
 export type NewVerification = typeof verification.$inferInsert;
+export type ApiKey = typeof apikey.$inferSelect;
+export type NewApiKey = typeof apikey.$inferInsert;
 
 // Export types for app-specific tables
 export type Subscription = typeof subscriptions.$inferSelect;

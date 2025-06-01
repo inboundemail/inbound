@@ -377,7 +377,7 @@ export default function Page() {
         {/* Emails Received Card with Edge-to-Edge Chart */}
         <Card className="relative overflow-hidden p-0 h-[140px]">
           {/* Background Chart - Edge to Edge */}
-          <div className="absolute inset-0 h-full w-full">
+          <div className="absolute bottom-0 left-0 right-0 h-1/2 w-full">
             {isLoading ? (
               <div className="flex items-center justify-center h-full">
                 <Skeleton className="h-full w-full" />

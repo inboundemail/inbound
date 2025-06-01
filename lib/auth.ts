@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { db } from "./db/index";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { stripe } from "@better-auth/stripe";
-import { admin } from "better-auth/plugins";
+import { admin, apiKey } from "better-auth/plugins";
 import Stripe from "stripe";
 import * as schema from "./db/schema";
 
@@ -26,6 +26,7 @@ export const auth = betterAuth({
         },
     },
     plugins: [
+        apiKey(),
         admin(),
         stripe({
             stripeClient,
