@@ -89,39 +89,6 @@ export default function HomePage() {
                 <FaArrowRight className="ml-2 w-3 h-3" />
               </a>
             </Button>
-
-            {/* Email Input Section */}
-            {/* <div className="max-w-lg mx-auto mb-12">
-              <div className="flex flex-col sm:flex-row gap-3 p-2 ">
-                <div className="flex-1">
-                  <Input
-                    type="email"
-                    placeholder="nizzy@0.email"
-                    value={email}
-                    onChange={handleEmailChange}
-                    className="text-lg placeholder:text-gray-400 h-10"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck="false"
-                  />
-                </div>
-                <Button
-                  variant="primary"
-                  onClick={handleGetStarted}
-                  disabled={!email || !email.includes("@")}
-                  className="text-white px-6 py-2 whitespace-nowrap h-10"
-                >
-                  Get Started
-                  <FaArrowRight className="ml-2 w-4 h-4" />
-                </Button>
-              </div>
-              {domain && (
-                <p className="text-sm text-gray-500 mt-2">
-                  We'll help you set up email receiving for <span className="font-mono font-medium text-gray-700">{domain}</span>
-                </p>
-              )}
-            </div> */}
           </div>
 
           {/* Interactive Demo Section */}
@@ -296,6 +263,102 @@ export default function HomePage() {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+
+          {/* Docs and Developer Support */}
+          <div className="mb-32">
+            <h2 className="text-3xl font-bold text-gray-900 mb-6 text-center">Built for Developers</h2>
+            <p className="text-lg text-gray-600 mb-12 text-center max-w-2xl mx-auto">
+              Programmatically manage your email infrastructure with our TypeScript SDK and REST API.
+            </p>
+            
+            <div className="space-y-8 max-w-4xl mx-auto">
+              {/* SDK Card */}
+              <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-8 border border-purple-200 text-left">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2L2 7v10c0 5.55 3.84 9.739 9 11 5.16-1.261 9-5.45 9-11V7l-10-5z"/>
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">TypeScript SDK</h3>
+                </div>
+                <p className="text-gray-600 mb-6">
+                  Install our npm package and start creating email addresses and webhooks with full type safety.
+                </p>
+                <div className="bg-gray-900 rounded-lg p-4 mb-6 font-mono text-sm text-left">
+                  <div className="text-green-400 mb-2">$ npm install exon-inbound</div>
+                  <div className="text-gray-300">
+                    <span className="text-blue-400">import</span> {`{ createInboundClient }`} <span className="text-blue-400">from</span> <span className="text-yellow-300">'exon-inbound'</span>
+                  </div>
+                </div>
+                <Button variant="secondary" asChild className="w-full">
+                  <a href="/docs" className="flex items-center justify-center gap-2">
+                    View SDK Docs
+                    <FaArrowRight className="w-3 h-3" />
+                  </a>
+                </Button>
+              </div>
+
+              {/* API Card */}
+              <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-8 border border-blue-200 text-left">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">REST API</h3>
+                </div>
+                <p className="text-gray-600 mb-6">
+                  Use our REST API directly from any language or platform to integrate email receiving into your workflow.
+                </p>
+                <div className="bg-gray-900 rounded-lg p-4 mb-6 font-mono text-sm text-left">
+                  <div className="text-green-400 mb-2">POST /api/v1/domains</div>
+                  <div className="text-gray-300">
+                    {`{`}
+                    <br />
+                    &nbsp;&nbsp;<span className="text-yellow-300">"domain"</span>: <span className="text-green-300">"example.com"</span>,
+                    <br />
+                    &nbsp;&nbsp;<span className="text-yellow-300">"email"</span>: <span className="text-green-300">"hello@example.com"</span>
+                    <br />
+                    {`}`}
+                  </div>
+                </div>
+                <Button variant="secondary" asChild className="w-full">
+                  <a href="/docs" className="flex items-center justify-center gap-2">
+                    View API Docs
+                    <FaArrowRight className="w-3 h-3" />
+                  </a>
+                </Button>
+              </div>
+            </div>
+
+            {/* Features List */}
+            <div className="mt-12 grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+              <div className="text-center">
+                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                  <FaCheckCircle className="w-6 h-6 text-green-600" />
+                </div>
+                <h4 className="font-semibold text-gray-900 mb-2">Domain Management</h4>
+                <p className="text-sm text-gray-600">List, verify, and manage your email domains programmatically</p>
+              </div>
+              <div className="text-center">
+                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                  <FaEnvelope className="w-6 h-6 text-purple-600" />
+                </div>
+                <h4 className="font-semibold text-gray-900 mb-2">Email Addresses</h4>
+                <p className="text-sm text-gray-600">Create and delete email addresses on your verified domains</p>
+              </div>
+              <div className="text-center">
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                  <FaBolt className="w-6 h-6 text-blue-600" />
+                </div>
+                <h4 className="font-semibold text-gray-900 mb-2">Webhook Setup</h4>
+                <p className="text-sm text-gray-600">Configure webhook endpoints to receive email notifications</p>
               </div>
             </div>
           </div>
