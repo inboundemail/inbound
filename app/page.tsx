@@ -46,7 +46,11 @@ export default function HomePage() {
           </div>
           {/* Conditionally show Sign In or Go to Dashboard based on auth state */}
           {isPending ? (
-            <div className="w-20 h-10 bg-gray-200 animate-pulse rounded"></div>
+            <Button variant="primary" asChild>
+              <a href="/docs" className="text-white hover:text-gray-900">
+                Docs
+              </a>
+          </Button>
           ) : session ? (
             <Button variant="primary" asChild>
               <a href="/dashboard" className="text-white hover:text-gray-900">
@@ -72,10 +76,22 @@ export default function HomePage() {
               the easiest way to turn
               <br />
 
-              <img src="/mail-icon.png" alt="Email" width={48} height={48} className="inline-block ml-4 mr-2 align-bottom" />
+              <img 
+                src="/mail-icon.png" 
+                alt="Email" 
+                width={48} 
+                height={48} 
+                className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_0.5s_forwards]" 
+              />
               <span className="text-[#6C47FF]">emails</span> into
 
-              <img src="/domain-icon.png" alt="Email" width={48} height={48} className="inline-block ml-4 mr-2 align-bottom" />
+              <img 
+                src="/domain-icon.png" 
+                alt="Email" 
+                width={48} 
+                height={48} 
+                className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_1s_forwards]" 
+              />
               <span className="text-[#1C2894]">webhooks</span>
             </h1>
             <p className="text-xl text-gray-600 mb-12 max-w-2xl mx-auto leading-relaxed">

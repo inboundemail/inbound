@@ -349,12 +349,32 @@
     view-transition-name: page-content;
   }
 
+  /* Custom animation for hero images */
+  @keyframes fadeInRotate {
+    0% {
+      opacity: 0;
+      transform: rotate(-20deg) scale(0.8);
+    }
+    100% {
+      opacity: 1;
+      transform: rotate(0deg) scale(1);
+    }
+  }
+
   /* Reduce motion for accessibility */
   @media (prefers-reduced-motion: reduce) {
     ::view-transition-old(*),
     ::view-transition-new(*) {
       animation-duration: 0.1s !important;
       animation-timing-function: linear !important;
+    }
+    
+    /* Disable rotation animation for users who prefer reduced motion */
+    .animate-\[fadeInRotate_1s_ease-out_0\.5s_forwards\],
+    .animate-\[fadeInRotate_1s_ease-out_1s_forwards\] {
+      animation: none !important;
+      opacity: 1 !important;
+      transform: none !important;
     }
   }
 }
