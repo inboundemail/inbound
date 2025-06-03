@@ -211,65 +211,6 @@ export default function EmailsPage() {
     router.push(`/emails/${domainId}`)
   }
 
-  const handleAddDomain = () => {
-    setIsAddDomainOpen(true)
-    setNewDomain('')
-    setAddDomainError(null)
-  }
-
-  const handleAddDomainSubmit = async () => {
-    if (!newDomain.trim()) {
-      setAddDomainError('Domain is required')
-      return
-    }
-
-    // Basic domain validation
-    const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9])*$/
-    if (!domainRegex.test(newDomain.trim())) {
-      setAddDomainError('Please enter a valid domain name (e.g., example.com)')
-      return
-    }
-
-    setIsAddingDomain(true)
-    setAddDomainError(null)
-
-    try {
-      const response = await fetch('/api/domains', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: newDomain.trim().toLowerCase() })
-      })
-
-      const result = await response.json()
-
-      if (response.ok) {
-        toast.success('Domain added successfully!')
-        setIsAddDomainOpen(false)
-        setNewDomain('')
-        
-        // Redirect to the domain detail page
-        router.push(`/emails/${result.domain.id}`)
-      } else {
-        // Check if this is an MX records conflict error
-        if (result.hasMxRecords && result.suggestedSubdomains) {
-          setMxConflictError({
-            domain: newDomain.trim().toLowerCase(),
-            suggestedSubdomains: result.suggestedSubdomains,
-            mxRecords: result.mxRecords
-          })
-          setIsAddDomainOpen(false) // Close the add domain dialog
-        } else {
-          setAddDomainError(result.error || 'Failed to add domain')
-        }
-      }
-    } catch (error) {
-      console.error('Error adding domain:', error)
-      setAddDomainError('Network error occurred')
-    } finally {
-      setIsAddingDomain(false)
-    }
-  }
-
   const handleAddSubdomain = async (subdomain: string) => {
     setIsAddingDomain(true)
     
@@ -534,7 +475,7 @@ export default function EmailsPage() {
                 </Button>
               )}
               <Button
-                onClick={handleAddDomain}
+                onClick={() => router.push("/add")}
                 disabled={isLoading || (domainStats?.limits ? !domainStats.limits.allowed : false)}
                 className="bg-white text-purple-700 hover:bg-white/90 border-white/30 backdrop-blur-sm font-medium"
               >
@@ -728,74 +669,7 @@ export default function EmailsPage() {
           </div>
         )}
       </div>
-
-      {/* Add Domain Modal */}
-      <Dialog open={isAddDomainOpen} onOpenChange={setIsAddDomainOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Add New Domain</DialogTitle>
-            <DialogDescription>
-              {domainStats?.limits && !domainStats.limits.allowed ? (
-                <span className="text-red-600">
-                  You've reached your domain limit ({domainStats.limits.current}/{domainStats.limits.balance}). Please upgrade your plan to add more domains.
-                </span>
-              ) : (
-                "Enter your domain name to start receiving emails. You'll need to add DNS records to verify ownership."
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="domain">Domain Name</Label>
-              <Input
-                id="domain"
-                placeholder="example.com"
-                value={newDomain}
-                onChange={(e) => setNewDomain(e.target.value)}
-                disabled={isAddingDomain || (domainStats?.limits ? !domainStats.limits.allowed : false)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleAddDomainSubmit()
-                  }
-                }}
-              />
-              {addDomainError && (
-                <p className="text-sm text-red-600">{addDomainError}</p>
-              )}
-              {domainStats?.limits && !domainStats.limits.unlimited && (
-                <p className="text-xs text-muted-foreground">
-                  {domainStats.limits.remaining} domain{domainStats.limits.remaining !== 1 ? 's' : ''} remaining on your plan
-                </p>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={() => setIsAddDomainOpen(false)}
-              disabled={isAddingDomain}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleAddDomainSubmit}
-              disabled={isAddingDomain || !newDomain.trim() || (domainStats?.limits ? !domainStats.limits.allowed : false)}
-            >
-              {isAddingDomain ? (
-                <>
-                  <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" />
-                  Adding...
-                </>
-              ) : (
-                <>
-                  <PlusIcon className="h-4 w-4 mr-2" />
-                  Add Domain
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      
 
       {/* MX Records Conflict Dialog */}
       <Dialog open={!!mxConflictError} onOpenChange={() => setMxConflictError(null)}>

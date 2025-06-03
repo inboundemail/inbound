@@ -338,7 +338,7 @@ export default function Page() {
                 Refresh
               </Button>
               <Button asChild className="bg-white text-purple-700 hover:bg-white/90 font-semibold shadow-lg">
-                <a href="/emails">
+                <a href="/add">
                   <PlusIcon className="h-4 w-4 mr-2" />
                   Add Domain
                 </a>

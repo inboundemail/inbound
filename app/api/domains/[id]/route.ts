@@ -10,6 +10,7 @@ import { DOMAIN_STATUS } from '@/lib/db/schema'
 import { deleteDomainFromDatabase } from '@/lib/db/domains'
 import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
 import { SESClient, GetIdentityVerificationAttributesCommand } from '@aws-sdk/client-ses'
+import { Autumn as autumn } from 'autumn-js'
 
 // AWS SES Client setup
 const awsRegion = process.env.AWS_REGION || 'us-east-2'
@@ -386,6 +387,24 @@ export async function DELETE(
         },
         { status: 500 }
       )
+    }
+
+    console.log(`✅ Domain deleted from database: ${domain.domain}`)
+
+    // Step 4: Track domain deletion with Autumn to free up domain spot
+    console.log(`📊 Delete Domain - Tracking domain deletion with Autumn for user: ${session.user.id}`)
+    const { error: trackError } = await autumn.track({
+      customer_id: session.user.id,
+      feature_id: "domains",
+      value: -1,
+    })
+
+    if (trackError) {
+      console.error('Delete Domain - Failed to track domain deletion:', trackError)
+      // Don't fail the deletion if tracking fails, just log it
+      console.warn(`⚠️ Delete Domain - Domain deleted but usage tracking failed for user: ${session.user.id}`)
+    } else {
+      console.log(`✅ Delete Domain - Successfully tracked domain deletion for user: ${session.user.id}`)
     }
 
     console.log(`✅ Domain deletion completed successfully: ${domain.domain}`)
