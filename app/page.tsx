@@ -48,7 +48,7 @@ export default function HomePage() {
           {isPending ? (
             <Button variant="primary" asChild>
               <a href="/docs" className="text-white hover:text-gray-900">
-                Docs
+                Sign In
               </a>
           </Button>
           ) : session ? (
