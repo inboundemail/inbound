@@ -228,8 +228,9 @@ export async function checkDomainCanReceiveEmails(domain: string): Promise<DnsCh
 
     // Try to resolve MX records
     const mxRecords = await dns.resolveMx(domain);
+    const cnameRecords = await dns.resolveCname(domain);
     
-    if (mxRecords && mxRecords.length > 0) {
+    if (mxRecords && mxRecords.length > 0 || cnameRecords && cnameRecords.length > 0) {
       // Domain HAS MX records - cannot safely receive emails
       result.hasMxRecords = true;
       result.mxRecords = mxRecords;

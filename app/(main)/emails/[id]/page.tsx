@@ -857,6 +857,7 @@ export default function DomainDetailPage() {
                         }))}
                         preloadedStep={1} // Start at DNS records step
                         preloadedProvider={domain.domainProvider}
+                        overrideRefreshFunction={refreshVerification}
                         onSuccess={(domainId) => {
                             // Refresh domain details when form succeeds
                             fetchDomainDetailsBackground()

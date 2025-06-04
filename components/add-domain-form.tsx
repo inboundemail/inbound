@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useEffect, useMemo, type FormEvent } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Globe2, ListChecks, BadgeCheck, CheckCircle2, ArrowRight, ClipboardCopy, LoaderIcon, RefreshCw, Clock, AlertCircle, GlobeIcon, ExternalLinkIcon } from "lucide-react"
+import { Globe2, ListChecks, BadgeCheck, CheckCircle2, ArrowRight, ClipboardCopy, LoaderIcon, RefreshCw, Clock, AlertCircle, GlobeIcon, ExternalLinkIcon, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -59,6 +59,7 @@ interface AddDomainFormProps {
   preloadedStep?: number
   preloadedProvider?: string
   onRefresh?: () => void
+  overrideRefreshFunction?: () => Promise<void>
   // Optional callback when domain is successfully added/verified
   onSuccess?: (domainId: string) => void
 }
@@ -90,6 +91,7 @@ export default function AddDomainForm({
   preloadedStep = 0,
   preloadedProvider = "",
   onRefresh,
+  overrideRefreshFunction,
   onSuccess
 }: AddDomainFormProps) {
   const [currentStepIdx, setCurrentStepIdx] = useState(preloadedStep)
@@ -236,6 +238,20 @@ export default function AddDomainForm({
   }
 
   const handleRefresh = async () => {
+    // Use overrideRefreshFunction if provided, otherwise fall back to onRefresh or default behavior
+    if (overrideRefreshFunction) {
+      setIsRefreshing(true)
+      try {
+        await overrideRefreshFunction()
+      } catch (err) {
+        console.error('Error in override refresh function:', err)
+        toast.error("Failed to refresh status")
+      } finally {
+        setIsRefreshing(false)
+      }
+      return
+    }
+
     if (onRefresh) {
       onRefresh()
       return
@@ -306,6 +322,68 @@ export default function AddDomainForm({
       console.error("Failed to copy text: ", err)
       toast.error("Failed to copy to clipboard")
     }
+  }
+
+  const downloadZoneFile = () => {
+    if (!domainName || dnsRecords.length === 0) {
+      toast.error("No DNS records available to download")
+      return
+    }
+
+    try {
+      // Generate zone file content
+      const zoneFileContent = generateZoneFile(domainName, dnsRecords)
+      
+      // Create blob and download
+      const blob = new Blob([zoneFileContent], { type: 'text/plain' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${domainName}.zone`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      toast.success("Zone file downloaded successfully")
+    } catch (err) {
+      console.error("Failed to generate zone file:", err)
+      toast.error("Failed to generate zone file")
+    }
+  }
+
+  const generateZoneFile = (domain: string, records: DnsRecord[]): string => {
+    let zoneContent = `$ORIGIN ${domain}.\n`
+    zoneContent += `$TTL 3600\n\n`
+    
+    // Group records by type
+    const txtRecords = records.filter(r => r.type === 'TXT')
+    const mxRecords = records.filter(r => r.type === 'MX')
+    
+    // TXT Records
+    if (txtRecords.length > 0) {
+      zoneContent += `; TXT Records\n`
+      txtRecords.forEach(record => {
+        const recordName = extractRecordName(record.name, domain)
+        const name = recordName === '@' ? '@' : recordName
+        zoneContent += `${name}\t\t3600\tTXT\t"${record.value}"\n`
+      })
+      zoneContent += `\n`
+    }
+    
+    // MX Records
+    if (mxRecords.length > 0) {
+      zoneContent += `; MX Records\n`
+      mxRecords.forEach(record => {
+        const recordName = extractRecordName(record.name, domain)
+        const name = recordName === '@' ? '@' : recordName
+        const [priority, mailServer] = record.value.split(' ')
+        zoneContent += `${name}\t\t3600\tMX\t${priority}\t${mailServer}\n`
+      })
+      zoneContent += `\n`
+    }
+    
+    return zoneContent
   }
 
   const handleResendImport = async () => {
@@ -1217,15 +1295,26 @@ export default function AddDomainForm({
 
                   {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
-                  <Button
-                    onClick={handleRefresh}
-                    variant="primary"
-                    className="mt-10 w-full md:w-auto"
-                    disabled={isRefreshing}
-                  >
-                    <RefreshCw className={cn("mr-2 h-4 w-4", { "animate-spin": isRefreshing })} />
-                    Refresh Status
-                  </Button>
+                  <div className="flex gap-3 mt-10">
+                    <Button
+                      onClick={handleRefresh}
+                      variant="primary"
+                      className="w-full md:w-auto"
+                      disabled={isRefreshing}
+                    >
+                      <RefreshCw className={cn("mr-2 h-4 w-4", { "animate-spin": isRefreshing })} />
+                      Refresh Status
+                    </Button>
+                    {/* <Button
+                      onClick={downloadZoneFile}
+                      variant="secondary"
+                      className="w-full md:w-auto"
+                      disabled={!domainName || dnsRecords.length === 0}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download Zone File
+                    </Button> */}
+                  </div>
                 </div>
               )}
 
