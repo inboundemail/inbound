@@ -113,6 +113,8 @@ export const receivedEmails = pgTable('received_emails', {
   receivedAt: timestamp('received_at').notNull(),
   processedAt: timestamp('processed_at'),
   status: varchar('status', { length: 50 }).notNull(), // 'received', 'processing', 'forwarded', 'failed'
+  isRead: boolean('is_read').default(false), // Track read/unread status
+  readAt: timestamp('read_at'), // When the email was marked as read
   metadata: text('metadata'), // JSON string
   userId: varchar('user_id', { length: 255 }).notNull(),
   createdAt: timestamp('created_at').defaultNow(),

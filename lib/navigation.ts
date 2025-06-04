@@ -1,4 +1,4 @@
-import { LucideIcon, BarChart3Icon, InboxIcon, WebhookIcon, ActivityIcon, CreditCardIcon, SettingsIcon, HelpCircleIcon, ShieldCheckIcon, PlusIcon, GlobeIcon } from "lucide-react"
+import { LucideIcon, BarChart3Icon, InboxIcon, WebhookIcon, ActivityIcon, CreditCardIcon, SettingsIcon, HelpCircleIcon, ShieldCheckIcon, PlusIcon, GlobeIcon, MailIcon } from "lucide-react"
 
 export interface NavigationItem {
   title: string
@@ -20,6 +20,12 @@ export const navigationConfig: NavigationConfig = {
       url: "/dashboard",
       icon: BarChart3Icon,
       description: "Overview and analytics"
+    },
+    {
+      title: "Mail",
+      url: "/mail",
+      icon: MailIcon,
+      description: "View and manage your received emails"
     },
     {
       title: "Domains",

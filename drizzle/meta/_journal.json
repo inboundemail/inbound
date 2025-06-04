@@ -57,6 +57,13 @@
       "when": 1748784007520,
       "tag": "0007_easy_miek",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1748995411803,
+      "tag": "0008_panoramic_tyger_tiger",
+      "breakpoints": true
     }
   ]
 }

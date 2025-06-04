@@ -1048,7 +1048,21 @@ export default function DomainDetailPage() {
                                             return (
                                                 <TableRow key={email.id}>
                                                     <TableCell>
-                                                        <div className="font-mono">{email.address}</div>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="font-mono">{email.address}</div>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => {
+                                                                    navigator.clipboard.writeText(email.address)
+                                                                    toast.success('Copied to clipboard')
+                                                                }}
+                                                                className="h-6 w-6 p-0 hover:bg-gray-100"
+                                                            >
+                                                                <CopyIcon className="h-3 w-3" />
+                                                            </Button>
+                                                        </div>
+                                                        
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex items-center gap-2">

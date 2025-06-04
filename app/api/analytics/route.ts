@@ -25,6 +25,8 @@ interface AnalyticsData {
     receivedAt: string
     status: string
     domain: string
+    isRead: boolean
+    readAt?: string
     authResults: {
       spf: string
       dkim: string
@@ -144,6 +146,8 @@ export async function GET(request: NextRequest) {
         subject: receivedEmails.subject,
         receivedAt: receivedEmails.receivedAt,
         status: receivedEmails.status,
+        isRead: receivedEmails.isRead,
+        readAt: receivedEmails.readAt,
         metadata: receivedEmails.metadata,
         spamVerdict: sesEvents.spamVerdict,
         virusVerdict: sesEvents.virusVerdict,
@@ -259,6 +263,8 @@ export async function GET(request: NextRequest) {
       receivedAt: email.receivedAt.toISOString(),
       status: email.status,
       domain: email.recipient.split('@')[1] || '',
+      isRead: email.isRead || false,
+      readAt: email.readAt?.toISOString(),
       authResults: {
         spf: email.spfVerdict || 'UNKNOWN',
         dkim: email.dkimVerdict || 'UNKNOWN',

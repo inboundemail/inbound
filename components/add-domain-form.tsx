@@ -106,11 +106,13 @@ export default function AddDomainForm({
   const [showBulkImport, setShowBulkImport] = useState(false)
   const [resendDomains, setResendDomains] = useState<any[]>([])
   const [selectedDomains, setSelectedDomains] = useState<Set<string>>(new Set())
-  const [importProgress, setImportProgress] = useState<{[key: string]: {
-    status: 'pending' | 'processing' | 'success' | 'failed' | 'exists'
-    message?: string
-    domainId?: string
-  }}>({})
+  const [importProgress, setImportProgress] = useState<{
+    [key: string]: {
+      status: 'pending' | 'processing' | 'success' | 'failed' | 'exists'
+      message?: string
+      domainId?: string
+    }
+  }>({})
   const [isProcessing, setIsProcessing] = useState(false)
   const router = useRouter()
 
@@ -341,17 +343,17 @@ export default function AddDomainForm({
       if (!data.success) {
         throw new Error(data.error || 'Failed to fetch domains from Resend')
       }
-      
+
       if (data.domains && data.domains.length > 0) {
         toast.success(`Found ${data.domains.length} domain(s) in your Resend account`)
-        
+
         // Set up domains for selection
         setResendDomains(data.domains)
         setSelectedDomains(new Set()) // Start with no domains selected
-        
+
         // Show domain selection screen
         setShowDomainSelection(true)
-        
+
         console.log('Resend domains:', data.domains)
       } else {
         toast.info("No domains found in your Resend account")
@@ -394,12 +396,12 @@ export default function AddDomainForm({
     }
 
     // Initialize progress tracking for selected domains only
-    const initialProgress: {[key: string]: {status: 'pending', message?: string}} = {}
+    const initialProgress: { [key: string]: { status: 'pending', message?: string } } = {}
     selectedDomains.forEach((domainName) => {
       initialProgress[domainName] = { status: 'pending' }
     })
     setImportProgress(initialProgress)
-    
+
     // Show bulk import screen and start processing
     setShowDomainSelection(false)
     setShowBulkImport(true)
@@ -408,13 +410,13 @@ export default function AddDomainForm({
 
   const processBulkImport = async () => {
     setIsProcessing(true)
-    
+
     // Only process selected domains
     const selectedDomainObjects = resendDomains.filter(domain => selectedDomains.has(domain.name))
-    
+
     for (const domain of selectedDomainObjects) {
       const domainName = domain.name
-      
+
       // Update status to processing
       setImportProgress(prev => ({
         ...prev,
@@ -437,9 +439,9 @@ export default function AddDomainForm({
         if (!checkResult.success) {
           setImportProgress(prev => ({
             ...prev,
-            [domainName]: { 
-              status: 'failed', 
-              message: checkResult.error || 'Failed to check domain compatibility' 
+            [domainName]: {
+              status: 'failed',
+              message: checkResult.error || 'Failed to check domain compatibility'
             }
           }))
           continue
@@ -448,9 +450,9 @@ export default function AddDomainForm({
         if (!checkResult.canBeUsed) {
           setImportProgress(prev => ({
             ...prev,
-            [domainName]: { 
-              status: 'failed', 
-              message: 'Domain cannot be used. May have conflicting DNS records or MX records already configured.' 
+            [domainName]: {
+              status: 'failed',
+              message: 'Domain cannot be used. May have conflicting DNS records or MX records already configured.'
             }
           }))
           continue
@@ -471,8 +473,8 @@ export default function AddDomainForm({
         if (addResult.success) {
           setImportProgress(prev => ({
             ...prev,
-            [domainName]: { 
-              status: 'success', 
+            [domainName]: {
+              status: 'success',
               message: `Successfully added. Status: ${addResult.status}`,
               domainId: addResult.domainId
             }
@@ -480,12 +482,12 @@ export default function AddDomainForm({
         } else {
           // Handle specific error cases
           let errorMessage = addResult.error || 'Failed to add domain'
-          
+
           if (addResult.error?.includes('already exists')) {
             setImportProgress(prev => ({
               ...prev,
-              [domainName]: { 
-                status: 'exists', 
+              [domainName]: {
+                status: 'exists',
                 message: 'Domain already exists in your account',
                 domainId: addResult.domainId
               }
@@ -493,9 +495,9 @@ export default function AddDomainForm({
           } else if (addResult.error?.includes('limit reached')) {
             setImportProgress(prev => ({
               ...prev,
-              [domainName]: { 
-                status: 'failed', 
-                message: 'Domain limit reached. Please upgrade your plan to add more domains.' 
+              [domainName]: {
+                status: 'failed',
+                message: 'Domain limit reached. Please upgrade your plan to add more domains.'
               }
             }))
             // Stop processing if limit reached
@@ -503,9 +505,9 @@ export default function AddDomainForm({
           } else {
             setImportProgress(prev => ({
               ...prev,
-              [domainName]: { 
-                status: 'failed', 
-                message: errorMessage 
+              [domainName]: {
+                status: 'failed',
+                message: errorMessage
               }
             }))
           }
@@ -515,9 +517,9 @@ export default function AddDomainForm({
         console.error(`Error processing domain ${domainName}:`, err)
         setImportProgress(prev => ({
           ...prev,
-          [domainName]: { 
-            status: 'failed', 
-            message: 'Network error occurred while adding domain' 
+          [domainName]: {
+            status: 'failed',
+            message: 'Network error occurred while adding domain'
           }
         }))
       }
@@ -527,13 +529,13 @@ export default function AddDomainForm({
     }
 
     setIsProcessing(false)
-    
+
     // Show completion summary
     const results = Object.values(importProgress)
     const successful = results.filter(r => r.status === 'success').length
     const existing = results.filter(r => r.status === 'exists').length
     const failed = results.filter(r => r.status === 'failed').length
-    
+
     toast.success(`Import completed: ${successful} added, ${existing} already existed, ${failed} failed`)
   }
 
@@ -541,17 +543,17 @@ export default function AddDomainForm({
     // Extract root domain from domainName (get last 2 parts: domain.tld)
     const domainParts = domainName.split('.')
     const rootDomain = domainParts.slice(-2).join('.')
-    
+
     // If the record name is exactly the root domain, return "@"
     if (recordName === rootDomain) {
       return "@"
     }
-    
+
     // If the record name ends with the root domain, extract the subdomain part
     if (recordName.endsWith(`.${rootDomain}`)) {
       return recordName.replace(`.${rootDomain}`, '')
     }
-    
+
     // Fallback: if no match found, return the original record name
     return recordName
   }
@@ -793,7 +795,7 @@ export default function AddDomainForm({
                     {resendDomains.filter(domain => selectedDomains.has(domain.name)).map((domain, index) => {
                       const progress = importProgress[domain.name]
                       const status = progress?.status || 'pending'
-                      
+
                       return (
                         <div
                           key={domain.name}
@@ -835,7 +837,7 @@ export default function AddDomainForm({
                               )}
                             </div>
                           </div>
-                          
+
                           <div className="text-right">
                             <div className={cn(
                               "text-sm font-medium",
@@ -875,7 +877,7 @@ export default function AddDomainForm({
                         Start Import
                       </Button>
                     )}
-                    
+
                     {isProcessing && (
                       <Button
                         variant="primary"
@@ -979,14 +981,15 @@ export default function AddDomainForm({
                       )}
                     </Button>
                   </form>
-                  
+
                   {/* Import from Resend Section */}
-                  <div className="mt-8 p-6 rounded-lg border-2 border-dashed" style={{ backgroundColor: '#05050A', borderColor: '#2C3037' }}>
+                  <div className="mt-8 rounded-lg">
                     <div className="flex items-center gap-3 mb-4">
-                      <ResendIcon variant="white" className="h-8 w-8" />
-                      <h3 className="text-lg font-semibold text-white">Import from Resend</h3>
+
+                      <h3 className="text-lg font-semibold text-black">Import from</h3>
+                      <ResendIcon variant="black" className="h-12 w-16 -ml-1" />
                     </div>
-                    <p className="text-sm text-white/80 mb-4">
+                    <p className="text-sm text-black/80 mb-4">
                       Already have domains in Resend? Paste your API key to import them for bulk processing.
                     </p>
                     <div className="space-y-3">
@@ -995,13 +998,13 @@ export default function AddDomainForm({
                         value={resendApiKey}
                         onChange={(e) => setResendApiKey(e.target.value)}
                         placeholder="Paste your Resend API key (re_...)"
-                        className="bg-transparent border text-white placeholder:text-white/50"
+                        className="bg-transparent border text-black placeholder:text-black/50"
                         style={{ borderColor: '#2C3037' }}
                         disabled={isImporting}
                       />
-                      <Button 
-                        variant="secondary" 
-                        className="w-full bg-white/10 hover:bg-white/20 text-white border-0"
+                      <Button
+                        variant="secondary"
+                        className="w-full"
                         onClick={handleResendImport}
                         disabled={isImporting || !resendApiKey.trim()}
                       >
@@ -1191,12 +1194,12 @@ export default function AddDomainForm({
                             <div className="flex items-center justify-end">
                               <span className="text-sm">{record.type === "MX" ? record.value.split(" ")[0] : ""}</span>
                               {record.type === "MX" && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => copyToClipboard(record.type === "MX" ? record.value.split(" ")[0] : "")}
-                                className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded flex-shrink-0 ml-2"
-                              >
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => copyToClipboard(record.type === "MX" ? record.value.split(" ")[0] : "")}
+                                  className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded flex-shrink-0 ml-2"
+                                >
                                   <ClipboardCopy size={16} className="text-gray-600" />
                                 </Button>
                               )}
