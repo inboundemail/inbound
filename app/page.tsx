@@ -1,39 +1,17 @@
-"use client"
-
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import InboundIcon from "@/components/InboundIcon"
 import { PricingTable } from "@/components/autumn/pricing-table"
 import { FaArrowRight, FaEnvelope, FaGlobe, FaLock, FaCheckCircle, FaBolt, FaArrowDown, FaTimes, FaStar } from "react-icons/fa"
-import { useState } from "react"
 import Image from "next/image"
 import { Sparkle, Sparkles } from "lucide-react"
-import { useSession } from "@/lib/auth-client"
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
 
-export default function HomePage() {
-  const [email, setEmail] = useState("")
-  const [domain, setDomain] = useState("")
-  const { data: session, isPending } = useSession()
-
-  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    setEmail(value)
-
-    // Extract domain from email
-    if (value.includes("@")) {
-      const extractedDomain = value.split("@")[1]
-      setDomain(extractedDomain || "")
-    } else {
-      setDomain("")
-    }
-  }
-
-  const handleGetStarted = () => {
-    if (email && email.includes("@")) {
-      // Redirect to the login page
-      window.location.href = `/login`
-    }
-  }
+export default async function HomePage() {
+  const session = await auth.api.getSession({
+    headers: await headers()
+  })
 
   return (
     <div className="min-h-screen bg-white">
@@ -45,13 +23,7 @@ export default function HomePage() {
             <span className="text-2xl font-bold text-black">inbound</span>
           </div>
           {/* Conditionally show Sign In or Go to Dashboard based on auth state */}
-          {isPending ? (
-            <Button variant="primary" asChild>
-              <a href="/docs" className="text-white hover:text-gray-900">
-                Sign In
-              </a>
-          </Button>
-          ) : session ? (
+          {session ? (
             <Button variant="primary" asChild>
               <a href="/dashboard" className="text-white hover:text-gray-900">
                 Go to Dashboard
@@ -94,10 +66,16 @@ export default function HomePage() {
               />
               <span className="text-[#1C2894]">webhooks</span>
             </h1>
-            <p className="text-xl text-gray-600 mb-12 max-w-2xl mx-auto leading-relaxed">
+            <p className="text-xl text-gray-600 mb-4 max-w-2xl mx-auto leading-relaxed">
               set up email receiving for your domain in minutes.
               get webhooks when emails arrive, with automatic spam filtering and secure processing.
             </p>
+
+            <div className="mb-8 w-[300px] mx-auto bg-purple-600/20 border border-purple-300/30 text-purple-700 px-4 py-2 rounded-full">
+              <p className="text-center font-medium text-sm">
+              💫 email routing is coming soon 💫
+              </p>
+            </div>
 
             <Button variant="primary" asChild className="text-white hover:text-gray-900">
               <a href="/login" className="text-white hover:text-gray-900">

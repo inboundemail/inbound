@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useSession } from '@/lib/auth-client'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { addEmailAddress, deleteEmailAddress, getEmailAddresses, updateEmailWebhook } from '@/app/actions/primary'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -175,7 +176,21 @@ export default function DomainDetailPage() {
         try {
             setIsLoading(true)
             setError(null)
-            const response = await fetch(`/api/domains/${domainId}?refreshProvider=true`)
+            
+            // Use the verifications API
+            // For initial load, we use the existing domain name if available, otherwise use domainId as placeholder
+            const domainName = domainDetails?.domain?.domain || domainId
+            
+            const response = await fetch('/api/domain/verifications', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'getDomain',
+                    domain: domainName,
+                    domainId: domainId,
+                    refreshProvider: true
+                })
+            })
 
             if (!response.ok) {
                 if (response.status === 404) {
@@ -199,7 +214,20 @@ export default function DomainDetailPage() {
     const fetchDomainDetailsBackground = async () => {
         try {
             setError(null)
-            const response = await fetch(`/api/domains/${domainId}?refreshProvider=true`)
+            
+            if (!domainDetails) return
+            
+            // Use the verifications API for background refresh
+            const response = await fetch('/api/domain/verifications', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'getDomain',
+                    domain: domainDetails.domain.domain,
+                    domainId: domainId,
+                    refreshProvider: true
+                })
+            })
 
             if (!response.ok) {
                 if (response.status === 404) {
@@ -288,7 +316,7 @@ export default function DomainDetailPage() {
         }
     }
 
-    const addEmailAddress = async () => {
+    const addEmailAddressHandler = async () => {
         if (!domainDetails || !newEmailAddress.trim()) return
 
         setIsAddingEmail(true)
@@ -299,24 +327,19 @@ export default function DomainDetailPage() {
                 ? newEmailAddress
                 : `${newEmailAddress}@${domainDetails.domain.domain}`
 
-            const response = await fetch(`/api/domains/${domainId}/email-addresses`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    emailAddress: fullEmailAddress,
-                    webhookId: selectedWebhookId === 'none' ? null : selectedWebhookId
-                })
-            })
+            const result = await addEmailAddress(
+                domainId,
+                fullEmailAddress,
+                selectedWebhookId === 'none' ? undefined : selectedWebhookId
+            )
 
-            const result = await response.json()
-
-            if (response.ok) {
+            if (result.success) {
                 setNewEmailAddress('')
                 setSelectedWebhookId('none')
                 await fetchDomainDetailsBackground() // Refresh the data
                 toast.success('Email address added successfully')
-                if (result.warning) {
-                    toast.warning(result.warning)
+                if (result.data?.warning) {
+                    toast.warning(result.data.warning)
                 }
             } else {
                 setEmailError(result.error || 'Failed to add email address')
@@ -331,7 +354,7 @@ export default function DomainDetailPage() {
         }
     }
 
-    const deleteEmailAddress = async (emailAddressId: string, emailAddress: string) => {
+    const deleteEmailAddressHandler = async (emailAddressId: string, emailAddress: string) => {
         if (!domainDetails) return
 
         if (!confirm(`Are you sure you want to delete ${emailAddress}?`)) {
@@ -339,17 +362,12 @@ export default function DomainDetailPage() {
         }
 
         try {
-            const response = await fetch(`/api/domains/${domainId}/email-addresses`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ emailAddressId })
-            })
+            const result = await deleteEmailAddress(domainId, emailAddressId)
 
-            if (response.ok) {
+            if (result.success) {
                 await fetchDomainDetailsBackground() // Refresh the data
                 toast.success('Email address deleted successfully')
             } else {
-                const result = await response.json()
                 toast.error(result.error || 'Failed to delete email address')
             }
         } catch (error) {
@@ -369,10 +387,15 @@ export default function DomainDetailPage() {
 
         setIsDeleting(true)
         try {
-            // Need to update this to the /api/domain/verifications
-            const response = await fetch(`/api/domains/${domainId}`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' }
+            // Use the verifications API for domain deletion
+            const response = await fetch('/api/domain/verifications', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'deleteDomain',
+                    domain: domainDetails.domain.domain,
+                    domainId: domainId
+                })
             })
 
             const result = await response.json()
@@ -394,20 +417,18 @@ export default function DomainDetailPage() {
         }
     }
 
-    const updateEmailWebhook = async () => {
+    const updateEmailWebhookHandler = async () => {
         if (!selectedEmailForWebhook) return
 
         setIsUpdatingWebhook(true)
         try {
-            const response = await fetch(`/api/domains/${domainId}/email-addresses/${selectedEmailForWebhook.id}/webhook`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ webhookId: webhookDialogSelectedId === 'none' ? null : webhookDialogSelectedId })
-            })
+            const result = await updateEmailWebhook(
+                domainId,
+                selectedEmailForWebhook.id,
+                webhookDialogSelectedId === 'none' ? undefined : webhookDialogSelectedId
+            )
 
-            const result = await response.json()
-
-            if (response.ok) {
+            if (result.success) {
                 toast.success(result.message)
                 setIsWebhookDialogOpen(false)
                 setSelectedEmailForWebhook(null)
@@ -926,7 +947,7 @@ export default function DomainDetailPage() {
                                                     onChange={(e) => setNewEmailAddress(e.target.value)}
                                                     onKeyDown={(e) => {
                                                         if (e.key === 'Enter' && newEmailAddress.trim() && !isAddingEmail) {
-                                                            addEmailAddress()
+                                                            addEmailAddressHandler()
                                                         }
                                                     }}
                                                     className="border-0 rounded-r-none focus:ring-0 focus:border-0 flex-1 min-w-0 h-full"
@@ -1001,7 +1022,7 @@ export default function DomainDetailPage() {
                                     <div className="flex flex-col justify-center">
                                         <div className="mt-2">
                                             <Button
-                                                onClick={addEmailAddress}
+                                                onClick={() => addEmailAddressHandler()}
                                                 disabled={isAddingEmail || !newEmailAddress.trim()}
                                                 className="shrink-0 h-10"
                                             >
@@ -1119,7 +1140,7 @@ export default function DomainDetailPage() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="sm"
-                                                                onClick={() => deleteEmailAddress(email.id, email.address)}
+                                                                onClick={() => deleteEmailAddressHandler(email.id, email.address)}
                                                                 className="text-red-600 hover:text-red-700 hover:bg-red-50"
                                                             >
                                                                 <TrashIcon className="h-4 w-4" />
@@ -1199,7 +1220,7 @@ export default function DomainDetailPage() {
                             Cancel
                         </Button>
                         <Button
-                            onClick={updateEmailWebhook}
+                            onClick={() => updateEmailWebhookHandler()}
                             disabled={isUpdatingWebhook}
                         >
                             {isUpdatingWebhook ? (

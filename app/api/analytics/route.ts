@@ -62,6 +62,8 @@ export async function GET(request: NextRequest) {
       headers: await headers()
     })
 
+    const timeStart = performance.now()
+
     if (!session?.user?.id) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -336,6 +338,10 @@ export async function GET(request: NextRequest) {
       emailsByDomain,
       authResultsStats
     }
+
+    const timeEnd = performance.now()
+    const timeTaken = timeEnd - timeStart
+    console.log(`🕑 Analytics API took ${timeTaken.toFixed(2)}ms`)
 
     return NextResponse.json(analyticsData)
   } catch (error) {

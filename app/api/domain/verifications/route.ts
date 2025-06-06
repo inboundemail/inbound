@@ -10,7 +10,7 @@ import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
 import { Autumn as autumn } from 'autumn-js'
 import { db } from '@/lib/db'
 import { emailDomains } from '@/lib/db/schema'
-import { eq, count, and } from 'drizzle-orm'
+import { eq, count, and, sql } from 'drizzle-orm'
 
 // AWS SES Client setup
 const awsRegion = process.env.AWS_REGION || 'us-east-2'
@@ -30,9 +30,10 @@ if (awsAccessKeyId && awsSecretAccessKey) {
 }
 
 interface VerificationRequest {
-  action: 'canDomainBeUsed' | 'addDomain' | 'checkVerification' | 'deleteDomain'
+  action: 'canDomainBeUsed' | 'addDomain' | 'checkVerification' | 'deleteDomain' | 'verifyDomain' | 'getDomain'
   domain: string
   domainId?: string
+  refreshProvider?: boolean
 }
 
 interface CanDomainBeUsedResponse {
@@ -104,6 +105,53 @@ interface DeleteDomainResponse {
   timestamp: Date
 }
 
+interface GetDomainResponse {
+  success: boolean
+  domain: {
+    id: string
+    domain: string
+    status: string
+    verificationToken: string
+    canReceiveEmails: boolean
+    hasMxRecords: boolean
+    domainProvider?: string
+    providerConfidence?: number
+    lastDnsCheck?: Date
+    lastSesCheck?: Date
+    createdAt: Date
+    updatedAt: Date
+    canProceed: boolean
+  }
+  dnsRecords: Array<{
+    type: string
+    name: string
+    value: string
+    isVerified: boolean
+    isRequired: boolean
+    lastChecked?: Date
+  }>
+  emailAddresses: Array<{
+    id: string
+    address: string
+    webhookId?: string
+    webhookName?: string
+    isActive: boolean
+    isReceiptRuleConfigured: boolean
+    receiptRuleName?: string
+    createdAt: Date
+    updatedAt: Date
+    emailsLast24h: number
+  }>
+  stats: {
+    totalEmailAddresses: number
+    activeEmailAddresses: number
+    configuredEmailAddresses: number
+    totalEmailsLast24h: number
+  }
+  error?: string
+  timestamp: Date
+}
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
   let requestData: VerificationRequest | null = null
@@ -144,7 +192,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { action, domain, domainId } = requestData
+    const { action, domain, domainId, refreshProvider } = requestData
 
 
     console.log(`🌐 Domain Verification API - Processing action: ${action} for domain: ${domain} by user: ${session.user.email} and domainId: ${domainId}`)
@@ -158,18 +206,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate domain format
+    // Validate domain format (skip validation for getDomain action when domainId is provided)
     const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/
-    if (!domainRegex.test(domain) || domain.length > 253) {
+    if (action !== 'getDomain' && (!domainRegex.test(domain) || domain.length > 253)) {
       console.log(`⚠️ Domain Verification API - Invalid domain format: ${domain}`)
       return NextResponse.json(
         { success: false, error: 'Invalid domain format' },
         { status: 400 }
       )
     }
+    
+    // For getDomain action, we can skip domain format validation since we use domainId for lookup
+    if (action === 'getDomain' && domainId && (!domainRegex.test(domain) || domain.length > 253)) {
+      console.log(`ℹ️ Domain Verification API - Skipping domain format validation for getDomain action with domainId: ${domainId}`)
+    }
 
     // Handle different actions
     switch (action) {
+      case 'verifyDomain':
+        return await handleVerifyDomain(domain, startTime)
+
       case 'canDomainBeUsed':
         return await handleCanDomainBeUsed(domain, session.user.id, startTime)
 
@@ -186,6 +242,16 @@ export async function POST(request: NextRequest) {
         }
         return await handleCheckVerification(domain, domainId, session.user.id, startTime)
 
+      case 'getDomain':
+        if (!domainId || domainId.trim() === '') {
+          console.log('⚠️ Domain Verification API - Missing domainId for getDomain action. domainId:', domainId)
+          return NextResponse.json(
+            { success: false, error: 'domainId is required for getDomain action' },
+            { status: 400 }
+          )
+        }
+        return await handleGetDomain(domain, domainId, session.user.id, refreshProvider || false, startTime)
+
       case 'deleteDomain':
         if (!domainId) {
           console.log('⚠️ Domain Verification API - Missing domainId for deleteDomain action')
@@ -199,7 +265,7 @@ export async function POST(request: NextRequest) {
       default:
         console.log(`⚠️ Domain Verification API - Invalid action: ${action}`)
         return NextResponse.json(
-          { success: false, error: `Invalid action: ${action}. Must be one of: canDomainBeUsed, addDomain, checkVerification, deleteDomain` },
+          { success: false, error: `Invalid action: ${action}. Must be one of: canDomainBeUsed, addDomain, checkVerification, getDomain, deleteDomain` },
           { status: 400 }
         )
     }
@@ -624,6 +690,124 @@ async function handleCheckVerification(
   }
 }
 
+async function handleVerifyDomain(
+  domain: string,
+  startTime: number
+): Promise<NextResponse<CheckVerificationResponse>> {
+  try {
+    console.log(`✅ Verify Domain - Checking verification status for domain: ${domain}`)
+
+    // Step 1: Check SES verification status
+    let sesVerified = false
+    let sesStatus = 'Pending'
+
+    if (sesClient) {
+      try {
+        console.log(`🔍 Verify Domain - Checking SES status for ${domain}`)
+        const getAttributesCommand = new GetIdentityVerificationAttributesCommand({
+          Identities: [domain]
+        })
+
+        console.log('📦 getAttributesCommand', getAttributesCommand)
+
+        const attributesResponse = await sesClient.send(getAttributesCommand)
+        const attributes = attributesResponse.VerificationAttributes?.[domain]
+
+        if (attributes) {
+          sesStatus = attributes.VerificationStatus || 'Pending'
+          sesVerified = sesStatus === 'Success'
+          console.log(`📊 Check Verification - SES status for ${domain}: ${sesStatus}`)
+        } else {
+          console.log(`⚠️ Check Verification - No SES verification attributes found for ${domain}`)
+        }
+      } catch (sesError) {
+        console.error(`❌ Check Verification - SES check failed for ${domain}:`, sesError)
+        sesStatus = 'Error'
+      }
+    } else {
+      console.log(`⚠️ Check Verification - SES client not available`)
+      sesStatus = 'NotConfigured'
+    }
+
+    // Step 2: Check DNS records verification
+
+    const recordsToCheck = [
+      {
+        type: 'TXT',
+        name: '_amazonses.domain.com',
+        value: '1234567890'
+      }
+    ]
+    const dnsChecks = await verifyDnsRecords(recordsToCheck)
+
+    // Log DNS verification results
+    console.log(`📊 Check Verification - DNS verification results:`)
+    dnsChecks.forEach((check, index) => {
+      const status = check.isVerified ? '✅' : '❌'
+      console.log(`   ${index + 1}. ${status} ${check.type} ${check.name} - ${check.isVerified ? 'VERIFIED' : 'FAILED'}`)
+      if (!check.isVerified && check.error) {
+        console.log(`      Error: ${check.error}`)
+      }
+    })
+
+    const dnsVerified = dnsChecks.every(check => check.isVerified)
+    const allVerified = sesVerified && dnsVerified
+
+    console.log(`📈 Check Verification - Verification summary for ${domain}:`, {
+      sesVerified,
+      dnsVerified,
+      allVerified
+    })
+
+    const duration = Date.now() - startTime
+    console.log(`🏁 Check Verification - Completed for ${domain} in ${duration}ms - All verified: ${allVerified}`)
+
+    const response: CheckVerificationResponse = {
+      success: true,
+      domain,
+      domainId: '123',
+      status: 'verified',
+      sesStatus,
+      sesVerified,
+      dnsVerified,
+      allVerified,
+      dnsRecords: dnsChecks.map(check => ({
+        type: check.type,
+        name: check.name,
+        value: check.expectedValue,
+        isVerified: check.isVerified,
+        actualValues: check.actualValues,
+        error: check.error
+      })),
+      canProceed: allVerified,
+      timestamp: new Date()
+    }
+
+    return NextResponse.json(response)
+
+  } catch (error) {
+    const duration = Date.now() - startTime
+    console.error(`💥 Check Verification - Error for domain ${domain} after ${duration}ms:`, error)
+
+    const response: CheckVerificationResponse = {
+      success: false,
+      domain,
+      domainId: '123',
+      status: 'failed',
+      sesStatus: 'Error',
+      sesVerified: false,
+      dnsVerified: false,
+      allVerified: false,
+      dnsRecords: [],
+      canProceed: false,
+      error: error instanceof Error ? error.message : 'Failed to check verification status',
+      timestamp: new Date()
+    }
+
+    return NextResponse.json(response, { status: 500 })
+  }
+}
+
 async function handleDeleteDomain(
   domain: string,
   domainId: string,
@@ -750,4 +934,325 @@ async function handleDeleteDomain(
 
     return NextResponse.json(response, { status: 500 })
   }
-}   
+}
+
+async function handleGetDomain(
+  domain: string,
+  domainId: string,
+  userId: string,
+  refreshProvider: boolean,
+  startTime: number
+): Promise<NextResponse<GetDomainResponse>> {
+  try {
+    console.log(`📋 Get Domain - Fetching domain details for: ${domain}, domainId: ${domainId}`)
+
+    // Get domain record
+    const domainRecord = await db
+      .select()
+      .from(emailDomains)
+      .where(and(eq(emailDomains.id, domainId), eq(emailDomains.userId, userId)))
+      .limit(1)
+
+    if (!domainRecord[0]) {
+      console.log(`❌ Get Domain - Domain not found: ${domain}`)
+      const response: GetDomainResponse = {
+        success: false,
+        domain: {
+          id: '',
+          domain: '',
+          status: '',
+          verificationToken: '',
+          canReceiveEmails: false,
+          hasMxRecords: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          canProceed: false
+        },
+        dnsRecords: [],
+        emailAddresses: [],
+        stats: {
+          totalEmailAddresses: 0,
+          activeEmailAddresses: 0,
+          configuredEmailAddresses: 0,
+          totalEmailsLast24h: 0
+        },
+        error: 'Domain not found',
+        timestamp: new Date()
+      }
+      return NextResponse.json(response, { status: 404 })
+    }
+
+    let domainData = domainRecord[0]
+
+    // Refresh domain provider if requested
+    if (refreshProvider) {
+      try {
+        console.log(`🔍 Get Domain - Refreshing domain provider for: ${domainData.domain}`)
+        
+        // Import detectDomainProvider function
+        const { detectDomainProvider } = await import('@/lib/dns')
+        const providerInfo = await detectDomainProvider(domainData.domain)
+        
+        if (providerInfo) {
+          console.log(`✅ Get Domain - Provider detected: ${providerInfo.name} (${providerInfo.confidence} confidence)`)
+          
+          // Update domain record with new provider information
+          const [updatedDomain] = await db
+            .update(emailDomains)
+            .set({
+              domainProvider: providerInfo.name,
+              providerConfidence: providerInfo.confidence,
+              lastDnsCheck: new Date(),
+              updatedAt: new Date()
+            })
+            .where(eq(emailDomains.id, domainId))
+            .returning()
+          
+          if (updatedDomain) {
+            domainData = updatedDomain
+            console.log(`💾 Get Domain - Updated domain provider: ${providerInfo.name}`)
+          }
+        } else {
+          console.log(`⚠️ Get Domain - No provider detected for domain: ${domainData.domain}`)
+        }
+      } catch (error) {
+        console.error('Get Domain - Error refreshing domain provider:', error)
+        // Continue with existing domain data if provider refresh fails
+      }
+    }
+
+    // Perform comprehensive SES verification check if refreshProvider=true
+    let updatedDomain = domainData
+    if (refreshProvider && sesClient) {
+      try {
+        console.log(`🔍 Get Domain - Performing comprehensive SES verification check for domain: ${domainData.domain}`)
+        
+        // Get current verification status from AWS SES
+        const getAttributesCommand = new GetIdentityVerificationAttributesCommand({
+          Identities: [domainData.domain]
+        })
+
+        const attributesResponse = await sesClient.send(getAttributesCommand)
+        const attributes = attributesResponse.VerificationAttributes?.[domainData.domain]
+
+        if (attributes) {
+          const sesStatus = attributes.VerificationStatus || 'Pending'
+          console.log(`📊 Get Domain - AWS SES verification status for ${domainData.domain}: ${sesStatus}`)
+          
+          // Import DOMAIN_STATUS
+          const { DOMAIN_STATUS } = await import('@/lib/db/schema')
+          
+          // Determine new domain status based on SES response
+          let newStatus = domainData.status
+          if (sesStatus === 'Success') {
+            newStatus = DOMAIN_STATUS.VERIFIED
+          } else if (sesStatus === 'Failed') {
+            newStatus = DOMAIN_STATUS.FAILED
+          }
+          
+          // Update domain record if status changed
+          if (newStatus !== domainData.status) {
+            console.log(`📝 Get Domain - Updating domain status from ${domainData.status} to ${newStatus}, SES status: ${sesStatus}`)
+            
+            const [updated] = await db
+              .update(emailDomains)
+              .set({
+                status: newStatus,
+                lastSesCheck: new Date(),
+                updatedAt: new Date()
+              })
+              .where(eq(emailDomains.id, domainId))
+              .returning()
+            
+            if (updated) {
+              updatedDomain = updated
+              console.log(`✅ Get Domain - Updated domain status successfully`)
+            }
+          } else {
+            console.log(`ℹ️ Get Domain - Domain status unchanged, updating last check time`)
+            
+            // Still update the last check time
+            const [updated] = await db
+              .update(emailDomains)
+              .set({
+                lastSesCheck: new Date(),
+                updatedAt: new Date()
+              })
+              .where(eq(emailDomains.id, domainId))
+              .returning()
+              
+            if (updated) {
+              updatedDomain = updated
+            }
+          }
+        } else {
+          console.log(`⚠️ Get Domain - No verification attributes found for domain: ${domainData.domain}`)
+        }
+      } catch (error) {
+        console.error('Get Domain - Error performing comprehensive SES verification check:', error)
+        // Continue with existing domain data if SES check fails
+      }
+    } else if (refreshProvider && !sesClient) {
+      console.log(`⚠️ Get Domain - SES client not available for comprehensive verification check`)
+    } else {
+      // Auto-check SES verification if domain is in verified status
+      const { DOMAIN_STATUS } = await import('@/lib/db/schema')
+      if (domainData.status === DOMAIN_STATUS.VERIFIED) {
+        try {
+          console.log(`Get Domain - Auto-checking SES verification for domain: ${domainData.domain}`)
+          const verificationResult = await initiateDomainVerification(domainData.domain, userId)
+          
+          // If status changed, get the updated domain record
+          if (verificationResult.status === DOMAIN_STATUS.VERIFIED) {
+            const updatedDomainRecord = await db
+              .select()
+              .from(emailDomains)
+              .where(and(eq(emailDomains.id, domainId), eq(emailDomains.userId, userId)))
+              .limit(1)
+            
+            if (updatedDomainRecord[0]) {
+              updatedDomain = updatedDomainRecord[0]
+              console.log(`Get Domain - Domain status updated from ${domainData.status} to ${updatedDomain.status}`)
+            }
+          }
+        } catch (error) {
+          console.error('Get Domain - Error auto-checking SES verification:', error)
+          // Continue with original domain data if verification check fails
+        }
+      }
+    }
+
+    // Get DNS records
+    const { domainDnsRecords } = await import('@/lib/db/schema')
+    const dnsRecords = await db
+      .select()
+      .from(domainDnsRecords)
+      .where(eq(domainDnsRecords.domainId, domainId))
+
+    // Calculate 24 hours ago
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+    // Get email addresses with their statistics and webhook information
+    const { emailAddresses, webhooks, sesEvents } = await import('@/lib/db/schema')
+    const emailAddressesWithStats = await db
+      .select({
+        id: emailAddresses.id,
+        address: emailAddresses.address,
+        webhookId: emailAddresses.webhookId,
+        webhookName: webhooks.name,
+        isActive: emailAddresses.isActive,
+        isReceiptRuleConfigured: emailAddresses.isReceiptRuleConfigured,
+        receiptRuleName: emailAddresses.receiptRuleName,
+        createdAt: emailAddresses.createdAt,
+        updatedAt: emailAddresses.updatedAt,
+        emailsLast24h: sql<number>`COALESCE(${sql`(
+          SELECT COUNT(*)::int 
+          FROM ${sesEvents} 
+          WHERE EXISTS (
+            SELECT 1 
+            FROM jsonb_array_elements_text(${sesEvents.destination}::jsonb) AS dest_email
+            WHERE dest_email = ${emailAddresses.address}
+          )
+          AND ${sesEvents.timestamp} >= ${twentyFourHoursAgo}
+        )`}, 0)`
+      })
+      .from(emailAddresses)
+      .leftJoin(webhooks, eq(emailAddresses.webhookId, webhooks.id))
+      .where(eq(emailAddresses.domainId, domainId))
+      .orderBy(emailAddresses.createdAt)
+
+    // Transform DNS records for frontend
+    const transformedDnsRecords = dnsRecords.map(record => ({
+      type: record.recordType,
+      name: record.name,
+      value: record.value,
+      isVerified: record.isVerified ?? false,
+      isRequired: record.isRequired ?? false,
+      lastChecked: record.lastChecked ?? undefined
+    }))
+
+    // Calculate verification status
+    const { DOMAIN_STATUS } = await import('@/lib/db/schema')
+    const allRequiredDnsVerified = dnsRecords
+      .filter(record => record.isRequired)
+      .every(record => record.isVerified)
+
+    const canProceed = updatedDomain.status === DOMAIN_STATUS.VERIFIED || 
+      (updatedDomain.status === DOMAIN_STATUS.VERIFIED && allRequiredDnsVerified)
+
+    const duration = Date.now() - startTime
+    console.log(`🏁 Get Domain - Completed for ${domain} in ${duration}ms`)
+
+    const response: GetDomainResponse = {
+      success: true,
+      domain: {
+        id: updatedDomain.id,
+        domain: updatedDomain.domain,
+        status: updatedDomain.status,
+        verificationToken: updatedDomain.verificationToken || '',
+        canReceiveEmails: updatedDomain.canReceiveEmails ?? false,
+        hasMxRecords: updatedDomain.hasMxRecords ?? false,
+        domainProvider: updatedDomain.domainProvider || undefined,
+        providerConfidence: typeof updatedDomain.providerConfidence === 'string' ? undefined : updatedDomain.providerConfidence || undefined,
+        lastDnsCheck: updatedDomain.lastDnsCheck || undefined,
+        lastSesCheck: updatedDomain.lastSesCheck || undefined,
+        createdAt: updatedDomain.createdAt || new Date(),
+        updatedAt: updatedDomain.updatedAt || new Date(),
+        canProceed
+      },
+      dnsRecords: transformedDnsRecords,
+      emailAddresses: emailAddressesWithStats.map(email => ({
+        id: email.id,
+        address: email.address,
+        webhookId: email.webhookId || undefined,
+        webhookName: email.webhookName || undefined,
+        isActive: email.isActive ?? false,
+        isReceiptRuleConfigured: email.isReceiptRuleConfigured ?? false,
+        receiptRuleName: email.receiptRuleName || undefined,
+        createdAt: email.createdAt || new Date(),
+        updatedAt: email.updatedAt || new Date(),
+        emailsLast24h: email.emailsLast24h || 0
+      })),
+      stats: {
+        totalEmailAddresses: emailAddressesWithStats.length,
+        activeEmailAddresses: emailAddressesWithStats.filter(email => email.isActive).length,
+        configuredEmailAddresses: emailAddressesWithStats.filter(email => email.isReceiptRuleConfigured).length,
+        totalEmailsLast24h: emailAddressesWithStats.reduce((sum, email) => sum + email.emailsLast24h, 0)
+      },
+      timestamp: new Date()
+    }
+
+    return NextResponse.json(response)
+
+  } catch (error) {
+    const duration = Date.now() - startTime
+    console.error(`💥 Get Domain - Error for domain ${domain} after ${duration}ms:`, error)
+
+    const response: GetDomainResponse = {
+      success: false,
+      domain: {
+        id: '',
+        domain: '',
+        status: '',
+        verificationToken: '',
+        canReceiveEmails: false,
+        hasMxRecords: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        canProceed: false
+      },
+      dnsRecords: [],
+      emailAddresses: [],
+      stats: {
+        totalEmailAddresses: 0,
+        activeEmailAddresses: 0,
+        configuredEmailAddresses: 0,
+        totalEmailsLast24h: 0
+      },
+      error: error instanceof Error ? error.message : 'Failed to fetch domain details',
+      timestamp: new Date()
+    }
+
+    return NextResponse.json(response, { status: 500 })
+  }
+}

@@ -34,36 +34,12 @@ import {
 import { formatDistanceToNow, format } from 'date-fns'
 import { PricingTable } from '@/components/autumn/pricing-table'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { generateAutumnBillingPortal, getAutumnCustomer } from '@/app/actions/primary'
+// import { AutumnCustomer } from '@/app/actions/types'
+import { Customer } from 'autumn-js'
 
-interface AutumnCustomer {
-  id: string
-  created_at: number
-  name: string
-  email: string
-  stripe_id: string
-  env: string
-  products: Array<{
-    id: string
-    name: string
-    group: string | null
-    status: string
-    canceled_at: number | null
-    started_at: number
-  }>
-  features: {
-    [key: string]: {
-      id: string
-      name: string
-      unlimited: boolean
-      balance: number
-      usage: number
-      included_usage: number
-      next_reset_at: number | null
-      interval: string
-    }
-  }
-  metadata: any
-}
+
+
 
 interface DomainStatsResponse {
   totalDomains: number
@@ -163,7 +139,7 @@ function CircularProgress({ value, max, size = 60, strokeWidth = 6, className = 
 export default function SettingsPage() {
   const { data: session, isPending } = useSession()
   const [isLoading, setIsLoading] = useState(false)
-  const [customerData, setCustomerData] = useState<AutumnCustomer | null>(null)
+  const [customerData, setCustomerData] = useState<Customer | null>(null)
   const [isLoadingCustomer, setIsLoadingCustomer] = useState(true)
   const [domainStats, setDomainStats] = useState<DomainStatsResponse | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -203,15 +179,13 @@ export default function SettingsPage() {
     
     try {
       setIsLoadingCustomer(true)
-      const [customerResponse, domainStatsResponse] = await Promise.all([
-        fetch('/api/customer'),
-        fetch('/api/domains/stats')
-      ])
+      const customerResponse = await getAutumnCustomer()
+      const domainStatsResponse = await fetch('/api/domains/stats')
       
-      if (customerResponse.ok) {
-        const data = await customerResponse.json()
-        setCustomerData(data.customer)
+      if (customerResponse.customer) {
+        setCustomerData(customerResponse.customer)  
       } else {
+        toast.error(customerResponse.error)
         throw new Error('Failed to fetch customer data')
       }
 
@@ -330,14 +304,11 @@ export default function SettingsPage() {
 
   const handleManageBilling = async () => {
     try {
-      const response = await fetch('/api/billing-portal', { method: 'POST' })
-      if (response.ok) {
-        const data = await response.json()
-        if (data.url) {
-          window.open(data.url, '_blank')
-        }
+      const response = await generateAutumnBillingPortal()
+      if (response.error) {
+        toast.error(response.error)
       } else {
-        throw new Error('Failed to create billing portal session')
+        window.open(response.url, '_blank')
       }
     } catch (error) {
       console.error('Error creating billing portal session:', error)
@@ -489,8 +460,8 @@ export default function SettingsPage() {
                   {inboundTriggersFeature && (
                     <div className="flex items-center gap-3">
                       <CircularProgress 
-                        value={inboundTriggersFeature.unlimited ? 0 : inboundTriggersFeature.usage} 
-                        max={inboundTriggersFeature.unlimited ? 100 : inboundTriggersFeature.balance}
+                        value={inboundTriggersFeature.unlimited ? 0 : inboundTriggersFeature.usage || 0} 
+                        max={inboundTriggersFeature.unlimited ? 100 : inboundTriggersFeature.balance || 0}
                         size={40}
                         strokeWidth={4}
                       />
@@ -500,7 +471,7 @@ export default function SettingsPage() {
                           {inboundTriggersFeature.unlimited ? (
                             'unlimited'
                           ) : (
-                            `${inboundTriggersFeature.usage.toLocaleString()} / ${inboundTriggersFeature.balance.toLocaleString()}`
+                            `${inboundTriggersFeature.usage?.toLocaleString()} / ${inboundTriggersFeature.balance?.toLocaleString()}`
                           )}
                         </div>
                       </div>
@@ -512,18 +483,18 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-3">
                       <div 
                         className={`w-10 h-10 rounded-full border-2 flex items-center justify-center ${
-                          emailRetentionFeature.balance >= 30 
+                          emailRetentionFeature.balance && emailRetentionFeature.balance >= 30 
                             ? 'border-green-500 bg-green-500/10' 
-                            : emailRetentionFeature.balance >= 8
+                            : emailRetentionFeature.balance && emailRetentionFeature.balance >= 8
                             ? 'border-yellow-500 bg-yellow-500/10'
                             : 'border-red-500 bg-red-500/10'
                         }`}
                       >
                         <div 
                           className={`w-2 h-2 rounded-full ${
-                            emailRetentionFeature.balance >= 30 
+                            emailRetentionFeature.balance && emailRetentionFeature.balance >= 30 
                               ? 'bg-green-500' 
-                              : emailRetentionFeature.balance >= 8
+                              : emailRetentionFeature.balance && emailRetentionFeature.balance >= 8
                               ? 'bg-yellow-500'
                               : 'bg-red-500'
                           }`}
@@ -532,7 +503,7 @@ export default function SettingsPage() {
                       <div>
                         <div className="text-sm font-medium text-white">Retention</div>
                         <div className="text-xs text-slate-400">
-                          {emailRetentionFeature.balance} days
+                          {emailRetentionFeature.balance?.toLocaleString()} days
                         </div>
                       </div>
                     </div>

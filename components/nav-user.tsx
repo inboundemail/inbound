@@ -36,36 +36,7 @@ import { signOut, useSession } from "@/lib/auth-client"
 import { useRouter } from "next/navigation"
 import { isUserAdmin } from "@/lib/navigation"
 import { useEffect, useState } from "react"
-
-interface AutumnCustomer {
-  id: string
-  created_at: number
-  name: string
-  email: string
-  stripe_id: string
-  env: string
-  products: Array<{
-    id: string
-    name: string
-    group: string | null
-    status: string
-    canceled_at: number | null
-    started_at: number
-  }>
-  features: {
-    [key: string]: {
-      id: string
-      name: string
-      unlimited: boolean
-      balance: number
-      usage: number
-      included_usage: number
-      next_reset_at: number | null
-      interval: string
-    }
-  }
-  metadata: any
-}
+import { getAutumnCustomer } from "@/app/actions/primary"
 
 export function NavUser({
   user,
@@ -95,11 +66,10 @@ export function NavUser({
       }
 
       try {
-        const response = await fetch('/api/customer')
+        const response = await getAutumnCustomer()
         
-        if (response.ok) {
-          const data = await response.json()
-          const customer: AutumnCustomer = data.customer
+        if (response.customer) {
+          const customer = response.customer
           
           // Find active product
           const activeProduct = customer.products?.find(
@@ -108,14 +78,15 @@ export function NavUser({
 
           if (activeProduct) {
             // Capitalize the product name
-            const planName = activeProduct.name.charAt(0).toUpperCase() + 
-                            activeProduct.name.slice(1)
+            const planName = activeProduct.name 
+              ? activeProduct.name.charAt(0).toUpperCase() + activeProduct.name.slice(1) 
+              : "Free"
             setSubscriptionPlan(planName)
           } else {
             setSubscriptionPlan("Free")
           }
         } else {
-          console.error("Failed to fetch customer data:", response.statusText)
+          console.error("Failed to fetch customer data:", response.error)
           setSubscriptionPlan("Free")
         }
       } catch (error) {
