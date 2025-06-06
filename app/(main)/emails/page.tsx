@@ -44,6 +44,7 @@ import {
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
+import { getDomainStats } from '@/app/actions/primary'
 
 interface DomainStats {
   id: string
@@ -159,14 +160,16 @@ export default function EmailsPage() {
     try {
       setIsLoading(true)
       setError(null)
-      const response = await fetch('/api/domains/stats')
       
-      if (!response.ok) {
-        throw new Error('Failed to fetch domain statistics')
+      const result = await getDomainStats()
+      
+      if ('error' in result) {
+        console.error('Error fetching domain stats:', result.error)
+        setError(result.error || 'Unknown error occurred')
+        toast.error('Failed to load domain statistics')
+      } else {
+        setDomainStats(result)
       }
-      
-      const data: DomainStatsResponse = await response.json()
-      setDomainStats(data)
     } catch (error) {
       console.error('Error fetching domain stats:', error)
       setError(error instanceof Error ? error.message : 'Failed to load domain statistics')

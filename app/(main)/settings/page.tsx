@@ -34,7 +34,7 @@ import {
 import { formatDistanceToNow, format } from 'date-fns'
 import { PricingTable } from '@/components/autumn/pricing-table'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { generateAutumnBillingPortal, getAutumnCustomer } from '@/app/actions/primary'
+import { generateAutumnBillingPortal, getAutumnCustomer, getDomainStats } from '@/app/actions/primary'
 // import { AutumnCustomer } from '@/app/actions/types'
 import { Customer } from 'autumn-js'
 
@@ -179,8 +179,10 @@ export default function SettingsPage() {
     
     try {
       setIsLoadingCustomer(true)
-      const customerResponse = await getAutumnCustomer()
-      const domainStatsResponse = await fetch('/api/domains/stats')
+      const [customerResponse, domainStatsResult] = await Promise.all([
+        getAutumnCustomer(),
+        getDomainStats()
+      ])
       
       if (customerResponse.customer) {
         setCustomerData(customerResponse.customer)  
@@ -189,9 +191,11 @@ export default function SettingsPage() {
         throw new Error('Failed to fetch customer data')
       }
 
-      if (domainStatsResponse.ok) {
-        const domainData = await domainStatsResponse.json()
-        setDomainStats(domainData)
+      if ('error' in domainStatsResult) {
+        console.error('Error fetching domain stats:', domainStatsResult.error)
+        // Don't throw here, just log the error since domain stats are not critical for settings
+      } else {
+        setDomainStats(domainStatsResult)
       }
     } catch (error) {
       console.error('Error fetching customer data:', error)

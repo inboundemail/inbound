@@ -16,6 +16,9 @@ export interface EmailReceiptConfig {
   lambdaFunctionArn: string
   s3BucketName: string
   ruleSetName?: string
+  // Catch-all configuration
+  isCatchAll?: boolean
+  catchAllWebhookId?: string
 }
 
 export interface ReceiptRuleResult {
@@ -24,6 +27,16 @@ export interface ReceiptRuleResult {
   emailAddresses: string[]
   status: 'created' | 'updated' | 'failed'
   error?: string
+  isCatchAll?: boolean
+  catchAllWebhookId?: string
+}
+
+export interface CatchAllConfig {
+  domain: string
+  webhookId: string
+  lambdaFunctionArn: string
+  s3BucketName: string
+  ruleSetName?: string
 }
 
 export class AWSSESReceiptRuleManager {
@@ -121,7 +134,9 @@ export class AWSSESReceiptRuleManager {
         ruleName,
         domain: config.domain,
         emailAddresses: recipients,
-        status
+        status,
+        isCatchAll: config.isCatchAll,
+        catchAllWebhookId: config.catchAllWebhookId
       }
     } catch (error) {
       console.error('💥 SES Rules - Failed to configure email receiving:', error)
@@ -130,7 +145,9 @@ export class AWSSESReceiptRuleManager {
         domain: config.domain,
         emailAddresses: config.emailAddresses,
         status: 'failed',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isCatchAll: config.isCatchAll,
+        catchAllWebhookId: config.catchAllWebhookId
       }
     }
   }
@@ -223,5 +240,123 @@ export class AWSSESReceiptRuleManager {
    */
   static extractDomain(email: string): string {
     return email.split('@')[1] || ''
+  }
+
+  /**
+   * Configure catch-all email receiving for a domain
+   * This creates a receipt rule that captures ALL emails sent to the domain
+   */
+  async configureCatchAllDomain(config: CatchAllConfig): Promise<ReceiptRuleResult> {
+    const ruleSetName = config.ruleSetName || 'inbound-email-rules'
+    const ruleName = `${config.domain}-catchall-rule`
+
+    try {
+      console.log(`🌐 SES Rules - Configuring catch-all for domain: ${config.domain}`)
+      console.log(`🪝 SES Rules - Webhook ID: ${config.webhookId}`)
+      
+      // Ensure rule set exists
+      await this.ensureRuleSetExists(ruleSetName)
+
+      // Create receipt rule for catch-all
+      const rule: ReceiptRule = {
+        Name: ruleName,
+        Enabled: true,
+        Recipients: [`*@${config.domain}`], // Catch all emails to this domain
+        Actions: [
+          // Store email in S3
+          {
+            S3Action: {
+              BucketName: config.s3BucketName,
+              ObjectKeyPrefix: `emails/${config.domain}/catchall/`,
+              TopicArn: undefined
+            }
+          },
+          // Invoke Lambda function with catch-all metadata
+          {
+            LambdaAction: {
+              FunctionArn: config.lambdaFunctionArn,
+              InvocationType: 'Event'
+            }
+          }
+        ]
+      }
+
+      // Check if rule already exists
+      const existingRule = await this.getRuleIfExists(ruleSetName, ruleName)
+      let status: 'created' | 'updated' | 'failed' = 'created'
+
+      if (existingRule) {
+        console.log(`🔄 SES Rules - Updating existing catch-all rule: ${ruleName}`)
+        const updateCommand = new UpdateReceiptRuleCommand({
+          RuleSetName: ruleSetName,
+          Rule: rule
+        })
+        await this.sesClient.send(updateCommand)
+        status = 'updated'
+      } else {
+        console.log(`➕ SES Rules - Creating new catch-all rule: ${ruleName}`)
+        const createCommand = new CreateReceiptRuleCommand({
+          RuleSetName: ruleSetName,
+          Rule: rule
+        })
+        await this.sesClient.send(createCommand)
+        status = 'created'
+      }
+
+      // Set as active rule set
+      await this.setActiveRuleSet(ruleSetName)
+
+      console.log(`✅ SES Rules - Successfully ${status} catch-all rule for ${config.domain}`)
+
+      return {
+        ruleName,
+        domain: config.domain,
+        emailAddresses: [`*@${config.domain}`],
+        status,
+        isCatchAll: true,
+        catchAllWebhookId: config.webhookId
+      }
+    } catch (error) {
+      console.error('💥 SES Rules - Failed to configure catch-all:', error)
+      return {
+        ruleName,
+        domain: config.domain,
+        emailAddresses: [`*@${config.domain}`],
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isCatchAll: true,
+        catchAllWebhookId: config.webhookId
+      }
+    }
+  }
+
+  /**
+   * Remove catch-all receipt rule for a domain
+   */
+  async removeCatchAllDomain(domain: string, ruleSetName: string = 'inbound-email-rules'): Promise<boolean> {
+    try {
+      const ruleName = `${domain}-catchall-rule`
+      
+      const command = new DeleteReceiptRuleCommand({
+        RuleSetName: ruleSetName,
+        RuleName: ruleName
+      })
+
+      await this.sesClient.send(command)
+      console.log(`✅ SES Rules - Successfully removed catch-all rule for ${domain}`)
+      return true
+    } catch (error) {
+      console.error('Failed to remove catch-all receipt rule:', error)
+      return false
+    }
+  }
+
+  /**
+   * Check if a domain has catch-all configured
+   */
+  async isCatchAllConfigured(domain: string, ruleSetName: string = 'inbound-email-rules'): Promise<boolean> {
+    const ruleName = `${domain}-catchall-rule`
+    const existingRule = await this.getRuleIfExists(ruleSetName, ruleName)
+    return existingRule !== null
   }
 } 

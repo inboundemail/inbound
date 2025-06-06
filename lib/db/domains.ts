@@ -283,4 +283,78 @@ export async function deleteDomainFromDatabase(domainId: string, userId: string)
       error: error instanceof Error ? error.message : 'Failed to delete domain from database'
     }
   }
+}
+
+/**
+ * Enable catch-all for a domain
+ */
+export async function enableDomainCatchAll(
+  domainId: string,
+  webhookId: string,
+  receiptRuleName: string
+): Promise<EmailDomain> {
+  const [updated] = await db
+    .update(emailDomains)
+    .set({
+      isCatchAllEnabled: true,
+      catchAllWebhookId: webhookId,
+      catchAllReceiptRuleName: receiptRuleName,
+      updatedAt: new Date(),
+    })
+    .where(eq(emailDomains.id, domainId))
+    .returning()
+
+  if (!updated) {
+    throw new Error('Domain not found')
+  }
+
+  return updated
+}
+
+/**
+ * Disable catch-all for a domain
+ */
+export async function disableDomainCatchAll(domainId: string): Promise<EmailDomain> {
+  const [updated] = await db
+    .update(emailDomains)
+    .set({
+      isCatchAllEnabled: false,
+      catchAllWebhookId: null,
+      catchAllReceiptRuleName: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(emailDomains.id, domainId))
+    .returning()
+
+  if (!updated) {
+    throw new Error('Domain not found')
+  }
+
+  return updated
+}
+
+/**
+ * Get domain with catch-all configuration
+ */
+export async function getDomainWithCatchAll(domain: string, userId: string): Promise<EmailDomain | null> {
+  const [domainRecord] = await db
+    .select()
+    .from(emailDomains)
+    .where(and(eq(emailDomains.domain, domain), eq(emailDomains.userId, userId)))
+    .limit(1)
+
+  return domainRecord || null
+}
+
+/**
+ * Check if domain has catch-all enabled
+ */
+export async function isDomainCatchAllEnabled(domainId: string): Promise<boolean> {
+  const [domain] = await db
+    .select({ isCatchAllEnabled: emailDomains.isCatchAllEnabled })
+    .from(emailDomains)
+    .where(eq(emailDomains.id, domainId))
+    .limit(1)
+
+  return domain?.isCatchAllEnabled || false
 } 

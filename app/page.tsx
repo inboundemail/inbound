@@ -20,7 +20,11 @@ export default async function HomePage() {
         <div className="flex items-center justify-between max-w-6xl mx-auto">
           <div className="flex items-center gap-2">
             <img src="/inbound-logo-3.png" alt="Email" width={32} height={32} className="inline-block align-bottom" />
-            <span className="text-2xl font-bold text-black">inbound</span>
+            <div className="flex flex-col items-start gap-0">
+              <span className="text-2xl font-bold text-black">inbound</span>
+              <span className="text-xs text-gray-500 -mt-2">by exon</span>
+            </div>
+            
           </div>
           {/* Conditionally show Sign In or Go to Dashboard based on auth state */}
           {session ? (

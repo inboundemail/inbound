@@ -16,6 +16,8 @@ config({ path: path.join(__dirname, '../aws/cdk/.env') });
 const SERVICE_API_URL = process.env.SERVICE_API_URL || 'https://inbound.exon.dev';
 const SERVICE_API_KEY = process.env.SERVICE_API_KEY || '';
 const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || 'inbound-email-processor-bucket';
+const SENTRY_DSN = process.env.SENTRY_DSN || 'https://663ccebda453fcc61b3632c6fb3235c0@o4509397176745984.ingest.us.sentry.io/4509397177794560';
+const NODE_OPTIONS = process.env.NODE_OPTIONS || '-r @sentry/aws-serverless/awslambda-auto';
 
 console.log('🚀 Deploying Lambda function update...\n');
 
@@ -84,7 +86,7 @@ try {
   
   const envVarsCommand = `aws lambda update-function-configuration \
     --function-name ${LAMBDA_FUNCTION_NAME} \
-    --environment "Variables={SERVICE_API_URL=${SELECTED_SERVICE_API_URL},SERVICE_API_KEY=${SERVICE_API_KEY},S3_BUCKET_NAME=${S3_BUCKET_NAME}}" \
+    --environment "Variables={SERVICE_API_URL=${SELECTED_SERVICE_API_URL},SERVICE_API_KEY=${SERVICE_API_KEY},S3_BUCKET_NAME=${S3_BUCKET_NAME},SENTRY_DSN=${SENTRY_DSN},NODE_OPTIONS=${NODE_OPTIONS}}" \
     --region ${AWS_REGION}`;
   
   try {
@@ -94,6 +96,8 @@ try {
     console.log(`   SERVICE_API_URL: ${envResultJson.Environment?.Variables?.SERVICE_API_URL || 'not set'}`);
     console.log(`   SERVICE_API_KEY: ${envResultJson.Environment?.Variables?.SERVICE_API_KEY ? '[HIDDEN]' : 'not set'}`);
     console.log(`   S3_BUCKET_NAME: ${envResultJson.Environment?.Variables?.S3_BUCKET_NAME || 'not set'}`);
+    console.log(`   SENTRY_DSN: ${envResultJson.Environment?.Variables?.SENTRY_DSN || 'not set'}`);
+    console.log(`   NODE_OPTIONS: ${envResultJson.Environment?.Variables?.NODE_OPTIONS || 'not set'}`);
     // Wait for the configuration update to complete
     console.log('\n⏳ Waiting for configuration update to complete...');
     execSync(`aws lambda wait function-updated --function-name ${LAMBDA_FUNCTION_NAME} --region ${AWS_REGION}`, {

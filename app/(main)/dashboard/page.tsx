@@ -32,6 +32,7 @@ import { Area, AreaChart, CartesianGrid, XAxis, Line, LineChart, Bar, BarChart }
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
+import { getDomainStats } from '@/app/actions/primary'
 
 import inboundData from "@/lib/data.json"
 
@@ -124,16 +125,20 @@ export default function Page() {
       setError(null)
       
       // Fetch both domain stats and analytics data
-      const [domainsResponse, analyticsResponse] = await Promise.all([
-        fetch('/api/domains/stats'),
+      const [domainsResult, analyticsResponse] = await Promise.all([
+        getDomainStats(),
         fetch('/api/analytics')
       ])
       
-      if (domainsResponse.ok) {
-        const domainsData: DomainStatsResponse = await domainsResponse.json()
-        setDomainStats(domainsData)
+      // Handle domain stats result
+      if ('error' in domainsResult) {
+        console.error('Error fetching domain stats:', domainsResult.error)
+        setError(domainsResult.error || 'Unknown error occurred')
+      } else {
+        setDomainStats(domainsResult)
       }
       
+      // Handle analytics response
       if (analyticsResponse.ok) {
         const analyticsData: AnalyticsData = await analyticsResponse.json()
         setAnalyticsData(analyticsData)
