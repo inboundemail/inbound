@@ -1,0 +1,3 @@
+[submodule "mintlify-docs"]
+	path = mintlify-docs
+	url = https://github.com/R44VC0RP/docs.git
