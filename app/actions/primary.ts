@@ -614,13 +614,55 @@ export async function disableDomainCatchAll(domainId: string) {
             return { error: 'Catch-all is not currently enabled for this domain' }
         }
 
-        // Remove SES catch-all receipt rule
+        // Get existing email addresses for this domain to restore them
+        const existingEmails = await db
+            .select()
+            .from(emailAddresses)
+            .where(and(
+                eq(emailAddresses.domainId, domainId),
+                eq(emailAddresses.userId, session.user.id),
+                eq(emailAddresses.isActive, true)
+            ))
+
+        // Remove SES catch-all receipt rule and restore individual rules
         try {
             const sesManager = new AWSSESReceiptRuleManager()
             
+            // Remove catch-all rule
             const ruleRemoved = await sesManager.removeCatchAllDomain(domain.domain)
 
             if (ruleRemoved) {
+                // Restore individual email rules if there are existing email addresses
+                if (existingEmails.length > 0) {
+                    const awsRegion = process.env.AWS_REGION || 'us-east-2'
+                    const lambdaFunctionName = process.env.LAMBDA_FUNCTION_NAME || 'email-processor'
+                    const s3BucketName = process.env.S3_BUCKET_NAME
+                    const awsAccountId = process.env.AWS_ACCOUNT_ID
+
+                    if (s3BucketName && awsAccountId) {
+                        const lambdaArn = AWSSESReceiptRuleManager.getLambdaFunctionArn(
+                            lambdaFunctionName,
+                            awsAccountId,
+                            awsRegion
+                        )
+
+                        const emailAddressList = existingEmails.map(email => email.address)
+                        
+                        const restoreResult = await sesManager.restoreIndividualEmailRules(
+                            domain.domain,
+                            emailAddressList,
+                            lambdaArn,
+                            s3BucketName
+                        )
+
+                        if (restoreResult.status === 'created') {
+                            console.log(`✅ Restored individual email rules for ${existingEmails.length} addresses`)
+                        } else {
+                            console.warn(`⚠️ Failed to restore individual email rules: ${restoreResult.error}`)
+                        }
+                    }
+                }
+
                 // Update domain record to disable catch-all
                 const [updatedDomain] = await db
                     .update(emailDomains)
@@ -637,9 +679,10 @@ export async function disableDomainCatchAll(domainId: string) {
                     success: true,
                     data: {
                         domain: updatedDomain.domain,
-                        isCatchAllEnabled: false
+                        isCatchAllEnabled: false,
+                        restoredEmailCount: existingEmails.length
                     },
-                    message: 'Catch-all disabled successfully'
+                    message: `Catch-all disabled successfully${existingEmails.length > 0 ? ` and restored ${existingEmails.length} individual email addresses` : ''}`
                 }
             } else {
                 return {

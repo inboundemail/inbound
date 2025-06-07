@@ -66,7 +66,7 @@ export class AWSSESReceiptRuleManager {
       const existingRule = await this.getRuleIfExists(ruleSetName, ruleName)
       
       // Merge existing recipients with new ones if rule exists
-      let recipients = config.emailAddresses.length > 0 ? config.emailAddresses : [`*@${config.domain}`]
+      let recipients = config.emailAddresses.length > 0 ? config.emailAddresses : [config.domain]
       
       if (existingRule && existingRule.Recipients) {
         // Get existing recipients
@@ -249,6 +249,7 @@ export class AWSSESReceiptRuleManager {
   async configureCatchAllDomain(config: CatchAllConfig): Promise<ReceiptRuleResult> {
     const ruleSetName = config.ruleSetName || 'inbound-email-rules'
     const ruleName = `${config.domain}-catchall-rule`
+    const individualRuleName = `${config.domain}-rule`
 
     try {
       console.log(`🌐 SES Rules - Configuring catch-all for domain: ${config.domain}`)
@@ -257,11 +258,23 @@ export class AWSSESReceiptRuleManager {
       // Ensure rule set exists
       await this.ensureRuleSetExists(ruleSetName)
 
+      // CRITICAL: Remove individual email rule if it exists
+      // This prevents rule precedence conflicts
+      const existingIndividualRule = await this.getRuleIfExists(ruleSetName, individualRuleName)
+      if (existingIndividualRule) {
+        console.log(`🗑️ SES Rules - Removing individual email rule to prevent conflicts: ${individualRuleName}`)
+        await this.sesClient.send(new DeleteReceiptRuleCommand({
+          RuleSetName: ruleSetName,
+          RuleName: individualRuleName
+        }))
+      }
+
       // Create receipt rule for catch-all
+      // According to AWS SES docs, use just the domain name (not *@domain) for catch-all
       const rule: ReceiptRule = {
         Name: ruleName,
         Enabled: true,
-        Recipients: [`*@${config.domain}`], // Catch all emails to this domain
+        Recipients: [config.domain], // Just the domain name catches all emails to this domain
         Actions: [
           // Store email in S3
           {
@@ -281,11 +294,11 @@ export class AWSSESReceiptRuleManager {
         ]
       }
 
-      // Check if rule already exists
-      const existingRule = await this.getRuleIfExists(ruleSetName, ruleName)
+      // Check if catch-all rule already exists
+      const existingCatchAllRule = await this.getRuleIfExists(ruleSetName, ruleName)
       let status: 'created' | 'updated' | 'failed' = 'created'
 
-      if (existingRule) {
+      if (existingCatchAllRule) {
         console.log(`🔄 SES Rules - Updating existing catch-all rule: ${ruleName}`)
         const updateCommand = new UpdateReceiptRuleCommand({
           RuleSetName: ruleSetName,
@@ -311,7 +324,7 @@ export class AWSSESReceiptRuleManager {
       return {
         ruleName,
         domain: config.domain,
-        emailAddresses: [`*@${config.domain}`],
+        emailAddresses: [config.domain], // Just the domain name for catch-all
         status,
         isCatchAll: true,
         catchAllWebhookId: config.webhookId
@@ -321,7 +334,7 @@ export class AWSSESReceiptRuleManager {
       return {
         ruleName,
         domain: config.domain,
-        emailAddresses: [`*@${config.domain}`],
+        emailAddresses: [config.domain], // Just the domain name for catch-all
         status: 'failed',
         error: error instanceof Error ? error.message : 'Unknown error',
         isCatchAll: true,
@@ -358,5 +371,109 @@ export class AWSSESReceiptRuleManager {
     const ruleName = `${domain}-catchall-rule`
     const existingRule = await this.getRuleIfExists(ruleSetName, ruleName)
     return existingRule !== null
+  }
+
+  /**
+   * Get all rules for a domain (both individual and catch-all)
+   */
+  async getDomainRules(domain: string, ruleSetName: string = 'inbound-email-rules'): Promise<{
+    individualRule: ReceiptRule | null
+    catchAllRule: ReceiptRule | null
+  }> {
+    const individualRuleName = `${domain}-rule`
+    const catchAllRuleName = `${domain}-catchall-rule`
+    
+    const individualRule = await this.getRuleIfExists(ruleSetName, individualRuleName)
+    const catchAllRule = await this.getRuleIfExists(ruleSetName, catchAllRuleName)
+    
+    return {
+      individualRule,
+      catchAllRule
+    }
+  }
+
+  /**
+   * Restore individual email rules when disabling catch-all
+   * This recreates the individual email rule with existing email addresses
+   */
+  async restoreIndividualEmailRules(
+    domain: string, 
+    emailAddresses: string[], 
+    lambdaFunctionArn: string, 
+    s3BucketName: string,
+    ruleSetName: string = 'inbound-email-rules'
+  ): Promise<ReceiptRuleResult> {
+    const ruleName = `${domain}-rule`
+
+    try {
+      console.log(`🔄 SES Rules - Restoring individual email rules for domain: ${domain}`)
+      console.log(`📧 SES Rules - Email addresses: ${emailAddresses.join(', ')}`)
+      
+      // Only restore if there are email addresses to restore
+      if (emailAddresses.length === 0) {
+        console.log(`⚠️ SES Rules - No email addresses to restore for ${domain}`)
+        return {
+          ruleName,
+          domain,
+          emailAddresses: [],
+          status: 'created',
+          isCatchAll: false
+        }
+      }
+
+      // Create receipt rule for individual emails
+      const rule: ReceiptRule = {
+        Name: ruleName,
+        Enabled: true,
+        Recipients: emailAddresses,
+        Actions: [
+          // Store email in S3
+          {
+            S3Action: {
+              BucketName: s3BucketName,
+              ObjectKeyPrefix: `emails/${domain}/`,
+              TopicArn: undefined
+            }
+          },
+          // Invoke Lambda function
+          {
+            LambdaAction: {
+              FunctionArn: lambdaFunctionArn,
+              InvocationType: 'Event'
+            }
+          }
+        ]
+      }
+
+      console.log(`➕ SES Rules - Creating individual email rule: ${ruleName}`)
+      const createCommand = new CreateReceiptRuleCommand({
+        RuleSetName: ruleSetName,
+        Rule: rule
+      })
+      await this.sesClient.send(createCommand)
+
+      // Set as active rule set
+      await this.setActiveRuleSet(ruleSetName)
+
+      console.log(`✅ SES Rules - Successfully restored individual email rules for ${domain}`)
+
+      return {
+        ruleName,
+        domain,
+        emailAddresses,
+        status: 'created',
+        isCatchAll: false
+      }
+    } catch (error) {
+      console.error('💥 SES Rules - Failed to restore individual email rules:', error)
+      return {
+        ruleName,
+        domain,
+        emailAddresses,
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isCatchAll: false
+      }
+    }
   }
 } 

@@ -29,3 +29,12 @@ would be routed based on slug
 - your api docs still show a placeholder url
 - idea - add catchall logic as an option. maybe secure it on an email header?
 - idea - default webhook for all unset
+
+
+
+
+left off:
+
+- need to finalize the accept all domain
+- need to modify the way the emails are stored to be able to store and pull from S3 and be able to parse better
+- need to enable the email redirection and stuff
