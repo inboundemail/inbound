@@ -1,7 +1,6 @@
 "use client"
 
 import { useSession } from '@/lib/auth-client'
-import { authClient } from '@/lib/auth-client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,34 +8,29 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
+import {
+  useCustomerQuery,
+  useDomainStatsQuery,
+  useApiKeysQuery,
+  useCreateApiKeyMutation,
+  useUpdateApiKeyMutation,
+  useDeleteApiKeyMutation,
+  useBillingPortalMutation
+} from '@/features/settings/hooks'
 import { 
   CreditCardIcon, 
-  CalendarIcon, 
-  InfinityIcon, 
-  DatabaseIcon, 
-  MailIcon, 
-  ClockIcon, 
   TrendingUpIcon, 
   CheckCircleIcon, 
   KeyIcon, 
   PlusIcon, 
   CopyIcon, 
-  TrashIcon, 
-  EyeIcon, 
-  EyeOffIcon,
-  EditIcon
+  TrashIcon
 } from 'lucide-react'
-import { formatDistanceToNow, format } from 'date-fns'
+import { formatDistanceToNow } from 'date-fns'
 import { PricingTable } from '@/components/autumn/pricing-table'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { generateAutumnBillingPortal, getAutumnCustomer, getDomainStats } from '@/app/actions/primary'
-// import { AutumnCustomer } from '@/app/actions/types'
-import { Customer } from 'autumn-js'
 
 
 
@@ -53,26 +47,6 @@ interface DomainStatsResponse {
     current: number
     remaining: number | null
   } | null
-}
-
-interface ApiKey {
-  id: string
-  name: string | null
-  start: string | null
-  prefix: string | null
-  userId: string
-  enabled: boolean
-  rateLimitEnabled: boolean
-  rateLimitTimeWindow: number | null
-  rateLimitMax: number | null
-  requestCount: number | null
-  remaining: number | null
-  lastRequest: Date | null
-  expiresAt: Date | null
-  createdAt: string
-  updatedAt: string
-  permissions: { [key: string]: string[] } | null
-  metadata: Record<string, any> | null
 }
 
 interface CreateApiKeyForm {
@@ -139,17 +113,34 @@ function CircularProgress({ value, max, size = 60, strokeWidth = 6, className = 
 export default function SettingsPage() {
   const { data: session, isPending } = useSession()
   const [isLoading, setIsLoading] = useState(false)
-  const [customerData, setCustomerData] = useState<Customer | null>(null)
-  const [isLoadingCustomer, setIsLoadingCustomer] = useState(true)
-  const [domainStats, setDomainStats] = useState<DomainStatsResponse | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isUpgradeSuccessOpen, setIsUpgradeSuccessOpen] = useState(false)
   
+  // React Query hooks
+  const { 
+    data: customerData, 
+    isLoading: isLoadingCustomer, 
+    refetch: refetchCustomer 
+  } = useCustomerQuery()
+  
+  const { 
+    data: domainStats, 
+    isLoading: isLoadingDomainStats 
+  } = useDomainStatsQuery()
+  
+  const { 
+    data: apiKeys = [], 
+    isLoading: isLoadingApiKeys 
+  } = useApiKeysQuery()
+  
+  // Mutations
+  const createApiKeyMutation = useCreateApiKeyMutation()
+  const updateApiKeyMutation = useUpdateApiKeyMutation()
+  const deleteApiKeyMutation = useDeleteApiKeyMutation()
+  const billingPortalMutation = useBillingPortalMutation()
+  
   // API Key state
-  const [apiKeys, setApiKeys] = useState<any[]>([])
-  const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(true)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isCreatingApiKey, setIsCreatingApiKey] = useState(false)
   const [newApiKey, setNewApiKey] = useState<string | null>(null)
   const [showNewApiKey, setShowNewApiKey] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -174,74 +165,17 @@ export default function SettingsPage() {
     }
   }
 
-  const fetchCustomerData = async () => {
-    if (!session?.user?.id) return
-    
-    try {
-      setIsLoadingCustomer(true)
-      const [customerResponse, domainStatsResult] = await Promise.all([
-        getAutumnCustomer(),
-        getDomainStats()
-      ])
-      
-      if (customerResponse.customer) {
-        setCustomerData(customerResponse.customer)  
-      } else {
-        toast.error(customerResponse.error)
-        throw new Error('Failed to fetch customer data')
-      }
-
-      if ('error' in domainStatsResult) {
-        console.error('Error fetching domain stats:', domainStatsResult.error)
-        // Don't throw here, just log the error since domain stats are not critical for settings
-      } else {
-        setDomainStats(domainStatsResult)
-      }
-    } catch (error) {
-      console.error('Error fetching customer data:', error)
-      toast.error('Failed to load subscription data')
-    } finally {
-      setIsLoadingCustomer(false)
-    }
-  }
-
-  const fetchApiKeys = async () => {
-    if (!session?.user?.id) return
-    
-    try {
-      setIsLoadingApiKeys(true)
-      const { data, error } = await authClient.apiKey.list()
-      
-      if (error) {
-        throw new Error(error.message)
-      }
-      
-      setApiKeys(data || [])
-    } catch (error) {
-      console.error('Error fetching API keys:', error)
-      toast.error('Failed to load API keys')
-    } finally {
-      setIsLoadingApiKeys(false)
-    }
-  }
-
   const handleCreateApiKey = async () => {
     try {
-      setIsCreatingApiKey(true)
-      
-      const createData: any = {
+      const createData = {
         name: createForm.name || undefined,
         prefix: createForm.prefix || undefined,
       }
       
-      const { data, error } = await authClient.apiKey.create(createData)
+      const result = await createApiKeyMutation.mutateAsync(createData)
       
-      if (error) {
-        throw new Error(error.message)
-      }
-      
-      if (data?.key) {
-        setNewApiKey(data.key)
+      if (result?.key) {
+        setNewApiKey(result.key)
         setShowNewApiKey(true)
         toast.success('API key created successfully')
         
@@ -250,28 +184,17 @@ export default function SettingsPage() {
           name: '',
           prefix: ''
         })
-        
-        // Refresh API keys list
-        fetchApiKeys()
       }
     } catch (error) {
       console.error('Error creating API key:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to create API key')
-    } finally {
-      setIsCreatingApiKey(false)
     }
   }
 
   const handleDeleteApiKey = async (keyId: string) => {
     try {
-      const { error } = await authClient.apiKey.delete({ keyId })
-      
-      if (error) {
-        throw new Error(error.message)
-      }
-      
+      await deleteApiKeyMutation.mutateAsync(keyId)
       toast.success('API key deleted successfully')
-      fetchApiKeys()
     } catch (error) {
       console.error('Error deleting API key:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to delete API key')
@@ -280,17 +203,8 @@ export default function SettingsPage() {
 
   const handleUpdateApiKey = async (keyId: string, updates: { name?: string; enabled?: boolean }) => {
     try {
-      const { error } = await authClient.apiKey.update({
-        keyId,
-        ...updates
-      })
-      
-      if (error) {
-        throw new Error(error.message)
-      }
-      
+      await updateApiKeyMutation.mutateAsync({ keyId, ...updates })
       toast.success('API key updated successfully')
-      fetchApiKeys()
     } catch (error) {
       console.error('Error updating API key:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to update API key')
@@ -308,24 +222,13 @@ export default function SettingsPage() {
 
   const handleManageBilling = async () => {
     try {
-      const response = await generateAutumnBillingPortal()
-      if (response.error) {
-        toast.error(response.error)
-      } else {
-        window.open(response.url, '_blank')
-      }
+      const url = await billingPortalMutation.mutateAsync()
+      window.open(url, '_blank')
     } catch (error) {
       console.error('Error creating billing portal session:', error)
-      toast.error('Failed to open billing portal')
+      toast.error(error instanceof Error ? error.message : 'Failed to open billing portal')
     }
   }
-
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchCustomerData()
-      fetchApiKeys()
-    }
-  }, [session?.user?.id])
 
   // Check for upgrade success parameter
   useEffect(() => {
@@ -521,7 +424,7 @@ export default function SettingsPage() {
                 <Button 
                   variant="secondary" 
                   size="sm" 
-                  onClick={fetchCustomerData}
+                  onClick={() => refetchCustomer()}
                   className="mt-2 bg-slate-800 hover:bg-slate-700 text-white border-slate-600"
                 >
                   Retry
@@ -559,7 +462,7 @@ export default function SettingsPage() {
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4" onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !isCreatingApiKey) {
+                    if (e.key === 'Enter' && !createApiKeyMutation.isPending) {
                       e.preventDefault()
                       handleCreateApiKey()
                     }
@@ -594,9 +497,9 @@ export default function SettingsPage() {
                        </Button>
                        <Button
                          onClick={handleCreateApiKey}
-                         disabled={isCreatingApiKey}
+                         disabled={createApiKeyMutation.isPending}
                        >
-                         {isCreatingApiKey ? 'Creating...' : 'Create API Key'}
+                         {createApiKeyMutation.isPending ? 'Creating...' : 'Create API Key'}
                        </Button>
                      </div>
                   </div>
@@ -895,7 +798,7 @@ export default function SettingsPage() {
               onClick={() => {
                 setIsUpgradeSuccessOpen(false)
                 // Refresh customer data to show updated plan
-                fetchCustomerData()
+                refetchCustomer()
               }}
               className="w-full"
             >
