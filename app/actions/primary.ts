@@ -4,8 +4,8 @@ import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { Autumn as autumn, Customer } from "autumn-js"
 import { db } from '@/lib/db'
-import { emailDomains, emailAddresses, webhooks, sesEvents, DOMAIN_STATUS } from '@/lib/db/schema'
-import { eq, and, sql } from 'drizzle-orm'
+import { emailDomains, emailAddresses, webhooks, sesEvents, receivedEmails, DOMAIN_STATUS } from '@/lib/db/schema'
+import { eq, and, sql, desc } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
 
@@ -985,6 +985,509 @@ export async function syncDomainsWithAWS() {
     } catch (error) {
         console.error('Domain sync error:', error)
         return { error: 'Failed to sync domains with AWS SES' }
+    }
+}
+
+// ============================================================================
+// EMAIL MANAGEMENT
+// ============================================================================
+
+export async function getEmailDetails(emailId: string) {
+    try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+
+        if (!session?.user?.id) {
+            return { error: 'Unauthorized' }
+        }
+
+        if (!emailId) {
+            return { error: 'Email ID is required' }
+        }
+
+        // Fetch email details with SES event data
+        const emailDetails = await db
+            .select({
+                // Email details
+                id: receivedEmails.id,
+                messageId: receivedEmails.messageId,
+                from: receivedEmails.from,
+                to: receivedEmails.to,
+                recipient: receivedEmails.recipient,
+                subject: receivedEmails.subject,
+                receivedAt: receivedEmails.receivedAt,
+                processedAt: receivedEmails.processedAt,
+                status: receivedEmails.status,
+                metadata: receivedEmails.metadata,
+                userId: receivedEmails.userId,
+                sesEventId: receivedEmails.sesEventId,
+                createdAt: receivedEmails.createdAt,
+                updatedAt: receivedEmails.updatedAt,
+                
+                // SES event details
+                emailContent: sesEvents.emailContent,
+                spamVerdict: sesEvents.spamVerdict,
+                virusVerdict: sesEvents.virusVerdict,
+                spfVerdict: sesEvents.spfVerdict,
+                dkimVerdict: sesEvents.dkimVerdict,
+                dmarcVerdict: sesEvents.dmarcVerdict,
+                actionType: sesEvents.actionType,
+                s3BucketName: sesEvents.s3BucketName,
+                s3ObjectKey: sesEvents.s3ObjectKey,
+                s3ContentFetched: sesEvents.s3ContentFetched,
+                s3ContentSize: sesEvents.s3ContentSize,
+                s3Error: sesEvents.s3Error,
+                commonHeaders: sesEvents.commonHeaders,
+                processingTimeMillis: sesEvents.processingTimeMillis,
+                timestamp: sesEvents.timestamp,
+                receiptTimestamp: sesEvents.receiptTimestamp,
+            })
+            .from(receivedEmails)
+            .leftJoin(sesEvents, eq(receivedEmails.sesEventId, sesEvents.id))
+            .where(
+                and(
+                    eq(receivedEmails.id, emailId),
+                    eq(receivedEmails.userId, session.user.id)
+                )
+            )
+            .limit(1)
+
+        if (emailDetails.length === 0) {
+            return { error: 'Email not found' }
+        }
+
+        const email = emailDetails[0]
+
+        // Parse common headers if available
+        let parsedHeaders = null
+        if (email.commonHeaders) {
+            try {
+                parsedHeaders = JSON.parse(email.commonHeaders)
+            } catch (e) {
+                console.error('Failed to parse common headers:', e)
+            }
+        }
+
+        // Parse metadata if available
+        let parsedMetadata = null
+        if (email.metadata) {
+            try {
+                parsedMetadata = JSON.parse(email.metadata)
+            } catch (e) {
+                console.error('Failed to parse metadata:', e)
+            }
+        }
+
+        // Parse email content
+        const { parseEmailContent, sanitizeHtml } = await import('@/lib/email-parser')
+        const parsedEmail = await parseEmailContent(email.emailContent || '')
+
+        // Format the response
+        const response = {
+            id: email.id,
+            messageId: email.messageId,
+            from: email.from,
+            to: email.to,
+            recipient: email.recipient,
+            subject: email.subject,
+            receivedAt: email.receivedAt,
+            processedAt: email.processedAt,
+            status: email.status,
+            emailContent: {
+                htmlBody: parsedEmail.htmlBody ? sanitizeHtml(parsedEmail.htmlBody) : null,
+                textBody: parsedEmail.textBody,
+                attachments: parsedEmail.attachments,
+                headers: parsedEmail.headers,
+                rawContent: email.emailContent, // Include raw content for debugging
+            },
+            authResults: {
+                spf: email.spfVerdict || 'UNKNOWN',
+                dkim: email.dkimVerdict || 'UNKNOWN',
+                dmarc: email.dmarcVerdict || 'UNKNOWN',
+                spam: email.spamVerdict || 'UNKNOWN',
+                virus: email.virusVerdict || 'UNKNOWN',
+            },
+            metadata: {
+                processingTime: email.processingTimeMillis,
+                timestamp: email.timestamp,
+                receiptTimestamp: email.receiptTimestamp,
+                actionType: email.actionType,
+                s3Info: {
+                    bucketName: email.s3BucketName,
+                    objectKey: email.s3ObjectKey,
+                    contentFetched: email.s3ContentFetched,
+                    contentSize: email.s3ContentSize,
+                    error: email.s3Error,
+                },
+                commonHeaders: parsedHeaders,
+                emailMetadata: parsedMetadata,
+            },
+            createdAt: email.createdAt,
+            updatedAt: email.updatedAt,
+        }
+
+        return { success: true, data: response }
+    } catch (error) {
+        console.error('Error fetching email details:', error)
+        return { error: 'Failed to fetch email details' }
+    }
+}
+
+export async function getEmailDetailsFromParsed(emailId: string) {
+    try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+
+        if (!session?.user?.id) {
+            return { error: 'Unauthorized' }
+        }
+
+        if (!emailId) {
+            return { error: 'Email ID is required' }
+        }
+
+        // Import parsedEmails table
+        const { parsedEmails } = await import('@/lib/db/schema')
+
+        // Fetch email details from both receivedEmails and parsedEmails tables
+        const emailDetails = await db
+            .select({
+                // Received email details
+                id: receivedEmails.id,
+                messageId: receivedEmails.messageId,
+                from: receivedEmails.from,
+                to: receivedEmails.to,
+                recipient: receivedEmails.recipient,
+                subject: receivedEmails.subject,
+                receivedAt: receivedEmails.receivedAt,
+                processedAt: receivedEmails.processedAt,
+                status: receivedEmails.status,
+                isRead: receivedEmails.isRead,
+                readAt: receivedEmails.readAt,
+                userId: receivedEmails.userId,
+                createdAt: receivedEmails.createdAt,
+                updatedAt: receivedEmails.updatedAt,
+                
+                // Parsed email details
+                parsedFromText: parsedEmails.fromText,
+                parsedFromAddress: parsedEmails.fromAddress,
+                parsedFromName: parsedEmails.fromName,
+                parsedToText: parsedEmails.toText,
+                parsedToAddresses: parsedEmails.toAddresses,
+                parsedSubject: parsedEmails.subject,
+                parsedTextBody: parsedEmails.textBody,
+                parsedHtmlBody: parsedEmails.htmlBody,
+                parsedAttachments: parsedEmails.attachments,
+                parsedAttachmentCount: parsedEmails.attachmentCount,
+                parsedHasAttachments: parsedEmails.hasAttachments,
+                parsedHeaders: parsedEmails.headers,
+                parsedEmailDate: parsedEmails.emailDate,
+                parsedInReplyTo: parsedEmails.inReplyTo,
+                parsedReferences: parsedEmails.references,
+                parsedPriority: parsedEmails.priority,
+                parsedHasTextBody: parsedEmails.hasTextBody,
+                parsedHasHtmlBody: parsedEmails.hasHtmlBody,
+                parseSuccess: parsedEmails.parseSuccess,
+                parseError: parsedEmails.parseError,
+            })
+            .from(receivedEmails)
+            .leftJoin(parsedEmails, eq(receivedEmails.id, parsedEmails.emailId))
+            .where(
+                and(
+                    eq(receivedEmails.id, emailId),
+                    eq(receivedEmails.userId, session.user.id)
+                )
+            )
+            .limit(1)
+
+        if (emailDetails.length === 0) {
+            return { error: 'Email not found' }
+        }
+
+        const email = emailDetails[0]
+
+        // Parse JSON fields
+        let parsedAttachments = []
+        if (email.parsedAttachments) {
+            try {
+                parsedAttachments = JSON.parse(email.parsedAttachments)
+            } catch (e) {
+                console.error('Failed to parse attachments:', e)
+            }
+        }
+
+        let parsedHeaders = {}
+        if (email.parsedHeaders) {
+            try {
+                parsedHeaders = JSON.parse(email.parsedHeaders)
+            } catch (e) {
+                console.error('Failed to parse headers:', e)
+            }
+        }
+
+        let parsedToAddresses = []
+        if (email.parsedToAddresses) {
+            try {
+                parsedToAddresses = JSON.parse(email.parsedToAddresses)
+            } catch (e) {
+                console.error('Failed to parse to addresses:', e)
+            }
+        }
+
+        let parsedReferences = []
+        if (email.parsedReferences) {
+            try {
+                parsedReferences = JSON.parse(email.parsedReferences)
+            } catch (e) {
+                console.error('Failed to parse references:', e)
+            }
+        }
+
+        // Sanitize HTML content
+        const { sanitizeHtml } = await import('@/lib/email-parser')
+        const sanitizedHtmlBody = email.parsedHtmlBody ? sanitizeHtml(email.parsedHtmlBody) : null
+
+        // Format the response
+        const response = {
+            id: email.id,
+            messageId: email.messageId,
+            from: email.from,
+            to: email.to,
+            recipient: email.recipient,
+            subject: email.subject || email.parsedSubject,
+            receivedAt: email.receivedAt,
+            processedAt: email.processedAt,
+            status: email.status,
+            isRead: email.isRead,
+            readAt: email.readAt,
+            emailContent: {
+                htmlBody: sanitizedHtmlBody,
+                textBody: email.parsedTextBody,
+                attachments: parsedAttachments,
+                headers: parsedHeaders,
+            },
+            parsedData: {
+                fromText: email.parsedFromText,
+                fromAddress: email.parsedFromAddress,
+                fromName: email.parsedFromName,
+                toText: email.parsedToText,
+                toAddresses: parsedToAddresses,
+                subject: email.parsedSubject,
+                emailDate: email.parsedEmailDate,
+                inReplyTo: email.parsedInReplyTo,
+                references: parsedReferences,
+                priority: email.parsedPriority,
+                attachmentCount: email.parsedAttachmentCount,
+                hasAttachments: email.parsedHasAttachments,
+                hasTextBody: email.parsedHasTextBody,
+                hasHtmlBody: email.parsedHasHtmlBody,
+                parseSuccess: email.parseSuccess,
+                parseError: email.parseError,
+            },
+            createdAt: email.createdAt,
+            updatedAt: email.updatedAt,
+        }
+
+        return { success: true, data: response }
+    } catch (error) {
+        console.error('Error fetching email details from parsed:', error)
+        return { error: 'Failed to fetch email details' }
+    }
+}
+
+export async function getEmailsList(options?: {
+    limit?: number
+    offset?: number
+    searchQuery?: string
+    statusFilter?: string
+    domainFilter?: string
+}) {
+    try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+
+        if (!session?.user?.id) {
+            return { error: 'Unauthorized' }
+        }
+
+        const {
+            limit = 50,
+            offset = 0,
+            searchQuery = '',
+            statusFilter = 'all',
+            domainFilter = 'all'
+        } = options || {}
+
+        // Import parsedEmails table
+        const { parsedEmails } = await import('@/lib/db/schema')
+
+        // Build where conditions
+        let whereConditions = [eq(receivedEmails.userId, session.user.id)]
+
+        // Add status filter
+        if (statusFilter !== 'all') {
+            whereConditions.push(eq(receivedEmails.status, statusFilter))
+        }
+
+        // Add domain filter
+        if (domainFilter !== 'all') {
+            whereConditions.push(sql`SPLIT_PART(${receivedEmails.recipient}, '@', 2) = ${domainFilter}`)
+        }
+
+        // Add search filter
+        if (searchQuery) {
+            whereConditions.push(
+                sql`(
+                    ${receivedEmails.from} ILIKE ${`%${searchQuery}%`} OR
+                    ${receivedEmails.recipient} ILIKE ${`%${searchQuery}%`} OR
+                    ${receivedEmails.subject} ILIKE ${`%${searchQuery}%`} OR
+                    ${receivedEmails.messageId} ILIKE ${`%${searchQuery}%`} OR
+                    ${parsedEmails.fromText} ILIKE ${`%${searchQuery}%`} OR
+                    ${parsedEmails.subject} ILIKE ${`%${searchQuery}%`}
+                )`
+            )
+        }
+
+        // Fetch emails with parsed data
+        const emailsList = await db
+            .select({
+                // Basic email info
+                id: receivedEmails.id,
+                messageId: receivedEmails.messageId,
+                from: receivedEmails.from,
+                recipient: receivedEmails.recipient,
+                subject: receivedEmails.subject,
+                receivedAt: receivedEmails.receivedAt,
+                status: receivedEmails.status,
+                isRead: receivedEmails.isRead,
+                readAt: receivedEmails.readAt,
+                
+                // Parsed email info
+                parsedFromText: parsedEmails.fromText,
+                parsedFromAddress: parsedEmails.fromAddress,
+                parsedFromName: parsedEmails.fromName,
+                parsedSubject: parsedEmails.subject,
+                parsedAttachmentCount: parsedEmails.attachmentCount,
+                parsedHasAttachments: parsedEmails.hasAttachments,
+                parsedEmailDate: parsedEmails.emailDate,
+                parseSuccess: parsedEmails.parseSuccess,
+            })
+            .from(receivedEmails)
+            .leftJoin(parsedEmails, eq(receivedEmails.id, parsedEmails.emailId))
+            .where(and(...whereConditions))
+            .orderBy(desc(receivedEmails.receivedAt))
+            .limit(limit)
+            .offset(offset)
+
+        // Get total count for pagination
+        const totalCountResult = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(receivedEmails)
+            .leftJoin(parsedEmails, eq(receivedEmails.id, parsedEmails.emailId))
+            .where(and(...whereConditions))
+
+        const totalCount = totalCountResult[0]?.count || 0
+
+        // Get unique domains for filter options
+        const uniqueDomainsResult = await db
+            .select({
+                domain: sql<string>`DISTINCT SPLIT_PART(${receivedEmails.recipient}, '@', 2)`
+            })
+            .from(receivedEmails)
+            .where(eq(receivedEmails.userId, session.user.id))
+            .orderBy(sql`SPLIT_PART(${receivedEmails.recipient}, '@', 2)`)
+
+        const uniqueDomains = uniqueDomainsResult.map(row => row.domain).filter(Boolean)
+
+        // Format the emails
+        const formattedEmails = emailsList.map(email => ({
+            id: email.id,
+            messageId: email.messageId,
+            from: email.from,
+            recipient: email.recipient,
+            subject: email.subject || email.parsedSubject || 'No Subject',
+            receivedAt: email.receivedAt.toISOString(),
+            status: email.status,
+            domain: email.recipient.split('@')[1] || '',
+            isRead: email.isRead || false,
+            readAt: email.readAt?.toISOString(),
+            parsedData: {
+                fromText: email.parsedFromText,
+                fromAddress: email.parsedFromAddress,
+                fromName: email.parsedFromName,
+                subject: email.parsedSubject,
+                attachmentCount: email.parsedAttachmentCount || 0,
+                hasAttachments: email.parsedHasAttachments || false,
+                emailDate: email.parsedEmailDate?.toISOString(),
+                parseSuccess: email.parseSuccess,
+            }
+        }))
+
+        return {
+            success: true,
+            data: {
+                emails: formattedEmails,
+                pagination: {
+                    total: totalCount,
+                    limit,
+                    offset,
+                    hasMore: offset + limit < totalCount
+                },
+                filters: {
+                    uniqueDomains
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching emails list:', error)
+        return { error: 'Failed to fetch emails list' }
+    }
+}
+
+export async function markEmailAsRead(emailId: string) {
+    try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+
+        if (!session?.user?.id) {
+            return { error: 'Unauthorized' }
+        }
+
+        if (!emailId) {
+            return { error: 'Email ID is required' }
+        }
+
+        // Update the email to mark it as read
+        const result = await db
+            .update(receivedEmails)
+            .set({
+                isRead: true,
+                readAt: new Date(),
+                updatedAt: new Date()
+            })
+            .where(
+                and(
+                    eq(receivedEmails.id, emailId),
+                    eq(receivedEmails.userId, session.user.id)
+                )
+            )
+            .returning()
+
+        if (result.length === 0) {
+            return { error: 'Email not found or access denied' }
+        }
+
+        return { 
+            success: true, 
+            data: result[0] 
+        }
+    } catch (error) {
+        console.error('Error marking email as read:', error)
+        return { error: 'Failed to mark email as read' }
     }
 }
 

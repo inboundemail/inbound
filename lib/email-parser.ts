@@ -1,5 +1,122 @@
 import { simpleParser, ParsedMail, Attachment } from 'mailparser'
 
+// Types for the parsed email data structure
+interface ParsedEmailAddress {
+  text: string
+  addresses: Array<{
+    name: string | null
+    address: string | null
+  }>
+}
+
+interface ParsedEmailData {
+  messageId: string | undefined
+  date: Date | undefined
+  subject: string | undefined
+  from: ParsedEmailAddress | null
+  to: ParsedEmailAddress | null
+  cc: ParsedEmailAddress | null
+  bcc: ParsedEmailAddress | null
+  replyTo: ParsedEmailAddress | null
+  inReplyTo: string | undefined
+  references: string[] | undefined
+  textBody: string | undefined
+  htmlBody: string | undefined
+  raw: string
+  attachments: Array<{
+    filename: string | undefined
+    contentType: string | undefined
+    size: number | undefined
+    contentId: string | undefined
+    contentDisposition: string | undefined
+  }>
+  headers: Record<string, any>
+  priority: string | false | undefined
+}
+
+export async function parseEmail(emailContent: string): Promise<ParsedEmailData> {
+  try {
+    // Parse the email
+    const parsed = await simpleParser(emailContent);
+    
+    // Helper function to extract address info
+    const extractAddressInfo = (addressObj: any): ParsedEmailAddress | null => {
+      if (!addressObj) return null;
+      
+      if (Array.isArray(addressObj)) {
+        return {
+          text: addressObj.map(addr => addr.text || `${addr.name || ''} <${addr.address || ''}>`).join(', '),
+          addresses: addressObj.map(addr => ({
+            name: addr.name || null,
+            address: addr.address || null
+          }))
+        };
+      } else if (addressObj.value && Array.isArray(addressObj.value)) {
+        // Handle AddressObject with value array
+        return {
+          text: addressObj.text,
+          addresses: addressObj.value.map((addr: any) => ({
+            name: addr.name || null,
+            address: addr.address || null
+          }))
+        };
+      } else if (addressObj.value) {
+        // Handle AddressObject with single value
+        return {
+          text: addressObj.text,
+          addresses: [{
+            name: addressObj.value.name || null,
+            address: addressObj.value.address || null
+          }]
+        };
+      } else {
+        // Handle direct address object
+        return {
+          text: addressObj.text || `${addressObj.name || ''} <${addressObj.address || ''}>`,
+          addresses: [{
+            name: addressObj.name || null,
+            address: addressObj.address || null
+          }]
+        };
+      }
+    };
+    
+    // Extract key information
+    const emailData: ParsedEmailData = {
+      messageId: parsed.messageId,
+      date: parsed.date,
+      subject: parsed.subject,
+      from: extractAddressInfo(parsed.from),
+      to: extractAddressInfo(parsed.to),
+      cc: extractAddressInfo(parsed.cc),
+      bcc: extractAddressInfo(parsed.bcc),
+      replyTo: extractAddressInfo(parsed.replyTo),
+      inReplyTo: parsed.inReplyTo,
+      references: Array.isArray(parsed.references) ? parsed.references : parsed.references ? [parsed.references] : undefined,
+      textBody: parsed.text,
+      htmlBody: parsed.html || undefined,
+      raw: emailContent,
+      attachments: parsed.attachments?.map(att => ({
+        filename: att.filename,
+        contentType: att.contentType,
+        size: att.size,
+        contentId: att.contentId,
+        contentDisposition: att.contentDisposition
+      })) || [],
+      headers: Object.fromEntries(parsed.headers),
+      priority: parsed.priority
+    };
+    
+    // Return the full parsed data for programmatic use
+    return emailData;
+    
+  } catch (error) {
+    console.error('Error parsing email:', error);
+    throw error;
+  }
+}
+
+// Legacy interface for backward compatibility
 interface ParsedEmail {
   headers: Record<string, string>
   htmlBody: string | null
@@ -206,4 +323,7 @@ export function formatEmailAddress(email: string): { name: string; address: stri
     name: '',
     address: email.trim()
   }
-} 
+}
+
+// Export the ParsedEmailData type for use in other files
+export type { ParsedEmailData, ParsedEmailAddress } 

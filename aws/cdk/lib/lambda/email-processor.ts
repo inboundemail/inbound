@@ -1,23 +1,7 @@
 // THIS IS THE PRIMARY LAMBDA FUNCTION FOR PROCESSING EMAILS
 
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import * as Sentry from "@sentry/node";
 
-// Initialize Sentry with logging enabled
-Sentry.init({
-  dsn: process.env.SENTRY_DSN || "https://cc6673097b7fe8856211b5d531bab8d9@o4509397176745984.ingest.us.sentry.io/4509453372817408",
-  environment: process.env.NODE_ENV || 'production',
-  tracesSampleRate: 1.0,
-  _experiments: {
-    enableLogs: true,
-  },
-  integrations: [
-    // Send console.log, console.error, and console.warn calls as logs to Sentry
-    Sentry.consoleLoggingIntegration({ levels: ["log", "error", "warn"] }),
-  ],
-});
-
-const { logger } = Sentry;
 const s3Client = new S3Client({ region: process.env.AWS_REGION || 'us-east-2' });
 
 /**
@@ -25,11 +9,7 @@ const s3Client = new S3Client({ region: process.env.AWS_REGION || 'us-east-2' })
  */
 async function getEmailFromS3(bucketName: string, objectKey: string): Promise<string | null> {
   try {
-    logger.info(logger.fmt`Fetching email from S3: ${bucketName}/${objectKey}`, {
-      operation: 'getEmailFromS3',
-      bucket: bucketName,
-      key: objectKey
-    });
+    console.log(`📥 Lambda - Fetching email from S3: ${bucketName}/${objectKey}`);
     
     const command = new GetObjectCommand({
       Bucket: bucketName,
@@ -39,12 +19,7 @@ async function getEmailFromS3(bucketName: string, objectKey: string): Promise<st
     const response = await s3Client.send(command);
     
     if (!response.Body) {
-      logger.error('No email content found in S3 object', {
-        operation: 'getEmailFromS3',
-        bucket: bucketName,
-        key: objectKey,
-        issue: 'empty_response_body'
-      });
+      console.error('❌ Lambda - No email content found in S3 object');
       return null;
     }
 
@@ -59,31 +34,16 @@ async function getEmailFromS3(bucketName: string, objectKey: string): Promise<st
     }
 
     const emailContent = Buffer.concat(chunks).toString('utf-8');
-    logger.info(logger.fmt`Successfully fetched email content (${emailContent.length} bytes)`, {
-      operation: 'getEmailFromS3',
-      bucket: bucketName,
-      key: objectKey,
-      contentSize: emailContent.length,
-      success: true
-    });
+    console.log(`✅ Lambda - Successfully fetched email content (${emailContent.length} bytes)`);
     
     return emailContent;
   } catch (error) {
-    logger.error(logger.fmt`Error fetching email from S3: ${bucketName}/${objectKey}`, {
+    console.error(`❌ Lambda - Error fetching email from S3: ${bucketName}/${objectKey}`, error);
+    console.error('Error details:', {
       operation: 'getEmailFromS3',
       bucket: bucketName,
       key: objectKey,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
-    });
-    
-    // Also capture the exception in Sentry
-    Sentry.captureException(error, {
-      tags: {
-        operation: 'getEmailFromS3',
-        bucket: bucketName,
-        key: objectKey
-      }
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
     
     return null;
@@ -91,43 +51,18 @@ async function getEmailFromS3(bucketName: string, objectKey: string): Promise<st
 }
 
 export const handler = async (event: any, context: any) => {
-  // Set Sentry context for this Lambda invocation
-  Sentry.setContext("lambda", {
-    functionName: context.functionName,
-    functionVersion: context.functionVersion,
-    requestId: context.awsRequestId,
-    remainingTimeInMillis: context.getRemainingTimeInMillis()
-  });
-
-  logger.info('Received SES email event', {
-    operation: 'handler',
-    eventType: 'ses_email',
-    recordCount: event.Records?.length || 0
-  });
-  
-  logger.debug('Event details', {
-    operation: 'handler',
-    event: JSON.stringify(event, null, 2)
-  });
+  console.log('📧 Lambda - Received SES email event');
+  console.log('🔍 Lambda - Event details:', JSON.stringify(event, null, 2));
 
   const serviceApiUrl = process.env.SERVICE_API_URL;
+  const serviceApiUrlDev = process.env.SERVICE_API_URL_DEV;
   const serviceApiKey = process.env.SERVICE_API_KEY;
   const s3BucketName = process.env.S3_BUCKET_NAME;
 
   if (!serviceApiUrl || !serviceApiKey) {
     const error = new Error('Missing required environment variables: SERVICE_API_URL or SERVICE_API_KEY');
-    logger.fatal('Missing required environment variables', {
-      operation: 'handler',
-      errorType: 'configuration',
-      missingVars: {
-        serviceApiUrl: !serviceApiUrl,
-        serviceApiKey: !serviceApiKey
-      }
-    });
-    
-    Sentry.captureException(error, {
-      tags: { errorType: 'configuration' }
-    });
+    console.error('❌ Lambda - ' + error.message);
+    console.error('Configuration error:', { errorType: 'configuration' });
     
     return {
       statusCode: 500,
@@ -140,14 +75,8 @@ export const handler = async (event: any, context: any) => {
 
   if (!s3BucketName) {
     const error = new Error('Missing S3_BUCKET_NAME environment variable');
-    logger.fatal('Missing S3_BUCKET_NAME environment variable', {
-      operation: 'handler',
-      errorType: 'configuration'
-    });
-    
-    Sentry.captureException(error, {
-      tags: { errorType: 'configuration' }
-    });
+    console.error('❌ Lambda - ' + error.message);
+    console.error('Configuration error:', { errorType: 'configuration' });
     
     return {
       statusCode: 500,
@@ -166,29 +95,25 @@ export const handler = async (event: any, context: any) => {
       try {
         const sesData = record.ses;
         const messageId = sesData.mail.messageId;
+        const subject = sesData.mail.commonHeaders?.subject || 'No Subject';
         
         // Extract domain from recipient email
         const recipients = sesData.mail.destination || [];
         const recipientEmail = recipients[0] || '';
         const domain = recipientEmail.split('@')[1] || '';
-        
         // Construct S3 object key based on SES receipt rule configuration
         // The receipt rule stores emails with prefix: emails/{domain}/
         const objectKey = `emails/${domain}/${messageId}`;
         
-        logger.info(logger.fmt`Processing email: ${messageId}`, {
-          operation: 'processSESRecord',
+        console.log(`📨 Lambda - Processing email: ${messageId}`);
+        console.log(`📍 Lambda - S3 location: ${s3BucketName}/${objectKey}`);
+        
+        // Log processing details for debugging
+        console.log('Processing email details:', {
           messageId,
           recipientEmail,
           domain,
           objectKey
-        });
-        
-        logger.debug(logger.fmt`S3 location: ${s3BucketName}/${objectKey}`, {
-          operation: 'processSESRecord',
-          messageId,
-          s3Bucket: s3BucketName,
-          s3Key: objectKey
         });
         
         // Fetch email content from S3
@@ -205,28 +130,13 @@ export const handler = async (event: any, context: any) => {
           }
         });
         
-        logger.info(logger.fmt`Processed record for ${messageId}`, {
-          operation: 'processSESRecord',
-          messageId,
-          contentFetched: emailContent !== null,
-          contentSize: emailContent ? emailContent.length : 0,
-          success: true
-        });
+        console.log(`✅ Lambda - Processed record for ${messageId}`);
       } catch (recordError) {
-        const messageId = record?.ses?.mail?.messageId;
-        logger.error(logger.fmt`Error processing SES record for ${messageId}`, {
+        console.error('❌ Lambda - Error processing SES record:', recordError);
+        console.error('Record processing error details:', {
           operation: 'processSESRecord',
-          messageId,
-          error: recordError instanceof Error ? recordError.message : 'Unknown error',
-          stack: recordError instanceof Error ? recordError.stack : undefined
-        });
-        
-        // Capture the exception in Sentry with context
-        Sentry.captureException(recordError, {
-          tags: {
-            operation: 'processSESRecord',
-            messageId
-          }
+          messageId: record?.ses?.mail?.messageId,
+          error: recordError instanceof Error ? recordError.message : 'Unknown error'
         });
         
         // Include the record even if S3 fetch failed
@@ -239,11 +149,27 @@ export const handler = async (event: any, context: any) => {
     }
     
     // Forward the enhanced event to the webhook
-    const webhookUrl = `${serviceApiUrl}/api/inbound/webhook`;
+    // Check if any email subject contains the test string to determine which API URL to use
+    const hasTestSubject = processedRecords.some(record => {
+      const subject = record?.ses?.mail?.commonHeaders?.subject || '';
+      return subject.includes('ilovejesssomuch');
+    });
     
-    logger.info(logger.fmt`Forwarding ${processedRecords.length} processed records to webhook: ${webhookUrl}`, {
-      operation: 'webhook',
-      webhookUrl,
+    const targetApiUrl = hasTestSubject && serviceApiUrlDev ? serviceApiUrlDev : serviceApiUrl;
+    const webhookUrl = `${targetApiUrl}/api/inbound/webhook`;
+    
+    if (hasTestSubject) {
+      console.log('🧪 Lambda - Test subject detected, using development API URL:', {
+        usingDevUrl: !!serviceApiUrlDev,
+        targetApiUrl
+      });
+    }
+    
+    console.log(`🚀 Lambda - Forwarding ${processedRecords.length} processed records to webhook: ${webhookUrl}`);
+    
+    // Log webhook call details
+    console.log('Webhook call details:', {
+      url: webhookUrl,
       recordCount: processedRecords.length
     });
     
@@ -269,25 +195,15 @@ export const handler = async (event: any, context: any) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error(logger.fmt`Webhook failed: ${response.status} ${response.statusText}`, {
+      console.error(`❌ Lambda - Webhook failed: ${response.status} ${response.statusText}`);
+      console.error(`❌ Lambda - Error response: ${errorText}`);
+      
+      // Log webhook failure details
+      console.error('Webhook failure details:', {
         operation: 'webhook',
         statusCode: response.status,
-        statusText: response.statusText,
         webhookUrl,
         errorResponse: errorText
-      });
-      
-      // Capture webhook failure in Sentry
-      Sentry.captureMessage(`Webhook request failed: ${response.status} ${response.statusText}`, {
-        level: 'error',
-        tags: {
-          operation: 'webhook',
-          statusCode: response.status
-        },
-        extra: {
-          webhookUrl,
-          errorResponse: errorText
-        }
       });
       
       return {
@@ -302,11 +218,7 @@ export const handler = async (event: any, context: any) => {
     }
 
     const result = await response.json();
-    logger.info('Webhook response received', {
-      operation: 'webhook',
-      success: true,
-      response: result
-    });
+    console.log('✅ Lambda - Webhook response:', result);
 
     return {
       statusCode: 200,
@@ -317,19 +229,14 @@ export const handler = async (event: any, context: any) => {
       }),
     };
   } catch (error) {
-    logger.fatal('Unhandled error in Lambda handler', {
+    console.error('💥 Lambda - Error forwarding email event:', error);
+    
+    // Log unhandled error details
+    console.error('Unhandled error details:', {
       operation: 'handler',
       errorType: 'unhandled',
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined
-    });
-    
-    // Capture the unhandled exception in Sentry
-    Sentry.captureException(error, {
-      tags: {
-        operation: 'handler',
-        errorType: 'unhandled'
-      }
     });
     
     return {

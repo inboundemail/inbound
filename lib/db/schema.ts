@@ -110,17 +110,104 @@ export const receivedEmails = pgTable('received_emails', {
   id: varchar('id', { length: 255 }).primaryKey(),
   sesEventId: varchar('ses_event_id', { length: 255 }).notNull(), // Reference to sesEvents table
   messageId: varchar('message_id', { length: 255 }).notNull(),
+  
+  // Basic email fields
   from: varchar('from', { length: 255 }).notNull(),
   to: text('to').notNull(), // JSON string for multiple recipients
   recipient: varchar('recipient', { length: 255 }).notNull(), // Specific recipient for this record
   subject: text('subject'),
+  
+  // Parsed email data from parseEmail function
+  fromParsed: text('from_parsed'), // JSON: { text: string, addresses: Array<{name: string|null, address: string|null}> }
+  toParsed: text('to_parsed'), // JSON: same structure as fromParsed
+  ccParsed: text('cc_parsed'), // JSON: same structure as fromParsed
+  bccParsed: text('bcc_parsed'), // JSON: same structure as fromParsed
+  replyToParsed: text('reply_to_parsed'), // JSON: same structure as fromParsed
+  
+  // Email content
+  textBody: text('text_body'), // Plain text body
+  htmlBody: text('html_body'), // HTML body
+  rawEmailContent: text('raw_email_content'), // Full raw email content
+  
+  // Email metadata
+  inReplyTo: varchar('in_reply_to', { length: 255 }), // Message ID this is replying to
+  references: text('references'), // JSON array of referenced message IDs
+  priority: varchar('priority', { length: 50 }), // Email priority
+  
+  // Attachments and headers
+  attachments: text('attachments'), // JSON array of attachment metadata
+  headers: text('headers'), // JSON object of all email headers
+  
+  // Timestamps
+  emailDate: timestamp('email_date'), // Date from email headers
   receivedAt: timestamp('received_at').notNull(),
   processedAt: timestamp('processed_at'),
+  
+  // Status and tracking
   status: varchar('status', { length: 50 }).notNull(), // 'received', 'processing', 'forwarded', 'failed'
   isRead: boolean('is_read').default(false), // Track read/unread status
   readAt: timestamp('read_at'), // When the email was marked as read
+  
+  // Legacy metadata field for backward compatibility
   metadata: text('metadata'), // JSON string
+  
   userId: varchar('user_id', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Parsed Emails table - stores structured parsed email data with individual columns
+export const parsedEmails = pgTable('parsed_emails', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  emailId: varchar('email_id', { length: 255 }).notNull(), // Reference to receivedEmails table
+  messageId: varchar('message_id', { length: 255 }), // Parsed message ID from email headers
+  
+  // Email addresses - storing as text for the full address info, and separate columns for quick queries
+  fromText: text('from_text'), // Full "Name <email@domain.com>" format
+  fromAddress: varchar('from_address', { length: 255 }), // Just the email address for indexing
+  fromName: varchar('from_name', { length: 255 }), // Just the display name
+  
+  toText: text('to_text'), // Full to addresses text
+  toAddresses: text('to_addresses'), // JSON array of {name, address} objects
+  
+  ccText: text('cc_text'), // Full CC addresses text  
+  ccAddresses: text('cc_addresses'), // JSON array of {name, address} objects
+  
+  bccText: text('bcc_text'), // Full BCC addresses text
+  bccAddresses: text('bcc_addresses'), // JSON array of {name, address} objects
+  
+  replyToText: text('reply_to_text'), // Full reply-to text
+  replyToAddresses: text('reply_to_addresses'), // JSON array of {name, address} objects
+  
+  // Email content
+  subject: text('subject'), // Parsed subject
+  textBody: text('text_body'), // Plain text body
+  htmlBody: text('html_body'), // HTML body
+  
+  // Email threading and references
+  inReplyTo: varchar('in_reply_to', { length: 255 }), // Message ID this is replying to
+  references: text('references'), // JSON array of referenced message IDs
+  
+  // Email metadata
+  priority: varchar('priority', { length: 50 }), // Email priority (high, normal, low)
+  emailDate: timestamp('email_date'), // Date from email headers
+  
+  // Attachments and headers
+  attachments: text('attachments'), // JSON array of attachment metadata
+  attachmentCount: integer('attachment_count').default(0), // Quick count for queries
+  hasAttachments: boolean('has_attachments').default(false), // Quick boolean for queries
+  
+  headers: text('headers'), // JSON object of all email headers
+  
+  // Content flags for quick queries
+  hasTextBody: boolean('has_text_body').default(false),
+  hasHtmlBody: boolean('has_html_body').default(false),
+  
+  // Parsing metadata
+  parseSuccess: boolean('parse_success').default(true), // Whether parsing was successful
+  parseError: text('parse_error'), // Any parsing errors encountered
+  
+  // Timestamps
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -181,6 +268,8 @@ export type SesEvent = typeof sesEvents.$inferSelect;
 export type NewSesEvent = typeof sesEvents.$inferInsert;
 export type ReceivedEmail = typeof receivedEmails.$inferSelect;
 export type NewReceivedEmail = typeof receivedEmails.$inferInsert;
+export type ParsedEmail = typeof parsedEmails.$inferSelect;
+export type NewParsedEmail = typeof parsedEmails.$inferInsert;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 export type NewWebhookDelivery = typeof webhookDeliveries.$inferInsert;
 export type DomainDnsRecord = typeof domainDnsRecords.$inferSelect;
