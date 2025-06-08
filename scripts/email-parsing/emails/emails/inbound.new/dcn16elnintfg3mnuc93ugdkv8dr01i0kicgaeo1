@@ -1,0 +1,88 @@
+Return-Path: <ryan@mandarin3d.com>
+Received: from mail-ej1-f52.google.com (mail-ej1-f52.google.com [209.85.218.52])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id dcn16elnintfg3mnuc93ugdkv8dr01i0kicgaeo1
+ for ryan@inbound.new;
+ Wed, 04 Jun 2025 06:08:13 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of mandarin3d.com designates 209.85.218.52 as permitted sender) client-ip=209.85.218.52; envelope-from=ryan@mandarin3d.com; helo=mail-ej1-f52.google.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of mandarin3d.com designates 209.85.218.52 as permitted sender) client-ip=209.85.218.52; envelope-from=ryan@mandarin3d.com; helo=mail-ej1-f52.google.com;
+ dkim=pass header.i=@mandarin3d-com.20230601.gappssmtp.com;
+ dmarc=pass header.from=mandarin3d.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFGcTM3VFF4eEo4aGJYVzNhc3BUMi83SkhDK3hvQTA3YVdjRXgrMjhmNlAyVHpOSG1ma3h0TEp3eXlwMi9KVms3UU5FNkFVbUwxTnV0WkJaZ3BXWFRDT3hEaWM0QU5tK1FVc1lLcVJRWXgrVnhaeWJIWUJDdHA3QWJNWTlWUGJZUklwc1dtdkdUMWJvUEV0cEtXOVhHTU80a0U2NlBMd1NZK0FUYlFmTm8yQ09ZdkVGbWtQdXhCc1lnN0owOUJGZDRpenh4QjgydHZZUVBCL29jVDh3YkV6M1lrRkNSY0ZJZ05aM2VIK2pNcFFUQitoSDhPTW1FNW1NUEpYQlNvajhra1RzYys3RWRGZ244cktoQmoyK0UwaXRGMmZrOUc2blRUTjBRU3I0M3d1UVE9PQ==
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=gnPJxZk3bqLhfDh/Pl2CxiZBRTK6Pw6Ddm82P57vzV/z3RoVpW41Y+huV63+TllCwwFCpno4pq52eab6Cqam65kor+3OljunNz779STL849kSqr53Z7oulqoj7Rx8wNAoyrtVl5p3Vm/IINYJyBQvLAEZMwsx0o6KgS7R53cARY=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1749017294; v=1; bh=TmotWCa5ctPFBRiH9b4hvUfyskzbuxNW9tsHfh6vC6s=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+Received: by mail-ej1-f52.google.com with SMTP id a640c23a62f3a-adb2e9fd208so1097991566b.3
+        for <ryan@inbound.new>; Tue, 03 Jun 2025 23:08:13 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=mandarin3d-com.20230601.gappssmtp.com; s=20230601; t=1749017292; x=1749622092; darn=inbound.new;
+        h=to:subject:message-id:date:from:mime-version:from:to:cc:subject
+         :date:message-id:reply-to;
+        bh=UQlmJuU0dnfJ008YxabyoAiFtB7WLp/E2OjpMvzmBFU=;
+        b=OAoKsysa2mxO5QdHf6Oiw4zef2kpGpO1DfKu0ZpdI6ZIlERnYONMMlr9NBKKfS0Kw3
+         xaaa7a7zSd9JgeVmk+2lqM/6rNLOEtqkwkpqKUdh9Uwh2AaIcT1663IPc/qX7e8lHHQp
+         lQigHfr8AUDAkmHtCjyyrx8WitmyNPQr1zSB9ZzkkRleUvJNIjyYkt+yBhXHats+1MpO
+         QOELpF9V850iqmFfugR3Lfx9dP4RAMGBifFIdxmV1dqEcMnuFu7Ox69xDQ5iqP2cPso9
+         zzEFv0uYaovlK33/cfLv1DQR/fzt94yjse38A2T2Xw4IvTLZwl50y0DxyjUfFB/oVs2d
+         wFyA==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1749017292; x=1749622092;
+        h=to:subject:message-id:date:from:mime-version:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=UQlmJuU0dnfJ008YxabyoAiFtB7WLp/E2OjpMvzmBFU=;
+        b=R99S6y6J6U5nkw4EZdAHpG7ByH04YH3q86DTNtLzt+wclIkCcvyvFV8vjWlf/EtpU0
+         aQ0H8+VJRmp7Duoq2hfvwhZTtFW/XGvisEgc5Zyr9bQCLJgzSGrDEAg9Q5fMF8kPCO5P
+         vgMQJ4aY9YZSYPHgZtg7Fi+Zikd37olAaZmhvoICf6KBhyNtaha89VQsdpOvNaoKZddo
+         nPqYpgVbeI9Q2eR//jZtfAz/Syl308vuOdwy6hKRAHepm0BZGT4HMv88Qh/6bv4z+PUL
+         mGWYMyU0UHDXQEqK4smWbe8aBQSJDWUxBKXhI4/I67hWhRiPl7KqwgomM3m9THt7ynIR
+         ZekA==
+X-Gm-Message-State: AOJu0Ywc4PnHZShFHcob3zTpYRMbxMR8ppXPFj0egHwLNK9z7UjGrU9g
+	lUKSeABPUf12R9e98CcxxQYYwswDxT4hQACQL/5qfRfqvM86Tdv9szgyMQYPtsZXsXGgzROpXKb
+	fp31YRCSJ39gvzOxmSboanffxUiJcCSzd8lFN8IFOH1WN/RJWNE3Ee8U=
+X-Gm-Gg: ASbGnctEx+TDZGSTXEqNvsbmM3G6yJTfklP3vpKjAhGjc3oVYH9/kW23doMy3vfpTaN
+	O+TC+uEY5m3VnIc0+GjT+kOQksbx//8ZhY6Jq6TB7Z9DauLpj1JG26rGmpUn6axJamhcVfWMWFG
+	fu7fhPqL6IlIrIk6MslwUcQ4iUOm9GMtD8mik2XR7M+ONCPo39E1mTlB8=
+X-Google-Smtp-Source: AGHT+IGWs00R9n1aDXpupSoRY82OuoYD4FUuOsQaeXJn0X82VtJvllBwJfEQ6J5mzNhNccWY6oyu9fOEKtzbPv+tTLU=
+X-Received: by 2002:a17:906:6a16:b0:ad5:7bc4:84be with SMTP id
+ a640c23a62f3a-addf8fb2600mr100852966b.52.1749014016191; Tue, 03 Jun 2025
+ 22:13:36 -0700 (PDT)
+MIME-Version: 1.0
+From: Ryan Vogel <ryan@mandarin3d.com>
+Date: Tue, 3 Jun 2025 22:13:23 -0700
+X-Gm-Features: AX0GCFt1Xu6poX33K-aq46Y3IdVwVF0BtwJ_dhHbb6sZCj7IPFM2Y5nHbI6CvsQ
+Message-ID: <CA+_yP7bfFjv4-vehzat3-70OaKTO8XdWCKdr_OGW6xQ3QOP_5A@mail.gmail.com>
+Subject: test email
+To: ryan@inbound.new
+Content-Type: multipart/alternative; boundary="000000000000247f8f0636b80fa2"
+
+--000000000000247f8f0636b80fa2
+Content-Type: text/plain; charset="UTF-8"
+
+-- 
+
+*Ryan Vogel*
+
+*Exon Enterprises*
+
+--000000000000247f8f0636b80fa2
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"ltr"><div><br clear=3D"all"></div><div><br></div><span class=3D=
+"gmail_signature_prefix">-- </span><br><div dir=3D"ltr" class=3D"gmail_sign=
+ature" data-smartmail=3D"gmail_signature"><div dir=3D"ltr"><table border=3D=
+"0" cellspacing=3D"0" cellpadding=3D"0" style=3D"border-collapse:collapse;b=
+order:none"><tbody><tr><td width=3D"126" colspan=3D"2" valign=3D"top" style=
+=3D"width:94.25pt;padding:0in 5.4pt"><p class=3D"MsoNormal" align=3D"right"=
+ style=3D"margin:0in;font-size:12pt;text-align:right"><font face=3D"tahoma,=
+ sans-serif"><img width=3D"96" height=3D"96" src=3D"https://ci3.googleuserc=
+ontent.com/mail-sig/AIorK4xmXLdMVbVKMaTOTiY-MiQH9bmAQw8USV8K0oBbBUR94PuIQnG=
+NpOwm5vHxOPIH8RsrZYM3C--pGFxN"></font></p></td><td width=3D"498" valign=3D"=
+top" style=3D"width:373.25pt;padding:0in 5.4pt"><p class=3D"MsoNormal" styl=
+e=3D"margin:0in;font-size:12pt"><span style=3D"font-size:28pt"><font face=
+=3D"tahoma, sans-serif"><b>Ryan Vogel</b></font></span></p><p class=3D"MsoN=
+ormal" style=3D"margin:0in;font-size:12pt"><font face=3D"tahoma, sans-serif=
+"><b>Exon Enterprises</b></font></p></td></tr><tr height=3D"0"><td width=3D=
+"42" style=3D"border:none"></td><td width=3D"84" style=3D"border:none"></td=
+><td width=3D"498" style=3D"border:none"></td></tr></tbody></table></div></=
+div></div>
+
+--000000000000247f8f0636b80fa2--

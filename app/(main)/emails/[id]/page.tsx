@@ -50,6 +50,7 @@ import {
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
+import { Webhook } from '@/features/webhooks/types'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
 import {
     Select,
@@ -82,14 +83,7 @@ interface EmailAddress {
     emailsLast24h: number
 }
 
-interface Webhook {
-    id: string
-    name: string
-    url: string
-    isActive: boolean
-    description?: string
-    createdAt: string
-}
+
 
 interface DomainDetails {
     domain: {

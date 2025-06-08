@@ -1,0 +1,129 @@
+Return-Path: <zno.rocha@gmail.com>
+Received: from mail-oi1-f172.google.com (mail-oi1-f172.google.com [209.85.167.172])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id acpqdv6pkr8h34tdvif778sn5b5m1bh43q2hi9o1
+ for test@primary.mandarin3d.com;
+ Thu, 05 Jun 2025 18:01:19 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of _spf.google.com designates 209.85.167.172 as permitted sender) client-ip=209.85.167.172; envelope-from=zno.rocha@gmail.com; helo=mail-oi1-f172.google.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of _spf.google.com designates 209.85.167.172 as permitted sender) client-ip=209.85.167.172; envelope-from=zno.rocha@gmail.com; helo=mail-oi1-f172.google.com;
+ dkim=pass header.i=@gmail.com;
+ dmarc=pass header.from=gmail.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFGTnZ0cDZ3aHY1bkMzTlg4MkRRb1hzZk0ySFRNNWRDQkJUNFI4V3JpQk45b1FQZkNPeS9LdUEzWkpzNFBFZ0syMnM2a3YycnBUQ2E1V3ExVzNwbUpVdHhVdSsydVdQbmRxZkkrQWNJcGJhemtZTjFTMGtmL3E1UlFzcTZic1R2VENRQ3JQWjVUZk9CZVhBS29GbzJYdkhBWlVQM3ZOWWJxcjEzSG1LckFlTFRlMVp0TXNkTXdnWE5iaVk3R2VCTWtNR2JYMXl5WFhRT1BTK2o3YUlSNWM5ZjVVMUJad1VyODNuZ2taQXZEWUFXV0laZGpBNzA3RjQ2dUw5V2dJdnd1eUpTNU1NMkJ5bitTRTRFSmRQWXhDQjFxWlpWZGFmcmxoZzVYcTBudVhFSnc9PQ==
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=clVII3xkKC71Vodc28g/Yg6RQUi6SyQMeYATJXDZ+GmJhgwXRqD6UPr6sBXw/3rNYFQs2NabxnWzhc7sF/4i4lfyUFfX5ju4dqflVIO1MQom4OWep9xWpypZXFo5nG6YOI5KYgvnf/rlWuKVWj61KRnuWRHh4rxyl+WKJjSoLxE=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1749146479; v=1; bh=1LnBDXyIhy7igpkavSk5cZSRznfEotfXacUMuiVWGXM=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+Received: by mail-oi1-f172.google.com with SMTP id 5614622812f47-40677f3b919so351350b6e.1
+        for <test@primary.mandarin3d.com>; Thu, 05 Jun 2025 11:01:19 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1749146478; x=1749751278; darn=primary.mandarin3d.com;
+        h=from:to:message-id:date:subject:mime-version:from:to:cc:subject
+         :date:message-id:reply-to;
+        bh=jumYmmktvOzr5qHRlpePzNL7TgYnDjctifAddNOF2OM=;
+        b=T4xkaSRY9RZQUX9pfvSwFXcYk/4j8ixicEkcehgyJz0CqvgxbtLqtY4fjRGa5No9q0
+         Bp+U7xFNzW0I2ME1I6IHAQ4BFfz5tnV3Ez4dPVUoYgKRrZOcMBzzbsIqw1S+ub1BjES3
+         BTFTVgiBdKDr/RkIqPj1/ztrYPgNp4c3a0qg82dLpXzDvSqJHUn5bh4405p7jn4a/TJR
+         5EYy3xqaU8fBgej9z1fpx/POc8aTV+Zv86XpMW+WPerWzNgWfqEPU7/2ChI+Q3usNgxn
+         iY7CpF3gajbWhlXEP7qyEL80Zrj6019sstrPeMESmnlL+hwlud7W/1CwvekyGW3ttZJS
+         +IVA==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1749146478; x=1749751278;
+        h=from:to:message-id:date:subject:mime-version:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=jumYmmktvOzr5qHRlpePzNL7TgYnDjctifAddNOF2OM=;
+        b=JAqHBk1sGJKoVP6SqSp0ya5wNFVBWkpm6DaYJLIBfe/o5WH5It5pzVukdXHwnSGgG1
+         R5sQqly+r8NDCkqQseZj0VAZ9qkkng43rKdZ8dSzTMV1tWxFhJ3uIe90SM3JiRQ6WeTU
+         /n0bcFIfpoaq/EFfgtBy4yFXV15lIjPmfUn2Bmw50nCoE7j8PEFyArwDkBSJN83Ibztk
+         bSCxdNTbJ6AuPNpz78mzc88V53wlCYgW+N3o+cnT0yIPx2d7hfUIiP7Jqx+nejN3p19R
+         /ZuCBSpgB2n+K5wQ+3gV9XlpcIgPeTnsZIwt6DnmiI3BjFPAvmCIfG84L/16uNR9aIx5
+         NFlg==
+X-Gm-Message-State: AOJu0YxPWPZARQl8HVf6Lx148HcAF1dtGJ1RCz7Vq4bS6RFfNxhbPZ4z
+	GWw5WNac1P+APNHgq3luFkJNLjY4AkroONvLv9UhGcuBkpRUvQANqp7wNqDY4gmm
+X-Gm-Gg: ASbGncsTDXg/RWp3OU2dPSxKhte9b5afVrPUQG2TRg+IQyUk6IcAcwwJySLUDbwNXLo
+	76KfP9AFwRR+bWzjJ2HPnqRM/CVyfegou1P+Ccxy4a6J2PCJTyMoN/l4KrI0MMDxUS8Onkkymtj
+	Gk6vJrTTakgwdtC8en07a1updKorJTbf9UOPenZ63Sp6Wvoolr2BC782Ps1UHmveC44smtYRd09
+	5/jdLTZ1QpcXuLfHvu+Doxp3BHX0Jo8vfZ8h2LUYkef5ptGJl9zTbseHguO421hoY5l2+l9pBUe
+	8RDiai989GS3P10PSHniKiu7g7Hy+x50a7BznuBJJx3MUZr62OBlr/dMKyB64z386fTvJrp8AI8
+	kp7kqQP8=
+X-Google-Smtp-Source: AGHT+IEZG0HbNNpQqxJ189pJFYcWltZndTYZ3HZsl5fxO+h6SG5ZrLQ/NLZ4CaaAT/Sy4Fx84ZLT4g==
+X-Received: by 2002:a05:6102:510a:b0:4e5:a398:b6fa with SMTP id ada2fe7eead31-4e7728ce45bmr407638137.3.1749146464195;
+        Thu, 05 Jun 2025 11:01:04 -0700 (PDT)
+Return-Path: <zno.rocha@gmail.com>
+Received: from localhost (0.92.231.35.bc.googleusercontent.com. [35.231.92.0])
+        by smtp.gmail.com with UTF8SMTPSA id ada2fe7eead31-4e64449b9a6sm11845724137.16.2025.06.05.11.01.03
+        for <test@primary.mandarin3d.com>
+        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+        Thu, 05 Jun 2025 11:01:03 -0700 (PDT)
+Mime-Version: 1.0
+X-Superhuman-Draft-ID: draft0000214cde5562a4
+X-Superhuman-Thread-ID: draft0041edc07fce7db0
+Subject: let's go!
+X-Mailer: Superhuman Desktop (2025-06-04T19:05:56Z)
+X-Superhuman-ID: mbjomo3j.9a2cdc81-7459-4142-8c04-956220a8c96c
+Date: Thu, 05 Jun 2025 18:01:02 +0000
+Message-ID: <mbjomlsd.b3a48c13-bdc3-46ed-8c2c-6f4d7ac4c977@we.are.superhuman.com>
+To: test@primary.mandarin3d.com
+X-Entity-Ref-ID: mbjomo3j.9a2cdc81-7459-4142-8c04-956220a8c96c
+From: "Zeno Rocha" <zno.rocha@gmail.com>
+Content-Type: multipart/alternative;
+ boundary=2a5074597f84e85a8e431853eb91bf1dabd9c4f773cbbfd067aa173fb422
+
+--2a5074597f84e85a8e431853eb91bf1dabd9c4f773cbbfd067aa173fb422
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset=UTF-8
+
+
+--2a5074597f84e85a8e431853eb91bf1dabd9c4f773cbbfd067aa173fb422
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/html; charset=UTF-8
+
+<html><head></head><body><div><div><div class=3D""><br/></div></div><div><d=
+iv style=3D"display: none; border: 0px; width: 0px; height: 0px; overflow: =
+hidden; visibility: hidden;"><img src=3D"https://r.superhuman.com/NmigaTBJA=
+7r2rO6YMY1rIhiLhG2ZYyJJWTPQiWvhrmHQfQ7JfBdzeBqw5Z00eXjz2OJH3KN3hi_Agu_W8Adh=
+6VX-SOIJ3B_UYvoEIMJQB2Hnbf9f-D-qvGIJIJkF3qkhjXz3HEzMGvT7VpsfKYmTqDL2-6s5vxc=
+qMskSSoqe_oNqvbyNRcdEAfuDsRp-6ys.gif" alt=3D" " width=3D"1" height=3D"0" st=
+yle=3D"display: none; border: 0px; width: 0px; height: 0px; overflow: hidde=
+n; visibility: hidden;"/><!--                                              =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+    --></div><br/><div class=3D"gmail_signature"></div></div></div></body><=
+/html>
+--2a5074597f84e85a8e431853eb91bf1dabd9c4f773cbbfd067aa173fb422--

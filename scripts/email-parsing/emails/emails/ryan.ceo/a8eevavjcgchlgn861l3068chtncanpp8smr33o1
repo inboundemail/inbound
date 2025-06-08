@@ -1,0 +1,67 @@
+Return-Path: <kalyanvedantham721@gmail.com>
+Received: from mail-qv1-f52.google.com (mail-qv1-f52.google.com [209.85.219.52])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id a8eevavjcgchlgn861l3068chtncanpp8smr33o1
+ for livetwittertest@ryan.ceo;
+ Wed, 28 May 2025 06:56:16 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of _spf.google.com designates 209.85.219.52 as permitted sender) client-ip=209.85.219.52; envelope-from=kalyanvedantham721@gmail.com; helo=mail-qv1-f52.google.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of _spf.google.com designates 209.85.219.52 as permitted sender) client-ip=209.85.219.52; envelope-from=kalyanvedantham721@gmail.com; helo=mail-qv1-f52.google.com;
+ dkim=pass header.i=@gmail.com;
+ dmarc=pass header.from=gmail.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFHUTBHWDFVazgzYURhakFzYTExcDZwblQyeEUreEx1Z3NBbUdpSGdGK0VBUmtrV2JiRmtJMTJxWmVNOGU3N0hmbFBPaVFWZW5rRktqTm94emppUXhjekpDTW8vd0l4Nkt0UzdyOUFtY3VtczFWaTdHSlZYMVlOazFpdWk5WlZJSDc0QlkzZmVxM1hsWGZMN2N6TmxBN1NoUnZDRVRzbWhNM0tHUjl4R3FTajl2M3hOdVFMcjZ2WU9OT3JOMEdSSitkZi9YOWwxYUtmTkdCbklMUVRnYTljbStkR2JhUjVzK3o1NXFadjYxcDBOV0ZoNk5KRTNLZUFlSm9xRmo2VVJYcVpIdnlUOFE1RWF4UHI5ajlDZHNOa0d3RHhJeUZCNWlycU5HZDhlUWR5WkVwbHR4dVozU0NzVXZXOXFKbFlxamc9
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=nsZ/kOrQbgINuRzXDYqa1qv/+ayT5pAsUu8mecvJbZE8ijw39pdrGxwCdsuXWZLUf2o57e+XIL+INWcb7jMvXKKR+BxgTF8nWK3jc5jZfylK/IuqxtxCvhP4h+SECpaJoCkLrJaaTM7P+cmM12+3jcXUl9KVuZ5yPrsWlV8dSmI=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1748415377; v=1; bh=rXAe0zdfjalRQP9KffInfotPSI1TOXKmoHDsHpP+bMQ=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+Received: by mail-qv1-f52.google.com with SMTP id 6a1803df08f44-6fab5a9a892so15511416d6.0
+        for <livetwittertest@ryan.ceo>; Tue, 27 May 2025 23:56:16 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1748415376; x=1749020176; darn=ryan.ceo;
+        h=to:subject:message-id:date:from:mime-version:from:to:cc:subject
+         :date:message-id:reply-to;
+        bh=rXAe0zdfjalRQP9KffInfotPSI1TOXKmoHDsHpP+bMQ=;
+        b=De9j+WAEev4RVQOKBJCbdbzgqsxqHL8fJcA+uvE7OkByPljeU7BIreU0b5zU8MMuDP
+         G8BSBnMUalSLZWp7t93SPSvf35xBRAWZeAiMJ75028ycZa4xkorVZCVq7Ybyu1OBG3tS
+         0lF09PyKVGZhd1sZAc2CYSkfxpNH/bvrx72pIuBFvGgha9qh30dfLop0OXG8h370TxiL
+         o/xo0qWdeT4PE7KFYw01wUl+6osvKZrY7l1HwJU7/Yab6TSjSwCBBA78TGCjWWxkw9bp
+         rVTDyd/o1pjdf0bcEAcOtC8NHBDKJ21YObnjkI7uupnI9OMUlLfDre5HWGqaGMXo8cGU
+         OJQw==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1748415376; x=1749020176;
+        h=to:subject:message-id:date:from:mime-version:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=rXAe0zdfjalRQP9KffInfotPSI1TOXKmoHDsHpP+bMQ=;
+        b=Waa5LzsVbxnHRgCs5zb+mcdlGL6iYL/uXzq2JQqgCkxtc2IvxRlzz934k8KoMc4r9U
+         7th8NPSS7a5uaL3xZWu/GwMLRLMLDv6+UCbGuPT6dU4w5cCMIBkbiiv17jd9yrLYz03H
+         2/zF4pRQWG/ER2lmRqiB1cm5BZsEpn444Rq4ArkVZoctdAhwxJcooEGsfkGW3/9eKItj
+         FCedS1pSdxFd7A7EnB3eG0WeQhDDYg30jyAiaHjlRnz7EKDmJvBEQCfPOsONcKW4krU8
+         QDO87uEbl0w8WVmARQcss5QahsVMIdbVHa2uR7r1JMVtEjubLFBliMB/j19yyBOZJB3g
+         DsKg==
+X-Gm-Message-State: AOJu0YyMMfl/Sq1ndQ3L4IX+cSbIeVJx9NeUSeD7QnZkwYVt+/UXKyZZ
+	mevHIJANJxLLNHsji1rMsymrmVMVB0Jdp2wrAuF8BVhw1+0QGqbpQNSeGOxmKe8RNJKFCo3clDZ
+	U4EVuLOI9SveQe3BoRJ5JXTf2t3dDomoNGQ==
+X-Gm-Gg: ASbGncuZWlIaUlvWFN4H7KBl3uzchP6F16TQKeefT7mLKgFAMFU0u90QOGhTU0erRKY
+	F6t0VMoiOMdHP+CcLdKMFEfhxnIwawkwT3zR6+bT5top13qFsAQ/zKMNiujmtA73kE//m7LQLU/
+	D6Y7OFwHpKJkSudZP2m876IHxE3jwVSoN5uJPgOjd4FJrXLcarsBkykWZNr8ZRHWvzZkbXM2LOl
+	67JWQ==
+X-Google-Smtp-Source: AGHT+IE3dzYNZVSp5ioizyNHJjlQXiIk/KEc/RJWfhZ0NdBzXEcm52MEMgidHgtOPUcMt53aTaojJERWHLeISxuUzcI=
+X-Received: by 2002:a05:6214:c27:b0:6fa:980d:528 with SMTP id
+ 6a1803df08f44-6fa9d15983dmr267471036d6.23.1748415375998; Tue, 27 May 2025
+ 23:56:15 -0700 (PDT)
+MIME-Version: 1.0
+From: Kalyan Vedantham <kalyanvedantham721@gmail.com>
+Date: Wed, 28 May 2025 12:26:04 +0530
+X-Gm-Features: AX0GCFuOngkrfWScOxpAIoyCDTD6vW1AuNYyIIbgMSAzhdBB8CxQjHCBY3_jiSw
+Message-ID: <CAEbC_JhxX3fabphL4JG=0SCGkwmXo5AZ4vfAguASuh9u2LUEGg@mail.gmail.com>
+Subject: 
+To: livetwittertest@ryan.ceo
+Content-Type: multipart/alternative; boundary="0000000000006804ae06362cad2d"
+
+--0000000000006804ae06362cad2d
+Content-Type: text/plain; charset="UTF-8"
+
+test from comet.
+
+--0000000000006804ae06362cad2d
+Content-Type: text/html; charset="UTF-8"
+
+<div dir="auto">test from comet.</div>
+
+--0000000000006804ae06362cad2d--

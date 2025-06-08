@@ -1,0 +1,698 @@
+Return-Path: <01000197387a5f0d-cff72550-74c8-4f01-b11c-30e04a66b9ed-000000@send.0.email>
+Received: from a9-112.smtp-out.amazonses.com (a9-112.smtp-out.amazonses.com [54.240.9.112])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id jrp8cn71fr85eo2mteel52splp7u8kv2idvu7n81
+ for submit@cursorfor.ai;
+ Wed, 04 Jun 2025 01:07:13 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of send.0.email designates 54.240.9.112 as permitted sender) client-ip=54.240.9.112; envelope-from=01000197387a5f0d-cff72550-74c8-4f01-b11c-30e04a66b9ed-000000@send.0.email; helo=a9-112.smtp-out.amazonses.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of send.0.email designates 54.240.9.112 as permitted sender) client-ip=54.240.9.112; envelope-from=01000197387a5f0d-cff72550-74c8-4f01-b11c-30e04a66b9ed-000000@send.0.email; helo=a9-112.smtp-out.amazonses.com;
+ dkim=pass header.i=@amazonses.com;
+ dkim=pass header.i=@0.email;
+ dmarc=pass header.from=0.email;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFIdmxjM0JDdm1VNURnZDVsRWFNSERXSVYvZFBRTG5nd0xmZU83MWN1cmpOL1FKMTJKMGFIaXhPUURnbmlFMHg1K0dPMDBWRE94b3dVTXJaOWhxY1ljMXNXQjRYOXhVa3lxS1FsTEJnZTR0M0FhOG9WSjUwVVpFSU1LajJ5a1dYbkxObXBmdlpORTRLZDhFelBIaDVsQzZzOEJrTzFvRmhLMjF4NCtndldIMHljRVNJYWFqRWpVWGpqMjZHUjNCNkdmWkxmbzZiYkgzSUZjUnlXd09Ob1h4Y0FYbk55Qzk2OW5UL2QrUy9JN1hLWEFtWDIrTlpkWHkxdTc1VHBFb25OQmNmaFk4azEwM1JJWWxlSERVNTdPRnN2R1A0S2VvdmRneDlMazV0ZkU0ekNYeW1hUFlYcnRoSHA2bWFuRkIxTzgzSS8vUy9PaVR6OS9XUkRMNStDNmFwZnArNWhFck9EVmNRcFRqQmVEY0ljZloyMGg4NzdINzBZZFVxRHNSQ05zPQ==
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=6k2ivllBWzbliQ9qM+z/hK9GBgst9J693dM+++kUSNHpGIGxqm2SvjY2MJWDKS19rnvqjwbD1JkFV6sFVQMszSCo7hVuTYbeJmLJiORFEEpQuvDczDoqHlXo2l9V3ttartIULqOJEsRPLNrDTpgdafV3cBt+XoErw/lgySfW28I=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1748999234; v=1; bh=LjB6UuFTQHjBdpAhCMOoP46Rh1FDWC2e4dKX698nFQA=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple; s=resend;
+	d=0.email; t=1748999233;
+	h=List-Unsubscribe:List-Unsubscribe-Post:From:To:Subject:Message-ID:Date:MIME-Version:Content-Type;
+	bh=LjB6UuFTQHjBdpAhCMOoP46Rh1FDWC2e4dKX698nFQA=;
+	b=VTA5PqBEiYYusO5cbmlNcCpGz72yvGIrKZzKUJS8MSs6ttzCrJ8ChCAd8YX9jGmg
+	CKOmOCIoIUVLprGydVyP6vMUhIOSBPRUpZ3w1R5582/cR2QX0KOLcC+HXNZHYm925Ke
+	ibq3I+8WqioB2TNcCNcVWAVZ8noD4TFB9C978yc0=
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple;
+	s=6gbrjpgwjskckoa6a5zn6fwqkn67xbtw; d=amazonses.com; t=1748999233;
+	h=List-Unsubscribe:List-Unsubscribe-Post:From:To:Subject:Message-ID:Date:MIME-Version:Content-Type:Feedback-ID;
+	bh=LjB6UuFTQHjBdpAhCMOoP46Rh1FDWC2e4dKX698nFQA=;
+	b=ZtcckB5YnyMjtc/DxJ9sbFv8lmRQjn4U+10GvWRTj5bvatc9WVtrDABFyb8O6uvx
+	Y190gMpjUqNjZLjoRmzLwtbhoj1qYv1rRTzM7XAi80oeNX6j/rFp0j0CbsK4/bvMxlt
+	UUqUgSC+788vncyuLl188wKb6GYvdhuD9Jb4d9CM=
+List-Unsubscribe: <https://unsubscribe.resend.com>
+X-Entity-Ref-ID: e1ac4468-fb15-4570-a166-b783688add44
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+From: Twitter <twitter@0.email>
+To: submit@cursorfor.ai
+Subject: [TEST] Twitter Password Change
+Message-ID: <01000197387a5f0d-cff72550-74c8-4f01-b11c-30e04a66b9ed-000000@email.amazonses.com>
+Date: Wed, 4 Jun 2025 01:07:13 +0000
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="--_NmP-691a79bdd0dfc861-Part_1"
+Feedback-ID: ::1.us-east-1.pAEstvQcjyhQNKGKcgSlzI7SVR8ZSG5wSmKwiz/A8Dg=:AmazonSES
+X-SES-Outgoing: 2025.06.04-54.240.9.112
+
+----_NmP-691a79bdd0dfc861-Part_1
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Change your X password - Security request
+=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF=C2=A0=E2=80=8C =
+=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF
+
+
+X
+
+Password change request
+
+
+CHANGE YOUR PASSWORD
+
+Hi @nizabizaher,
+
+We received a request to change =
+your X password. If you made this request, click
+the button below to set a =
+new password for your account.
+
+Change Password https://x.=
+com/account/password/reset
+
+This link will expire in 24 hours for your =
+security.
+
+
+REQUEST DETAILS
+
+Date: June 3, 2025
+
+Time: 5:34 AM PST
+
+IP Address: 192.168.1.1
+
+Location: San Francisco, CA
+
+Didn't request this change?
+
+If you didn't request a password change, =
+someone else might be trying to access
+your account. Please secure your =
+account immediately and ignore this email.
+
+Secure My Account https://x.=
+com/account/security
+
+
+PASSWORD SECURITY TIPS
+
+=E2=80=A2 Use a strong =
+password with at least 8 characters
+
+=E2=80=A2 Include uppercase, lowercase=
+, numbers, and symbols
+
+=E2=80=A2 Don't reuse passwords from other accounts
+
+=E2=80=A2 Consider using a password manager
+
+-----------------------------=
+---------------------------------------------------
+
+This email was sent to nizabizaher@gmail.com
+
+If you have questions, visit =
+our Help Center https://help.x.com
+
+X Corp. =E2=80=A2 1355 Market Street, =
+Suite 900 =E2=80=A2 San Francisco, CA 94103
+
+=C2=A9 2025 X Corp. All rights=
+ reserved.
+
+
+----_NmP-691a79bdd0dfc861-Part_1
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html dir=3D"ltr" lang=3D"en">
+  <head>
+    <meta content=3D"width=3Ddevice-width" name=3D"viewport" />
+    <meta content=3D"text/html; charset=3DUTF-8" http-equiv=3D"Content-Type=
+" />
+    <meta name=3D"x-apple-disable-message-reformatting" />
+    <meta content=3D"IE=3Dedge" http-equiv=3D"X-UA-Compatible" />
+    <meta name=3D"x-apple-disable-message-reformatting" />
+    <meta
+      content=3D"telephone=3Dno,address=3Dno,email=3Dno,date=3Dno,url=3Dno"
+      name=3D"format-detection" />
+    <meta content=3D"light" name=3D"color-scheme" />
+    <meta content=3D"light dark" name=3D"supported-color-schemes" />
+  </head>
+  <body
+    style=3D"font-family:-apple-system, BlinkMacSystemFont, &#x27;Segoe UI&=
+#x27;, &#x27;Roboto&#x27;, &#x27;Oxygen&#x27;, &#x27;Ubuntu&#x27;, &#x27;Ca=
+ntarell&#x27;, &#x27;Fira Sans&#x27;, &#x27;Droid Sans&#x27;, &#x27;Helveti=
+ca Neue&#x27;, sans-serif;font-size:1.0769230769230769em;min-height:100%;li=
+ne-height:155%">
+    <!--$-->
+    <table
+      align=3D"center"
+      width=3D"100%"
+      border=3D"0"
+      cellpadding=3D"0"
+      cellspacing=3D"0"
+      role=3D"presentation"
+      style=3D"align:center;padding-left:0px;padding-right:0px;h-padding:0p=
+x;width:auto;max-width:600px;font-family:-apple-system, BlinkMacSystemFont,=
+ &#x27;Segoe UI&#x27;, &#x27;Roboto&#x27;, &#x27;Oxygen&#x27;, &#x27;Ubuntu=
+&#x27;, &#x27;Cantarell&#x27;, &#x27;Fira Sans&#x27;, &#x27;Droid Sans&#x27=
+;, &#x27;Helvetica Neue&#x27;, sans-serif">
+      <tbody>
+        <tr>
+          <td>
+            <div>
+              <div
+                style=3D"display:none;overflow:hidden;line-height:1px;opaci=
+ty:0;max-height:0;max-width:0">
+                Change your X password - Security request
+                <div>
+                  &nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=
+=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=
+=BF&nbsp;=E2=80=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=
+=8C=E2=80=8B=E2=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF&nbsp;=E2=80=8C=E2=80=8B=E2=
+=80=8D=E2=80=8E=E2=80=8F=EF=BB=BF
+                </div>
+              </div>
+              <table
+                style=3D"background-color:rgb(17,24,39);border-radius:8px;p=
+adding-left:32px;padding-right:32px;padding-top:40px;padding-bottom:40px;ma=
+rgin-left:auto;margin-right:auto;max-width:600px"
+                role=3D"presentation"
+                cellspacing=3D"0"
+                cellpadding=3D"0"
+                border=3D"0"
+                width=3D"100%"
+                align=3D"center">
+                <tbody>
+                  <tr style=3D"width:100%">
+                    <td>
+                      <table
+                        style=3D"text-align:center;margin-bottom:32px"
+                        role=3D"presentation"
+                        cellspacing=3D"0"
+                        cellpadding=3D"0"
+                        border=3D"0"
+                        width=3D"100%"
+                        align=3D"center">
+                        <tbody>
+                          <tr>
+                            <td>
+                              <img
+                                width=3D"48"
+                                style=3D"margin-left:auto;margin-right:auto=
+;margin-bottom:16px;display:block;outline:none;border:none;text-decoration:=
+none"
+                                src=3D"https://upload.wikimedia.org/wikiped=
+ia/commons/thumb/b/b7/X_logo.jpg/500px-X_logo.jpg"
+                                height=3D"48"
+                                alt=3D"X Logo" />
+                              <h1
+                                style=3D"font-size:32px;font-weight:700;col=
+or:rgb(255,255,255);margin:0px;margin-bottom:8px">
+                                X
+                              </h1>
+                              <p
+                                style=3D"font-size:16px;color:rgb(156,163,1=
+75);margin:0px;line-height:24px;margin-bottom:0px;margin-top:0px;margin-lef=
+t:0px;margin-right:0px">
+                                Password change request
+                              </p>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <table
+                        style=3D"margin-bottom:32px"
+                        role=3D"presentation"
+                        cellspacing=3D"0"
+                        cellpadding=3D"0"
+                        border=3D"0"
+                        width=3D"100%"
+                        align=3D"center">
+                        <tbody>
+                          <tr>
+                            <td>
+                              <h1
+                                style=3D"font-size:24px;font-weight:700;col=
+or:rgb(255,255,255);margin-bottom:16px;margin-top:0px">
+                                Change Your Password
+                              </h1>
+                              <p
+                                style=3D"font-size:16px;color:rgb(229,231,2=
+35);margin-bottom:16px;margin-top:0px;line-height:24px">
+                                Hi @nizabizaher,
+                              </p>
+                              <p
+                                style=3D"font-size:16px;color:rgb(229,231,2=
+35);margin-bottom:24px;margin-top:0px;line-height:24px">
+                                We received a request to change your X pass=
+word.
+                                If you made this request, click the button =
+below
+                                to set a new password for your account.
+                              </p>
+                              <table
+                                style=3D"text-align:center;margin-bottom:32=
+px"
+                                role=3D"presentation"
+                                cellspacing=3D"0"
+                                cellpadding=3D"0"
+                                border=3D"0"
+                                width=3D"100%"
+                                align=3D"center">
+                                <tbody>
+                                  <tr>
+                                    <td>
+                                      <a
+                                        style=3D"background-color:rgb(255,2=
+55,255);color:rgb(0,0,0);padding-left:32px;padding-right:32px;padding-top:1=
+6px;padding-bottom:16px;border-radius:24px;font-size:16px;font-weight:700;t=
+ext-decoration-line:none;box-sizing:border-box;line-height:100%;text-decora=
+tion:none;display:inline-block;max-width:100%;mso-padding-alt:0px;padding:1=
+6px 32px 16px 32px"
+                                        class=3D"hover:bg-gray-200"
+                                        href=3D"https://1878db310c20002cfa8=
+83b7f9765f466.us-east-1.resend-links.com/CL0/https:%2F%2Fx.com%2Faccount%2F=
+password%2Freset/1/01000197387a5f0d-cff72550-74c8-4f01-b11c-30e04a66b9ed-00=
+0000/ZzeiPmaMpQoA8Khq_Z7yXD5Bc5p2Tx915XmgnpYo620=3D408"
+                                        ><span></span
+                                        ><span
+                                          style=3D"max-width:100%;display:i=
+nline-block;line-height:120%;mso-padding-alt:0px;mso-text-raise:12px"
+                                          >Change Password</span
+                                        ><span></span
+                                      ></a>
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                              <p
+                                style=3D"font-size:14px;color:rgb(156,163,1=
+75);margin-bottom:16px;margin-top:0px;line-height:20px;text-align:center">
+                                This link will expire in 24 hours for your
+                                security.
+                              </p>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <table
+                        style=3D"background-color:rgb(31,41,55);border-radi=
+us:8px;padding:24px;margin-bottom:32px"
+                        role=3D"presentation"
+                        cellspacing=3D"0"
+                        cellpadding=3D"0"
+                        border=3D"0"
+                        width=3D"100%"
+                        align=3D"center">
+                        <tbody>
+                          <tr>
+                            <td>
+                              <h1
+                                style=3D"font-size:18px;font-weight:700;col=
+or:rgb(255,255,255);margin-bottom:16px;margin-top:0px">
+                                Request Details
+                              </h1>
+                              <p
+                                style=3D"font-size:14px;color:rgb(209,213,2=
+19);margin-bottom:8px;margin-top:0px;line-height:24px">
+                                <strong>Date:</strong>
+                                June 3, 2025
+                              </p>
+                              <p
+                                style=3D"font-size:14px;color:rgb(209,213,2=
+19);margin-bottom:8px;margin-top:0px;line-height:24px">
+                                <strong>Time:</strong>
+                                5:34 AM PST
+                              </p>
+                              <p
+                                style=3D"font-size:14px;color:rgb(209,213,2=
+19);margin-bottom:8px;margin-top:0px;line-height:24px">
+                                <strong>IP Address:</strong>
+                                192.168.1.1
+                              </p>
+                              <p
+                                style=3D"font-size:14px;color:rgb(209,213,2=
+19);margin-bottom:0px;margin-top:0px;line-height:24px">
+                                <strong>Location:</strong>
+                                San Francisco, CA
+                              </p>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <table
+                        style=3D"background-color:rgb(127,29,29);border-lef=
+t-width:4px;border-color:rgb(239,68,68);padding:20px;margin-bottom:32px"
+                        role=3D"presentation"
+                        cellspacing=3D"0"
+                        cellpadding=3D"0"
+                        border=3D"0"
+                        width=3D"100%"
+                        align=3D"center">
+                        <tbody>
+                          <tr>
+                            <td>
+                              <p
+                                style=3D"font-size:16px;color:rgb(254,202,2=
+02);margin-bottom:12px;margin-top:0px;font-weight:600;line-height:24px">
+                                Didn't request this change?
+                              </p>
+                              <p
+                                style=3D"font-size:14px;color:rgb(252,165,1=
+65);margin-bottom:16px;margin-top:0px;line-height:20px">
+                                If you didn't request a password change, so=
+meone
+                                else might be trying to access your account=
+.
+                                Please secure your account immediately and
+                                ignore this email.
+                              </p>
+                              <a
+                                style=3D"background-color:rgb(220,38,38);co=
+lor:rgb(255,255,255);padding-left:24px;padding-right:24px;padding-top:12px;=
+padding-bottom:12px;border-radius:6px;font-size:14px;font-weight:600;text-d=
+ecoration-line:none;box-sizing:border-box;line-height:100%;text-decoration:=
+none;display:inline-block;max-width:100%;mso-padding-alt:0px;padding:12px 2=
+4px 12px 24px"
+                                class=3D"hover:bg-red-700"
+                                href=3D"https://1878db310c20002cfa883b7f976=
+5f466.us-east-1.resend-links.com/CL0/https:%2F%2Fx.com%2Faccount%2Fsecurity=
+/1/01000197387a5f0d-cff72550-74c8-4f01-b11c-30e04a66b9ed-000000/Aqg_IWduxWF=
+ffkbho-cH21LEv_0J4bZHttc3X4N-RMA=3D408"
+                                ><span></span
+                                ><span
+                                  style=3D"max-width:100%;display:inline-bl=
+ock;line-height:120%;mso-padding-alt:0px;mso-text-raise:9px"
+                                  >Secure My Account</span
+                                ><span></span
+                              ></a>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <table
+                        style=3D"margin-bottom:32px"
+                        role=3D"presentation"
+                        cellspacing=3D"0"
+                        cellpadding=3D"0"
+                        border=3D"0"
+                        width=3D"100%"
+                        align=3D"center">
+                        <tbody>
+                          <tr>
+                            <td>
+                              <h1
+                                style=3D"font-size:18px;font-weight:700;col=
+or:rgb(255,255,255);margin-bottom:16px;margin-top:0px">
+                                Password Security Tips
+                              </h1>
+                              <p
+                                style=3D"font-size:14px;color:rgb(209,213,2=
+19);margin-bottom:12px;margin-top:0px;line-height:20px">
+                                =E2=80=A2 Use a strong password with at lea=
+st 8
+                                characters
+                              </p>
+                              <p
+                                style=3D"font-size:14px;color:rgb(209,213,2=
+19);margin-bottom:12px;margin-top:0px;line-height:20px">
+                                =E2=80=A2 Include uppercase, lowercase, num=
+bers, and
+                                symbols
+                              </p>
+                              <p
+                                style=3D"font-size:14px;color:rgb(209,213,2=
+19);margin-bottom:12px;margin-top:0px;line-height:20px">
+                                =E2=80=A2 Don't reuse passwords from other =
+accounts
+                              </p>
+                              <p
+                                style=3D"font-size:14px;color:rgb(209,213,2=
+19);margin-bottom:0px;margin-top:0px;line-height:20px">
+                                =E2=80=A2 Consider using a password manager
+                              </p>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <hr
+                        style=3D"border-color:rgb(55,65,81);margin-top:32px=
+;margin-bottom:32px;width:100%;border:none;border-top:1px solid #eaeaea" />
+                      <table
+                        style=3D"text-align:center"
+                        role=3D"presentation"
+                        cellspacing=3D"0"
+                        cellpadding=3D"0"
+                        border=3D"0"
+                        width=3D"100%"
+                        align=3D"center">
+                        <tbody>
+                          <tr>
+                            <td>
+                              <p
+                                style=3D"font-size:12px;color:rgb(156,163,1=
+75);margin-bottom:8px;margin-top:0px;line-height:24px">
+                                This email was sent to nizabizaher@gmail.co=
+m
+                              </p>
+                              <p
+                                style=3D"font-size:12px;color:rgb(156,163,1=
+75);margin-bottom:16px;margin-top:0px;line-height:24px">
+                                If you have questions, visit our
+                                <a
+                                  style=3D"color:rgb(96,165,250);text-decor=
+ation-line:none"
+                                  href=3D"https://1878db310c20002cfa883b7f9=
+765f466.us-east-1.resend-links.com/CL0/https:%2F%2Fhelp.x.com/1/01000197387=
+a5f0d-cff72550-74c8-4f01-b11c-30e04a66b9ed-000000/6ssr6oPJLBd-IfAuJjBlRlmks=
+mgRB7dHKKbniV6xtsw=3D408"
+                                  >Help Center</a
+                                >
+                              </p>
+                              <p
+                                style=3D"font-size:12px;color:rgb(107,114,1=
+28);margin:0px;line-height:24px;margin-bottom:0px;margin-top:0px;margin-lef=
+t:0px;margin-right:0px">
+                                X Corp. =E2=80=A2 1355 Market Street, Suite=
+ 900 =E2=80=A2 San
+                                Francisco, CA 94103
+                              </p>
+                              <p
+                                style=3D"font-size:12px;color:rgb(107,114,1=
+28);margin:0px;margin-top:0px;line-height:24px;margin-bottom:0px;margin-lef=
+t:0px;margin-right:0px">
+                                =C2=A9 2025 X Corp. All rights reserved.
+                              </p>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p
+              class=3D""
+              style=3D"margin:0;padding:0;font-size:1em;padding-top:0.5em;p=
+adding-bottom:0.5em;text-align:left"></p>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <!--7--><!--/$-->
+  </body>
+</html>
+
+----_NmP-691a79bdd0dfc861-Part_1--

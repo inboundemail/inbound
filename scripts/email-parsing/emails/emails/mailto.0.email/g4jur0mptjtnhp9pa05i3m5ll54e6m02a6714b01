@@ -1,0 +1,84 @@
+Return-Path: <ab0udamd@gmail.com>
+Received: from mail-yb1-f171.google.com (mail-yb1-f171.google.com [209.85.219.171])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id g4jur0mptjtnhp9pa05i3m5ll54e6m02a6714b01
+ for adam@mailto.0.email;
+ Tue, 03 Jun 2025 06:53:44 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of _spf.google.com designates 209.85.219.171 as permitted sender) client-ip=209.85.219.171; envelope-from=ab0udamd@gmail.com; helo=mail-yb1-f171.google.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of _spf.google.com designates 209.85.219.171 as permitted sender) client-ip=209.85.219.171; envelope-from=ab0udamd@gmail.com; helo=mail-yb1-f171.google.com;
+ dkim=pass header.i=@gmail.com;
+ dmarc=pass header.from=gmail.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFIYlNQUGF6SHRRYmNZS1RrVTAycEluQlpiQnd4cGppaGVENWJ0VGUzUmtXWjI0SWNaRGtpK1VMSkZmMk1PYjQyaHI5WkFhZWRzYVVwTFlndUREYkdrWUpIQUg4Q2NWT2VVWmF5eEFUTnRzRlNENVpqUTlvS3dKaXFQdUhPQ0VjOE12MWw4T2pMSXlIT0hzTHF1dzA2Rks2NjM4MTNBUFJqNmRyUnB2c3FKN1FNNmt0dWJsTHZQQmI3MlFZUzJQelVmNlFLWHVFTzRlN29VVTNBNzY1Ym0ydjAxUWsrZW04UTFCZnI1aW5nYStVb2VkUm1mcER6K241eVNsVGhPUnJ5TzhYOUJpa2dCQ2dlR1UrQnhkdHpKblBoRWpFQzlVU21uWjhDSC81UDZmWlE9PQ==
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=ixkueF7d9fjds0diVSVVJKVsV2+gq6SS/k4zmDGpsuGfaUq8UpAWC4PRl2SemskZRV6N2FZBLVmYLKeIUNXOP5Nbkn2PLjy0CnesbwvLmE/d8l58dBPgURFsC6eF8llJO4WrP4hOKHYx5UFyQzj8gZxf2JsbOSzp1EQOuHnqBqU=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1748933624; v=1; bh=+s5UbC3wwv0/9yH6TROjqw8QKGiSSQqACu8dk4ANLTU=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+Received: by mail-yb1-f171.google.com with SMTP id 3f1490d57ef6-e7c5d4709caso5097645276.1
+        for <adam@mailto.0.email>; Mon, 02 Jun 2025 23:53:44 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1748933624; x=1749538424; darn=mailto.0.email;
+        h=to:subject:message-id:date:mime-version:from:from:to:cc:subject
+         :date:message-id:reply-to;
+        bh=viMn7hfZ3nPTgiH3ZWtKvh0/ehtdvWUBMykEyK02Dc8=;
+        b=UC/i7BdKJRsASlJLx3rL5sjDvabqy0YBNmFHuryjQrbKwZYUqmxOHmO1ABatfTpWPk
+         eeXmq2bO/Ey0A1zd9eOT22zjrll+c+CJmKJgpsQbW/N1XqaVEM+CUvWG822XNArLjSs1
+         LNI3EL7IFrt9A18S47nE5rQpUdw6VyPKlGs9mjpB50hLFn9cnI5D8B9csjm064Jwf3RN
+         XbSPUoFMmJXjfxLCXIWUDI5A6qrJ1AeOUKEWL6291e+DHII4bL717s4OrFX1Cwvb9J2o
+         BBodWXvD5Mg+wGRalcnt8XdGWQ7rHt5SYR42NnkuRWfbB1iBzpDbuGMrWnhU9ZbFQyEk
+         LrOw==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1748933624; x=1749538424;
+        h=to:subject:message-id:date:mime-version:from:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=viMn7hfZ3nPTgiH3ZWtKvh0/ehtdvWUBMykEyK02Dc8=;
+        b=MbroJPzhmfCBRJHEiciG+5rb7tYUWe8EgGcWmcgV6Wf7xky3ug8VFnSAunyJGkV5iw
+         7VLrs0Or92ahMxnci/7ZRF8LsWVdVgi3lliJMN0l+/WK5kEcNAwswrQdp2OJdcmuDMbS
+         9Gruakfo+sxKbCIvdShgg+swWycXS8atZ1wAA/wDInXLeUaHm2qI0KtL5Gw0XbJ7BDqh
+         V7aRwcwYVphGm1bcOWDdUlo+bFN8XPFiv/WMXDUnAdPeFznfqDvEL7FlYIGwAQ4uS00x
+         WYpvWypETzC1FFJRfgYW/sLcPnv5c0a8oQc/BykM+dk26Fs1P4dmUt0bHPeKRK+dyb4y
+         nbmg==
+X-Gm-Message-State: AOJu0YxG/S8ScFg7+ZeL+4e39STHiDT/3RPUjA16vKo0Y7CSE4h6+grT
+	PSOTS01Ka9SnilkengM+gzd0Pnd/hZaDM63xeaomoMtImuBj8ED/wOwa58dWSwUzzm9f6vp6vq2
+	o7hl2r46p0qvLEqfKL0N1Mz5b2G7Z2JuqgA==
+X-Gm-Gg: ASbGnct0lWlloNWtTg9h6UT++0Fy6Iascu5khqxPl1GQaolyoc9qjKb4KS04TjjXpDz
+	uj7iC03Cj3GsZ+z+dYD97F/RG2c3jOGYcSOnbuirgC+K6ioWOeslFTo7jqanBT8SBr0a9SEanma
+	5mDF0sJRyuk8Ah+vYgGkabqat/xOugYfcM7n8=
+X-Google-Smtp-Source: AGHT+IGfKIFX0N99UHFa0SwbrLD9R7sGPLPirXTo5UCc6/QtF9rT+haVUHsTilIVdzKUVAtXjY59UT8pc7G95nZ/XbU=
+X-Received: by 2002:a05:6902:c12:b0:e7d:6791:9c1c with SMTP id
+ 3f1490d57ef6-e7fec8d1c00mr18184736276.21.1748933623943; Mon, 02 Jun 2025
+ 23:53:43 -0700 (PDT)
+Received: from 225375202415 named unknown by gmailapi.google.com with
+ HTTPREST; Mon, 2 Jun 2025 23:53:43 -0700
+From: A W <ab0udamd@gmail.com>
+MIME-Version: 1.0
+Date: Mon, 2 Jun 2025 23:53:43 -0700
+X-Gm-Features: AX0GCFvWslvB90VzcXMsNgzROMhZx8GC7_MV1vnh0xtpXv1qOq7M_hx-tbyQSJc
+Message-ID: <CANyvFMK8w9Ug_AaNfr_=TW7M_j7eZNiM2N=0hK7UUS6ZrWF9vg@mail.gmail.com>
+Subject: Follow-Up: Updates on Our Recent Discussion
+To: adam <adam@mailto.0.email>
+Content-Type: multipart/alternative; boundary="0000000000006417660636a557d6"
+
+--0000000000006417660636a557d6
+Content-Type: text/plain; charset="UTF-8"
+
+Hey Adam,
+
+I hope you're doing well!
+
+I wanted to touch base regarding some of the deez stuff we've been
+discussing. Let me know if you have any updates or thoughts on it.
+
+Looking forward to hearing from you!
+
+Best,
+
+A W
+
+--0000000000006417660636a557d6
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html dir=3D"ltr" lang=3D"en"><head></head><div><p>Hey Adam,</p><p></p><p>I=
+ hope you&#39;re doing well!</p><p></p><p>I wanted to touch base regarding =
+some of the deez stuff we&#39;ve been discussing. Let me know if you have a=
+ny updates or thoughts on it.</p><p></p><p>Looking forward to hearing from =
+you!</p><p></p><p>Best,  </p><p>A W</p></div></html>
+
+--0000000000006417660636a557d6--

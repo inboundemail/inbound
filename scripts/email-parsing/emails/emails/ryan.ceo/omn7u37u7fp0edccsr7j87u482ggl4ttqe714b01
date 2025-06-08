@@ -1,0 +1,47 @@
+Return-Path: <siddharthborderwala@icloud.com>
+Received: from outbound.pv.icloud.com (p-west1-cluster2-host8-snip4-8.eps.apple.com [57.103.64.209])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id omn7u37u7fp0edccsr7j87u482ggl4ttqe714b01
+ for livetwittertest@ryan.ceo;
+ Wed, 28 May 2025 12:37:08 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of icloud.com designates 57.103.64.209 as permitted sender) client-ip=57.103.64.209; envelope-from=siddharthborderwala@icloud.com; helo=outbound.pv.icloud.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of icloud.com designates 57.103.64.209 as permitted sender) client-ip=57.103.64.209; envelope-from=siddharthborderwala@icloud.com; helo=outbound.pv.icloud.com;
+ dkim=pass header.i=@icloud.com;
+ dmarc=pass header.from=icloud.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFISkQ5RXcrSVBlZW9RQWx4Mm54RGZpUk1nZ0tETjBPWHkrcWc1dC9PcVdPb3VHa1dmdUlZenBXYWlsMjVnM0xYTUtZbWh2cjhPY3FPTk1ObnAzbGRiaStFZ3hydlB3Sk1EWHk0Mi9CS2c4YWVaYlYvQlVvZzBPb1hwUHA0YzF1MXJ1Znd4dVlJazhla2c2ODk4YmFmQ1AwVTdtYVBmOFBxbmt1WlJOUm1MUUNLQy9nYzRJQU51Q0M0eGJGK2R5ZkY0OHBJdlo3THdWWjFzMHpzNXlLNmp2d3phdlBlT3krTWtkbldnTHdWeldrVE9Gc1pOQm5GaE5rZ0NMNDNEc0JTald3UHpESEdkYTYwS0pVWnB1RnArS01Wb2lVUXZrSWhDSkR5MDZ6L003UzFGT0xSK1MwejhIS2t2RmVBcnNXc1E9
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=Nedz+0AZZsc5cYT951mzawvee+SjGhwCNZH9xBIAwuoqarvMsAn48dL+FBK12on5TsZJCIiOZcb2s/j50+D+uH0tZsnIonUGjG7rrZNpciS7tZHl8mUTaHu2drDQgGMvAOELu3+qRlUBRYOP3FnE6UZM2hjXMCCEc4y8Dmp+MNM=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1748435828; v=1; bh=j6dyGGwd5awBnesCG2lxrRQuovqoEFn6NutUGHYTAYw=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=icloud.com;
+	s=1a1hai; bh=j6dyGGwd5awBnesCG2lxrRQuovqoEFn6NutUGHYTAYw=;
+	h=Content-Type:From:Mime-Version:Date:Subject:Message-Id:To:x-icloud-hme;
+	b=iuvPEe2fFz3U5XekmDhl3/yE+dGwN2ICSnBs1X/+0mwqdAAR7o2Zc72/lyFS/3b1F
+	 nBvtVwod8qB/bahQ3LftayeF1paOBV+F8gJcSjnuxrsAd8yEqr/BV9PqyrZPyS4Y7N
+	 vsqlNwUT6CQ7Z1QuOQtOnApRd3XdTDA7qhuq4UuMD3t9bPzUzlpQvonRFGzIyOyotz
+	 Yp6pw8YeXlUUFl2+TqiH3BeXHX+aje9rmqN8kVVXJQQWcnb+g6AjLyafMgNIvoy+uJ
+	 RNCA1k3NreiA4Com7eXWQ9SmPpPs3PjwG4Qjvm10gFqoe65U6PcFHVfCtBnk5dnpQI
+	 C4iJI3A3bHYig==
+Received: from outbound.pv.icloud.com (localhost [127.0.0.1])
+	by outbound.pv.icloud.com (Postfix) with ESMTPS id 2409F1800D77
+	for <livetwittertest@ryan.ceo>; Wed, 28 May 2025 12:37:04 +0000 (UTC)
+Received: from smtpclient.apple (pv-asmtp-me-k8s.p00.prod.me.com [17.56.9.36])
+	by outbound.pv.icloud.com (Postfix) with ESMTPSA id 81EF51800208
+	for <livetwittertest@ryan.ceo>; Wed, 28 May 2025 12:37:03 +0000 (UTC)
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+From: Siddharth Borderwala <siddharthborderwala@icloud.com>
+Mime-Version: 1.0 (1.0)
+Date: Wed, 28 May 2025 18:06:48 +0530
+Subject: Yoo
+Message-Id: <D2158C35-FF5C-4176-8CB1-74D83C31B38A@icloud.com>
+To: livetwittertest@ryan.ceo
+X-Mailer: iPhone Mail (22D82)
+X-Proofpoint-ORIG-GUID: InWybaU8RlsBvSc2J6NVjHQM54sSf2v5
+X-Proofpoint-GUID: InWybaU8RlsBvSc2J6NVjHQM54sSf2v5
+X-Proofpoint-Virus-Version: vendor=baseguard
+ engine=ICAP:2.0.293,Aquarius:18.0.1099,Hydra:6.0.736,FMLib:17.12.80.40
+ definitions=2025-05-28_06,2025-05-27_01,2025-03-28_01
+X-Proofpoint-Spam-Details: rule=notspam policy=default score=0 phishscore=0
+ spamscore=0 malwarescore=0 suspectscore=0 mlxscore=0 mlxlogscore=587
+ bulkscore=0 adultscore=0 clxscore=1011 classifier=spam adjust=0 reason=mlx
+ scancount=1 engine=8.22.0-2503310001 definitions=main-2505280110
+
+You=E2=80=99re ngmi if you don=E2=80=99t ship!

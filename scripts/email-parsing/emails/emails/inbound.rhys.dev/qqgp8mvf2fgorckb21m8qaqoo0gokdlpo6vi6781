@@ -1,0 +1,66 @@
+Return-Path: <rhys@rhyssullivan.com>
+Received: from mail-wr1-f46.google.com (mail-wr1-f46.google.com [209.85.221.46])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id qqgp8mvf2fgorckb21m8qaqoo0gokdlpo6vi6781
+ for user@inbound.rhys.dev;
+ Tue, 03 Jun 2025 00:50:10 +0000 (UTC)
+Received-SPF: none (spfCheck: 209.85.221.46 is neither permitted nor denied by domain of rhyssullivan.com) client-ip=209.85.221.46; envelope-from=rhys@rhyssullivan.com; helo=mail-wr1-f46.google.com;
+Authentication-Results: amazonses.com;
+ spf=none (spfCheck: 209.85.221.46 is neither permitted nor denied by domain of rhyssullivan.com) client-ip=209.85.221.46; envelope-from=rhys@rhyssullivan.com; helo=mail-wr1-f46.google.com;
+ dkim=pass header.i=@rhyssullivan-com.20230601.gappssmtp.com;
+ dmarc=none header.from=rhyssullivan.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFGMWVUTm9FdHB3QkxrSWhqcUNNVHdLZTRKS1labGc4eDNBMFlOQStvZ21CUG5CeW5aYkllb2FtelI2cDRVUzJWYTRHcTNKWnlNVW5WdUpxQ2d6OGhJdVN2YzF3dFpPakhmbTFSL0tTRm9QVlVVZXAyR281K25LNzFaZkNaem9KbDVvb003UE0xUDVVajljdkgrd2J3WWovWEJOOS9lSGpxYXU2Z0dvU0g5UnBjUHk3MjM3RW1PdGpYVDRTQ2IxVFhmQzVYUXdONHpncHh1MUQxbnBaL2ZOcCszYW5PLzdremt2aExWbDM0ZnZOUFltS0dHNldNY1RUcUtyMmROS1plMXczMWlOUzBKcTF3c0tjWVRKeEtUNWpieUVId2lRVGNmKzZWZ09mcjhzd0E9PQ==
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=MHM3ixJX3WfZHoti7BdjPon7OhD/eaKK7PCazP3KNC1bUhIpZ/FGzZxqq4qUjcVXZXU6niAMl2PyhZr0jdhCno2EHD9ODtNgHK7mHSGelmZ3NkIDlmFVIlHsxIxl6iEzmVIGCujY3fg3CBxrl4L4XNzIUlCTU+wQzGO4P2wruTc=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1748911810; v=1; bh=bkFzUF7cddUyxMspaGijsZrMp/1ImUVpNFooa2ITf6g=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+Received: by mail-wr1-f46.google.com with SMTP id ffacd0b85a97d-3a4ef2c2ef3so4025806f8f.2
+        for <user@inbound.rhys.dev>; Mon, 02 Jun 2025 17:50:10 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=rhyssullivan-com.20230601.gappssmtp.com; s=20230601; t=1748911809; x=1749516609; darn=inbound.rhys.dev;
+        h=to:subject:message-id:date:from:mime-version:from:to:cc:subject
+         :date:message-id:reply-to;
+        bh=bkFzUF7cddUyxMspaGijsZrMp/1ImUVpNFooa2ITf6g=;
+        b=e4FMJxQyqnWBTrPMwxeMiUE99UZ+7LWe624yugX7SltbHO1l+dY2TrO2w5mho0YOEo
+         Az8IPCvqKS+BKypCNFF4kGZAfwvC2Bj/7s2QWrYYYzzCmE2Or4tSg0pnCyjQM4KNtpk2
+         i2C5caP7M2T4dEz//95BGe9dhp+8Pcw/jS/UIdTbth/sLUdtcW17lRjsZfosFVV9os7y
+         6wcqARRAJ/PeyA6V1Ev24TzN8FumB55yGu1auhqH4d2m4EJdrWQ5GU7XjjRAoS4/P0wb
+         HsknW79wQvDHkeYX5BIFWJN41ulf4y34qDUY/k4Mt93TVuHTj6X979heIBA2tA+FPQgU
+         m+Sw==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1748911809; x=1749516609;
+        h=to:subject:message-id:date:from:mime-version:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=bkFzUF7cddUyxMspaGijsZrMp/1ImUVpNFooa2ITf6g=;
+        b=DlWCRZENZRzckG5Jl9nHHaDkHvh3KUM5J/3iHrkvrXFMkC5hDNPvEWqnUndZevh5nl
+         TYbcaqf8aTmUYLtUcE3tLBR6onKilIDnjcINq5yxn4d2KbgrDOw3fj8QBBEaVN0OLeuZ
+         6UAeEcRzA5hBjok6VnYQW7zkI8tbY7MXNquPGRXoEk5qc40Y3SfQH7rvhweQk7f6O1YT
+         4h8X8x44zDkcoUXhifCJflPyg4A1nsSlTpJG5Zs4oDUHioSPVxrfFlIA6WjkkTm54J28
+         iFwNprHpACBoYgbQJcdZyew1rY8Eo4xAdu3bzCLyE3YD9JP9iA+jG8Bt8Wq2u/zt9L3v
+         oe4A==
+X-Gm-Message-State: AOJu0Yy56zgrpNGAJp8lVm0EZdoMNVHT20Qhh8s2yO4B7BKgBEdJW5Pw
+	/FLgI3ziUei01m0hvoInERk3fQldi674rdlGp4L67xQ1p7ruRtDMo6PVPpGFyV1eaX5dPGlRhAc
+	c/mLQzjw+jPa6FqRUYKKbKUuBDp2YfMiCPXwSegB4Ej21/EyhiRladGAzlA==
+X-Gm-Gg: ASbGnctYyW6Z8uZTbj6oCC7/eZ6JsA9KALmLYk8ASxtYIZbjY0aTIJPXnYuyhV7WA3y
+	RbfTW0d7MxqXMKYRbI18V0FNCZ604CEQ8sQSK4w1xipR5DD1CCw7HXrnlhQTGX4UqOaDCKW2wMx
+	eBth+FyAGeowPWYsAzq5jLdDdbEggJkylxNFuEYSNB0Fc+zjvPKF8=
+X-Google-Smtp-Source: AGHT+IG7O2t0LVxQiCGet0WODZaHoWEFrnI18lhq7Ggi8z957axM3+49/nl9sx6igdEDAG46A5fyS5Cl8PqA8nwjhCc=
+X-Received: by 2002:a05:6000:3109:b0:3a1:f8d1:6340 with SMTP id
+ ffacd0b85a97d-3a4fe391a05mr7595271f8f.34.1748911808913; Mon, 02 Jun 2025
+ 17:50:08 -0700 (PDT)
+MIME-Version: 1.0
+From: Rhys Sullivan <rhys@rhyssullivan.com>
+Date: Mon, 2 Jun 2025 17:49:58 -0700
+X-Gm-Features: AX0GCFv7Ms-pJhm1XQzrLqw9Fiof0e7a-anPuQ9q3PDhnpHusQPk6kmXFZ7wGA8
+Message-ID: <CA+kWBAyO567pGv4huup9r4a7sny1oB_esrpUccns7MNTbyX7Kg@mail.gmail.com>
+Subject: Test
+To: user@inbound.rhys.dev
+Content-Type: multipart/alternative; boundary="0000000000001d34550636a043d6"
+
+--0000000000001d34550636a043d6
+Content-Type: text/plain; charset="UTF-8"
+
+Test
+
+--0000000000001d34550636a043d6
+Content-Type: text/html; charset="UTF-8"
+
+Test
+
+--0000000000001d34550636a043d6--

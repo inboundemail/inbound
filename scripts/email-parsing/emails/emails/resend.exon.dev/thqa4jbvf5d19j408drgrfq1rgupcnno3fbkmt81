@@ -1,0 +1,125 @@
+Return-Path: <01000197476df164-b13c43e2-032f-4478-93d2-19ad27d0b4b1-000000@send.nextdev.fm>
+Received: from a9-15.smtp-out.amazonses.com (a9-15.smtp-out.amazonses.com [54.240.9.15])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id thqa4jbvf5d19j408drgrfq1rgupcnno3fbkmt81
+ for new@resend.exon.dev;
+ Fri, 06 Jun 2025 22:47:57 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of send.nextdev.fm designates 54.240.9.15 as permitted sender) client-ip=54.240.9.15; envelope-from=01000197476df164-b13c43e2-032f-4478-93d2-19ad27d0b4b1-000000@send.nextdev.fm; helo=a9-15.smtp-out.amazonses.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of send.nextdev.fm designates 54.240.9.15 as permitted sender) client-ip=54.240.9.15; envelope-from=01000197476df164-b13c43e2-032f-4478-93d2-19ad27d0b4b1-000000@send.nextdev.fm; helo=a9-15.smtp-out.amazonses.com;
+ dkim=pass header.i=@nextdev.fm;
+ dkim=pass header.i=@amazonses.com;
+ dmarc=pass header.from=nextdev.fm;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFITGVVaTJ0V3ZmV1dCWmJGLzBVc3prN1orVnBEdXJwWjFWcE1pNXFDY082ZmNVTUNKbDFjMFdEdk8xYUxWendpOGZhMVZzNEdva1BXVDlXdDlXbmI5U1ZQNWNCM05yMFFwOUVsUE1nWmNWR3FJSGRNUlhTM05BVkZQbHpxNXc1M1lOejUwbFNBcHJpS1JwMm5RZ1UzTE9nNWVTb1AxRGd6SWFNblNWcWZhNjBVdlZGRldXbkVOOFFjSFhvN3NwQ3E5OFNlZHNhOFVyaVdJbDRjUS9hck51U09VMzAwbVY2cDNuSmhVL3pZUmhTd2dsdFZLai81U0RPWXF4NHhUQU1TSTNKKzNIQkhMaVN3cFo4WTFQcDV5b0lpSkdDZGhKM29rSkNpUFkzeUJnNkJ1U3RKTlVzTzA3ZUxLN3R1dmtCTlQ5SzBWMjcrWXJkVzNteHJFL21VK3ZYK0pZUjIzOEJ6cVhXTkREWlFOV25vRWlwb3N4Ykc3U0FaS2NKUFhVQkE4PQ==
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=yPtE60ML3vlbpjRgY7b6bNZmji92LNCOAOE8MmGy6ohaEYBA8PUHBcg0jToZ04DePYAbgEa9wprluvKvYJ6TtuXM+DtXGxDKUpzkB0E571vLkCuxhBeCy9XjzSIZujfwTD4tgQtNPzovW3k9DxBW3xPNJYOSIxOKqXp0dknRiUw=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1749250077; v=1; bh=QngiRlzgnOGpszdyteuFtM6sekEhsVb23o5d7cRvKFA=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple; s=resend;
+	d=nextdev.fm; t=1749250077;
+	h=List-Unsubscribe:List-Unsubscribe-Post:From:To:Subject:Message-ID:Date:MIME-Version:Content-Type;
+	bh=QngiRlzgnOGpszdyteuFtM6sekEhsVb23o5d7cRvKFA=;
+	b=BVMQntyhmQ+GAVPaP7wrEKbfIKO7xgfIWnzrixrFlHo46HwTDdCvJc57uExo0/QS
+	M78A939mlc/jB+cCvSF9OsSm55Us5GdOJn+7Mu/adHtB3yxyV4m1snYpJ3uQ+TqNYz+
+	tyRWLZG2yHxNnKtbdgC3QmoLULGWBP7CGwUYs1qM=
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple;
+	s=6gbrjpgwjskckoa6a5zn6fwqkn67xbtw; d=amazonses.com; t=1749250077;
+	h=List-Unsubscribe:List-Unsubscribe-Post:From:To:Subject:Message-ID:Date:MIME-Version:Content-Type:Feedback-ID;
+	bh=QngiRlzgnOGpszdyteuFtM6sekEhsVb23o5d7cRvKFA=;
+	b=ESwfa788dze64ecUluy891HDzOJDzjuHho44HN/DbyREBxoGDyjKXheDWkzVfOiQ
+	2LWw4hpAoXW2Tv0KV3FZggQ2GX2NziwNaShH1A+/d8IiF70rkX+Ze/ItbvYb8boXVlj
+	6la8ooRlVnUcKKGBg6MAyP3BVagwLjmQrGMiNyiQ=
+List-Unsubscribe: <https://unsubscribe.resend.com>
+X-Entity-Ref-ID: ed736c92-4e45-4877-a625-8fb19328cc11
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+From: Ryan <ryan@nextdev.fm>
+To: new@resend.exon.dev
+Subject: [TEST] intro into the new thing, can we check it out?
+Message-ID: <01000197476df164-b13c43e2-032f-4478-93d2-19ad27d0b4b1-000000@email.amazonses.com>
+Date: Fri, 6 Jun 2025 22:47:57 +0000
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="--_NmP-105f1adbcd908b50-Part_1"
+Feedback-ID: ::1.us-east-1.epbACCJLarUaEI78XZoGREJ9LamRjxMH5pM2kZb64rA=:AmazonSES
+X-SES-Outgoing: 2025.06.06-54.240.9.15
+
+----_NmP-105f1adbcd908b50-Part_1
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Hope you're doing well! I just wanted to quickly check in and see how =
+things are
+going with [briefly mention what you're checking in about - e.g.=
+, "the project,"
+"your new role," "the report"]. Let me know if there's =
+anything I can help with.
+----_NmP-105f1adbcd908b50-Part_1
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html dir=3D"ltr" =
+lang=3D"en">
+  <head>
+    <meta content=3D"width=3Ddevice-width" =
+name=3D"viewport" />
+    <meta content=3D"text/html; charset=3DUTF-8" =
+http-equiv=3D"Content-Type" />
+    <meta name=3D"x-apple-disable-message-re=
+formatting" />
+    <meta content=3D"IE=3Dedge" http-equiv=3D"X-UA-Compatibl=
+e" />
+    <meta name=3D"x-apple-disable-message-reformatting" />
+    <meta
+      content=3D"telephone=3Dno,address=3Dno,email=3Dno,date=3Dno,url=3Dno"
+      name=3D"format-detection" />
+    <meta content=3D"light" =
+name=3D"color-scheme" />
+    <meta content=3D"light dark" =
+name=3D"supported-color-schemes" />
+  </head>
+  <body
+    style=3D"font-family:-apple-system, BlinkMacSystemFont, &#x27;Segoe =
+UI&#x27;, &#x27;Roboto&#x27;, &#x27;Oxygen&#x27;, &#x27;Ubuntu&#x27;, =
+&#x27;Cantarell&#x27;, &#x27;Fira Sans&#x27;, &#x27;Droid Sans&#x27;, =
+&#x27;Helvetica Neue&#x27;, sans-serif;font-size:1.0769230769230769em;min-h=
+eight:100%;line-height:155%">
+    <!--$-->
+    <table
+      align=3D"left"
+      width=3D"100%"
+      border=3D"0"
+      cellpadding=3D"0"
+      cellspacing=3D"0"
+      role=3D"presentation"
+      style=3D"align:left;padding-left:0px;padding-right:0px;h-padding:0px;=
+width:auto;max-width:600px;font-family:-apple-system, BlinkMacSystemFont, =
+&#x27;Segoe UI&#x27;, &#x27;Roboto&#x27;, &#x27;Oxygen&#x27;, =
+&#x27;Ubuntu&#x27;, &#x27;Cantarell&#x27;, &#x27;Fira Sans&#x27;, =
+&#x27;Droid Sans&#x27;, &#x27;Helvetica Neue&#x27;, sans-serif">
+      <tbody>
+        <tr>
+          <td>
+            <p
+              class=3D""
+              style=3D"margin:0;padding:0;font-siz=
+e:1em;padding-top:0.5em;padding-bottom:0.5em;text-align:left">
+              <span
+                >Hope you&#x27;re doing well! I just =
+wanted to quickly check in
+                and see how things are going =
+with [briefly mention what
+                you&#x27;re checking in about - =
+e.g., &quot;the project,&quot;
+                &quot;your new role,&quot; =
+&quot;the report&quot;]. Let me know
+                if there&#x27;s =
+anything I can help with.</span
+              >
+            </p>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <!--7--><!--/$-->
+  </body>
+</html>
+
+----_NmP-105f1adbcd908b50-Part_1--

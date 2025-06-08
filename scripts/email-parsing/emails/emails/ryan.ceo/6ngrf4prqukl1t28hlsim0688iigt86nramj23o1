@@ -1,0 +1,398 @@
+Return-Path: <ryan@mandarin3d.com>
+Received: from mail-vs1-f45.google.com (mail-vs1-f45.google.com [209.85.217.45])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id 6ngrf4prqukl1t28hlsim0688iigt86nramj23o1
+ for me@ryan.ceo;
+ Fri, 30 May 2025 15:07:45 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of mandarin3d.com designates 209.85.217.45 as permitted sender) client-ip=209.85.217.45; envelope-from=ryan@mandarin3d.com; helo=mail-vs1-f45.google.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of mandarin3d.com designates 209.85.217.45 as permitted sender) client-ip=209.85.217.45; envelope-from=ryan@mandarin3d.com; helo=mail-vs1-f45.google.com;
+ dkim=pass header.i=@mandarin3d-com.20230601.gappssmtp.com;
+ dmarc=pass header.from=mandarin3d.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFFeXgyUzZUQ0VXUVJOVXVUVThOVDl6NjJTVEs0TlVuMldDaW0zY3o2b1VzcFU1QXUzQTJvaTAwY1Yxc2M2d25FNm1FempRUE1xaTZNZE5RUmdmZXBCVVM5K3dZUTZoWXNSWGQzb3Z6dnFtbi9EaTN0bStRa0k1aGNQbXI1TG41VW9pNFRVTG83ek42T2R5Uzc0c3dtdVprYVJjQ0U0M2NWbnZ0QjFUY1RtbmtPZS9hVEd3d3dMT2RIZWFia3IwY1laL1hGaW94Yi9ReHlSMXZVd0YrSllkUHkxbHhPbjlYa0QwR042cEhHVjVoMHdLRGxFQkRlNDI0cEFYNWpWMzd1WU1HMmJ6MDQ0K2xYbWtNby9Gb3FWVVZmRjFQSWduMndJeW1CUU0zTVBJQXc9PQ==
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=u6H/u2wtriyL7J47pzQ0Fu0dqRCdw7vuZe8ylySL9u3ToGsWDHwXgmIiXBi1Ow7VL7gHhqk6XG0JkfpE5UKRBIaQ10qGE2IOZN+UC+o4QpuaVfslwwTZJLMISt76o1KaGyhynlaHE97XSWOb5/+228YxAkLh0PnKdS4XqGA6JTY=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1748617666; v=1; bh=s11n4Hmn41SFhovEJVpd7hYVwPOH0XP1W8GrXoTW/b0=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+Received: by mail-vs1-f45.google.com with SMTP id ada2fe7eead31-4e59af1f0e7so655817137.0
+        for <me@ryan.ceo>; Fri, 30 May 2025 08:07:45 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=mandarin3d-com.20230601.gappssmtp.com; s=20230601; t=1748617665; x=1749222465; darn=ryan.ceo;
+        h=date:references:to:subject:in-reply-to:message-id:from:mime-version
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=6J1SZKAn5QArjEii/qWYQ70+F91u3tt6bBymQbc5cxI=;
+        b=Gbc9cKoNwbLlXBccau3fKy8Oq78qJ3+kjGBoofvTnz8HjE/7xcuJFmP+mqk/AhOXlO
+         Yxd6+i3Nozoj7f4FuKgRpSJZiE+Lc4v1JF814P/lo35HlY6NS+FKgKKwKvZi+wsHZgCv
+         +tqkdHB2SldDATd1TegmsMyjKPD6CG96ZFqdc0b4FlAHpB+G8YkwG40NbeBaOetWgJFu
+         basIU9ulEaLYadW1djms3F8gqVZHn33oHuZEsx2DFL5nbcivPvMAcXf62bzAF0Cif+hl
+         Lv/OocaayrXsgzvZljQbXiv7zGYcpeESXYI49NI2Jx4tuppdrGCOU09KWooyrwIp6LCz
+         oCCA==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1748617665; x=1749222465;
+        h=date:references:to:subject:in-reply-to:message-id:from:mime-version
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
+        bh=6J1SZKAn5QArjEii/qWYQ70+F91u3tt6bBymQbc5cxI=;
+        b=u8L1Qm3rFWbF/bzlHU3oSUMRALcLB7/A4PRkIZbo2mYp+nlhHomWrupJQ0UsVKcfBK
+         M1BEdaifik+tkpgnpqF7O+9tdQmvSj6pUVjFCPlDIyYDhmk718teerfC49MpMVLkUx3c
+         eWcC2Avp/cdkT1jPUJRh3vsrGWT8EvahVBq4Nhk1YGls+KjtarM3KDKg3RTF1h8hu5F9
+         To6cK1DYZfE8IeZg0BIJ/Pt+X6/Xp+aoIcwi6eCFCCAxxDzMt0MiG0Y19JrgOaEqdhYn
+         gmNxMX4exY/OZwY+AfzLQ1z0SdPjgSj/YMCnR/6NkMMy4gIGdbquYWJdlthSLs8+l1qM
+         59FA==
+X-Gm-Message-State: AOJu0YyxAD9Pi3mdqYhTBzSD4WU5VT6jEpN4rlDNGkxe1M1eOh2wzYYq
+	BzC6q4cBGl8GILEPIqZCDGwkObi+VsaQyA1I9KvRSzZWXpewblSs43nPjfe5wMFKAhroJOLmx2/
+	ZH1fr
+X-Gm-Gg: ASbGncsZ6eugCUp1XRVq60XbVviBS/WKt0yopNhzzVQpluxMe+L0wKoEVyUEfBhKS5P
+	yExYEsEG/YAMHEZPIcZuImDhLm6Evxi26H9hpM6LGInApNLCBllCw5gZJM0HCTd+lqwEbkVgzA5
+	v0WJGQ40fxJv6QdCrEbRRX3zzp96PKBgkx3Dx0BI9pjcyA6tAYAfRjf92cTSp/pDoJazjxMelcQ
+	czwwHc6izPJ9A1ctk10E0YsMlwIp7reAsaMfDMMhar8546EUZnn4yOrPK7ivnPEW1+hHiIZGYKP
+	SBPkKYKSEjg8jyWw2oSe5Nb44MPaOgQVGfiHsOxzmWrS7B0cwhl3WpcYmkq9/KheBLEUkuLbayS
+	aF+KE8Lw=
+X-Google-Smtp-Source: AGHT+IEExTZH0Ux6DF8SIIzyQSFfjBYWhHgziC1xdKw9KI0AVVYkAL/IFv9K4hM8wSw9KhAgSz2PXQ==
+X-Received: by 2002:a05:6102:dd2:b0:4e2:a5b9:df1d with SMTP id ada2fe7eead31-4e6e40f5b8cmr3886544137.8.1748617664676;
+        Fri, 30 May 2025 08:07:44 -0700 (PDT)
+Return-Path: <ryan@mandarin3d.com>
+Received: from localhost (0.92.231.35.bc.googleusercontent.com. [35.231.92.0])
+        by smtp.gmail.com with UTF8SMTPSA id ada2fe7eead31-4e6444be9b5sm2979380137.18.2025.05.30.08.07.44
+        for <me@ryan.ceo>
+        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+        Fri, 30 May 2025 08:07:44 -0700 (PDT)
+Mime-Version: 1.0
+From: "Ryan Vogel" <ryan@mandarin3d.com>
+Message-ID: <mbaxsmyx.213c3cdf-3a88-402c-8e8f-0d3766f5bc87@we.are.superhuman.com>
+X-Superhuman-ID: mbaxso5n.b7e926da-b3fb-4bba-855e-1ea29eb0d502
+X-Superhuman-Draft-ID: draft00ccf10f2b6da38e
+In-Reply-To: <_jJMGubiR72hWEo7HytfDQ@geopod-ismtpd-0>
+Subject: Fwd: We're processing your direct deposit payment(s) from Mandarin
+ 3D Prints
+To: me@ryan.ceo
+X-Mailer: Superhuman Desktop (2025-05-29T19:06:00Z)
+References: <_jJMGubiR72hWEo7HytfDQ@geopod-ismtpd-0>
+Date: Fri, 30 May 2025 15:07:43 +0000
+Content-Type: multipart/alternative;
+ boundary=92e8510757a5fd801a9e2ebffd956968721ca09ba09b30a3fb6b49d22735
+
+--92e8510757a5fd801a9e2ebffd956968721ca09ba09b30a3fb6b49d22735
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset=UTF-8
+
+*Ryan Vogel*
+
+*Exon Enterprises*
+
+Sent via Superhuman ( https://sprh.mn/?vip=3Dryan@mandarin3d.com )
+
+---------- Forwarded message ----------
+From: qbo <do-not-reply@intuit.com>
+Date: Friday, May 30 2025 at 3:14 AM EDT
+Subject: We're processing your direct deposit payment(s) from Mandarin 3D P=
+rints
+To: payments@mandarin3d.com
+
+Hello Ryan,
+
+We've started processing your direct deposit payment(s) from the sender Man=
+darin 3D Prints.Your funds will be withdrawn from your bank account on 05/3=
+0/2025 and the contractor(s) will be paid on 05/30/2025.
+
+* Total amount to be transferred: $ US$ 200.00
+* Withdrawn on: 05/30/2025
+* Paid on: 05/30/2025
+* From account ending: ....3602
+* Transaction ID: 8aa2fa189711c7fc01971d7c04ed4f3f
+
+Amount to be transferred to contractor direct deposit payment recipient(s):=
+ Jessica Hornung (US$ 200.00)
+
+No transfer fees or taxes apply.
+
+Thank you for choosing QuickBooks Online.
+
+The QuickBooks Online Support Team
+
+Money movement services are provided by IPI pursuant to IPI=E2=80=99s licen=
+ses ( https://u7445749.ct.sendgrid.net/ls/click?upn=3Du001.C9ANdvTYX227JkDS=
+VWi87SLSj81B264OYNNlpD-2BCTPJzPmKYQoypOAx7KjMAtPUbFoenRPCncYMvvfSpU9pu3g-3D=
+-3D-uvE_liXMc2WMdswVK8QmQ-2FCarzQyojw3BRs96rec2ZQXUU3vKjNEeptd-2B6u3o4UQTqV=
+lsgk8jVSOws-2BNhR0TaiqHmZ5Zr8sFxQSO0p3Ap5Uihsc6sTFnUGVmBXnpBZRq02N6Q2e49j-2=
+FH5oG9DUsZBeOOlevFi-2BbRWReJU-2BRyKSt7Ymxo5GddVZfLVIWAaUEL13B4Z7vMoeFI-2BUa=
+hHFe5-2FpptU3MYgHShjHrztZSLC-2FEwfyedoVq9hXJ8epi4t-2B03PNC092uDlyDRjbnICtjR=
+YSzLWmvNhJuSMmKp48jRtPQ4biNzFy-2FJNFpthAnLiP892t-2FTLcsZb-2FJinYSzw-2FT9T0s=
+lDFdr-2FEOCj-2Fx1kwMb-2F4Q-2FbpFM0K6CypqLw8G0Yqp4LH-2FPM63VoT-2BKvCx4nXLQNp=
+F5IW79BqNlc2FqKYXA-2FpWGHFBzn1ZVHxcLDu4lUAahsFh4CfCWihujTkt-2FfxGtuNJfAKpIR=
+qX0SFXbLv0GLImTE20QgjTeZFB9TYqSxEK01PvQ4zVRUhSZEwStmLVKincs45Hl32v5E7OVBI5G=
+OwB-2F-2B4QYKHF8J4ZK1FpBVJTCEI77JwwHvJPjpNDdtdXxf3nozlOFJATfoGEEHsunvr6unkd=
+avSBSqk68ao-2BXp-2Fb-2FU3aZ-2Fw4q8T2-2FgbQbSYkJeIDTup3ML2jNVBOT518cA0FoN6V3=
+8aKuiW2Yr7T2hZzUULksTk5C2xcytcVYYjJzU0oWZ5C5wp6IqUmpynHvTOcb6mudz2e4qM0hVaC=
+cokoQVT-2FPhbkeyTskZNFvOgd7ubUt-2BBiyyw0tkR7sxeD19c3Mzbknz-2FkZlbY73XmH53Is=
+Sfx6j6W5rB5zxIaO-2BdAl4EdvHJMgufP7sMzVvSj2ve2qTuTaPojm1ZvOx3lWEs1uygJquhumM=
+LWd9DgR-2BDaGDvCPRZDXi0qN2rScOK3sjc-2B5D62MbBOpoCvuJ7JF2-2BN1ON4quZDTgqWQYd=
+Ohuh8L53IsbKiW0SiW1OIgJOQrEZoVkXhYGvuusoEclNgEynJC8bAgKyzba80yKUFEWXe-2BKWW=
+pW-2BWRm0gumDRpdcxvQTPLNoyDuZvLlOuTKC8drBXijptdAOp6-2FgB1KOevFnvA5hVWEqHTij=
+7ciGglsrj8RQHMxsyFK2lr5fQhhTknxTmNW0sI8pMaPeLw4-2Bbjq-2BLbYwod9GwzekMyWLXMk=
+BvMCJTFKpdjCVrmut-2F2rkkj08R76WzfOjkH-2FgiCcnXV6983RAvGVt-2B4oxi2IBy6fmPM0X=
+V2EiI-3D ) (NMLS #1098819). IPI is located at 2700 Coast Avenue, Mountain V=
+iew, CA 94043, 1-888-536-4801.
+
+Illinois residents: RIGHT TO REFUND. You are entitled to a refund of the mo=
+ney to be transmitted if Intuit Payments Inc. does not forward the money re=
+ceived from you within 3 business days of the date of its receipt. If you w=
+ant a refund, you must mail or deliver your written request to Intuit Payme=
+nts Inc., 2700 Coast Avenue, Mountain View, CA 94043 or by calling the Cust=
+omer Service Center at 1-888-536-4801.
+
+Minnesota residents: Consumer Fraud Warning: Consumers are warned that frau=
+d can and does occur. Please call Intuit Payments Inc. at 1-888-536-4801 to=
+ report fraud or if you suspect fraud.
+
+New York residents: RIGHT TO REFUND. You are entitled to a refund of the mo=
+ney to be transmitted if Intuit Payments Inc. does not forward the money re=
+ceived from you within 10 business days of the date of its receipt. If you =
+want a refund, you must mail or deliver your written request to Intuit Paym=
+ents Inc., 2700 Coast Avenue, Mountain View, CA 94043 or by calling the Cus=
+tomer Service Center at 1-888-536-4801.=C2=A0 Intuit Payments Inc. is licen=
+sed under the Transmitters of Money Act and regulated by the New York State=
+ Department of Financial Services. If you have a complaint, first contact I=
+ntuit Payments Inc. at 1-888-536-4801. Unresolved consumer complaints may b=
+e mailed to the New York State Department of Financial Services, Consumer S=
+ervices Division, One Commerce Plaza, Albany, NY
+
+Money movement services are provided by Intuit Payments Inc., licensed as a=
+ Money Transmitter by the New York State Department of Financial Services, =
+subject to eligibility criteria, credit and application approval. For more =
+information about Intuit Payments Inc.'s money transmission licenses, pleas=
+e visit https:/ / www. intuit. com/ legal/ licenses/ payment-licenses/ ( ht=
+tps://u7445749.ct.sendgrid.net/ls/click?upn=3Du001.C9ANdvTYX227JkDSVWi87SLS=
+j81B264OYNNlpD-2BCTPJzPmKYQoypOAx7KjMAtPUbFoenRPCncYMvvfSpU9pu3g-3D-3D8bqs_=
+liXMc2WMdswVK8QmQ-2FCarzQyojw3BRs96rec2ZQXUU3vKjNEeptd-2B6u3o4UQTqVlsgk8jVS=
+Ows-2BNhR0TaiqHmZ5Zr8sFxQSO0p3Ap5Uihsc6sTFnUGVmBXnpBZRq02N6Q2e49j-2FH5oG9DU=
+sZBeOOlevFi-2BbRWReJU-2BRyKSt7Ymxo5GddVZfLVIWAaUEL13B4Z7vMoeFI-2BUahHFe5-2F=
+pptU3MYgHShjHrztZSLC-2FEwfyedoVq9hXJ8epi4t-2B03PNC092uDlyDRjbnICtjRYSzLWmvN=
+hJuSMmKp48jRtPQ4biNzFy-2FJNFpthAnLiP892t-2FTLcsZb-2FJinYSzw-2FT9T0slDFdr-2F=
+EOCj-2Fx1kwMb-2F4Q-2FbpFM0K6CypqLw8G0Yqp4LH-2FPM63VoT-2BKvCx4nXLQNpF5IW79Bq=
+Nlc2FqKYXA-2FpWGHFBzn1ZVHxcLDu4lUAahsFh4CfCWihujTkt-2FfxGtuNJfAKpIRqX0SFXbL=
+v0GLImTE20QgjTeZFB9TYqSxEK01PvQ4zVRUhSZEwStmLVKincs45Hl32v5E7OVBI5GOwB-2F-2=
+B4QYKHF8J4ZK1FpBVJTCEI77JwwHvJPjpNDdtdXxf3nozlOFJATfoGEEHsunvr6unkdavSBSqk6=
+8ao-2BXp-2Fb-2FU3aZ-2Fw4q8T2-2FgbQbSYkJeIDTup3ML2jNVBOT518cA0FoN6V38aKuiW2Y=
+r7T2hZzUULksTk5C2xcytcVYYjJzU0oWZ5C5wp6IqUmpynHvTOcb6mudz2e4qM0hVaCcokoQVT-=
+2FPhbkeyTskZNFvOgd7ubUt-2BBiyyw0tkR7sxeD19c3Mzbknz-2FkZlbY73XmH53IsSfx6j6W5=
+rB5zxIaO-2BdAl4EdvHJMgufP7sMzVvSj2ve2qTuTaPojm1ZvOx3lWEs1uygJquhumMLWd9DgR-=
+2BDaGDvCPRZDXi0qN2rScOK3sjc-2B5D62MbBOpoCvuJ7JF2-2BN1ON4quZDTgqWQYdOhuh8L53=
+IsbKiW0SiW1OIgJOQrEZoVkXhYGvuusoEclNgEynJC8bAgKyzba80yKUFEWXe-2BKWWpW-2BWRm=
+0gumDRpdcxvQTPLNoy2AK2BInUahDixmsOt0O3ofjBC-2B11MCpUVbwNzAr-2B4cD9IjjkyXu45=
+oH4Rh7H0HIk9rUue5KSgKCs4DSmw5x-2FMIQNnnj0YJG4m5FB04wSj6KzrWob091BfiZaYQlpI6=
+JVMLAFloXQ5xahVZGFSGaZKv86UQQYgPzTj4CQGhyvI1ADsdYVM7Avfp6EEZEUFz9A-3D )
+
+Intuit respects your privacy. To learn more, read our Privacy Statement ( h=
+ttps:/ / www. intuit. com/ privacy ( https://www.intuit.com/privacy ) ). Vi=
+sit Legal ( http:/ / www. intuit. com/ legal/ ( http://www.intuit.com/legal=
+/ ) ) to find out more.
+
+IMPORTANT NOTICE: This notification is being sent to inform you of a critic=
+al matter concerning your current service, software or billing. Please note=
+ that if you previously opted out of receiving marketing materials from Int=
+uit, you may continue to receive notifications similar to this communicatio=
+n.=C2=A0 DO NOT REPLY to this email, this inbox is not monitored for replie=
+s.
+--92e8510757a5fd801a9e2ebffd956968721ca09ba09b30a3fb6b49d22735
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/html; charset=UTF-8
+
+<html><head></head><body><div><div><div><div class=3D""><br/></div></div><d=
+iv><div style=3D"display: none; border: 0px; width: 0px; height: 0px; overf=
+low: hidden; visibility: hidden;"><img src=3D"https://r.superhuman.com/mnNW=
+eonHNzokEz4K10LwsYimXwfrRN9vaLaGt954uXp3iisor7dQia31VIL-c1a-dzZMTxNU_rZk1gL=
+OieppifKhdl48Q1Wms-kkOL7XE7N0meDawxC0QtIea6soJeDCHnPlj56D0vVTdYSuxJUTAOQ71o=
+a-1F-PRdz9D6gG4A.gif" alt=3D" " width=3D"1" height=3D"0" style=3D"display: =
+none; border: 0px; width: 0px; height: 0px; overflow: hidden; visibility: h=
+idden;"/><!--                                                              =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                               --></div><br=
+/><div class=3D"gmail_signature"><div><div dir=3D"ltr"><table style=3D"bord=
+er-collapse:collapse;border:none" cellpadding=3D"0" cellspacing=3D"0" borde=
+r=3D"0"><tbody><tr><td style=3D"width:94.25pt;padding:0in 5.4pt" valign=3D"=
+top" colspan=3D"2" width=3D"126"><p style=3D"margin:0in;font-size:12pt;text=
+-align:right" align=3D"right" class=3D"MsoNormal sh-preserve-font-size"><fo=
+nt face=3D"tahoma, sans-serif" class=3D"sh-preserve-font-size sh-preserve-f=
+ont-family"><img data-os=3D"https://lh3.googleusercontent.com/d/1jk1N_a-KDn=
+MLtAVvbzmHZmIBIU2-NuwD" src=3D"https://ci3.googleusercontent.com/mail-sig/A=
+IorK4xmXLdMVbVKMaTOTiY-MiQH9bmAQw8USV8K0oBbBUR94PuIQnGNpOwm5vHxOPIH8RsrZYM3=
+C--pGFxN" height=3D"96" width=3D"96" data-aii=3D"CiExamsxTl9hLUtEbk1MdEFWdm=
+J6bUhabUlCSVUyLU51d0Q" class=3D"sh-preserve-font-size sh-preserve-font-fami=
+ly"/></font></p></td><td style=3D"width:373.25pt;padding:0in 5.4pt" valign=
+=3D"top" width=3D"498"><p style=3D"margin:0in;font-size:12pt" class=3D"MsoN=
+ormal sh-preserve-font-size"><span style=3D"font-size:28pt" class=3D"sh-pre=
+serve-font-size"><font face=3D"tahoma, sans-serif" class=3D"sh-preserve-fon=
+t-size sh-preserve-font-family"><b class=3D"sh-preserve-font-size sh-preser=
+ve-font-family">Ryan Vogel</b></font></span></p><p style=3D"margin:0in;font=
+-size:12pt" class=3D"MsoNormal sh-preserve-font-size"><font face=3D"tahoma,=
+ sans-serif" class=3D"sh-preserve-font-size sh-preserve-font-family"><b cla=
+ss=3D"sh-preserve-font-size sh-preserve-font-family">Exon Enterprises</b></=
+font></p></td></tr><tr height=3D"0"><td style=3D"border:none" width=3D"42">=
+</td><td style=3D"border:none" width=3D"84"></td><td style=3D"border:none" =
+width=3D"498"></td></tr></tbody></table></div></div><br/><div style=3D"clea=
+r:both">Sent via <a href=3D"https://sprh.mn/?vip=3Dryan@mandarin3d.com" tar=
+get=3D"_blank">Superhuman</a></div><br/></div></div><br/><div><div><div>---=
+------- Forwarded message ----------<br/>From: qbo &lt;do-not-reply@intuit.=
+com&gt;<br/>Date: <time datetime=3D"2025-05-30T07:14:00.000Z" class=3D"Date=
+Time">Friday, May 30 2025 at 3:14 AM EDT</time><br/>Subject: We&#39;re proc=
+essing your direct deposit payment(s) from Mandarin 3D Prints<br/>To: payme=
+nts@mandarin3d.com<br/></div><br/><div><div class=3D"gmail_quote sh-color-b=
+lack sh-color" style=3D"" id=3D""><p class=3D"sh-color-black sh-color">Hell=
+o Ryan,</p>
+<p class=3D"sh-color-black sh-color">We&#39;ve started processing your dire=
+ct deposit payment(s) from the sender Mandarin 3D Prints.Your funds will be=
+ withdrawn from your bank account on <span class=3D"sh-date sh-color-black =
+sh-color" data-date-isostring=3D"2025-05-30">05/30/2025</span> and the cont=
+ractor(s) will be paid on <span class=3D"sh-date sh-color-black sh-color" d=
+ata-date-isostring=3D"2025-05-30">05/30/2025</span>.</p>
+<ul class=3D"sh-color-black sh-color">
+  <li class=3D"sh-color-black sh-color">Total amount to be transferred: $ U=
+S$ 200.00</li>
+  <li class=3D"sh-color-black sh-color">Withdrawn on: <span class=3D"sh-dat=
+e sh-color-black sh-color" data-date-isostring=3D"2025-05-30">05/30/2025</s=
+pan></li>
+  <li class=3D"sh-color-black sh-color">Paid on: <span class=3D"sh-date sh-=
+color-black sh-color" data-date-isostring=3D"2025-05-30">05/30/2025</span><=
+/li>
+  <li class=3D"sh-color-black sh-color">From account ending: ....3602</li>
+  <li class=3D"sh-color-black sh-color">Transaction ID: 8aa2fa189711c7fc019=
+71d7c04ed4f3f</li>
+</ul>
+<p class=3D"sh-color-black sh-color">Amount to be transferred to contractor=
+ direct deposit payment recipient(s): Jessica Hornung (US$ 200.00)</p>
+<p class=3D"sh-color-black sh-color">No transfer fees or taxes apply.</p>
+<p class=3D"sh-color-black sh-color">Thank you for choosing QuickBooks Onli=
+ne.</p>
+<p class=3D"sh-color-black sh-color">The QuickBooks Online Support Team</p>
+<p class=3D"sh-color-black sh-color">Money movement services are provided b=
+y IPI pursuant to<a href=3D"https://u7445749.ct.sendgrid.net/ls/click?upn=
+=3Du001.C9ANdvTYX227JkDSVWi87SLSj81B264OYNNlpD-2BCTPJzPmKYQoypOAx7KjMAtPUbF=
+oenRPCncYMvvfSpU9pu3g-3D-3D-uvE_liXMc2WMdswVK8QmQ-2FCarzQyojw3BRs96rec2ZQXU=
+U3vKjNEeptd-2B6u3o4UQTqVlsgk8jVSOws-2BNhR0TaiqHmZ5Zr8sFxQSO0p3Ap5Uihsc6sTFn=
+UGVmBXnpBZRq02N6Q2e49j-2FH5oG9DUsZBeOOlevFi-2BbRWReJU-2BRyKSt7Ymxo5GddVZfLV=
+IWAaUEL13B4Z7vMoeFI-2BUahHFe5-2FpptU3MYgHShjHrztZSLC-2FEwfyedoVq9hXJ8epi4t-=
+2B03PNC092uDlyDRjbnICtjRYSzLWmvNhJuSMmKp48jRtPQ4biNzFy-2FJNFpthAnLiP892t-2F=
+TLcsZb-2FJinYSzw-2FT9T0slDFdr-2FEOCj-2Fx1kwMb-2F4Q-2FbpFM0K6CypqLw8G0Yqp4LH=
+-2FPM63VoT-2BKvCx4nXLQNpF5IW79BqNlc2FqKYXA-2FpWGHFBzn1ZVHxcLDu4lUAahsFh4CfC=
+WihujTkt-2FfxGtuNJfAKpIRqX0SFXbLv0GLImTE20QgjTeZFB9TYqSxEK01PvQ4zVRUhSZEwSt=
+mLVKincs45Hl32v5E7OVBI5GOwB-2F-2B4QYKHF8J4ZK1FpBVJTCEI77JwwHvJPjpNDdtdXxf3n=
+ozlOFJATfoGEEHsunvr6unkdavSBSqk68ao-2BXp-2Fb-2FU3aZ-2Fw4q8T2-2FgbQbSYkJeIDT=
+up3ML2jNVBOT518cA0FoN6V38aKuiW2Yr7T2hZzUULksTk5C2xcytcVYYjJzU0oWZ5C5wp6IqUm=
+pynHvTOcb6mudz2e4qM0hVaCcokoQVT-2FPhbkeyTskZNFvOgd7ubUt-2BBiyyw0tkR7sxeD19c=
+3Mzbknz-2FkZlbY73XmH53IsSfx6j6W5rB5zxIaO-2BdAl4EdvHJMgufP7sMzVvSj2ve2qTuTaP=
+ojm1ZvOx3lWEs1uygJquhumMLWd9DgR-2BDaGDvCPRZDXi0qN2rScOK3sjc-2B5D62MbBOpoCvu=
+J7JF2-2BN1ON4quZDTgqWQYdOhuh8L53IsbKiW0SiW1OIgJOQrEZoVkXhYGvuusoEclNgEynJC8=
+bAgKyzba80yKUFEWXe-2BKWWpW-2BWRm0gumDRpdcxvQTPLNoyDuZvLlOuTKC8drBXijptdAOp6=
+-2FgB1KOevFnvA5hVWEqHTij7ciGglsrj8RQHMxsyFK2lr5fQhhTknxTmNW0sI8pMaPeLw4-2Bb=
+jq-2BLbYwod9GwzekMyWLXMkBvMCJTFKpdjCVrmut-2F2rkkj08R76WzfOjkH-2FgiCcnXV6983=
+RAvGVt-2B4oxi2IBy6fmPM0XV2EiI-3D" target=3D"_blank" rel=3D"noopener norefer=
+rer" class=3D"sh-color-blue sh-color">
+    <span style=3D"color:#0000ff;" class=3D"sh-color-blue sh-color">IPI=E2=
+=80=99s licenses</span>
+  </a>
+  (NMLS #1098819). IPI is located at 2700 Coast Avenue, Mountain View, CA 9=
+4043, 1-888-536-4801.</p>
+<p class=3D"sh-color-black sh-color">Illinois residents: RIGHT TO REFUND. Y=
+ou are entitled to a refund of the money to be transmitted if Intuit Paymen=
+ts Inc. does not forward the money received from you within 3 business days=
+ of the date of its receipt. If you want a refund, you must mail or deliver=
+ your written request to Intuit Payments Inc., 2700 Coast Avenue, Mountain =
+View, CA 94043 or by calling the Customer Service Center at 1-888-536-4801.=
+</p>
+<p class=3D"sh-color-black sh-color">Minnesota residents: Consumer Fraud Wa=
+rning: Consumers are warned that fraud can and does occur. Please call Intu=
+it Payments Inc. at 1-888-536-4801 to report fraud or if you suspect fraud.=
+</p>
+<p class=3D"sh-color-black sh-color">New York residents: RIGHT TO REFUND. Y=
+ou are entitled to a refund of the money to be transmitted if Intuit Paymen=
+ts Inc. does not forward the money received from you within 10 business day=
+s of the date of its receipt. If you want a refund, you must mail or delive=
+r your written request to Intuit Payments Inc., 2700 Coast Avenue, Mountain=
+ View, CA 94043 or by calling the Customer Service Center at 1-888-536-4801=
+.=C2=A0 Intuit Payments Inc. is licensed under the Transmitters of Money Ac=
+t and regulated by the New York State Department of Financial Services. If =
+you have a complaint, first contact Intuit Payments Inc. at 1-888-536-4801.=
+ Unresolved consumer complaints may be mailed to the New York State Departm=
+ent of Financial Services, Consumer Services Division, One Commerce Plaza, =
+Albany, NY</p>
+<p class=3D"sh-color-black sh-color">Money movement services are provided b=
+y Intuit Payments Inc., licensed as a Money Transmitter by the New York Sta=
+te Department of Financial Services, subject to eligibility criteria, credi=
+t and application approval. For more information about Intuit Payments Inc.=
+&#39;s money transmission licenses, please visit
+  <a href=3D"https://u7445749.ct.sendgrid.net/ls/click?upn=3Du001.C9ANdvTYX=
+227JkDSVWi87SLSj81B264OYNNlpD-2BCTPJzPmKYQoypOAx7KjMAtPUbFoenRPCncYMvvfSpU9=
+pu3g-3D-3D8bqs_liXMc2WMdswVK8QmQ-2FCarzQyojw3BRs96rec2ZQXUU3vKjNEeptd-2B6u3=
+o4UQTqVlsgk8jVSOws-2BNhR0TaiqHmZ5Zr8sFxQSO0p3Ap5Uihsc6sTFnUGVmBXnpBZRq02N6Q=
+2e49j-2FH5oG9DUsZBeOOlevFi-2BbRWReJU-2BRyKSt7Ymxo5GddVZfLVIWAaUEL13B4Z7vMoe=
+FI-2BUahHFe5-2FpptU3MYgHShjHrztZSLC-2FEwfyedoVq9hXJ8epi4t-2B03PNC092uDlyDRj=
+bnICtjRYSzLWmvNhJuSMmKp48jRtPQ4biNzFy-2FJNFpthAnLiP892t-2FTLcsZb-2FJinYSzw-=
+2FT9T0slDFdr-2FEOCj-2Fx1kwMb-2F4Q-2FbpFM0K6CypqLw8G0Yqp4LH-2FPM63VoT-2BKvCx=
+4nXLQNpF5IW79BqNlc2FqKYXA-2FpWGHFBzn1ZVHxcLDu4lUAahsFh4CfCWihujTkt-2FfxGtuN=
+JfAKpIRqX0SFXbLv0GLImTE20QgjTeZFB9TYqSxEK01PvQ4zVRUhSZEwStmLVKincs45Hl32v5E=
+7OVBI5GOwB-2F-2B4QYKHF8J4ZK1FpBVJTCEI77JwwHvJPjpNDdtdXxf3nozlOFJATfoGEEHsun=
+vr6unkdavSBSqk68ao-2BXp-2Fb-2FU3aZ-2Fw4q8T2-2FgbQbSYkJeIDTup3ML2jNVBOT518cA=
+0FoN6V38aKuiW2Yr7T2hZzUULksTk5C2xcytcVYYjJzU0oWZ5C5wp6IqUmpynHvTOcb6mudz2e4=
+qM0hVaCcokoQVT-2FPhbkeyTskZNFvOgd7ubUt-2BBiyyw0tkR7sxeD19c3Mzbknz-2FkZlbY73=
+XmH53IsSfx6j6W5rB5zxIaO-2BdAl4EdvHJMgufP7sMzVvSj2ve2qTuTaPojm1ZvOx3lWEs1uyg=
+JquhumMLWd9DgR-2BDaGDvCPRZDXi0qN2rScOK3sjc-2B5D62MbBOpoCvuJ7JF2-2BN1ON4quZD=
+TgqWQYdOhuh8L53IsbKiW0SiW1OIgJOQrEZoVkXhYGvuusoEclNgEynJC8bAgKyzba80yKUFEWX=
+e-2BKWWpW-2BWRm0gumDRpdcxvQTPLNoy2AK2BInUahDixmsOt0O3ofjBC-2B11MCpUVbwNzAr-=
+2B4cD9IjjkyXu45oH4Rh7H0HIk9rUue5KSgKCs4DSmw5x-2FMIQNnnj0YJG4m5FB04wSj6KzrWo=
+b091BfiZaYQlpI6JVMLAFloXQ5xahVZGFSGaZKv86UQQYgPzTj4CQGhyvI1ADsdYVM7Avfp6EEZ=
+EUFz9A-3D" target=3D"_blank" rel=3D"noopener noreferrer" class=3D"sh-color-=
+blue sh-color">https:/<wbr/>/<wbr/>www.<wbr/>intuit.<wbr/>com/<wbr/>legal/<=
+wbr/>licenses/<wbr/>payment-licenses/<wbr/></a>
+</p>
+<p class=3D"sh-color-black sh-color">Intuit respects your privacy. To learn=
+ more, read our Privacy Statement (<a target=3D"_blank" rel=3D"noopener nor=
+eferrer" href=3D"https://www.intuit.com/privacy" class=3D"sh-color-blue sh-=
+color">https:/<wbr/>/<wbr/>www.<wbr/>intuit.<wbr/>com/<wbr/>privacy</a>). V=
+isit Legal (<a target=3D"_blank" rel=3D"noopener noreferrer" href=3D"http:/=
+/www.intuit.com/legal/" class=3D"sh-color-blue sh-color">http:/<wbr/>/<wbr/=
+>www.<wbr/>intuit.<wbr/>com/<wbr/>legal/<wbr/></a>) to find out more.</p>
+<p class=3D"sh-color-black sh-color">IMPORTANT NOTICE: This notification is=
+ being sent to inform you of a critical matter concerning your current serv=
+ice, software or billing. Please note that if you previously opted out of r=
+eceiving marketing materials from Intuit, you may continue to receive notif=
+ications similar to this communication.=C2=A0 DO NOT REPLY to this email, t=
+his inbox is not monitored for replies.</p>
+
+</div></div></div></div><br/></div></div></body></html>
+--92e8510757a5fd801a9e2ebffd956968721ca09ba09b30a3fb6b49d22735--

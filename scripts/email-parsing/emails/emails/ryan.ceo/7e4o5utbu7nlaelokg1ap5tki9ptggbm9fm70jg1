@@ -1,0 +1,66 @@
+Return-Path: <me@laurens.ai>
+Received: from mail-pg1-f180.google.com (mail-pg1-f180.google.com [209.85.215.180])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id 7e4o5utbu7nlaelokg1ap5tki9ptggbm9fm70jg1
+ for livetwittertest@ryan.ceo;
+ Wed, 28 May 2025 13:01:55 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of laurens.ai designates 209.85.215.180 as permitted sender) client-ip=209.85.215.180; envelope-from=me@laurens.ai; helo=mail-pg1-f180.google.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of laurens.ai designates 209.85.215.180 as permitted sender) client-ip=209.85.215.180; envelope-from=me@laurens.ai; helo=mail-pg1-f180.google.com;
+ dkim=pass header.i=@laurens-ai.20230601.gappssmtp.com;
+ dmarc=none header.from=laurens.ai;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFIdW1GRUhmUUE1RXQyNFVPVVZ1SGFUNCtzaGNoTTNvSFFId3FJY3pENFd2NzdIVUhsdjdSV2VXU1RPZ2Jpakx1cnYvRmlwazFTZ0FRZkVWTCs5THRCK0xzZDd2a3A0WERac3VoU1ZOT2xJcG5HeUlGWWZtQUltUVVCYnRvYWlGclYzSUdqTThQNjgwNUxjZXl1ZjFqTnk0UFgvalhHazJGd3VvbDFEWjVLVWVLQUo1SmtqOThlTjBhMUFKckhndHFjc2h1TzMrdFVLdFJwOWRzNUkzMEZFZ0ZlRUEyMklpeWVCbFpIdEdzaDh0bGc3K3grQ0ltU1dIM3JQRk9ZTVZHa1RuMHBMK3gzOU9XRVB6ejVQeC9BWno1SE1DWVg4TzRTR1FCUUdoQ1RBU3c9PQ==
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=HkVW3kLWB8X4zc2+ePEdRbNFJiQInDIVd9q1uTopJQJxedHGpsrO43zozGBnuyq1hDqqK3YPYGqlKUuWzSC58kKdVQPKDql0IDH7FfoHVqFQufWC2+Xy7/CIxUWw47lRSr8ie0/VyQGrEOfpqlRxdigy4O7ciiiGtR1SfS9BQwo=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1748437315; v=1; bh=TgJ6SCcl8Mhuw9BLA6BC7BY9YcKPCegCGH/O98j9K6Q=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+Received: by mail-pg1-f180.google.com with SMTP id 41be03b00d2f7-b26f7d2c1f1so3764075a12.0
+        for <livetwittertest@ryan.ceo>; Wed, 28 May 2025 06:01:54 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=laurens-ai.20230601.gappssmtp.com; s=20230601; t=1748437314; x=1749042114; darn=ryan.ceo;
+        h=to:subject:message-id:date:from:mime-version:from:to:cc:subject
+         :date:message-id:reply-to;
+        bh=TgJ6SCcl8Mhuw9BLA6BC7BY9YcKPCegCGH/O98j9K6Q=;
+        b=e/Hl8s2gR31HyK9btKL1AT9OdvRZQ5Xlr97u/ItamAw66kTSTBfDxJKHMq4fPixK/O
+         3RT6ys1VmbmsSj0sPoGzdqA45/jxiRejMXag+2EhnVgPqMMxP7U7D58mEFkfV4L83bR3
+         vieJmDY90U6PIj/p3NHBf8/SEK4/B822wftjSFj8krL5nAC0NwTltLW/ezf9pNIj8sl/
+         cE00Ql+G0j0P2f4s+cmgSGGJPKY5SOmkW1hNCGCSTFQJhsBTiJSVfn87T+AgmErb7DE5
+         BTVnPtX0Wi3rxKoHgVpjP87pDm/6lNzJq5jfBKJgnXiyCn7KAijYw1WHG4sWoV8XFrYD
+         DAjA==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1748437314; x=1749042114;
+        h=to:subject:message-id:date:from:mime-version:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=TgJ6SCcl8Mhuw9BLA6BC7BY9YcKPCegCGH/O98j9K6Q=;
+        b=o5lEkGtBp9wDmfpKKpNuGT08r4rK8zsWibGRz4muUZ5+JltFbmEggvdZsjnSyjmBvK
+         Q8ssQn/t5Bhq8wgaA0pLEPTKtAjnzjmVprryzHewM8WGAt4Gw8mi5yINAGWVkXNC6gF6
+         a8mqbxnKbvA9C/K402n9TcbSk1ctCxisN69HfUvFODS1m/RV7OrO5pD6wx6CzycsDrac
+         XeC57v571fX5QJYPorx9OafSB5JWa/gOH1MBkTTvafLKQQTE6csvGThyqLTRLfRmtzf0
+         e4gzPgyOd8BT9X/8yHdKWCzrvIUHnR2pVVcj3O7C7fo8wBJg53vfZSDO2e5oMhafZezG
+         bbPA==
+X-Gm-Message-State: AOJu0YzhqlJKrL8eydFptm/YxA3rhx2ZJOL9S7nzDOcLrWRdovfYMImF
+	c7AEh2wOH/UEfaKk96hUDqvChVVknTt1Nx7kt5Zp8d7C6CZZ1Cnr822OK2y/zD295pyNYNTdEhG
+	tyFeAy7GTbAgOXckH2/CH0Vpd+5PiZoKVdGXvaIYdtR2RNFcRIr2v+x4=
+X-Gm-Gg: ASbGncs9ObdX7lmdSd91kk95DsQVZBJ7q/9UXDtuT2sRQSd4rpx45ULuj2f8cVEBa1k
+	Mp8KMva8ZkybpCIMBoIoZKSgGBQtCergvO3cl6MhzNVi6QK3OhEtzcCQ8KRIznPbIO9RUlGhi0/
+	lI+qcptaQ/h/CjyyHhsOlL8AudMU8xDps3
+X-Google-Smtp-Source: AGHT+IFEKgZrYnFm5BV2vFN7yuW5VQxuDG29PbtOCF8NYJQs3mAPx7d9Xgy2OfSfq6u1RZOcVtVgNWCkLLfSRTRLA30=
+X-Received: by 2002:a17:90b:4a04:b0:311:da03:3437 with SMTP id
+ 98e67ed59e1d1-311da033461mr5300471a91.27.1748437313288; Wed, 28 May 2025
+ 06:01:53 -0700 (PDT)
+MIME-Version: 1.0
+From: Laurens Dauchy <me@laurens.ai>
+Date: Wed, 28 May 2025 15:01:41 +0200
+X-Gm-Features: AX0GCFvflIhz2SYUKIEBT93Mm0me_eoWQTkBnx5XMRRdzyP4utxFJnFaolwRe2c
+Message-ID: <CAPY6sA4L3UVQ=ZdJVUBFN1+jSJ2HMA7KsfAa-bPHPB=j8DFFjw@mail.gmail.com>
+Subject: The lion does not concern himself with twitter requests
+To: livetwittertest@ryan.ceo
+Content-Type: multipart/alternative; boundary="000000000000f88f13063631c896"
+
+--000000000000f88f13063631c896
+Content-Type: text/plain; charset="UTF-8"
+
+
+
+--000000000000f88f13063631c896
+Content-Type: text/html; charset="UTF-8"
+
+<div dir="ltr"><br></div>
+
+--000000000000f88f13063631c896--

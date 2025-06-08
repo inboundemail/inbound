@@ -1,0 +1,66 @@
+Return-Path: <zach@adamcad.com>
+Received: from mail-lj1-f179.google.com (mail-lj1-f179.google.com [209.85.208.179])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id 89m40onbii7uginvfuv5illei1otkohudsf85f01
+ for new@resend.exon.dev;
+ Tue, 03 Jun 2025 20:59:08 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of adamcad.com designates 209.85.208.179 as permitted sender) client-ip=209.85.208.179; envelope-from=zach@adamcad.com; helo=mail-lj1-f179.google.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of adamcad.com designates 209.85.208.179 as permitted sender) client-ip=209.85.208.179; envelope-from=zach@adamcad.com; helo=mail-lj1-f179.google.com;
+ dkim=pass header.i=@adamcad-com.20230601.gappssmtp.com;
+ dmarc=pass header.from=adamcad.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFGdmtTS0JPN3JhTkdndy91ZDU0aEV1Z1hGQ3RtVEYvNXkxd0VQSTNqTzQxT2lSaXhTTlhmcHNZOFgwbjZjY1h3ekhwYVkyTmpzR3RiWDFuQkZCTnZrR1NGYThjKzAvVXIvWnBqZXp0T1RtU2pVWElUTUFCUGpVaG96RUtWWFBvRzNvQkI1bGgyQU1IZTljaVhra0lHa0VJVXlkRk5yM1lsNUhWcTZRQy9kSDFrM1g3emhXVmVhUnlLL3N0SklRY2xlZ2RQTHZETW12bzJnMmZoL1pwOTREUk1uV0xPRzhjWDNyNktHL0orVzJUWGFDREpUVEx6c1pBYnJhVlI0S0RvaGJnblZ5QmdrZnRCSFhYdTVhT0lsbHA0K0htbzlKcnF2am1RWElibUhybXc9PQ==
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=H4ElLpeE1Zjk2qZazV+IDt57T+7wfJjmrHSPGIgWfMIeaq3k9NMQhoir/CxLSykrV6gYS9fcBpGbf7XuymOLaagZo1Hp6WupBlHvbm592jaf4W5I5Ugp/Cq9vcbsBKk98XOjyYl2RxDu1rKEGQ1CTa1GFoiiJDuj1rfwhfdBiFs=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1748984349; v=1; bh=/ddEa8adD5MkGuvdnDaslSrCk21dIk9cKpcrS8Wv1oE=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+Received: by mail-lj1-f179.google.com with SMTP id 38308e7fff4ca-32a9e5b6395so35508841fa.0
+        for <new@resend.exon.dev>; Tue, 03 Jun 2025 13:59:08 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=adamcad-com.20230601.gappssmtp.com; s=20230601; t=1748984347; x=1749589147; darn=resend.exon.dev;
+        h=to:subject:message-id:date:from:mime-version:from:to:cc:subject
+         :date:message-id:reply-to;
+        bh=/ddEa8adD5MkGuvdnDaslSrCk21dIk9cKpcrS8Wv1oE=;
+        b=FkUFhde6CJrrlqjrByqEu3cLndLOaASPzOyzHxV0j+fGIuVIpMDYdOYke5gsYHdm0i
+         18rPiQTsLshlDqdomaFinJr9emC0v6I1qsxeo4RXVriEsStVj04sBwYXlzANOzLyyExq
+         5tS+yBeQd35yQDNJ6jEsHbNurBY318VLsFqrCIKYcK7KKGQlQ+nXWAqUTYX1S7i8FX9h
+         3cJ8ZaX90+1nMljPZDHlgpGnhumGMTKgIjl5LFGwKOMqzCtNy8p/AlZ2u9IWNiZsTILL
+         W6bh5d/518MOaYyTv+QAxgFYVc53xrHVjDQ2gcno5VVWmSsK4FvFeXbyfgdOJaQLMyMM
+         mWrQ==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1748984347; x=1749589147;
+        h=to:subject:message-id:date:from:mime-version:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=/ddEa8adD5MkGuvdnDaslSrCk21dIk9cKpcrS8Wv1oE=;
+        b=mQcI1X65+Gj/xi9bmG2UB9Yzi4FEQdlY3Bf9zy4XsT5wZTv1s7ENuHn9EriuPr7o91
+         8t1NZ3LXg33QZF/KJNGacVIgzUfLVOaXe2ydG5tyClhqw0Pn+HWum+qAb0pZ4q3eBFMr
+         p3rIS2Cs1Cn9ifjSMgpc7cAg1IRtKhe3OwwzDSJWUxpo1GkuskRFO2hBlKFLCJLsUIEr
+         dR4UW/Sn9PKbCqTr9CE9SqCxFJptLg03v2TdS52Zjv9P9HUDvCyCh3cOOl1qpm/ai1ry
+         aQHpfocuHJB8vqJOUDJd6II//Gzdis30rKIrEJIAFPxh9l3n/jydQabVeBbLj2JZfwes
+         Xh/g==
+X-Gm-Message-State: AOJu0YyXRrD76U31U/UEIigMoFxZW59Mvf4GV07G6y2Pb30Wo3YBPA7I
+	JjSGiqUykuNrVano3cWAQe4xurqRs6u4vimZuBHVrryNDedCtF8lUK/YN7OXDlttWF3aeezy7uc
+	lFtt+gg8bmtnztTYK9zPRsFJkWMY2w9WRYNGQX76N94tPXbDPbqXV
+X-Gm-Gg: ASbGncsQEM8PdVAWslt313o/SXPo5ZRpCMPkzx4pCucidUrJyxZoWCxRkEX60x4Tppb
+	ai3mn4Z2cV8dObHSscqXs3zKNw09JRZDCCuPHST4fYzXaAfYKrGNKC2Cja5Qz5banrR43eizLqF
+	FoV61KxyZ2YZgbORGJRAfUmxKx3RGt0y8VQw==
+X-Google-Smtp-Source: AGHT+IGI7urWWTNRfmVfMPsJ696Tf1dFwbcCIqds4i5LXO25yUNKgu2XzLITE3plscqAh6SFgm3VdsG+aVbNenlHoo0=
+X-Received: by 2002:a2e:9a0d:0:b0:32a:85d5:849e with SMTP id
+ 38308e7fff4ca-32ac72033a2mr1103701fa.32.1748984346280; Tue, 03 Jun 2025
+ 13:59:06 -0700 (PDT)
+MIME-Version: 1.0
+From: Zach Dive <zach@adamcad.com>
+Date: Tue, 3 Jun 2025 13:58:55 -0700
+X-Gm-Features: AX0GCFs_5SYQGbfc1ADZl3vuC5tUddoa-HFku_WI1n03UK3WJUrMnAfyjitgHJQ
+Message-ID: <CALqAjx83KaASh6JQKXRY8UCTJddQOASoX_-A7wi+2hky=shUVQ@mail.gmail.com>
+Subject: 
+To: new@resend.exon.dev
+Content-Type: multipart/alternative; boundary="000000000000ad98450636b126f6"
+
+--000000000000ad98450636b126f6
+Content-Type: text/plain; charset="UTF-8"
+
+yo yo yo yo
+
+--000000000000ad98450636b126f6
+Content-Type: text/html; charset="UTF-8"
+
+yo yo yo yo
+
+--000000000000ad98450636b126f6--

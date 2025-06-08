@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useSession } from '@/lib/auth-client'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useAnalyticsQuery } from '@/features/analytics/hooks/useAnalyticsQuery'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -41,62 +42,22 @@ import {
 } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
-
-interface AnalyticsData {
-  stats: {
-    totalEmails: number
-    emailsLast24h: number
-    emailsLast7d: number
-    emailsLast30d: number
-    totalDomains: number
-    verifiedDomains: number
-    totalEmailAddresses: number
-    avgProcessingTime: number
-  }
-  recentEmails: Array<{
-    id: string
-    messageId: string
-    from: string
-    recipient: string
-    subject: string
-    receivedAt: string
-    status: string
-    domain: string
-    authResults: {
-      spf: string
-      dkim: string
-      dmarc: string
-      spam: string
-      virus: string
-    }
-    hasContent: boolean
-    contentSize?: number
-  }>
-  emailsByDay: Array<{
-    date: string
-    count: number
-  }>
-  emailsByDomain: Array<{
-    domain: string
-    count: number
-    percentage: number
-  }>
-  authResultsStats: {
-    spf: { pass: number; fail: number; neutral: number }
-    dkim: { pass: number; fail: number; neutral: number }
-    dmarc: { pass: number; fail: number; neutral: number }
-    spam: { pass: number; fail: number }
-    virus: { pass: number; fail: number }
-  }
-}
+import type { AnalyticsData } from '@/features/analytics/api/analyticsApi'
 
 export default function AnalyticsPage() {
   const { data: session } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  
+  // Use react-query for data fetching
+  const { 
+    data: analyticsData, 
+    isLoading, 
+    error, 
+    refetch,
+    isRefetching 
+  } = useAnalyticsQuery()
+  
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [domainFilter, setDomainFilter] = useState('all')
@@ -105,12 +66,6 @@ export default function AnalyticsPage() {
   // Email detail sheet state
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
-
-  useEffect(() => {
-    if (session?.user) {
-      fetchAnalyticsData()
-    }
-  }, [session])
 
   // Handle URL parameters for email ID
   useEffect(() => {
@@ -121,6 +76,7 @@ export default function AnalyticsPage() {
     }
   }, [searchParams, analyticsData])
 
+  // Filter emails based on search criteria
   useEffect(() => {
     if (analyticsData) {
       let filtered = analyticsData.recentEmails.filter(email => {
@@ -140,26 +96,12 @@ export default function AnalyticsPage() {
     }
   }, [analyticsData, searchQuery, statusFilter, domainFilter])
 
-  const fetchAnalyticsData = async () => {
-    try {
-      setIsLoading(true)
-      setError(null)
-      const response = await fetch('/api/analytics')
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch analytics data')
-      }
-      
-      const data: AnalyticsData = await response.json()
-      setAnalyticsData(data)
-    } catch (error) {
-      console.error('Error fetching analytics:', error)
-      setError(error instanceof Error ? error.message : 'Failed to load analytics')
+  // Handle refetch errors with toast
+  useEffect(() => {
+    if (error) {
       toast.error('Failed to load analytics data')
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [error])
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -308,14 +250,14 @@ export default function AnalyticsPage() {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <Button
-                  variant="secondary"
-                  onClick={fetchAnalyticsData}
-                  className="bg-white/20 border-white/30 text-white hover:bg-white/30 backdrop-blur-sm"
-                >
-                  <RefreshCwIcon className="h-4 w-4 mr-2" />
-                  Retry
-                </Button>
+                              <Button
+                variant="secondary"
+                onClick={() => refetch()}
+                className="bg-white/20 border-white/30 text-white hover:bg-white/30 backdrop-blur-sm"
+              >
+                <RefreshCwIcon className="h-4 w-4 mr-2" />
+                Retry
+              </Button>
               </div>
             </div>
           </div>
@@ -328,7 +270,7 @@ export default function AnalyticsPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-red-600">
               <XCircleIcon className="h-4 w-4" />
-              <span>{error || 'Failed to load analytics'}</span>
+              <span>{error?.message || 'Failed to load analytics'}</span>
             </div>
           </CardContent>
         </Card>
@@ -371,11 +313,11 @@ export default function AnalyticsPage() {
             <div className="flex items-center gap-3">
               <Button
                 variant="secondary"
-                onClick={fetchAnalyticsData}
-                disabled={isLoading}
+                onClick={() => refetch()}
+                disabled={isLoading || isRefetching}
                 className="bg-white/20 border-white/30 text-white hover:bg-white/30 backdrop-blur-sm"
               >
-                <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading || isRefetching ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
               <Button className="bg-white text-purple-700 hover:bg-white/90 font-semibold shadow-lg">

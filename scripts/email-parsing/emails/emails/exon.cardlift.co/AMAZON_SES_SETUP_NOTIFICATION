@@ -1,0 +1,15 @@
+Date: Thu, 05 Jun 2025 08:59:24 +0000
+To: recipient@example.com
+From: Amazon Web Services <no-reply-aws@amazon.com>
+Subject: Amazon SES Setup Notification
+
+Hello,
+
+You received this message because you attempted to set up Amazon SES to deliver emails to this S3 bucket.
+
+Please note that the rule that you configured to deliver emails to this S3 bucket is only valid if the entire setup process is successful. For more information about
+setting up email-receiving rules, see the Amazon SES Developer Guide at http://docs.aws.amazon.com/ses/latest/DeveloperGuide/Welcome.html .
+
+Thank you for using Amazon SES!
+
+The Amazon SES Team

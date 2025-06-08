@@ -1,0 +1,69 @@
+Return-Path: <bounces+30199539-26dd-livetwittertest=ryan.ceo@em2205.techwithanirudh.com>
+Received: from wrqvffvh.outbound-mail.sendgrid.net (wrqvffvh.outbound-mail.sendgrid.net [149.72.255.128])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id htj21mmhcmvelao0u0fobapqd6427ei64num2no1
+ for livetwittertest@ryan.ceo;
+ Wed, 28 May 2025 09:27:02 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of em2205.techwithanirudh.com designates 149.72.255.128 as permitted sender) client-ip=149.72.255.128; envelope-from=bounces+30199539-26dd-livetwittertest=ryan.ceo@em2205.techwithanirudh.com; helo=wrqvffvh.outbound-mail.sendgrid.net;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of em2205.techwithanirudh.com designates 149.72.255.128 as permitted sender) client-ip=149.72.255.128; envelope-from=bounces+30199539-26dd-livetwittertest=ryan.ceo@em2205.techwithanirudh.com; helo=wrqvffvh.outbound-mail.sendgrid.net;
+ dkim=pass header.i=@techwithanirudh.com;
+ dmarc=pass header.from=techwithanirudh.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFHT3BEenY2K1Vqa0lleEZkcnoxSzc0NUR5VlYyK0l3TmxPM3pwYytQelp0QWdLQkdZTVBUd1E0TDBkV3NiSFdJVVptOHdwTnVNZmpTN1BOcjhCQXVZdzc1OFRTT2ZqZytqR3B5VitoYnpCMEhUdExmajFjdm11SHRtdENuNmdzVHlrd3hOZ1B0WElJMDVCeWFLQ0VxT1ByTXNKNDQxbFhleVl0Y0hsV1pYeWZjWGJRZXlkTU5Nd3dzTjhHc1l5a3BBdVBBSFVBV1JkdmtDRWh4QkNINDEzN0JxNFN3TXJUZTNsNVVuWjE3THg4NFNXMk1TcDhLVTErTjkydzFZcDhUejFrbXhQdWZ4WmRwMFpKOWpaUHArcnNsb080UzZleE1pempVaGJmNDhId3NnNExWRk52OVFpcWkvOFViSHptQU96T0gybTlxMlpXZjdMdUxCUVU2bjZZak16WFoxZTlrdGNZSk04ZURJMSt5ZUFxWi9RZ2FzcFcwckk4TnFtVWxNPQ==
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=pc6GH16zELKNHvaPM9FewQU/8ejLvZdDvJv7xaUSNvA7AQs/W0TPeg3BVgcb1iHrZGEms61kq4doTKJdlFKm36cm3a0rnRPdaSW4o/JLzK4ROMAMxzpNReOFBYRUCix+HhkN0nSFmfVlhkCrNoUiseYQuPjhz1iOztq/NoOWFms=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1748424422; v=1; bh=Qmop4+WDjqTcLQWm9uu5S2bfqCTf9P8C+/GweoT+uoE=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=techwithanirudh.com;
+	h=mime-version:from:subject:to:content-type:cc:content-type:from:
+	subject:to;
+	s=s1; bh=Qmop4+WDjqTcLQWm9uu5S2bfqCTf9P8C+/GweoT+uoE=;
+	b=05jqvQtsc7bRRcVNYIrEfiQalv0V6bMFK7Yktqx5LUtbLCsxnrg5Z3ZSJilwkF8UsbiM
+	Wl7Oz/iREENcC4lrsKHwsqLnnHuXOjLD/E2n7kU31ibm84nI8r0E+/EBEDM32iTMS3bAqF
+	R8lEkR0q60nvbfRQwDH2WoNN030Jsdq+mfKW2T2wLPKgqtXxDfL8vZ8Tt1jp8JTnaLNefU
+	1k9rpeQqFmBl/NaZVG1tDbg73QtJ8QV2VmaddvWLD6zIsjqN9iOewfKYnuZG99YU4BZhkc
+	NqouW9h1AqvlUbW3RYsETvmtQ0DvD0Pg5+Q+p80bkh26dwXunhZZlLZX+2YSiXLg==
+Received: by recvd-6884bf9dd7-c6rh8 with SMTP id recvd-6884bf9dd7-c6rh8-1-6836D6E5-13
+	2025-05-28 09:27:01.534354053 +0000 UTC m=+4274348.988278008
+Received: from mail-il1-f170.google.com (unknown)
+	by geopod-ismtpd-16 (SG)
+	with ESMTP id IjOSaAe3TaCX5-kHaqLelA
+	for <livetwittertest@ryan.ceo>;
+	Wed, 28 May 2025 09:27:01.356 +0000 (UTC)
+Received: by mail-il1-f170.google.com with SMTP id e9e14a558f8ab-3db6ddcef4eso35825965ab.2
+        for <livetwittertest@ryan.ceo>; Wed, 28 May 2025 02:27:01 -0700 (PDT)
+X-Gm-Message-State: AOJu0YxmQjmHpx+PH+CE2vDNXn0HP6odw+Y1LPsRHw1a1ReIhEfVBKIM
+	fruYp/yzuyUcYa87R7aImcvJNscS+660Pa2iX/ZGR0o8vj0hArSEar0qdUaiRD4qrXbsTRvz/Ai
+	PjbviytMLklwCOfAsaxBO3UF/WTGOkJE=
+X-Google-Smtp-Source: AGHT+IFLgOGlizgkC/tz41TKxAvfpC+iTpdzMgEXYklOgTfi0Xfb2rSksU2dodtlTvaif9kVBBzDCZYdPSWIG9xQK/E=
+X-Received: by 2002:a05:6e02:1b05:b0:3ce:8ed9:ca94 with SMTP id
+ e9e14a558f8ab-3dd8b044badmr10196485ab.14.1748424420686; Wed, 28 May 2025
+ 02:27:00 -0700 (PDT)
+MIME-Version: 1.0
+From: Tech With Anirudh <hello@techwithanirudh.com>
+Date: Wed, 28 May 2025 09:27:01 +0000 (UTC)
+X-Gmail-Original-Message-ID: <CAKxhGQLTroJcpHfkzEp371RawCXpCcHjTMDCLoa=9gHZFmqP6g@mail.gmail.com>
+X-Gm-Features: AX0GCFvQwf01ZT4CSdqQg0DpoeMLZ-Rr-cyM9Vvc3jbuYqINGC1lGt7dR1ca3Dg
+Message-ID: <CAKxhGQLTroJcpHfkzEp371RawCXpCcHjTMDCLoa=9gHZFmqP6g@mail.gmail.com>
+Subject: Hi Ryan
+X-SG-EID: 
+ =?us-ascii?Q?u001=2EocuKpTNIjVrib8eK=2FKKei5PNpbDUEEqY=2FSEc5h4JWf3HJ+OEiXw4Id8Th?=
+ =?us-ascii?Q?e96amTivE1trBPa7K3qdnmFTPS3UWH7ChJJxqfd?=
+ =?us-ascii?Q?kBLbO5Z6YnhzqX33QJSiPpbF+B9S=2FF8fvtpbI8g?=
+ =?us-ascii?Q?Ms2tkwNyXqh989cQ2JycQ=2FqLwDtOkoTYr1JRTba?=
+ =?us-ascii?Q?tRUfNedHJzqq+K+GBl9YdgzlzGPYZbCmZlGKaeh?=
+ =?us-ascii?Q?gMHFgubZZ7Bul34lvtQvaecJ5S4WNzx4onfcQ2y?=
+ =?us-ascii?Q?fe2s99EI7qZ4HN0JJQyvHRcEoQ=3D=3D?=
+To: livetwittertest@ryan.ceo
+X-Entity-ID: u001.4eA2MhPiCFRGytWNyFNWTw==
+Content-Type: multipart/alternative; boundary="0000000000008304a406362ec8ac"
+
+--0000000000008304a406362ec8ac
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+
+Are you ryan?
+
+--0000000000008304a406362ec8ac
+Content-Type: text/html; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+
+<div dir="ltr">Are you ryan?</div>
+<img src="http://url9843.techwithanirudh.com/wf/open?upn=u001.1GE8TdKGcCf-2Fnrq8ZtTvwyLU5GmpSsOIjxyjk6lSccECQ7RM4E2yt7KdiOK4FCrPGRhuUngI-2FPDjeFj15LhMNgmxHHARG8ZOLSdYxon3qUhH-2F6QoSNWdAkEwqb7kzH7huHOAE90vKkwI7XvQaQKd8S8zDjWr9b43Rp1M4rcUXYub-2Fq8aOJX-2BFPUqR4EPi2SnlX0FF7bcvQmfiMUXC8HdlU8ILIi9eNsuIs-2BJ4yfGACc-3D" alt="" width="1" height="1" border="0" style="height:1px !important;width:1px !important;border-width:0 !important;margin-top:0 !important;margin-bottom:0 !important;margin-right:0 !important;margin-left:0 !important;padding-top:0 !important;padding-bottom:0 !important;padding-right:0 !important;padding-left:0 !important;"/>
+--0000000000008304a406362ec8ac--

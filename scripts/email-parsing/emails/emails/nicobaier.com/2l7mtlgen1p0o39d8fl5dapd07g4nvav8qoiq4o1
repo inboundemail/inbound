@@ -1,0 +1,66 @@
+Return-Path: <nico.baier@gmail.com>
+Received: from mail-ej1-f53.google.com (mail-ej1-f53.google.com [209.85.218.53])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id 2l7mtlgen1p0o39d8fl5dapd07g4nvav8qoiq4o1
+ for user@nicobaier.com;
+ Wed, 04 Jun 2025 05:27:54 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of _spf.google.com designates 209.85.218.53 as permitted sender) client-ip=209.85.218.53; envelope-from=nico.baier@gmail.com; helo=mail-ej1-f53.google.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of _spf.google.com designates 209.85.218.53 as permitted sender) client-ip=209.85.218.53; envelope-from=nico.baier@gmail.com; helo=mail-ej1-f53.google.com;
+ dkim=pass header.i=@gmail.com;
+ dmarc=pass header.from=gmail.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFGNzFBeHArbE5KU01rSm5ta3VWZkpPRUZvOEQrd1NNYVRodk4ySmErT2ZNeFJqU0pWOVJwTzYxVCtuSXp6YTBJVUZrNVdGY2RGQjlMS3BPbTg2eEIzSXdNdlNGNVRCTmIwcENlTzFTSFo3SmtxRkNuMjd3SUlhMDd0WlEvOGVHZUI0QTNidi9lSnlYWjdEd2xWTzhrTWVLTktYckkybEVhK1NlYmIyOXFMOHQ1S05jdWlLdktXUU1USUZJSUVFM2twRjRPSC9GWTExWkFjbTlzdVFCVWF0aWhKdlJrOGJ2aVJCWG1McUs3aFNSQzRnc0NJYTZJWkpqMG5yY0pLR3NGNFJIRTJPUFNqVlFNYzl1THpkb0xsNWE3ZFlpMjZ6NFpIcDRPbFVrZ1lJZ2c9PQ==
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=XqbMRvBBQzAJuaYwbzjXVTc9jdCwNK4CQ6yR7kG8F+tjzGMV483nBg4Udxrc79udgu0+OIKU3VVds1R3i+8O3oXhN9cXqUTpnTKR87Koj4P+CE2/7HWNlsM0RXvcu26WflAVLhJ2UlcEUHwcuT+UZC348gl0vDFgmea2lNzdb8c=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1749014874; v=1; bh=8glP8o3OKDok9CIAO/zmvxxke4WG0iAS5UK9Ut8pTCk=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+Received: by mail-ej1-f53.google.com with SMTP id a640c23a62f3a-ad572ba1347so927502466b.1
+        for <user@nicobaier.com>; Tue, 03 Jun 2025 22:27:54 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1749014873; x=1749619673; darn=nicobaier.com;
+        h=to:subject:message-id:date:from:mime-version:from:to:cc:subject
+         :date:message-id:reply-to;
+        bh=8glP8o3OKDok9CIAO/zmvxxke4WG0iAS5UK9Ut8pTCk=;
+        b=h0Wsv9q/LM0CkPUOgrcOD8ZUKtqUOLruxBbdxjXBitQKN2ZMrIuBPx16mx23SxuS1A
+         xVRGQ4YnP+W0gLh1bx+a2ZLvmtrJ717NSpcpz+LcjeMZZl1ruWk1qlnGevY1rxhAr0Bn
+         dGUYqSeMpbTHntrglPzO6LfUoJASsc2J2XkvE9Qx/WmDyghGIFSFpwH5tGzG3ziRwcEy
+         crJv8NSr3+hfizvbp8IxSUq3EAkJBEmw4gLJB3udXZjQ6URn96c4BWERGUndD3iua8Vf
+         g7D7bJrDrhWqvk6UCb6N8Z6EpRrogDb6mZ7Tl8HPdbhxNdtC/6cSM8EkOzsnXn/IQW/a
+         J5mg==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1749014873; x=1749619673;
+        h=to:subject:message-id:date:from:mime-version:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=8glP8o3OKDok9CIAO/zmvxxke4WG0iAS5UK9Ut8pTCk=;
+        b=Y6unDxshZ7T6OvPfN1MCj5FCA1gDQfrJRmqejGJraPnw/i7hDnPCX3/rNRfZzUC7I6
+         q2uvoJUaK0J+a5PTHkwbQIsa37FIHmrMolR41dJK1Nlriy4y9XXgGM6+toNk6MJSVR4L
+         lDmRp6UVEnvJ6UGpjSVJCBhmLHBrBNi37qxHKlpfQFqWHJyLXpMe4wL2G6V8j/trySUT
+         MaQPbI2uWH5hT7GmBUfTaHG35dhg5u3qNBr7BM696iHzZTSUeZGzeMnxztFB6tEmdezY
+         Cc43EJJ2JKUQjCk9ICuzIB8WyG1fFJI8OMxFhCq7fRpzflVPNl1xmfSfPbwEuNZvI+4T
+         BYzw==
+X-Gm-Message-State: AOJu0YzoIabTw6egwqeef9oxwsJvrtAH1Qs6JE8RDjU6UeT3bcwTDgVe
+	nHuZEoFkgKWclpzSIrJzWHWun6AjAwO3i5kQyOCJ1RPyq8OwZTgZMdZXVgAGT2fMSZ3a4Gvwm+4
+	S63MZO4BA038Xz7u96/hMl57onnjMLiX+B0uT
+X-Gm-Gg: ASbGncuzOYGbbY9sLdMRJIQakIvbTdrAJGtBMT3GGDZGukkYsGxqx4x/GSV1SCkYzV8
+	owHMPdpk9AcUMh+kO+5uRNTmBXqy0yufIvi78/Exn/dQltx1rsmrT07WvswRSsbrKhttUBrUpP3
+	X7mmDC6qe10Pjc98kz63KmaG/DzbYpyVEDgIB5HqqoTjb84aeWh40m4u6bmBIotlAZ
+X-Google-Smtp-Source: AGHT+IF663m7aw3/uRbwAY+dCtrX2GmlZGosUe3KAuBrV5ArpKLL2IFaVLLNOX00oL4Vu5peVvLze1dHLCM4tPLHsZk=
+X-Received: by 2002:a17:907:930c:b0:adb:2a7d:1e7b with SMTP id
+ a640c23a62f3a-addf8d0122fmr100319966b.23.1749014872789; Tue, 03 Jun 2025
+ 22:27:52 -0700 (PDT)
+MIME-Version: 1.0
+From: Nico Baier <nico.baier@gmail.com>
+Date: Wed, 4 Jun 2025 00:27:42 -0500
+X-Gm-Features: AX0GCFvDypJzRICnPYmCk8X74kC28yQGeTv7a15F6guyaJmyC1tBbvZZ6VJjCfc
+Message-ID: <CAGS8cY+HYCzkNfjdkrSobkOeiP7+JEaEZ3OPdih=1Hdy+mo3Ew@mail.gmail.com>
+Subject: hello
+To: user@nicobaier.com
+Content-Type: multipart/alternative; boundary="0000000000003319240636b84236"
+
+--0000000000003319240636b84236
+Content-Type: text/plain; charset="UTF-8"
+
+hello
+
+--0000000000003319240636b84236
+Content-Type: text/html; charset="UTF-8"
+
+<div dir="ltr">hello</div>
+
+--0000000000003319240636b84236--

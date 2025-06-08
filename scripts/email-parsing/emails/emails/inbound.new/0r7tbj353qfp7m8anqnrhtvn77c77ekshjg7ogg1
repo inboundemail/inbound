@@ -1,0 +1,134 @@
+Return-Path: <verified-org-support@x.com>
+Received: from mail-qt1-f178.google.com (mail-qt1-f178.google.com [209.85.160.178])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id 0r7tbj353qfp7m8anqnrhtvn77c77ekshjg7ogg1
+ for ryan@inbound.new;
+ Fri, 06 Jun 2025 20:27:06 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of x.com designates 209.85.160.178 as permitted sender) client-ip=209.85.160.178; envelope-from=verified-org-support@x.com; helo=mail-qt1-f178.google.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of x.com designates 209.85.160.178 as permitted sender) client-ip=209.85.160.178; envelope-from=verified-org-support@x.com; helo=mail-qt1-f178.google.com;
+ dkim=pass header.i=@x.com;
+ dmarc=pass header.from=x.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFGR2dqd1Z4SmVlcnRMZSs2MjBDQSt6YXhiYUlhRjRVeUV4TzQvMzZER0xJc0pCSGo3RkE3MW4yaVRNQ1M3dTR0bmVpeTNVRm5FMWxsblg1V2JjWWt4U3Mrb29iQm1rZjBUYkhvZXZkUVBuVnZhY096bmNKZ2VncWxldzBQbHV3L3JhbnhwN1dhdCt1cU04aS9nUEdjcHpUa05SRTQvcG5YYXBWQnBYaFJ3N29Bc0dVbEVRQzV1YmxwbE1FYUlrNkZpSDQ4T0FleXdOYWdsb0dwZnJwN1RMOUFjUWtNSTl0TFJVWktUM3FTWURKdlRld01CK3RJOUFPQ3AwRThTbGR3enJpZUFTSGV3QlQ5bS9idlRNVnk5ZVBFN1g2MVdLTytsNi9pSjQvRW1BSzhaYk4wejZnZVgya2h2eG02aHlhZTg9
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=QLpIEhmOVlj34XZnrfIY14J363NEsz70/mSNOfHge2rAc2pwP/B8Zrkvy4wJdLmYlXUplkx2+JAcaEiS6Q2p3RpSGSWK1HvxEu6guw7oi+BD7qeaifG9rdK11fH8y/iWznc1EtGq7e7qqg3yFZ1xLRREnIfPaiCIMBvX+IcqMvg=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1749241626; v=1; bh=1vvQCkPMqccr55muN+55QPiRqSixuaiI2B6UykvyWZQ=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+Received: by mail-qt1-f178.google.com with SMTP id d75a77b69052e-4a43972dcd7so31008821cf.3
+        for <ryan@inbound.new>; Fri, 06 Jun 2025 13:27:06 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=x.com; s=google; t=1749241626; x=1749846426; darn=inbound.new;
+        h=thread-index:precedence:list-unsubscribe-post:list-unsubscribe
+         :mime-version:subject:references:in-reply-to:message-id:from:date
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=D/tQleVxFG2ejWKLxcbrbfMFNz6qco5pTklxTgzypkM=;
+        b=RU0DkE/Sr/J9iaS/KkNrMfL0X600Mb5KvE/n0/0cqG4FH5pPQYYch2JT4o4H52/kFV
+         mwC0a5/adcS4S5hKZtNhDJsDj9N+ZeoNF8YRoM5gX9pBLwr8xY74YiGZ3HJNkRKys2ju
+         VnR0cNQYscwirtAeYh3atzkmEemYBAAtSx7O5sy6zAcuUeofkZbcce4jmx+uMj6nThZF
+         uTGne3+Jl5ZXiPxCfdPioapPC83MaBPhhUGJh04NoSlp0otW5u7pIUMP2HOSs4712Rz0
+         UJ9CrapYIrKrMMeHExPYm7NdkRUb55N/U1Cc5ZzmfY21uZFRhqImsOiWS8+zAZVQ6ejh
+         mBRA==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1749241626; x=1749846426;
+        h=thread-index:precedence:list-unsubscribe-post:list-unsubscribe
+         :mime-version:subject:references:in-reply-to:message-id:from:date
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
+        bh=D/tQleVxFG2ejWKLxcbrbfMFNz6qco5pTklxTgzypkM=;
+        b=gR/oPcvPg4tc6fNTYHVMf4z4c3QGZWeRLbUBDXPrbY7NfdMb5AXmgZVArbKU7yDzLo
+         USKJoYsEjSMIrU2DF/MDwbNiM6P5cfnyMQQnFrH6Hnhqjl1GOCinFuCgL5B5R42Hd6fk
+         aP4KClqutBh/oR61FWa/Yr94F4RY/U9sPLD7Wwx8YtbmIlR0qzlMQfiPWrRoHKBddyS6
+         xw7LmIX8gE+nYDk6ObUVTpUwvHum+BU9scEorWmkYt2IRNWo85o4p4sbkucItZaG4/um
+         7+YFJ+K/825KQtEAs+6/njeFxn/1xf4diYCDS8GVu2m7HZHsjyejOr0V2/AWZTXcL8l7
+         H5gA==
+X-Forwarded-Encrypted: i=1; AJvYcCX2LuyfMxGUpahIWSNiJPYk7kwsqVt4qYHlNagWBOVl5SJdWOuj7k+GrDPY4GsS4ONW2roa@inbound.new
+X-Gm-Message-State: AOJu0Yx0XKspBb4iG+fGG0JB9eOvA1nI0IER1Tzgwa0r50uCRu/Feo4r
+	GK9o0hXiDjkZ0/CqN3297+ZfW3Ms9P3desdJ68/0S32THe336K0bDGVaKJG14Exw8BId1eI3njX
+	2S4IA
+X-Gm-Gg: ASbGncts1RlTKQ73x/RvS1JpoEV+xi5wQee8aFw/9XU5f5nYyHdji+ii62U6r44Zpbz
+	yOE1Sz+WfVSr02mDvvd6SYGqyz3wcCIynJXmT7bIjqD91FDIbxlPinzQRAYJe6TkP8evaOUQey0
+	7/OQOLx5uhF3ByklrM5spVG7CvwZlfNORMqQtRkyIZT6lQncPKCa6Hx/tpTLxdW66MO5gfJJBfL
+	0qzk0+UhbK0hth/+n8IOTztrtM+g7NLjMUNW8CvzeB2uarce8ObwbHgLRZ3VDohCPr8OWl0txIm
+	WuEusg2BFTDfqScrR3PiD1ehVC/E+7ap5iiEUPHGaDijvwnipo/ax5peQQWrPM63viqJZFh/pCI
+	LmFtDW9GDJlnjWBz4d15MtmVAjUjPA4/u86KnUXtONdgPRPc+GspqkojDf+oKFtlE3rCW3CA=
+X-Google-Smtp-Source: AGHT+IFDgUNznga1iBLmpMp3eFQs5JUD/cV7skwarbpWGu21ZOk/8PVbQZYh1jDYLeatIOhT/nEfwQ==
+X-Received: by 2002:a05:622a:250b:b0:4a4:3449:2b82 with SMTP id d75a77b69052e-4a5b9e19257mr102713761cf.13.1749241625579;
+        Fri, 06 Jun 2025 13:27:05 -0700 (PDT)
+Return-Path: <verified-org-support@x.com>
+Received: from jemhc-mail.thepluginpeople.com (ec2-54-210-55-45.compute-1.amazonaws.com. [54.210.55.45])
+        by smtp.gmail.com with UTF8SMTPSA id d75a77b69052e-4a611150830sm18042391cf.10.2025.06.06.13.27.04
+        for <ryan@inbound.new>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Fri, 06 Jun 2025 13:27:05 -0700 (PDT)
+Date: Fri, 6 Jun 2025 20:27:04 +0000 (UTC)
+From: X Verified Organization <verified-org-support@x.com>
+Message-ID: <1219042280.122501.1749241624642@ip-10-0-1-191.ec2.internal>
+In-Reply-To: <JEMHCloud.prod.VO-53271@twittertnsrequests.atlassian.net>
+References: <JEMHCloud.prod.VO-53271@twittertnsrequests.atlassian.net>
+Subject: VO-53271: VO Application - inbounddotnew - 1931004803372691457
+MIME-Version: 1.0
+Content-Type: multipart/mixed; 
+	boundary="----=_Part_122499_1117797651.1749241624641"
+List-Unsubscribe: <https://jemhcloud.thepluginpeople.com/app/unsubscribeForm?token=%5f9%2Bjw%2BRArumEV%2BImZLho4zNhBoucKWUhVUrXqu85ki43H6r1zroigJ8uq5lUFVnPC6R6E0QluQEZp%2FZOf5wGbAf4Q5Li3U9dzgtc0XIq27KD60%2BXOcCz%2BNTo0d%2F3%2BRUDypJywwT%2FHfaczCEcfYSVZlazUf4zWC0BLAFx9XKkD05NDDCj6v8fLljHyFGwDO2ztiZ%2FVwQOc0QI33qjrKnSxLN5wrMBoojPsHtGTs0Ksln4b4o9mtrxRyWhGnbo%2Fy4EZwxxBddHjylc%3D%5f82a98ef8fc618b36400ef8dd5060c8dc%5f>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+Precedence: bulk
+Thread-Index: PEpFTUhDbG91ZC5wcm9kLlZPLTUzMjcxQHR3aXR0ZXJ0bnNyZXF1ZXN0cy5hdGxhc3NpYW4ubmV0Pg==
+X-JEMHC-FINGERPRINT: 85dbd76c8c26e24d1eb85f1c86a7871a
+X-SentBy-JEMHC: true
+
+------=_Part_122499_1117797651.1749241624641
+Content-Type: multipart/related; 
+	boundary="----=_Part_122500_992449356.1749241624641"
+
+------=_Part_122500_992449356.1749241624641
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<html>
+ <head></head>
+ <body>
+  <body>
+   <div style=3D"color: #999999; font-size: 14px; font-family: Arial, sans-=
+serif; line-height: 19.6px; color: #999999">
+    =E2=80=94-=E2=80=94-=E2=80=94-=E2=80=94
+   </div>
+   <div style=3D"color: #999999; margin-bottom: 30px; font-size: 14px; font=
+-family: Arial, sans-serif; line-height: 19.6px; color: #999999; margin-bot=
+tom: 30px">
+    Reply above this line.
+   </div>
+   <div style=3D"margin-bottom: 30px; font-size: 14px; font-family: Arial, =
+sans-serif; line-height: 19.6px; margin-bottom: 30px">
+    <div style=3D"font-size: 14px; font-family: Arial, sans-serif; line-hei=
+ght: 19.6px; color: #333333">
+     <p>X Support commented:</p>
+     <p></p>
+     <p>Hi there,</p>
+     <p>We were unable to approve your application for inbounddotnew becaus=
+e the account does not meet the eligibility requirement for Verified Organi=
+zations.</p>
+     <p>To qualify for a gold checkmark and Verified Organizations, your pr=
+ofile must clearly represent an organization and fulfill specific requireme=
+nts. Please review the criteria below and make the necessary updates:</p>
+     <ul>
+      <li>Website: Your profile must feature a link to an active website th=
+at showcases and/or provides relevant information about your organization's=
+ product or service. Additionally, the website should link back to your X a=
+ccount.</li>
+     </ul>
+     <p>For more information, please review X's Purchaser Terms: <a href=3D=
+"https://legal.x.com/en/purchaser-terms.html">https://legal.x.com/en/purcha=
+ser-terms.html</a></p>
+     <p><b>What happens next?</b></p>
+     <p>We will cancel this application and issue a full refund. Please <a =
+href=3D"https://x.com/i/verified-orgs-signup">reapply</a> after making the =
+necessary changes.</p>
+     <p><b>Appeals</b><br> You may appeal this decision using this <a href=
+=3D"https://help.x.com/en/forms/appeal-verified-organization-application">f=
+orm</a>.</p>
+     <p>Thanks,</p>
+     <p>X</p>
+     <p></p>
+    </div>
+   </div>
+  </body>
+ </body>
+</html>
+------=_Part_122500_992449356.1749241624641--
+
+------=_Part_122499_1117797651.1749241624641--

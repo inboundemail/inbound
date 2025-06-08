@@ -1,0 +1,157 @@
+Return-Path: <ryan@mandarin3d.com>
+Received: from mail-ua1-f54.google.com (mail-ua1-f54.google.com [209.85.222.54])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id t4lqn2psnij0k1dlm2q4c3eehdlc2ms3ebf44v01
+ for me@ryan.ceo;
+ Wed, 28 May 2025 04:08:34 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of mandarin3d.com designates 209.85.222.54 as permitted sender) client-ip=209.85.222.54; envelope-from=ryan@mandarin3d.com; helo=mail-ua1-f54.google.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of mandarin3d.com designates 209.85.222.54 as permitted sender) client-ip=209.85.222.54; envelope-from=ryan@mandarin3d.com; helo=mail-ua1-f54.google.com;
+ dkim=pass header.i=@mandarin3d-com.20230601.gappssmtp.com;
+ dmarc=pass header.from=mandarin3d.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFGcHp0VVhIS2FJNjZ6ZGZwV2o0dkNFQktZYnhLMzNSTmxpaVo4MC9iNzVXc2p2Z09vc0E1cnhRYXpObWQzaFlzU3NGZExKUEl0RTZWaVFVNk1rY2UzUW9odWJva3FvZzRmNGo3bmEwenpXbWxra0VaQVJCVW00L2Z5Smdqc2dTZVlzb1V5a01ZOVJTRTdyUERFR0xqY2FMa1BkejhhWDlBRmVRenZ4cEFBVGNUZUJJclBxR2p3aVptbjc2VzJ0SXNHamt3Q0lKaTNzeDlDL0pWY1JTd1VPSVp2MnZxMVFwNVNiUTJnVE1WY3U0V3AxTlZJTmZuYXVRNGw0K1c5bk1ydlZzL3VMNmx4Q1Y0MmZiMm1Ddk40akZ4bG9DRzg1VHFiS1RtMHNmOXI1YUE9PQ==
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=wiN+uBxNxY5UzvEXs11SFtGKIr/r81xcD1pDRLbWTmByUydXD5Vk7BtJEf3PaqdFUe/xIvBw9le+KWtl4X4hXeuhwRR9iN3QqMDjgU+PjFEb71ZDg5I2pPMUPzexWpehQDv8e0sa+aRTa+tU6jbTesD37pKvqI6OBnNdt8I9FWI=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1748405314; v=1; bh=gPDVA6chp02ShcdP/GtqkxlGHOhe+sr69gNUfmCWKRM=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+Received: by mail-ua1-f54.google.com with SMTP id a1e0cc1a2514c-86d6fd581f4so284769241.1
+        for <me@ryan.ceo>; Tue, 27 May 2025 21:08:33 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=mandarin3d-com.20230601.gappssmtp.com; s=20230601; t=1748405313; x=1749010113; darn=ryan.ceo;
+        h=to:subject:date:message-id:from:mime-version:from:to:cc:subject
+         :date:message-id:reply-to;
+        bh=3RZkSSJ4dyAVwxqrF5DOnYZjYg+26Lt7uUTNWg3PezA=;
+        b=Iwqwlv1AKGEB3jXpQLAOpPujcJMT/RgZNpxED6AE/ewPsqMrAUJoh9DZgNsBkGQYzx
+         lKDMvLKxH/9S+qAVyik4HwgGLZACA9oo0NaljJfL47SsbQB6w5WLO4Cr9eSA2CEQmTRr
+         aWNdDBgUKs7aQ+xOrxPSwKPbhazsLUuwlSde9ERvBALzNmn/3XJGqGlGD+RhbcUL8dQM
+         SIVVC3DVkeEmNh4YytvCkWzDcXyy947gkwJ1927DVRiEr+bORngLQlURVdhKIOSLq7PG
+         5RlZcTiu4tRKfQPW+fIc77V3l5Rc4YOyN4uxUL0cSAuUDfJcUB15D4XDT/1Xs5wrtLHT
+         zJEg==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1748405313; x=1749010113;
+        h=to:subject:date:message-id:from:mime-version:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=3RZkSSJ4dyAVwxqrF5DOnYZjYg+26Lt7uUTNWg3PezA=;
+        b=e3CArKx0Gbpuanl9xFkNEtYYG8dc/2gzncUhk2819dkcOJu6KS53SKSFPE4X5zncjH
+         IC1vaCUzhgn8xCt4PV0Hj7a62RSjoqjYIU+sXD//mmpFh7zz+jPj9nwv7K7w/GsqpLdu
+         gRYPAfHrOsqS1GXRVU7sFx3V5ty/1MOGyV6bvKLZ0xjdw9p+Mcs9BjF4GFtfHlfzW+0X
+         Oyat5ZAChmVMPuQbzEKfpjfywumoXv9C4sUJDpZYt10CAYmOn94kAYKc8ykpntt+7/LK
+         F+wE8Ss+iHS6WQhYYv48AuJIAzC+Wp7a+ugdICTB23iLrqhHqIq1S51GHNt7RYUbYaj2
+         ZcVg==
+X-Gm-Message-State: AOJu0Yz+Oj4nUnU3NifraVhkL3wmTVkfFu0s1/IuxgjY1f1DCwtGsZa0
+	OsQm3Gi77OBZKPEq3xQTM0gDocEesa3eTM0ljboK2OLziEURLhqLWAYGBzhtLp7TwDs/g6JE6yh
+	uSiQR
+X-Gm-Gg: ASbGnctYat7qzLrTMuc4qlC2sMvn/bu2yTA3se1aybo8apUVHInDDAG7JpnOeTRKXLX
+	ZzMOuE183JacIjzCb1CyUqliEUC8KqG4CxkEyNeTcBpJM1FuLCzfxAqOny8B9SpdWKO4XhVU87E
+	jWKGlZv79Fcx0wjF1UPavhhmqYi1GKBs2kRZqgzg+DN0BN5Phnj60yTXqyDsTLQr3KhHL9AALd1
+	gia6vvcJFZC7H/zDoy1glD4KoT8v6HnLylP1Qf3a5goPkNf9JrtRHFgWmEPHVkckqeBmdflIskh
+	THAZvuEbkdEXTcd7fH3g6tx+/tL8/6nCVqHorAw7NV2980AygBpjaQOMhzS3/6uX0HgygTyUr1Z
+	E/jQj/l0=
+X-Google-Smtp-Source: AGHT+IFHu7cn6fv80Ub2qmhEs+qaCk8ZgMjHX4kVJU4U4ncz8P61rkWnAfaqN47uoOuhUxmsbP1FnA==
+X-Received: by 2002:a05:6102:2907:b0:4df:e510:242e with SMTP id ada2fe7eead31-4e597c87daemr3263539137.5.1748405312952;
+        Tue, 27 May 2025 21:08:32 -0700 (PDT)
+Return-Path: <ryan@mandarin3d.com>
+Received: from localhost (0.92.231.35.bc.googleusercontent.com. [35.231.92.0])
+        by smtp.gmail.com with UTF8SMTPSA id a1e0cc1a2514c-87e1f109d5fsm281088241.28.2025.05.27.21.08.32
+        for <me@ryan.ceo>
+        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+        Tue, 27 May 2025 21:08:32 -0700 (PDT)
+Mime-Version: 1.0
+X-Superhuman-ID: mb7fd8qq.9db01c56-a428-44bd-b8ea-9fb4eebabf18
+X-Superhuman-Draft-ID: draft0098b6a5d0de7828
+X-Superhuman-Thread-ID: draft001b8410d830af7b
+From: "Ryan Vogel" <ryan@mandarin3d.com>
+Message-ID: <mb7fd62g.a7182e2d-264b-4d59-b790-4be39239a2a1@we.are.superhuman.com>
+X-Mailer: Superhuman Desktop (2025-05-27T21:23:43Z)
+Date: Wed, 28 May 2025 04:08:31 +0000
+Subject: NEW TEST EMAIL
+To: me@ryan.ceo
+X-Entity-Ref-ID: mb7fd8qq.9db01c56-a428-44bd-b8ea-9fb4eebabf18
+Content-Type: multipart/alternative;
+ boundary=05fddb1aaa8c063fe087141379a195a17224b2ba01201e0332b0156f5c1a
+
+--05fddb1aaa8c063fe087141379a195a17224b2ba01201e0332b0156f5c1a
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset=UTF-8
+
+*Ryan Vogel*
+
+*Exon Enterprises*
+
+Sent via Superhuman ( https://sprh.mn/?vip=3Dryan@mandarin3d.com )
+--05fddb1aaa8c063fe087141379a195a17224b2ba01201e0332b0156f5c1a
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/html; charset=UTF-8
+
+<html><head></head><body><div><div><div class=3D""><br/></div></div><div><d=
+iv style=3D"display: none; border: 0px; width: 0px; height: 0px; overflow: =
+hidden; visibility: hidden;"><img src=3D"https://r.superhuman.com/0IkYw2y0R=
+RxhFcA7i5fysEPbtY1uskDi7TRBSvXpYrv-o-k1V2Ezh-SLuhAT1kmpS6Hvg5FUvTg7EVXjLObE=
+rrNmLAsgq-CJCsyS_8C4s70VTq0X-ZbROETCSfWiWW1smeqMS6DaEZS2D_zwpHdQY96PxBxisWx=
+JEx3cjIbgDQ.gif" alt=3D" " width=3D"1" height=3D"0" style=3D"display: none;=
+ border: 0px; width: 0px; height: 0px; overflow: hidden; visibility: hidden=
+;"/><!--                                                                   =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                                           =
+                                                          --></div><br/><di=
+v class=3D"gmail_signature"><div><div dir=3D"ltr"><table style=3D"border-co=
+llapse:collapse;border:none" cellpadding=3D"0" cellspacing=3D"0" border=3D"=
+0"><tbody><tr><td style=3D"width:94.25pt;padding:0in 5.4pt" valign=3D"top" =
+colspan=3D"2" width=3D"126"><p style=3D"margin:0in;font-size:12pt;text-alig=
+n:right" align=3D"right" class=3D"MsoNormal sh-preserve-font-size"><font fa=
+ce=3D"tahoma, sans-serif" class=3D"sh-preserve-font-size sh-preserve-font-f=
+amily"><img data-os=3D"https://lh3.googleusercontent.com/d/1jk1N_a-KDnMLtAV=
+vbzmHZmIBIU2-NuwD" src=3D"https://ci3.googleusercontent.com/mail-sig/AIorK4=
+xmXLdMVbVKMaTOTiY-MiQH9bmAQw8USV8K0oBbBUR94PuIQnGNpOwm5vHxOPIH8RsrZYM3C--pG=
+FxN" height=3D"96" width=3D"96" data-aii=3D"CiExamsxTl9hLUtEbk1MdEFWdmJ6bUh=
+abUlCSVUyLU51d0Q" class=3D"sh-preserve-font-size sh-preserve-font-family"/>=
+</font></p></td><td style=3D"width:373.25pt;padding:0in 5.4pt" valign=3D"to=
+p" width=3D"498"><p style=3D"margin:0in;font-size:12pt" class=3D"MsoNormal =
+sh-preserve-font-size"><span style=3D"font-size:28pt" class=3D"sh-preserve-=
+font-size"><font face=3D"tahoma, sans-serif" class=3D"sh-preserve-font-size=
+ sh-preserve-font-family"><b class=3D"sh-preserve-font-size sh-preserve-fon=
+t-family">Ryan Vogel</b></font></span></p><p style=3D"margin:0in;font-size:=
+12pt" class=3D"MsoNormal sh-preserve-font-size"><font face=3D"tahoma, sans-=
+serif" class=3D"sh-preserve-font-size sh-preserve-font-family"><b class=3D"=
+sh-preserve-font-size sh-preserve-font-family">Exon Enterprises</b></font><=
+/p></td></tr><tr height=3D"0"><td style=3D"border:none" width=3D"42"></td><=
+td style=3D"border:none" width=3D"84"></td><td style=3D"border:none" width=
+=3D"498"></td></tr></tbody></table></div></div><br/><div style=3D"clear:bot=
+h">Sent via <a href=3D"https://sprh.mn/?vip=3Dryan@mandarin3d.com" target=
+=3D"_blank">Superhuman</a></div><br/></div></div></div></body></html>
+--05fddb1aaa8c063fe087141379a195a17224b2ba01201e0332b0156f5c1a--

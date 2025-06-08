@@ -1,0 +1,151 @@
+Return-Path: <010001973c2ea287-a9db390a-0733-418a-ba62-392d1134873d-000000@amazonses.com>
+Received: from a11-161.smtp-out.amazonses.com (a11-161.smtp-out.amazonses.com [54.240.11.161])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id 33dpoqvkm0id9qvm0aamlheq0rjkpvoqlslrf281
+ for ryan@inbound.new;
+ Wed, 04 Jun 2025 18:22:59 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of amazonses.com designates 54.240.11.161 as permitted sender) client-ip=54.240.11.161; envelope-from=010001973c2ea287-a9db390a-0733-418a-ba62-392d1134873d-000000@amazonses.com; helo=a11-161.smtp-out.amazonses.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of amazonses.com designates 54.240.11.161 as permitted sender) client-ip=54.240.11.161; envelope-from=010001973c2ea287-a9db390a-0733-418a-ba62-392d1134873d-000000@amazonses.com; helo=a11-161.smtp-out.amazonses.com;
+ dkim=pass header.i=@amazonses.com;
+ dkim=pass header.i=@amazon.com;
+ dmarc=pass header.from=amazon.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFFbEd0bXZIODBvTFh5Mnl2NjRtelJNQ0ExMC9tK2xMNjgxaXJRcmJ1U1JlemsrRGVDT3ZJNGpEMDBmNmhDUDhtWGEvR2R1UXMwZHJTdG5OeVBnNDdISDVmQ0JlVUgzL2dqR1FtTnVTckhubThxalFkczB6cWcxcFRUZm12MUFyOWNzRnFUUWw1WGJtcjJYNXVKeWF3T2hpTXBZalJ2eDNpR3VMSnpweERERG8rczdPak5udGp5RXNXTGxGNjN4RURNVFpyMUFlWCtsWU53YlRwdUM5dTVJWndvcGRsRE5wTFdVd0toWVY4cWpqZWx3eUFCeHFHMmpkOFcyYjNxeXNnZVpORWJ1Vzk1TzEreDZtOHFWd2FmT2J4TEdKYjc1VlYwclNqc3VpUGNrTGlITlB5WEVCNHQ0STFlcW9reU5CTm5PT0wxVGFadWxTc0RTYlN0dDRkR2I4cE9zVkFmV1JOSXhzRit0cDNXU3ZwcGkrQ2tMakQvQjl6eUNpN3VRcExRPQ==
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=ByIaY8YbYRJvZ8mCaHk0FW5ZsXX2rzZa4YrA0Gh/91/FIDhyKYg3uaYAX2IYepAiQmo2KDoTHn5sQCbSrTHkEOOoIJBiZSWMmkI4KymzUduS9PWW7GG+hiAoU7rSRub2BS4FQCTZUVqRhOcQCWX9CBP3Bxr/DwAG+RtcqN+0WhQ=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1749061379; v=1; bh=7ItRPcNrumMPGhV4BTsfZFxqyZw1vhUb2ww8vcrComE=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple;
+	s=benmzc5omgrgqjsu3tg2d2m7nez6lzho; d=amazon.com; t=1749061378;
+	h=From:To:Cc:Subject:MIME-Version:Content-Type:Message-ID:Date;
+	bh=7ItRPcNrumMPGhV4BTsfZFxqyZw1vhUb2ww8vcrComE=;
+	b=LXCkqjULLTtUp5GfPldrc6wab4WOHEpmrmjl0lrE1COtUrCJ1BHJjZVcSlIGBwf0
+	VEM1OeODqWrr3+yU6zkhSZtpGYZwTC0eyiAnmL1jrhQATcGj38N51seOUYP27noAhG0
+	OwyenUajQfEy9pD4toEqQ2uxsVZYn9VC8I5ZGyBA=
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple;
+	s=6gbrjpgwjskckoa6a5zn6fwqkn67xbtw; d=amazonses.com; t=1749061378;
+	h=From:To:Cc:Subject:MIME-Version:Content-Type:Message-ID:Date:Feedback-ID;
+	bh=7ItRPcNrumMPGhV4BTsfZFxqyZw1vhUb2ww8vcrComE=;
+	b=s1Rb149BaYol9cyMttEGaUpM1XFDCYvYG4Rlyo2DMZ2yRLQmw80QBJVkmxdbocGO
+	AWJosZXmKhAMN0FJkbC/WycQLeOrrWXN8TaYG+Je3FixroNgDsNbBmMnWH3hb1LhDx2
+	yV9oaIph9L8qdh7hFKiuthZKx2MBZu3vmNOwcsSk=
+From: Amazon Web Services <no-reply-aws@amazon.com>
+To: ryan@mandarin3d.com
+Cc: ryan@neon.tech, ryan@inbound.new
+Subject: [Case 174901226800326] Customer Added Communication: SES:
+ Production Access
+MIME-Version: 1.0
+Content-Type: multipart/alternative; 
+	boundary="----=_Part_163527_13402315.1749061378695"
+Message-ID: <010001973c2ea287-a9db390a-0733-418a-ba62-392d1134873d-000000@email.amazonses.com>
+Date: Wed, 4 Jun 2025 18:22:58 +0000
+Feedback-ID: ::1.us-east-1.huE3KBUlbB3jXEGPu3NtaNXYRdURNu75MKOqRLEVhr4=:AmazonSES
+X-SES-Outgoing: 2025.06.04-54.240.11.161
+
+------=_Part_163527_13402315.1749061378695
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+CAUTION: This email originated from outside of the organization. Do not cli=
+ck links or open attachments unless you can confirm the sender and know the=
+ content is safe.
+
+  Hi there,=20
+
+The usecase for this will be for email routing and forwarding the transacti=
+onal emails.
+
+The setup/implementation is for the site called inbound.exon.dev. Users can=
+ add + verify a domain to recieve inbound emails then in the console they c=
+an setup to go to a webhook or another email (like forwarding essentially).=
+ I need to be able to send as those verified identities so that I can have =
+the routing be smooth and come from the email that it was sent too.=20
+
+So for example if you email ryan@inbound.amazon.com it will go to the site =
+and if you have a routing rule setup where it will forard all requests to j=
+ohn@amazon.com the email incoming to john@amazon.com will be from ryan@inbo=
+und.amazon.com
+
+For most usecases unsubscribe bouncing and such is handled via the email th=
+at is actually sending. Inbound acts as an invisibile gateway.=20
+
+Inbound sending via SES will not be used for marketing or newsletters.=20
+  =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D
+
+  To contact us again about this case, please return to the AWS Support Cen=
+ter using the following URL:
+
+  https://console.aws.amazon.com/support/home#/case/?displayId=3D1749012268=
+00326&language=3Den
+
+  (If you will connect by federation, log in before following the link.)
+
+  *Please note: this e-mail was sent from an address that cannot receive in=
+coming e-mail. Please use the link above if you need to contact us again ab=
+out this same issue.
+
+  Amazon Web Services, Inc. is a subsidiary of Amazon.com, Inc.  Amazon.com=
+ is a registered trademark of Amazon.com.
+This message was produced and distributed by Amazon Web Services, Inc. or i=
+ts affiliates 410 Terry Ave. North, Seattle, WA 98109.
+=C2=A9 [2025], Amazon Web Services, Inc. or its affiliates.  All rights res=
+erved. Read our Privacy Notice.
+
+
+  Some of the content and links in this email may have been generated by an=
+ Amazon customer. Amazon is not responsible for the contents or links withi=
+n.
+------=_Part_163527_13402315.1749061378695
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+    <meta charset=3D"UTF-8">
+    <p style=3D"font-style: italic;">CAUTION: This email originated from ou=
+tside of the organization. Do not click links or open attachments unless yo=
+u can confirm the sender and know the content is safe.</p>
+    <div>Hi there, <br/><br/>The usecase for this will be for email routing=
+ and forwarding the transactional emails.<br/><br/>The setup/implementation=
+ is for the site called inbound.exon.dev. Users can add + verify a domain t=
+o recieve inbound emails then in the console they can setup to go to a webh=
+ook or another email (like forwarding essentially). I need to be able to se=
+nd as those verified identities so that I can have the routing be smooth an=
+d come from the email that it was sent too. <br/><br/>So for example if you=
+ email ryan@inbound.amazon.com it will go to the site and if you have a rou=
+ting rule setup where it will forard all requests to john@amazon.com the em=
+ail incoming to john@amazon.com will be from ryan@inbound.amazon.com<br/><b=
+r/>For most usecases unsubscribe bouncing and such is handled via the email=
+ that is actually sending. Inbound acts as an invisibile gateway. <br/><br/=
+>Inbound sending via SES will not be used for marketing or newsletters. </d=
+iv><p>To contact us again about this case, please return to the AWS Support=
+ Center using the following URL:</p>
+
+    <p><a href=3D"https://kqhwb7ft.r.us-east-1.awstrack.me/L0/https:%2F%2Fc=
+onsole.aws.amazon.com%2Fsupport%2Fhome%23%2Fcase%2F%3FdisplayId=3D174901226=
+800326%26language=3Den/1/010001973c2ea287-a9db390a-0733-418a-ba62-392d11348=
+73d-000000/sNk5BJdQ5JwpwJDTtU02NeI43rc=3D429">https://console.aws.amazon.co=
+m/support/home#/case/?displayId=3D174901226800326&amp;language=3Den</a></p>=
+<p>(If you will connect by federation, log in before following the link.)</=
+p>
+
+    <p style=3D"font-style: italic;">
+        *Please note: this e-mail was sent from an address that cannot acce=
+pt incoming e-mail. Please use the appropriate link above if you need to co=
+ntact us again about this same issue.
+    </p>
+
+    <p>Some of the content and links in this email may have been generated =
+by an Amazon customer. Amazon is not responsible for the contents or links =
+within.</p><p>Amazon Web Services, Inc. is a subsidiary of Amazon.com, Inc.=
+  Amazon.com is a registered trademark of Amazon.com.</p><p>This message wa=
+s produced and distributed by Amazon Web Services, Inc. or its <a href=3D"h=
+ttps://kqhwb7ft.r.us-east-1.awstrack.me/L0/https:%2F%2Faws.amazon.com%2Fleg=
+al%2Fmarketingentities%2F/1/010001973c2ea287-a9db390a-0733-418a-ba62-392d11=
+34873d-000000/J1Ge7JyINIYVlVvsfHC9oMLJArA=3D429">affiliates</a> 410 Terry A=
+ve. North, Seattle, WA 98109.</p><p>=C2=A9 [2025], Amazon Web Services, Inc=
+. or its affiliates.  All rights reserved.  Read our <a href=3D "https://kq=
+hwb7ft.r.us-east-1.awstrack.me/L0/https:%2F%2Faws.amazon.com%2Fprivacy%2F/1=
+/010001973c2ea287-a9db390a-0733-418a-ba62-392d1134873d-000000/ZHcxMxJg3JLj4=
+XtVoUMZ-gTPxqw=3D429">Privacy Notice.</a></p><img alt=3D"" src=3D"https://k=
+qhwb7ft.r.us-east-1.awstrack.me/I0/010001973c2ea287-a9db390a-0733-418a-ba62=
+-392d1134873d-000000/HFgLAvGtViSvNkGz5AeRNv9LUXM=3D429" style=3D"display: n=
+one; width: 1px; height: 1px;">
+
+------=_Part_163527_13402315.1749061378695--

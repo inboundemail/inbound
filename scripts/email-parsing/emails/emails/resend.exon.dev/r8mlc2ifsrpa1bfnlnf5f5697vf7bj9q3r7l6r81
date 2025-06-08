@@ -1,0 +1,42 @@
+Return-Path: <support@sendtestemail.com>
+Received: from mail.sendtestemail.com (mail.sendtestemail.com [143.244.187.129])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id r8mlc2ifsrpa1bfnlnf5f5697vf7bj9q3r7l6r81
+ for new@resend.exon.dev;
+ Tue, 03 Jun 2025 19:19:41 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of sendtestemail.com designates 143.244.187.129 as permitted sender) client-ip=143.244.187.129; envelope-from=support@sendtestemail.com; helo=mail.sendtestemail.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of sendtestemail.com designates 143.244.187.129 as permitted sender) client-ip=143.244.187.129; envelope-from=support@sendtestemail.com; helo=mail.sendtestemail.com;
+ dmarc=none header.from=sendtestemail.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFFRXFtSFFSMnkwVVRVMU11bndWK0VQdm1hYlZ0SmtYbnBPUEk1OW1xSXNGc3g3b00xSVl4b2YwZ1B4MDdaYy9vM0NUaXNWMHU1bHYvTHZFQi9IazlyaXZ5VFN6d3BhRXlDWVY5dXl0YzQweDd5dVJuT1hIUGxoMmZuWFhJWjZPd2VGc2phK05zQkFocTZyQkRhTGJzZnc3UTM3Y1I4Y1FLS0JCeVJiNE9KcnBNVkRyWVdXeDNoOTQ3NGh6YUVOQTJiYThHZU83VE5NNnpnMVdDL3FXQSsrV3dEQlgzTzRLN3MyRHJlUWFtYmNlVU1ucDlQMkNqb2tGSWllbzRWSGIvRVZ5VXlxTk9jWVVLdk9wVmNUVWxYN0txVFA2Rno0a1lzdTFldkNHZG1IVXBmTFQ1QS9acitoaGNKNkJKQjArS1k9
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=DMvem6mxJTTQZaoz50UP9zW6HXHd6VBehZUJHsuz5JZQ1GjgO5hIVTblAOzQzCjWcrLcLG3bXWQatw582dRxwRi/lBlppuZS53Kr/kuGGIJy3IRn+VPMgxydmgT7tV0rJM9zkW2FfPs6qtjEFq8Ub01AGxF40cyhzeky/e4dG1s=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1748978382; v=1; bh=rhjIYS7/oRrFMko4hh17gGt2nBF4RgCg4zuPEOBhPAQ=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+Received: by mail.sendtestemail.com (Postfix, from userid 48)
+	id 365063000577; Tue,  3 Jun 2025 14:19:41 -0500 (CDT)
+To: new@resend.exon.dev
+Subject: SendTestEmail.com - Testing Email ID: 03ea996d2de0bc9b478eeef6ee4c7b17
+From: SendTestEmail <noreply@sendtestemail.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;boundary=ste683f4acd2e3a3
+List-Unsubscribe: <https://sendtestemail.com/block>
+Message-Id: <20250603191941.365063000577@mail.sendtestemail.com>
+Date: Tue,  3 Jun 2025 14:19:41 -0500 (CDT)
+
+--ste683f4acd2e3a3
+Content-Type: text/plain;charset=utf-8
+
+If you are reading this your email address is working.
+
+
+This is not spam or a solicitation. This email was sent to your email address because you, or someone else, requested a test email to be sent to this address. We work hard to ensure a balance between testing, transparency, and privacy. If you did not request this email test, it's likely that someone accidentally mistyped their email address as yours. You can request your email address be blocked here: https://sendtestemail.com/block
+
+
+The IP address of the requester of this test email is: 128.177.72.33
+--ste683f4acd2e3a3
+Content-Type: text/html;charset=utf-8
+
+<html>
+Congratulations!<br><br>
+If you are reading this your email address is working.<br><br>
+This is not spam or a solicitation. This email was sent to your email address because you, or someone else, requested a test email to be sent to this address. We work hard to ensure a balance between testing, transparency, and privacy. If you did not request this email test, it's likely that someone accidentally mistyped their email address as yours. You can request your email address be blocked here: <a href="https://sendtestemail.com/block">https://sendtestemail.com/block</a><br><br>
+The IP address of the requester of this test email is: 128.177.72.33
+</html>
+--ste683f4acd2e3a3--

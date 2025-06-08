@@ -1,0 +1,107 @@
+Return-Path: <ryan@mandarin3d.com>
+Received: from mail-ed1-f54.google.com (mail-ed1-f54.google.com [209.85.208.54])
+ by inbound-smtp.us-east-2.amazonaws.com with SMTP id 73oef4gpmjo9cqa2il3dod13e28jlt028nvm6n81
+ for test@primary.mandarin3d.com;
+ Thu, 05 Jun 2025 17:57:08 +0000 (UTC)
+Received-SPF: pass (spfCheck: domain of mandarin3d.com designates 209.85.208.54 as permitted sender) client-ip=209.85.208.54; envelope-from=ryan@mandarin3d.com; helo=mail-ed1-f54.google.com;
+Authentication-Results: amazonses.com;
+ spf=pass (spfCheck: domain of mandarin3d.com designates 209.85.208.54 as permitted sender) client-ip=209.85.208.54; envelope-from=ryan@mandarin3d.com; helo=mail-ed1-f54.google.com;
+ dkim=pass header.i=@mandarin3d-com.20230601.gappssmtp.com;
+ dmarc=pass header.from=mandarin3d.com;
+X-SES-RECEIPT: AEFBQUFBQUFBQUFIYzR1VkVXZ1VNcUxjWHR1a3BmalJDMTNoUndjd3FmczJnMkxlbGdMZXRTbmdNK1ErZDBnSmlJVFdoTkRKWGNWbEZPQnVaQ01LZzlEK1FHazVaajRIbmJ1eTM0cloxTG1jOXRZQnZvUFE2VGlnc1Ryb0VSQmNJdUlaZTBCWjhIU0YvOHRzK1RmTEc0eFhYN1pxSWxkWGM4bHd4bHRLcGgwR1Jhdm1qeHlyS04zUFNpN05FRGxOdWJ3ZTAxVmtLdUVDVlpTalN5VlFxS1VoclAvZUhHRXN3QmJiMk5yUTFEL0IzMzdWNDF3TDhCcml0V3ErbzZveDc2YmJqaW1vUjZ3bE8zUVpVamVqNmhiL2tRYkNlZ0wxVHZhVlB4NzA2eDJieDdQWS9LZ2psR0E9PQ==
+X-SES-DKIM-SIGNATURE: a=rsa-sha256; q=dns/txt; b=bYXvj6a02Fnq7bwBzOSPwsE6rY5SRxu6kh089i19tTvrCRdPgRw1IAXL2Sbe5FTKg5plSn59+7D/oxwKF1C+aYdqxN6NwG1RTSwWmuygppk+WDrV2GTxevDA+9elBcjhPwESnuSBibYvtZxqn2gxtWKRyglNB+g3qcAiSnzi7as=; c=relaxed/simple; s=ndjes4mrtuzus6qxu3frw3ubo3gpjndv; d=amazonses.com; t=1749146228; v=1; bh=6ny1096LHhvkXtc0WfxHsOKrzwzT0FlT9hesErg4AMA=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;
+Received: by mail-ed1-f54.google.com with SMTP id 4fb4d7f45d1cf-60727e46168so1962440a12.0
+        for <test@primary.mandarin3d.com>; Thu, 05 Jun 2025 10:57:08 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=mandarin3d-com.20230601.gappssmtp.com; s=20230601; t=1749146227; x=1749751027; darn=primary.mandarin3d.com;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=v4Ot+4Ceu2SrWu9NUOag1lueIN/3j+VoAoV1XXD8ZRs=;
+        b=GL8+hzBDyMIhRdrcxxmFkrLLHkHO1doCDLy8TSr25PpKpnzz1xSbeZIT1uQcJZMwzL
+         VxRI18E+GS5EsK381IDTBg2iYJdAGpxrOIKz5wOnC0wfjnIGhSLSyeXHfTKgC3uq+Tiy
+         6rjEM7k4VPvM/XyI4q7MepDUTIAahep1LBW7qCtZYp20njp7+Qk0W5s1FybECWU2Q3Gx
+         C6ClRGcp6zUrHcotZDIuYE9Svl5e5sf/IEn+suwF7xQDyaW7UUvW6wKf37pvSExgz5GD
+         CZ/uAnezN+ODbb4DLB7IXC8HAcR4txob6MoAHRTMV/77tUfW2b+GGRmYHOL6Lb6JpIdP
+         eP4g==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1749146227; x=1749751027;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
+        bh=v4Ot+4Ceu2SrWu9NUOag1lueIN/3j+VoAoV1XXD8ZRs=;
+        b=QZR9zPugyj0hYw2bqRD1pDWUjCIWOgmIPl79KQ0uB0NSzeGd/yjUu3rFAYHYVVd68O
+         3mpe+aJgOa8IKLTgpCXBYm9YKNjGht4K14dM9p6uvcAO9QE0ca3OfDrQFkNW52NAuPN9
+         NjYfD8TEANKmki+0oqKxlgu7/HvTW4jbSawJvcISKPKOhI1T+8q0+XW+BjnbvNuerziT
+         JDE5BTW1Ka4vkvDK++1U8s1m0F76QhVaT4zB8e6pF9SglEMQ3D1xaA9wHehl9UZE1KKh
+         /SLxOpjJCMeaLcE79U/5Dt74XQmNDzAla9+mo4P52lp5A/ESZSBSM1rQX4zZk6HgH2qb
+         Tjaw==
+X-Gm-Message-State: AOJu0YwJAUAYs0OOCWVvIeNcAbWmY5JH9qpsHNDDhgFQR3O4zAUWR23E
+	vp36nBgBtkQPV/Wxu6u0Oup85X83T3lhG3ug/Fl20YcCBGLhQ9Ilkt5gx/ZenHFtLWXp4HS55ha
+	zn4bg2aarz1u7Q6LdO0lb59UWidjyrMSq4GJ+djTjGOoOCsiUd2Dm7IwUgw==
+X-Gm-Gg: ASbGncvz4XQGIDj3GceHg5ZmgtyxAUDcEwij/0L+3ucLnJRn7pUxAi7jYI8QGrDhi7r
+	1qe4DQfxbGVHiBNtyM5ZWSNxObj1eykEaDzdjGOGsB/k/4DyDH4LzvWlPRvtYdSDYi8HO1cPZks
+	OvIg5/lkeOyQS47iQYyjpvYfoib+asnVLU
+X-Google-Smtp-Source: AGHT+IGfgahRGjBiUcVtSfWZDEx6Z7LGUj03kQ30vhw/kWT6EkfWNDV1R5fPVfUotPUZOs0SoXBMzPpEIa1WvHNpjMI=
+X-Received: by 2002:a17:907:3d56:b0:ad8:9844:1424 with SMTP id
+ a640c23a62f3a-ade1ab77a03mr8283766b.61.1749146226960; Thu, 05 Jun 2025
+ 10:57:06 -0700 (PDT)
+MIME-Version: 1.0
+References: <bbd69239-1dd2-4a83-9914-c03082bf414b@getstarlingai.com>
+In-Reply-To: <bbd69239-1dd2-4a83-9914-c03082bf414b@getstarlingai.com>
+From: Ryan Vogel <ryan@mandarin3d.com>
+Date: Thu, 5 Jun 2025 10:56:55 -0700
+X-Gm-Features: AX0GCFtFuRx7-ML1hSvqI_6BEsml4r-8rAaJRw9C8_9Fp7X1-C79IxC1yqq7U9w
+Message-ID: <CA+_yP7Z5WBod-2_-MJTRgo8g-C==Hx8WbVKvSSau0cEPCvjHEA@mail.gmail.com>
+Subject: Fwd: It's almost ready
+To: test@primary.mandarin3d.com
+Content-Type: multipart/alternative; boundary="00000000000084bf930636d6d71d"
+
+--00000000000084bf930636d6d71d
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+---------- Forwarded message ---------
+From: Niko Yakovetskyi <mykola@getstarlingai.com>
+Date: Thu, Jun 5, 2025 at 10:28=E2=80=AFAM
+Subject: It's almost ready
+To: <ryan@mandarin3d.com>
+
+
+Hi Ryan,
+
+Been thinking... how cool would it be to have an AI assistant built just
+for your brand? I craft these bespoke beauties to fit your style, offering
+24/7 support and personalized picks that could bump your revenue by 30%.
+
+Fancy a chat about making that happen? Book a quick 15-minute call with me
+here:
+Link
+
+Cheers,
+Niko
+
+--00000000000084bf930636d6d71d
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"ltr"><br><br><div class=3D"gmail_quote gmail_quote_container"><=
+div dir=3D"ltr" class=3D"gmail_attr">---------- Forwarded message ---------=
+<br>From: <strong class=3D"gmail_sendername" dir=3D"auto">Niko Yakovetskyi<=
+/strong> <span dir=3D"auto">&lt;<a href=3D"mailto:mykola@getstarlingai.com"=
+>mykola@getstarlingai.com</a>&gt;</span><br>Date: Thu, Jun 5, 2025 at 10:28=
+=E2=80=AFAM<br>Subject: It&#39;s almost ready<br>To:  &lt;<a href=3D"mailto=
+:ryan@mandarin3d.com">ryan@mandarin3d.com</a>&gt;<br></div><br><br>Hi Ryan,=
+<br>
+<br>
+Been thinking... how cool would it be to have an AI assistant built just fo=
+r your brand? I craft these bespoke beauties to fit your style, offering 24=
+/7 support and personalized picks that could bump your revenue by 30%.<br>
+<br>
+Fancy a chat about making that happen? Book a quick 15-minute call with me =
+here:<br>
+Link<br>
+<br>
+Cheers,<br>
+Niko<br>
+</div></div>
+
+--00000000000084bf930636d6d71d--
