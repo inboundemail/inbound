@@ -4,16 +4,14 @@ import { useEffect, useState } from 'react'
 import { useSession } from '@/lib/auth-client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAnalyticsQuery } from '@/features/analytics/hooks/useAnalyticsQuery'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
+  TableCell,  
   TableRow,
 } from '@/components/ui/table'
 import {

@@ -1,3 +1,5 @@
+// THIS IS THE PRIMARY LAMBDA FUNCTION FOR PROCESSING EMAILS
+
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import * as Sentry from "@sentry/node";
 

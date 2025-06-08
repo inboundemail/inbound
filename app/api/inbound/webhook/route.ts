@@ -1,3 +1,5 @@
+// THIS IS THE PRIMARY WEBHOOK FOR PROCESSING EMAILS DO NOT DELETE THIS FILE
+
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sesEvents, receivedEmails, emailDomains, emailAddresses, webhooks, webhookDeliveries } from '@/lib/db/schema'

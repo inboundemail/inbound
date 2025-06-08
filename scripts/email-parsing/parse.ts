@@ -1,12 +1,8 @@
 import { simpleParser } from 'mailparser';
-import { readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
 
-async function parseEmail() {
+export async function parseEmail(emailContent: string) {
   try {
     // Read the email file
-    const emailPath = join(__dirname, 'email.txt');
-    const emailContent = readFileSync(emailPath, 'utf8');
     
     // Parse the email
     const parsed = await simpleParser(emailContent);
@@ -140,11 +136,6 @@ async function parseEmail() {
       }
     });
     
-    // Save to JSON file
-    const outputPath = join(__dirname, 'parsed-email.json');
-    writeFileSync(outputPath, JSON.stringify(emailData, null, 2), 'utf8');
-    console.log(`\n💾 Email data saved to: ${outputPath}`);
-    
     // Return the full parsed data for programmatic use
     return emailData;
     
@@ -153,17 +144,3 @@ async function parseEmail() {
     throw error;
   }
 }
-
-// Run the parser if this file is executed directly
-if (require.main === module) {
-  parseEmail()
-    .then(() => {
-      console.log('\n✅ Email parsing completed successfully!');
-    })
-    .catch((error) => {
-      console.error('❌ Email parsing failed:', error);
-      process.exit(1);
-    });
-}
-
-export { parseEmail };
