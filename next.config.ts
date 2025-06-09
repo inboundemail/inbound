@@ -3,6 +3,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // Add Turbopack configuration to suppress warnings
+  turbopack: {
+    // Empty configuration to acknowledge Turbopack usage
+  },
 };
 
 export default withSentryConfig(nextConfig, {
