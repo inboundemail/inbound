@@ -48,3 +48,8 @@ next-env.d.ts
 !.env.project
 !.env.vault
 .env.vault
+
+# Sentry Config File
+.env.sentry-build-plugin
+
+scripts/email-parsing/emails/

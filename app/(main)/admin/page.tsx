@@ -24,7 +24,6 @@ import {
   MailIcon,
   CalendarIcon
 } from "lucide-react"
-import DevelopmentTab from "@/components/admin/DevelopmentTab"
 import { 
   Table,
   TableBody,
@@ -49,6 +48,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+
 
 // Auth client with admin functions is imported above
 
@@ -556,7 +556,6 @@ export default function AdminPage() {
 
         {/* Development Tab */}
         <TabsContent value="development" className="space-y-6">
-          <DevelopmentTab />
         </TabsContent>
       </Tabs>
     </div>

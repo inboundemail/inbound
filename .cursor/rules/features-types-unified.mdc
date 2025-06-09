@@ -1,0 +1,205 @@
+---
+description: Use this when you are going to be creating a new type or using an existing type interface
+globs: 
+alwaysApply: false
+---
+# Features Type Management - Unified Approach
+
+This rule establishes a unified method for handling types across all features in the `@/features` directory to prevent duplication and ensure consistency.
+
+## Core Principles
+
+### 1. Database Schema as Source of Truth
+- **Always** infer types from the database schema using Drizzle's `$inferSelect` and `$inferInsert`
+- **Never** manually define types that duplicate database schema definitions
+- Reference: [lib/db/schema.ts](mdc:lib/db/schema.ts)
+
+### 2. Feature-Based Type Organization
+Each feature should follow this structure:
+```
+features/
+├── [feature-name]/
+│   ├── types/
+│   │   └── index.ts          # Main types export
+│   ├── hooks/
+│   │   ├── index.ts          # Hooks export
+│   │   └── use[Feature]*.ts  # Individual hooks
+│   ├── api/                  # Server actions (if needed)
+│   └── components/           # Feature components
+```
+
+### 3. Type Definition Patterns
+
+#### Primary Entity Types
+```typescript
+// features/[feature]/types/index.ts
+import { [tableName] } from '@/lib/db/schema'
+
+// Infer from database schema
+export type [EntityName] = typeof [tableName].$inferSelect
+export type New[EntityName] = typeof [tableName].$inferInsert
+```
+
+#### API/Action Types
+```typescript
+// For server actions and API operations
+export type Create[EntityName]Data = {
+  // Only include fields that can be set by user
+  field1: string
+  field2?: string
+}
+
+export type Update[EntityName]Data = {
+  // All fields optional for updates
+  field1?: string
+  field2?: string
+}
+```
+
+#### Component Props Types
+```typescript
+// For component-specific types
+export type [EntityName]ListProps = {
+  items: [EntityName][]
+  onSelect?: (item: [EntityName]) => void
+}
+```
+
+## Implementation Examples
+
+### Webhooks Feature (Reference Implementation)
+See [features/webhooks/types/index.ts](mdc:features/webhooks/types/index.ts) for the correct pattern:
+
+```typescript
+import { webhooks } from '@/lib/db/schema'
+
+// Primary types from schema
+export type Webhook = typeof webhooks.$inferSelect
+export type NewWebhook = typeof webhooks.$inferInsert
+
+// Action-specific types
+export type CreateWebhookData = {
+  name: string
+  url: string
+  description?: string
+  headers?: Record<string, string>
+  timeout?: number
+  retryAttempts?: number
+}
+
+export type UpdateWebhookData = {
+  name?: string
+  url?: string
+  description?: string
+  isActive?: boolean
+  headers?: Record<string, string>
+  timeout?: number
+  retryAttempts?: number
+}
+```
+
+## Anti-Patterns to Avoid
+
+### ❌ Don't Duplicate Database Types
+```typescript
+// BAD - Duplicating database schema
+interface Webhook {
+  id: string
+  name: string
+  url: string
+  // ... duplicating schema fields
+}
+```
+
+### ❌ Don't Define Types in Multiple Places
+```typescript
+// BAD - Defining same type in component files
+// app/(main)/webhooks/page.tsx
+interface Webhook { ... }
+
+// app/(main)/emails/[id]/page.tsx  
+interface Webhook { ... }
+```
+
+### ❌ Don't Use Inconsistent Naming
+```typescript
+// BAD - Inconsistent naming patterns
+export type WebhookType = ...
+export type WebhookInterface = ...
+export type IWebhook = ...
+```
+
+## Migration Strategy
+
+### For Existing Features
+1. **Audit existing types** - Find all duplicate type definitions
+2. **Create unified types file** - Follow the pattern above
+3. **Update imports** - Replace local interfaces with shared types
+4. **Handle null safety** - Use proper null coalescing for database fields
+
+### For New Features
+1. **Start with schema types** - Always begin with `$inferSelect`
+2. **Add action types** - Create specific types for operations
+3. **Export from index** - Centralize all type exports
+4. **Document deviations** - If you must deviate from patterns, document why
+
+## Type Safety Guidelines
+
+### Handling Nullable Database Fields
+```typescript
+// When displaying data that might be null
+const displayValue = webhook.description || 'No description'
+const count = webhook.totalDeliveries || 0
+
+// In calculations
+const successRate = !webhook.totalDeliveries 
+  ? 0 
+  : Math.round(((webhook.successfulDeliveries || 0) / webhook.totalDeliveries) * 100)
+```
+
+### React Query Integration
+```typescript
+// In hooks, always handle the server action response format
+export const useCreateWebhookMutation = () => {
+  return useMutation({
+    mutationFn: async (data: CreateWebhookData) => {
+      const result = await createWebhook(data)
+      if (!result.success) {
+        throw new Error(result.error)
+      }
+      return result.webhook // This will be of type Webhook
+    }
+  })
+}
+```
+
+## Enforcement
+
+### Code Review Checklist
+- [ ] Types are imported from feature's `types/index.ts`
+- [ ] No duplicate type definitions across files
+- [ ] Database types use `$inferSelect`/`$inferInsert`
+- [ ] Action types follow naming conventions
+- [ ] Null safety is properly handled
+
+### Automated Checks
+Consider adding ESLint rules to prevent:
+- Duplicate interface/type definitions
+- Direct database type definitions outside schema
+- Inconsistent naming patterns
+
+## Benefits
+
+1. **Single Source of Truth** - Database schema drives all types
+2. **Reduced Duplication** - No more duplicate interfaces
+3. **Type Safety** - Proper handling of nullable fields
+4. **Maintainability** - Changes to schema automatically propagate
+5. **Consistency** - Uniform patterns across all features
+6. **Developer Experience** - Clear patterns to follow
+
+## Related Files
+
+- [lib/db/schema.ts](mdc:lib/db/schema.ts) - Database schema definitions
+- [features/webhooks/types/index.ts](mdc:features/webhooks/types/index.ts) - Reference implementation
+- [features/webhooks/hooks/](mdc:features/webhooks/hooks) - Hook implementations using unified types
+

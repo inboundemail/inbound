@@ -20,7 +20,7 @@ export class InboundClient {
 
   constructor(config: InboundConfig) {
     this.apiKey = config.apiKey
-    this.baseUrl = config.baseUrl || 'https://api.inbound.email/api/v1'
+    this.baseUrl = config.baseUrl || 'https://inbound.new/api/v1'
   }
 
   /**

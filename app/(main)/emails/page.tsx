@@ -3,11 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useSession } from '@/lib/auth-client'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+
 import { 
   Table,
   TableBody,
@@ -23,14 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+
 import { 
   CheckCircleIcon, 
   XCircleIcon, 
@@ -47,12 +40,11 @@ import {
   ArrowUpIcon,
   ArrowDownIcon,
   CloudIcon,
-  AlertTriangleIcon,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
-import { DOMAIN_STATUS, SES_VERIFICATION_STATUS } from '@/lib/db/schema'
-import { shouldShowSyncButton } from '@/lib/feature-flags'
+import { DOMAIN_STATUS } from '@/lib/db/schema'
+import { getDomainStats } from '@/app/actions/primary'
 
 interface DomainStats {
   id: string
@@ -91,28 +83,11 @@ export default function EmailsPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [regionFilter, setRegionFilter] = useState('all')
   const [filteredDomains, setFilteredDomains] = useState<DomainStats[]>([])
 
   // Sorting state
   const [sortField, setSortField] = useState<SortField>('createdAt')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
-
-  // Add domain modal state
-  const [isAddDomainOpen, setIsAddDomainOpen] = useState(false)
-  const [newDomain, setNewDomain] = useState('')
-  const [isAddingDomain, setIsAddingDomain] = useState(false)
-  const [addDomainError, setAddDomainError] = useState<string | null>(null)
-
-  // Sync with AWS state
-  const [isSyncing, setIsSyncing] = useState(false)
-
-  // MX records conflict error state
-  const [mxConflictError, setMxConflictError] = useState<{
-    domain: string
-    suggestedSubdomains: string[]
-    mxRecords?: Array<{ exchange: string; priority: number }>
-  } | null>(null)
 
   useEffect(() => {
     if (session?.user) {
@@ -129,11 +104,7 @@ export default function EmailsPage() {
           (statusFilter === 'verified' && domain.isVerified) ||
           (statusFilter === DOMAIN_STATUS.PENDING && domain.status === DOMAIN_STATUS.PENDING) ||
           (statusFilter === DOMAIN_STATUS.FAILED && domain.status === DOMAIN_STATUS.FAILED)
-        
-        // For now, all domains are in the same region, but this can be extended
-        const matchesRegion = regionFilter === 'all' || regionFilter === 'us-east-1'
-        
-        return matchesSearch && matchesStatus && matchesRegion
+        return matchesSearch && matchesStatus
       })
 
       // Apply sorting
@@ -165,7 +136,7 @@ export default function EmailsPage() {
 
       setFilteredDomains(filtered)
     }
-  }, [domainStats, searchQuery, statusFilter, regionFilter, sortField, sortDirection])
+  }, [domainStats, searchQuery, statusFilter, sortField, sortDirection])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -189,14 +160,16 @@ export default function EmailsPage() {
     try {
       setIsLoading(true)
       setError(null)
-      const response = await fetch('/api/domains/stats')
       
-      if (!response.ok) {
-        throw new Error('Failed to fetch domain statistics')
+      const result = await getDomainStats()
+      
+      if ('error' in result) {
+        console.error('Error fetching domain stats:', result.error)
+        setError(result.error || 'Unknown error occurred')
+        toast.error('Failed to load domain statistics')
+      } else {
+        setDomainStats(result)
       }
-      
-      const data: DomainStatsResponse = await response.json()
-      setDomainStats(data)
     } catch (error) {
       console.error('Error fetching domain stats:', error)
       setError(error instanceof Error ? error.message : 'Failed to load domain statistics')
@@ -211,34 +184,7 @@ export default function EmailsPage() {
     router.push(`/emails/${domainId}`)
   }
 
-  const handleAddSubdomain = async (subdomain: string) => {
-    setIsAddingDomain(true)
-    
-    try {
-      const response = await fetch('/api/domains', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: subdomain })
-      })
 
-      const result = await response.json()
-
-      if (response.ok) {
-        toast.success(`Subdomain ${subdomain} added successfully!`)
-        setMxConflictError(null)
-        
-        // Redirect to the domain detail page
-        router.push(`/emails/${result.domain.id}`)
-      } else {
-        toast.error(result.error || `Failed to add subdomain ${subdomain}`)
-      }
-    } catch (error) {
-      console.error('Error adding subdomain:', error)
-      toast.error('Network error occurred')
-    } finally {
-      setIsAddingDomain(false)
-    }
-  }
 
   const getStatusBadge = (domain: DomainStats) => {
     if (domain.isVerified) {
@@ -316,49 +262,6 @@ export default function EmailsPage() {
           borderColor: 'border-slate-200',
           iconColor: 'text-slate-600'
         }
-    }
-  }
-
-  const getStatusIcon = (domain: DomainStats) => {
-    if (domain.isVerified) {
-      return <CheckCircleIcon className="h-4 w-4 text-green-600" />
-    }
-    
-    switch (domain.status) {
-      case DOMAIN_STATUS.PENDING:
-        return <ClockIcon className="h-4 w-4 text-yellow-600" />
-      case DOMAIN_STATUS.FAILED:
-        return <XCircleIcon className="h-4 w-4 text-red-600" />
-      default:
-        return <ClockIcon className="h-4 w-4 text-gray-600" />
-    }
-  }
-
-  const syncWithAWS = async () => {
-    try {
-      setIsSyncing(true)
-      
-      const response = await fetch('/api/domains/stats', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ syncWithAWS: true })
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        toast.success(`Synced ${result.synced || 0} domains with AWS SES`)
-        
-        // Refresh the domain stats after sync
-        await fetchDomainStats()
-      } else {
-        const error = await response.json()
-        toast.error(error.error || 'Failed to sync with AWS SES')
-      }
-    } catch (error) {
-      console.error('Sync error:', error)
-      toast.error('Failed to sync with AWS SES')
-    } finally {
-      setIsSyncing(false)
     }
   }
 
@@ -463,17 +366,7 @@ export default function EmailsPage() {
                 <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
-              {shouldShowSyncButton() && (
-                <Button
-                  variant="secondary"
-                  onClick={syncWithAWS}
-                  disabled={isSyncing || isLoading}
-                  className="bg-white/20 border-white/30 text-white hover:bg-white/30 backdrop-blur-sm"
-                >
-                  <CloudIcon className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-pulse' : ''}`} />
-                  {isSyncing ? 'Syncing...' : 'Sync with AWS'}
-                </Button>
-              )}
+              
               <Button
                 onClick={() => router.push("/add")}
                 disabled={isLoading || (domainStats?.limits ? !domainStats.limits.allowed : false)}
@@ -542,7 +435,7 @@ export default function EmailsPage() {
             <GlobeIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">No domains found</h3>
             <p className="text-muted-foreground mb-4">
-              {searchQuery || statusFilter !== 'all' || regionFilter !== 'all' 
+              {searchQuery || statusFilter !== 'all'
                 ? 'No domains match your search criteria.' 
                 : 'Get started by adding your first domain.'}
             </p>
@@ -669,89 +562,6 @@ export default function EmailsPage() {
           </div>
         )}
       </div>
-      
-
-      {/* MX Records Conflict Dialog */}
-      <Dialog open={!!mxConflictError} onOpenChange={() => setMxConflictError(null)}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangleIcon className="h-5 w-5 text-amber-600" />
-              Domain Already Has Email Setup
-            </DialogTitle>
-            <DialogDescription>
-              The domain <strong>{mxConflictError?.domain}</strong> already has MX records configured for email receiving. 
-              Adding our email service would conflict with your existing setup.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            {mxConflictError?.mxRecords && mxConflictError.mxRecords.length > 0 && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <h4 className="font-semibold text-amber-800 mb-2">Existing MX Records:</h4>
-                <div className="space-y-1">
-                  {mxConflictError.mxRecords.map((record, index) => (
-                    <div key={index} className="text-sm text-amber-700 font-mono">
-                      {record.priority} {record.exchange}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="p-4 border border-blue-200 bg-blue-50 rounded-lg">
-              <h4 className="font-semibold text-blue-800 mb-2">Recommended Solution: Use a Subdomain</h4>
-              <p className="text-sm text-blue-700 mb-3">
-                Instead of using your main domain, you can use a subdomain for inbound emails. 
-                This won't conflict with your existing email setup.
-              </p>
-              
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-blue-800">
-                  Choose a subdomain to configure for inbound emails:
-                </Label>
-                {mxConflictError?.suggestedSubdomains.map((subdomain) => (
-                  <div key={subdomain} className="flex items-center justify-between p-2 bg-white border border-blue-200 rounded">
-                    <span className="font-mono text-sm">{subdomain}</span>
-                    <Button
-                      size="sm"
-                      onClick={() => handleAddSubdomain(subdomain)}
-                      disabled={isAddingDomain}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      {isAddingDomain ? (
-                        <RefreshCwIcon className="h-3 w-3 animate-spin" />
-                      ) : (
-                        'Use This Subdomain'
-                      )}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-              <h4 className="font-semibold text-gray-800 mb-1">Why use a subdomain?</h4>
-              <ul className="text-sm text-gray-700 space-y-1">
-                <li>• Your existing email setup (like Gmail, Outlook) continues to work normally</li>
-                <li>• You can still receive emails at your regular addresses (@{mxConflictError?.domain})</li>
-                <li>• Inbound emails will be received at the subdomain (e.g., contact@mail.{mxConflictError?.domain})</li>
-                <li>• No conflicts or downtime with your current email service</li>
-              </ul>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={() => setMxConflictError(null)}
-              disabled={isAddingDomain}
-            >
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 } 

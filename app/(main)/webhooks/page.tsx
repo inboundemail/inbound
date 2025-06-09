@@ -1,20 +1,18 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useSession } from '@/lib/auth-client'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { 
+import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
-  TableHeader,
   TableRow,
 } from '@/components/ui/table'
 import {
@@ -25,12 +23,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { 
-  CheckCircleIcon, 
-  XCircleIcon, 
-  ClockIcon, 
+import {
+  CheckCircleIcon,
+  XCircleIcon,
   PlusIcon,
-  LinkIcon,
   TrendingUpIcon,
   CalendarIcon,
   RefreshCwIcon,
@@ -42,33 +38,33 @@ import {
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
-
-interface Webhook {
-  id: string
-  name: string
-  url: string
-  secret: string
-  isActive: boolean
-  description?: string
-  timeout: number
-  retryAttempts: number
-  lastUsed?: string
-  totalDeliveries: number
-  successfulDeliveries: number
-  failedDeliveries: number
-  createdAt: string
-  updatedAt: string
-}
+import {
+  useWebhooksQuery,
+  useCreateWebhookMutation,
+  useUpdateWebhookMutation,
+  useDeleteWebhookMutation,
+  useTestWebhookMutation
+} from '@/features/webhooks/hooks'
+import { Webhook } from '@/features/webhooks/types'
 
 export default function WebhooksPage() {
   const { data: session } = useSession()
-  const [webhooks, setWebhooks] = useState<Webhook[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+
+  // React Query hooks
+  const {
+    data: webhooks = [],
+    isLoading,
+    error,
+    refetch: refetchWebhooks
+  } = useWebhooksQuery()
+
+  const createWebhookMutation = useCreateWebhookMutation()
+  const updateWebhookMutation = useUpdateWebhookMutation()
+  const deleteWebhookMutation = useDeleteWebhookMutation()
+  const testWebhookMutation = useTestWebhookMutation()
 
   // Create webhook state
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isCreating, setIsCreating] = useState(false)
   const [createForm, setCreateForm] = useState({
     name: '',
     url: '',
@@ -78,12 +74,8 @@ export default function WebhooksPage() {
   })
   const [createError, setCreateError] = useState<string | null>(null)
 
-  // Test webhook state
-  const [testingWebhookId, setTestingWebhookId] = useState<string | null>(null)
-
   // Edit webhook state
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
   const [editingWebhook, setEditingWebhook] = useState<Webhook | null>(null)
   const [editForm, setEditForm] = useState({
     name: '',
@@ -95,119 +87,53 @@ export default function WebhooksPage() {
   })
   const [editError, setEditError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (session?.user) {
-      fetchWebhooks()
-    }
-  }, [session])
-
-  const fetchWebhooks = async () => {
-    try {
-      setIsLoading(true)
-      setError(null)
-      const response = await fetch('/api/webhooks')
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch webhooks')
-      }
-      
-      const data = await response.json()
-      setWebhooks(data.webhooks || [])
-    } catch (error) {
-      console.error('Error fetching webhooks:', error)
-      setError(error instanceof Error ? error.message : 'Failed to load webhooks')
-      toast.error('Failed to load webhooks')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const createWebhook = async () => {
+  const handleCreateWebhook = async () => {
     if (!createForm.name.trim() || !createForm.url.trim()) {
       setCreateError('Name and URL are required')
       return
     }
 
-    setIsCreating(true)
     setCreateError(null)
 
     try {
-      const response = await fetch('/api/webhooks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createForm)
+      await createWebhookMutation.mutateAsync(createForm)
+      toast.success('Webhook created successfully!')
+      setIsCreateDialogOpen(false)
+      setCreateForm({
+        name: '',
+        url: '',
+        description: '',
+        timeout: 30,
+        retryAttempts: 3
       })
-
-      const result = await response.json()
-
-      if (response.ok) {
-        toast.success('Webhook created successfully!')
-        setIsCreateDialogOpen(false)
-        setCreateForm({
-          name: '',
-          url: '',
-          description: '',
-          timeout: 30,
-          retryAttempts: 3
-        })
-        await fetchWebhooks()
-      } else {
-        setCreateError(result.error || 'Failed to create webhook')
-      }
     } catch (error) {
-      console.error('Error creating webhook:', error)
-      setCreateError('Network error occurred')
-    } finally {
-      setIsCreating(false)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create webhook'
+      setCreateError(errorMessage)
+      toast.error(errorMessage)
     }
   }
 
-  const testWebhook = async (webhookId: string) => {
-    setTestingWebhookId(webhookId)
-    
+  const handleTestWebhook = async (webhookId: string) => {
     try {
-      const response = await fetch(`/api/webhooks/${webhookId}/test`, {
-        method: 'POST'
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        toast.success(`Webhook test successful! Response: ${result.statusCode}`)
-      } else {
-        toast.error(`Webhook test failed: ${result.error || 'Unknown error'}`)
-      }
-
-      // Refresh webhooks to update stats
-      await fetchWebhooks()
+      const result = await testWebhookMutation.mutateAsync(webhookId)
+      toast.success(`Webhook test successful! Response: ${result.statusCode}`)
     } catch (error) {
-      console.error('Error testing webhook:', error)
-      toast.error('Failed to test webhook')
-    } finally {
-      setTestingWebhookId(null)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to test webhook'
+      toast.error(`Webhook test failed: ${errorMessage}`)
     }
   }
 
-  const deleteWebhook = async (webhookId: string, webhookName: string) => {
+  const handleDeleteWebhook = async (webhookId: string, webhookName: string) => {
     if (!confirm(`Are you sure you want to delete the webhook "${webhookName}"?`)) {
       return
     }
 
     try {
-      const response = await fetch(`/api/webhooks/${webhookId}`, {
-        method: 'DELETE'
-      })
-
-      if (response.ok) {
-        toast.success('Webhook deleted successfully')
-        await fetchWebhooks()
-      } else {
-        const result = await response.json()
-        toast.error(result.error || 'Failed to delete webhook')
-      }
+      await deleteWebhookMutation.mutateAsync(webhookId)
+      toast.success('Webhook deleted successfully')
     } catch (error) {
-      console.error('Error deleting webhook:', error)
-      toast.error('Network error occurred')
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete webhook'
+      toast.error(errorMessage)
     }
   }
 
@@ -217,45 +143,34 @@ export default function WebhooksPage() {
       name: webhook.name,
       url: webhook.url,
       description: webhook.description || '',
-      isActive: webhook.isActive,
-      timeout: webhook.timeout,
-      retryAttempts: webhook.retryAttempts
+      isActive: webhook.isActive || true,
+      timeout: webhook.timeout || 30,
+      retryAttempts: webhook.retryAttempts || 3
     })
     setEditError(null)
     setIsEditDialogOpen(true)
   }
 
-  const editWebhook = async () => {
+  const handleEditWebhook = async () => {
     if (!editForm.name.trim() || !editForm.url.trim() || !editingWebhook) {
       setEditError('Name and URL are required')
       return
     }
 
-    setIsEditing(true)
     setEditError(null)
 
     try {
-      const response = await fetch(`/api/webhooks/${editingWebhook.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm)
+      await updateWebhookMutation.mutateAsync({
+        id: editingWebhook.id,
+        data: editForm
       })
-
-      const result = await response.json()
-
-      if (response.ok) {
-        toast.success('Webhook updated successfully!')
-        setIsEditDialogOpen(false)
-        setEditingWebhook(null)
-        await fetchWebhooks()
-      } else {
-        setEditError(result.error || 'Failed to update webhook')
-      }
+      toast.success('Webhook updated successfully!')
+      setIsEditDialogOpen(false)
+      setEditingWebhook(null)
     } catch (error) {
-      console.error('Error updating webhook:', error)
-      setEditError('Network error occurred')
-    } finally {
-      setIsEditing(false)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update webhook'
+      setEditError(errorMessage)
+      toast.error(errorMessage)
     }
   }
 
@@ -278,8 +193,8 @@ export default function WebhooksPage() {
   }
 
   const getSuccessRate = (webhook: Webhook) => {
-    if (webhook.totalDeliveries === 0) return 0
-    return Math.round((webhook.successfulDeliveries / webhook.totalDeliveries) * 100)
+    if (!webhook.totalDeliveries) return 0
+    return Math.round(((webhook.successfulDeliveries || 0) / webhook.totalDeliveries) * 100)
   }
 
   if (isLoading) {
@@ -326,8 +241,8 @@ export default function WebhooksPage() {
   // Calculate webhook stats
   const totalWebhooks = webhooks.length
   const activeWebhooks = webhooks.filter(w => w.isActive).length
-  const totalDeliveries = webhooks.reduce((sum, w) => sum + w.totalDeliveries, 0)
-  const successfulDeliveries = webhooks.reduce((sum, w) => sum + w.successfulDeliveries, 0)
+  const totalDeliveries = webhooks.reduce((sum, w) => sum + (w.totalDeliveries || 0), 0)
+  const successfulDeliveries = webhooks.reduce((sum, w) => sum + (w.successfulDeliveries || 0), 0)
   const overallSuccessRate = totalDeliveries > 0 ? Math.round((successfulDeliveries / totalDeliveries) * 100) : 0
 
   return (
@@ -362,7 +277,7 @@ export default function WebhooksPage() {
             <div className="flex items-center gap-3">
               <Button
                 variant="secondary"
-                onClick={fetchWebhooks}
+                onClick={() => refetchWebhooks()}
                 disabled={isLoading}
                 className="bg-white/20 border-white/30 text-white hover:bg-white/30 backdrop-blur-sm"
               >
@@ -387,11 +302,11 @@ export default function WebhooksPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-red-600">
               <XCircleIcon className="h-4 w-4" />
-              <span>{error}</span>
+              <span>{error.message}</span>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={fetchWebhooks}
+                onClick={() => refetchWebhooks()}
                 className="ml-auto text-red-600 hover:text-red-700"
               >
                 Try Again
@@ -431,17 +346,16 @@ export default function WebhooksPage() {
                 <span className="text-right">Actions</span>
               </div>
             </div>
-            
+
             {/* Table Body */}
             <div className="">
               <Table>
                 <TableBody>
                   {webhooks.map((webhook, index) => (
-                    <TableRow 
+                    <TableRow
                       key={webhook.id}
-                      className={`hover:bg-muted/50 transition-colors ${
-                        index < webhooks.length - 1 ? 'border-b border-border/50' : ''
-                      }`}
+                      className={`hover:bg-muted/50 transition-colors ${index < webhooks.length - 1 ? 'border-b border-border/50' : ''
+                        }`}
                     >
                       <TableCell className="w-1/6">
                         <div className="flex items-center gap-3">
@@ -494,11 +408,11 @@ export default function WebhooksPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => testWebhook(webhook.id)}
-                            disabled={testingWebhookId === webhook.id || !webhook.isActive}
+                            onClick={() => testWebhookMutation.mutateAsync(webhook.id)}
+                            disabled={testWebhookMutation.isPending || !webhook.isActive}
                             className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                           >
-                            {testingWebhookId === webhook.id ? (
+                            {testWebhookMutation.isPending ? (
                               <RefreshCwIcon className="h-4 w-4 animate-spin" />
                             ) : (
                               <PlayIcon className="h-4 w-4" />
@@ -515,7 +429,7 @@ export default function WebhooksPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => deleteWebhook(webhook.id, webhook.name)}
+                            onClick={() => deleteWebhookMutation.mutateAsync(webhook.id)}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           >
                             <TrashIcon className="h-4 w-4" />
@@ -548,7 +462,7 @@ export default function WebhooksPage() {
                 placeholder="My Email Webhook"
                 value={createForm.name}
                 onChange={(e) => setCreateForm(prev => ({ ...prev, name: e.target.value }))}
-                disabled={isCreating}
+                disabled={createWebhookMutation.isPending}
               />
             </div>
             <div className="grid gap-2">
@@ -558,7 +472,7 @@ export default function WebhooksPage() {
                 placeholder="https://api.example.com/webhooks/email"
                 value={createForm.url}
                 onChange={(e) => setCreateForm(prev => ({ ...prev, url: e.target.value }))}
-                disabled={isCreating}
+                disabled={createWebhookMutation.isPending}
               />
             </div>
             <div className="grid gap-2">
@@ -568,7 +482,7 @@ export default function WebhooksPage() {
                 placeholder="Optional description for this webhook"
                 value={createForm.description}
                 onChange={(e) => setCreateForm(prev => ({ ...prev, description: e.target.value }))}
-                disabled={isCreating}
+                disabled={createWebhookMutation.isPending}
                 rows={3}
               />
             </div>
@@ -582,7 +496,7 @@ export default function WebhooksPage() {
                   max="300"
                   value={createForm.timeout}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, timeout: parseInt(e.target.value) || 30 }))}
-                  disabled={isCreating}
+                  disabled={createWebhookMutation.isPending}
                 />
               </div>
               <div className="grid gap-2">
@@ -594,7 +508,7 @@ export default function WebhooksPage() {
                   max="10"
                   value={createForm.retryAttempts}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, retryAttempts: parseInt(e.target.value) || 3 }))}
-                  disabled={isCreating}
+                  disabled={createWebhookMutation.isPending}
                 />
               </div>
             </div>
@@ -619,15 +533,15 @@ export default function WebhooksPage() {
                 })
                 setCreateError(null)
               }}
-              disabled={isCreating}
+              disabled={createWebhookMutation.isPending}
             >
               Cancel
             </Button>
             <Button
-              onClick={createWebhook}
-              disabled={isCreating || !createForm.name.trim() || !createForm.url.trim()}
+              onClick={handleCreateWebhook}
+              disabled={createWebhookMutation.isPending || !createForm.name.trim() || !createForm.url.trim()}
             >
-              {isCreating ? (
+              {createWebhookMutation.isPending ? (
                 <>
                   <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" />
                   Creating...
@@ -660,7 +574,7 @@ export default function WebhooksPage() {
                 placeholder="My Email Webhook"
                 value={editForm.name}
                 onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                disabled={isEditing}
+                disabled={updateWebhookMutation.isPending}
               />
             </div>
             <div className="grid gap-2">
@@ -670,7 +584,7 @@ export default function WebhooksPage() {
                 placeholder="https://api.example.com/webhooks/email"
                 value={editForm.url}
                 onChange={(e) => setEditForm(prev => ({ ...prev, url: e.target.value }))}
-                disabled={isEditing}
+                disabled={updateWebhookMutation.isPending}
               />
             </div>
             <div className="grid gap-2">
@@ -680,7 +594,7 @@ export default function WebhooksPage() {
                 placeholder="Optional description for this webhook"
                 value={editForm.description}
                 onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
-                disabled={isEditing}
+                disabled={updateWebhookMutation.isPending}
                 rows={3}
               />
             </div>
@@ -694,7 +608,7 @@ export default function WebhooksPage() {
                   max="300"
                   value={editForm.timeout}
                   onChange={(e) => setEditForm(prev => ({ ...prev, timeout: parseInt(e.target.value) || 30 }))}
-                  disabled={isEditing}
+                  disabled={updateWebhookMutation.isPending}
                 />
               </div>
               <div className="grid gap-2">
@@ -706,7 +620,7 @@ export default function WebhooksPage() {
                   max="10"
                   value={editForm.retryAttempts}
                   onChange={(e) => setEditForm(prev => ({ ...prev, retryAttempts: parseInt(e.target.value) || 3 }))}
-                  disabled={isEditing}
+                  disabled={updateWebhookMutation.isPending}
                 />
               </div>
             </div>
@@ -716,7 +630,7 @@ export default function WebhooksPage() {
                 id="webhook-isActive"
                 checked={editForm.isActive}
                 onCheckedChange={(value) => setEditForm(prev => ({ ...prev, isActive: value }))}
-                disabled={isEditing}
+                disabled={updateWebhookMutation.isPending}
               />
             </div>
             {editError && (
@@ -741,15 +655,15 @@ export default function WebhooksPage() {
                 })
                 setEditError(null)
               }}
-              disabled={isEditing}
+              disabled={updateWebhookMutation.isPending}
             >
               Cancel
             </Button>
             <Button
-              onClick={editWebhook}
-              disabled={isEditing || !editForm.name.trim() || !editForm.url.trim()}
+              onClick={handleEditWebhook}
+              disabled={updateWebhookMutation.isPending || !editForm.name.trim() || !editForm.url.trim()}
             >
-              {isEditing ? (
+              {updateWebhookMutation.isPending ? (
                 <>
                   <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" />
                   Updating...

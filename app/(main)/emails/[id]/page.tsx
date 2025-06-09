@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useSession } from '@/lib/auth-client'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { addEmailAddress, deleteEmailAddress, getEmailAddresses, updateEmailWebhook, enableDomainCatchAll, disableDomainCatchAll, getDomainCatchAllStatus } from '@/app/actions/primary'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -49,6 +50,7 @@ import {
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
+import { Webhook } from '@/features/webhooks/types'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
 import {
     Select,
@@ -81,14 +83,7 @@ interface EmailAddress {
     emailsLast24h: number
 }
 
-interface Webhook {
-    id: string
-    name: string
-    url: string
-    isActive: boolean
-    description?: string
-    createdAt: string
-}
+
 
 interface DomainDetails {
     domain: {
@@ -106,6 +101,10 @@ interface DomainDetails {
         createdAt: string
         updatedAt: string
         canProceed: boolean
+        // Catch-all fields
+        isCatchAllEnabled?: boolean
+        catchAllWebhookId?: string
+        catchAllReceiptRuleName?: string
     }
     dnsRecords: DnsRecord[]
     emailAddresses: EmailAddress[]
@@ -115,6 +114,20 @@ interface DomainDetails {
         configuredEmailAddresses: number
         totalEmailsLast24h: number
     }
+}
+
+interface CatchAllStatus {
+    domain: string
+    domainStatus: string
+    isCatchAllEnabled: boolean | null
+    catchAllWebhookId?: string | null
+    receiptRuleName?: string | null
+    webhook?: {
+        id: string
+        name: string
+        url: string
+        isActive: boolean | null
+    } | null
 }
 
 export default function DomainDetailPage() {
@@ -164,10 +177,18 @@ export default function DomainDetailPage() {
     })
     const [createWebhookError, setCreateWebhookError] = useState<string | null>(null)
 
+    // Catch-all domain state
+    const [catchAllStatus, setCatchAllStatus] = useState<CatchAllStatus | null>(null)
+    const [isLoadingCatchAll, setIsLoadingCatchAll] = useState(false)
+    const [isTogglingCatchAll, setIsTogglingCatchAll] = useState(false)
+    const [catchAllWebhookId, setCatchAllWebhookId] = useState<string>('none')
+    const [catchAllError, setCatchAllError] = useState<string | null>(null)
+
     useEffect(() => {
         if (session?.user && domainId) {
             fetchDomainDetails()
             fetchWebhooks()
+            fetchCatchAllStatus()
         }
     }, [session, domainId])
 
@@ -175,7 +196,21 @@ export default function DomainDetailPage() {
         try {
             setIsLoading(true)
             setError(null)
-            const response = await fetch(`/api/domains/${domainId}?refreshProvider=true`)
+            
+            // Use the verifications API
+            // For initial load, we use the existing domain name if available, otherwise use domainId as placeholder
+            const domainName = domainDetails?.domain?.domain || domainId
+            
+            const response = await fetch('/api/domain/verifications', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'getDomain',
+                    domain: domainName,
+                    domainId: domainId,
+                    refreshProvider: true
+                })
+            })
 
             if (!response.ok) {
                 if (response.status === 404) {
@@ -199,7 +234,20 @@ export default function DomainDetailPage() {
     const fetchDomainDetailsBackground = async () => {
         try {
             setError(null)
-            const response = await fetch(`/api/domains/${domainId}?refreshProvider=true`)
+            
+            if (!domainDetails) return
+            
+            // Use the verifications API for background refresh
+            const response = await fetch('/api/domain/verifications', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'getDomain',
+                    domain: domainDetails.domain.domain,
+                    domainId: domainId,
+                    refreshProvider: true
+                })
+            })
 
             if (!response.ok) {
                 if (response.status === 404) {
@@ -230,6 +278,27 @@ export default function DomainDetailPage() {
             console.error('Error fetching webhooks:', error)
         } finally {
             setIsLoadingWebhooks(false)
+        }
+    }
+
+    const fetchCatchAllStatus = async () => {
+        try {
+            setIsLoadingCatchAll(true)
+            setCatchAllError(null)
+            
+            const result = await getDomainCatchAllStatus(domainId)
+            
+            if (result.success && result.data) {
+                setCatchAllStatus(result.data)
+                setCatchAllWebhookId(result.data.catchAllWebhookId || 'none')
+            } else {
+                setCatchAllError(result.error || 'Failed to fetch catch-all status')
+            }
+        } catch (error) {
+            console.error('Error fetching catch-all status:', error)
+            setCatchAllError('Network error occurred')
+        } finally {
+            setIsLoadingCatchAll(false)
         }
     }
 
@@ -288,7 +357,7 @@ export default function DomainDetailPage() {
         }
     }
 
-    const addEmailAddress = async () => {
+    const addEmailAddressHandler = async () => {
         if (!domainDetails || !newEmailAddress.trim()) return
 
         setIsAddingEmail(true)
@@ -299,24 +368,19 @@ export default function DomainDetailPage() {
                 ? newEmailAddress
                 : `${newEmailAddress}@${domainDetails.domain.domain}`
 
-            const response = await fetch(`/api/domains/${domainId}/email-addresses`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    emailAddress: fullEmailAddress,
-                    webhookId: selectedWebhookId === 'none' ? null : selectedWebhookId
-                })
-            })
+            const result = await addEmailAddress(
+                domainId,
+                fullEmailAddress,
+                selectedWebhookId === 'none' ? undefined : selectedWebhookId
+            )
 
-            const result = await response.json()
-
-            if (response.ok) {
+            if (result.success) {
                 setNewEmailAddress('')
                 setSelectedWebhookId('none')
                 await fetchDomainDetailsBackground() // Refresh the data
                 toast.success('Email address added successfully')
-                if (result.warning) {
-                    toast.warning(result.warning)
+                if (result.data?.warning) {
+                    toast.warning(result.data.warning)
                 }
             } else {
                 setEmailError(result.error || 'Failed to add email address')
@@ -331,7 +395,7 @@ export default function DomainDetailPage() {
         }
     }
 
-    const deleteEmailAddress = async (emailAddressId: string, emailAddress: string) => {
+    const deleteEmailAddressHandler = async (emailAddressId: string, emailAddress: string) => {
         if (!domainDetails) return
 
         if (!confirm(`Are you sure you want to delete ${emailAddress}?`)) {
@@ -339,17 +403,12 @@ export default function DomainDetailPage() {
         }
 
         try {
-            const response = await fetch(`/api/domains/${domainId}/email-addresses`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ emailAddressId })
-            })
+            const result = await deleteEmailAddress(domainId, emailAddressId)
 
-            if (response.ok) {
+            if (result.success) {
                 await fetchDomainDetailsBackground() // Refresh the data
                 toast.success('Email address deleted successfully')
             } else {
-                const result = await response.json()
                 toast.error(result.error || 'Failed to delete email address')
             }
         } catch (error) {
@@ -369,10 +428,15 @@ export default function DomainDetailPage() {
 
         setIsDeleting(true)
         try {
-            // Need to update this to the /api/domain/verifications
-            const response = await fetch(`/api/domains/${domainId}`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' }
+            // Use the verifications API for domain deletion
+            const response = await fetch('/api/domain/verifications', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'deleteDomain',
+                    domain: domainDetails.domain.domain,
+                    domainId: domainId
+                })
             })
 
             const result = await response.json()
@@ -394,20 +458,18 @@ export default function DomainDetailPage() {
         }
     }
 
-    const updateEmailWebhook = async () => {
+    const updateEmailWebhookHandler = async () => {
         if (!selectedEmailForWebhook) return
 
         setIsUpdatingWebhook(true)
         try {
-            const response = await fetch(`/api/domains/${domainId}/email-addresses/${selectedEmailForWebhook.id}/webhook`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ webhookId: webhookDialogSelectedId === 'none' ? null : webhookDialogSelectedId })
-            })
+            const result = await updateEmailWebhook(
+                domainId,
+                selectedEmailForWebhook.id,
+                webhookDialogSelectedId === 'none' ? undefined : webhookDialogSelectedId
+            )
 
-            const result = await response.json()
-
-            if (response.ok) {
+            if (result.success) {
                 toast.success(result.message)
                 setIsWebhookDialogOpen(false)
                 setSelectedEmailForWebhook(null)
@@ -471,6 +533,11 @@ export default function DomainDetailPage() {
                 if (isWebhookDialogOpen) {
                     setWebhookDialogSelectedId(newWebhookId)
                 }
+                
+                // Also auto-select for catch-all if not currently enabled
+                if (!catchAllStatus?.isCatchAllEnabled) {
+                    setCatchAllWebhookId(newWebhookId)
+                }
             } else {
                 setCreateWebhookError(result.error || 'Failed to create webhook')
             }
@@ -495,6 +562,58 @@ export default function DomainDetailPage() {
             setIsCreateWebhookOpen(true)
         } else {
             setWebhookDialogSelectedId(value)
+        }
+    }
+
+    const handleCatchAllWebhookSelection = (value: string) => {
+        if (value === 'create-new') {
+            setIsCreateWebhookOpen(true)
+        } else {
+            setCatchAllWebhookId(value)
+        }
+    }
+
+    const toggleCatchAll = async () => {
+        if (!catchAllStatus) return
+
+        setIsTogglingCatchAll(true)
+        setCatchAllError(null)
+
+        try {
+            if (catchAllStatus.isCatchAllEnabled) {
+                // Disable catch-all
+                const result = await disableDomainCatchAll(domainId)
+                
+                if (result.success) {
+                    toast.success('Catch-all disabled successfully')
+                    await fetchCatchAllStatus() // Refresh status
+                } else {
+                    setCatchAllError(result.error || 'Failed to disable catch-all')
+                    toast.error(result.error || 'Failed to disable catch-all')
+                }
+            } else {
+                // Enable catch-all
+                if (catchAllWebhookId === 'none') {
+                    setCatchAllError('Please select a webhook for catch-all emails')
+                    return
+                }
+
+                const result = await enableDomainCatchAll(domainId, catchAllWebhookId)
+                
+                if (result.success) {
+                    toast.success('Catch-all enabled successfully')
+                    await fetchCatchAllStatus() // Refresh status
+                } else {
+                    setCatchAllError(result.error || 'Failed to enable catch-all')
+                    toast.error(result.error || 'Failed to enable catch-all')
+                }
+            }
+        } catch (error) {
+            console.error('Error toggling catch-all:', error)
+            setCatchAllError('Network error occurred')
+            toast.error('Network error occurred')
+        } finally {
+            setIsTogglingCatchAll(false)
         }
     }
 
@@ -778,14 +897,25 @@ export default function DomainDetailPage() {
                 <div className="grid gap-4 md:grid-cols-4">
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Email Addresses</CardTitle>
+                            <CardTitle className="text-sm font-medium">Email Configuration</CardTitle>
                             <MailIcon className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{stats.totalEmailAddresses}</div>
-                            <p className="text-xs text-muted-foreground">
-                                {stats.configuredEmailAddresses} configured
-                            </p>
+                            {catchAllStatus?.isCatchAllEnabled ? (
+                                <>
+                                    <div className="text-2xl font-bold">Catch-All</div>
+                                    <p className="text-xs text-muted-foreground">
+                                        All emails captured
+                                    </p>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold">{stats.totalEmailAddresses}</div>
+                                    <p className="text-xs text-muted-foreground">
+                                        {stats.configuredEmailAddresses} configured
+                                    </p>
+                                </>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -890,8 +1020,8 @@ export default function DomainDetailPage() {
                 </Card>
             )} */}
 
-            {/* Email Addresses Section - Only show for SES verified domains */}
-            {showEmailSection && (
+            {/* Email Addresses Section - Only show for SES verified domains and when catch-all is not enabled */}
+            {showEmailSection && !catchAllStatus?.isCatchAllEnabled && (
                 <Card>
                     <CardHeader>
                         <div className="flex items-center justify-between">
@@ -926,7 +1056,7 @@ export default function DomainDetailPage() {
                                                     onChange={(e) => setNewEmailAddress(e.target.value)}
                                                     onKeyDown={(e) => {
                                                         if (e.key === 'Enter' && newEmailAddress.trim() && !isAddingEmail) {
-                                                            addEmailAddress()
+                                                            addEmailAddressHandler()
                                                         }
                                                     }}
                                                     className="border-0 rounded-r-none focus:ring-0 focus:border-0 flex-1 min-w-0 h-full"
@@ -1001,7 +1131,7 @@ export default function DomainDetailPage() {
                                     <div className="flex flex-col justify-center">
                                         <div className="mt-2">
                                             <Button
-                                                onClick={addEmailAddress}
+                                                onClick={() => addEmailAddressHandler()}
                                                 disabled={isAddingEmail || !newEmailAddress.trim()}
                                                 className="shrink-0 h-10"
                                             >
@@ -1119,7 +1249,7 @@ export default function DomainDetailPage() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="sm"
-                                                                onClick={() => deleteEmailAddress(email.id, email.address)}
+                                                                onClick={() => deleteEmailAddressHandler(email.id, email.address)}
                                                                 className="text-red-600 hover:text-red-700 hover:bg-red-50"
                                                             >
                                                                 <TrashIcon className="h-4 w-4" />
@@ -1131,6 +1261,174 @@ export default function DomainDetailPage() {
                                         })}
                                     </TableBody>
                                 </Table>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Catch-All Domain Configuration - Only show for SES verified domains */}
+            {showEmailSection && (
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle className="flex items-center gap-2">
+                                    <GlobeIcon className="h-5 w-5" />
+                                    Catch-All Configuration
+                                </CardTitle>
+                                <CardDescription>
+                                    Configure catch-all email receiving for all addresses on this domain
+                                </CardDescription>
+                            </div>
+                            {catchAllStatus?.isCatchAllEnabled && (
+                                <Badge className="bg-green-100 text-green-800 border-green-200">
+                                    <CheckCircleIcon className="h-3 w-3 mr-1" />
+                                    Active
+                                </Badge>
+                            )}
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {isLoadingCatchAll ? (
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                                <RefreshCwIcon className="h-4 w-4 animate-spin" />
+                                Loading catch-all configuration...
+                            </div>
+                        ) : catchAllStatus ? (
+                            <div className="space-y-4">
+                                {/* Catch-all status and explanation */}
+                                <Alert className={`${catchAllStatus.isCatchAllEnabled ? 'border-green-200 bg-green-50' : 'border-blue-200 bg-blue-50'}`}>
+                                    {catchAllStatus.isCatchAllEnabled ? (
+                                        <CheckCircleIcon className="h-4 w-4 text-green-600" />
+                                    ) : (
+                                        <AlertTriangleIcon className="h-4 w-4 text-blue-600" />
+                                    )}
+                                    <AlertDescription className={catchAllStatus.isCatchAllEnabled ? 'text-green-800' : 'text-blue-800'}>
+                                        {catchAllStatus.isCatchAllEnabled ? (
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <div className="font-semibold mb-1">Catch-all is active!</div>
+                                                    <div>
+                                                        All emails sent to any address @{domain.domain} will be captured and 
+                                                        {catchAllStatus.webhook ? ` sent to your "${catchAllStatus.webhook.name}" webhook` : ' stored for viewing'}.
+                                                        Individual email address configuration is not needed.
+                                                    </div>
+                                                </div>
+                                                <Button
+                                                    variant="destructive"
+                                                    size="sm"
+                                                    onClick={toggleCatchAll}
+                                                    disabled={isTogglingCatchAll}
+                                                    className="ml-4 shrink-0"
+                                                >
+                                                    {isTogglingCatchAll ? (
+                                                        <RefreshCwIcon className="h-4 w-4 animate-spin mr-2" />
+                                                    ) : (
+                                                        <XCircleIcon className="h-4 w-4 mr-2" />
+                                                    )}
+                                                    {isTogglingCatchAll ? 'Processing...' : 'Disable Catch-All'}
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <div className="font-semibold mb-1">Catch-all emails</div>
+                                                <div>
+                                                    When enabled, any email sent to *@{domain.domain} (including non-existent addresses) 
+                                                    will be captured and sent to your selected webhook or stored for viewing.
+                                                </div>
+                                            </div>
+                                        )}
+                                    </AlertDescription>
+                                </Alert>
+
+                                {/* Webhook selection for catch-all */}
+                                {!catchAllStatus.isCatchAllEnabled && (
+                                    <div className="space-y-4">
+                                        <div className="space-y-3">
+                                            <Label htmlFor="catchall-webhook-select" className="text-sm font-medium">
+                                                Select Webhook for Catch-All Emails
+                                            </Label>
+                                            <Select 
+                                                value={catchAllWebhookId} 
+                                                onValueChange={handleCatchAllWebhookSelection}
+                                                disabled={isTogglingCatchAll || isLoadingWebhooks}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select a webhook for catch-all emails" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="none">Store emails only (no webhook)</SelectItem>
+                                                    <SelectItem value="create-new" className="text-blue-600 font-medium">
+                                                        <div className="flex items-center gap-2">
+                                                            <PlusIcon className="h-4 w-4" />
+                                                            Create New Webhook
+                                                        </div>
+                                                    </SelectItem>
+                                                    {userWebhooks.length > 0 && (
+                                                        <>
+                                                            <div className="px-2 py-1 text-xs font-medium text-muted-foreground border-t">
+                                                                Existing Webhooks
+                                                            </div>
+                                                            {userWebhooks.map((webhook) => (
+                                                                <SelectItem key={webhook.id} value={webhook.id}>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className={`w-2 h-2 rounded-full ${webhook.isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
+                                                                        <span>{webhook.name}</span>
+                                                                        {!webhook.isActive && <span className="text-xs text-muted-foreground">(disabled)</span>}
+                                                                    </div>
+                                                                </SelectItem>
+                                                            ))}
+                                                        </>
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+                                            <p className="text-xs text-muted-foreground">
+                                                All emails sent to any address @{domain.domain} will be sent to this webhook
+                                            </p>
+                                        </div>
+                                        
+                                        <div className="flex justify-end">
+                                            <Button
+                                                variant="primary"
+                                                onClick={toggleCatchAll}
+                                                disabled={isTogglingCatchAll || catchAllWebhookId === 'none'}
+                                            >
+                                                {isTogglingCatchAll ? (
+                                                    <RefreshCwIcon className="h-4 w-4 animate-spin mr-2" />
+                                                ) : (
+                                                    <CheckCircleIcon className="h-4 w-4 mr-2" />
+                                                )}
+                                                {isTogglingCatchAll ? 'Processing...' : 'Enable Catch-All'}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Error display */}
+                                {catchAllError && (
+                                    <Alert className="border-red-200 bg-red-50">
+                                        <XCircleIcon className="h-4 w-4 text-red-600" />
+                                        <AlertDescription className="text-red-800">
+                                            {catchAllError}
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
+
+
+                            </div>
+                        ) : (
+                            <div className="text-center py-4">
+                                <p className="text-muted-foreground">Failed to load catch-all configuration</p>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={fetchCatchAllStatus}
+                                    className="mt-2"
+                                >
+                                    <RefreshCwIcon className="h-4 w-4 mr-2" />
+                                    Retry
+                                </Button>
                             </div>
                         )}
                     </CardContent>
@@ -1199,7 +1497,7 @@ export default function DomainDetailPage() {
                             Cancel
                         </Button>
                         <Button
-                            onClick={updateEmailWebhook}
+                            onClick={() => updateEmailWebhookHandler()}
                             disabled={isUpdatingWebhook}
                         >
                             {isUpdatingWebhook ? (

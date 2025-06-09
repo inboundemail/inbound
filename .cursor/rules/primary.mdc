@@ -8,5 +8,7 @@ Project Rules:
 - only use bun for package manager
 - never run `bun run dev` or `bun run build` without my approval
 
+Current Goal: 
 
-- if I ask for it `stripe listen --forward-to http://localhost:3000/api/auth/stripe/webhook` is the stripe webhook command (do not run it)
+- We are going to be working on migrating from API to Next.JS Server Actions
+- When we are refactoring stuff we also need to make sure to use the react-query rule so that we can inhance the perfomance of the app using react query and such. Remember on the querys to make sure that we revalidate on the new data submission and such. 

@@ -1,3 +1,5 @@
+"use client"
+
 import {
   PricingCard,
   PricingTable as PricecnPricingTable,
