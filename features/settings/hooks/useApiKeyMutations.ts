@@ -1,16 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { authClient } from '@/lib/auth-client'
-
-interface CreateApiKeyData {
-  name?: string
-  prefix?: string
-}
-
-interface UpdateApiKeyData {
-  keyId: string
-  name?: string
-  enabled?: boolean
-}
+import { CreateApiKeyData, UpdateApiKeyData } from '@/features/settings/types'
 
 export const useCreateApiKeyMutation = () => {
   const queryClient = useQueryClient()

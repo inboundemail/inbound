@@ -63,13 +63,6 @@ interface User {
   banExpires?: Date | null
 }
 
-interface UserListResponse {
-  users: User[]
-  total: number
-  limit?: number
-  offset?: number
-}
-
 export default function AdminPage() {
   const { data: session, isPending, error } = useSession()
   const router = useRouter()
@@ -80,7 +73,6 @@ export default function AdminPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalUsers, setTotalUsers] = useState(0)
   const [isLoadingUsers, setIsLoadingUsers] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [isCreateUserOpen, setIsCreateUserOpen] = useState(false)
   const [newUser, setNewUser] = useState({ name: "", email: "", password: "", role: "user" })
 

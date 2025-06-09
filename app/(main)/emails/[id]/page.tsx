@@ -1,10 +1,9 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useSession } from '@/lib/auth-client'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { addEmailAddress, deleteEmailAddress, getEmailAddresses, updateEmailWebhook, enableDomainCatchAll, disableDomainCatchAll, getDomainCatchAllStatus } from '@/app/actions/primary'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -62,73 +61,19 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import AddDomainForm from '@/components/add-domain-form'
 
-interface DnsRecord {
-    type: string
-    name: string
-    value: string
-    isVerified: boolean
-    isRequired: boolean
-    lastChecked?: string
-}
-
-interface EmailAddress {
-    id: string
-    address: string
-    isActive: boolean
-    isReceiptRuleConfigured: boolean
-    receiptRuleName?: string
-    webhookId?: string
-    webhookName?: string
-    createdAt: string
-    emailsLast24h: number
-}
-
-
-
-interface DomainDetails {
-    domain: {
-        id: string
-        domain: string
-        status: string
-        sesVerificationStatus?: string
-        verificationToken?: string
-        canReceiveEmails: boolean
-        hasMxRecords: boolean
-        domainProvider?: string
-        providerConfidence?: string
-        lastDnsCheck?: string
-        lastSesCheck?: string
-        createdAt: string
-        updatedAt: string
-        canProceed: boolean
-        // Catch-all fields
-        isCatchAllEnabled?: boolean
-        catchAllWebhookId?: string
-        catchAllReceiptRuleName?: string
-    }
-    dnsRecords: DnsRecord[]
-    emailAddresses: EmailAddress[]
-    stats: {
-        totalEmailAddresses: number
-        activeEmailAddresses: number
-        configuredEmailAddresses: number
-        totalEmailsLast24h: number
-    }
-}
-
-interface CatchAllStatus {
-    domain: string
-    domainStatus: string
-    isCatchAllEnabled: boolean | null
-    catchAllWebhookId?: string | null
-    receiptRuleName?: string | null
-    webhook?: {
-        id: string
-        name: string
-        url: string
-        isActive: boolean | null
-    } | null
-}
+// React Query hooks
+import { 
+    useDomainDetailsQuery,
+    useCatchAllStatusQuery,
+    useDomainVerificationMutation,
+    useDomainDeletionMutation,
+    useAddEmailAddressMutation,
+    useDeleteEmailAddressMutation,
+    useUpdateEmailWebhookMutation,
+    useEnableCatchAllMutation,
+    useDisableCatchAllMutation
+} from '@/features/domains/hooks/useDomainDetailsQuery'
+import { useWebhooksQuery, useCreateWebhookMutation } from '@/features/webhooks/hooks'
 
 export default function DomainDetailPage() {
     const { data: session } = useSession()
@@ -136,38 +81,55 @@ export default function DomainDetailPage() {
     const router = useRouter()
     const domainId = params.id as string
 
-    const [domainDetails, setDomainDetails] = useState<DomainDetails | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
+    // React Query hooks for data fetching
+    const {
+        data: domainDetailsData,
+        isLoading: isDomainLoading,
+        error: domainError,
+        refetch: refetchDomainDetails
+    } = useDomainDetailsQuery(domainId)
+
+    const {
+        data: catchAllStatus,
+        isLoading: isCatchAllLoading,
+        error: catchAllError,
+        refetch: refetchCatchAllStatus
+    } = useCatchAllStatusQuery(domainId)
+
+    const {
+        data: userWebhooks = [],
+        isLoading: isWebhooksLoading
+    } = useWebhooksQuery()
+
+    // React Query mutations
+    const domainVerificationMutation = useDomainVerificationMutation()
+    const domainDeletionMutation = useDomainDeletionMutation()
+    const addEmailMutation = useAddEmailAddressMutation()
+    const deleteEmailMutation = useDeleteEmailAddressMutation()
+    const updateEmailWebhookMutation = useUpdateEmailWebhookMutation()
+    const enableCatchAllMutation = useEnableCatchAllMutation()
+    const disableCatchAllMutation = useDisableCatchAllMutation()
+    const createWebhookMutation = useCreateWebhookMutation()
+
+    // Local state for UI interactions
     const [copiedValues, setCopiedValues] = useState<Record<string, boolean>>({})
 
     // Email address management state
     const [newEmailAddress, setNewEmailAddress] = useState('')
     const [selectedWebhookId, setSelectedWebhookId] = useState<string>('none')
-    const [isAddingEmail, setIsAddingEmail] = useState(false)
     const [emailError, setEmailError] = useState<string | null>(null)
-
-    // Webhook management state
-    const [userWebhooks, setUserWebhooks] = useState<Webhook[]>([])
-    const [isLoadingWebhooks, setIsLoadingWebhooks] = useState(false)
 
     // Domain deletion state
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-    const [isDeleting, setIsDeleting] = useState(false)
     const [deleteConfirmText, setDeleteConfirmText] = useState('')
-
-    // Refresh/verification state
-    const [isRefreshing, setIsRefreshing] = useState(false)
 
     // Webhook management dialog state
     const [isWebhookDialogOpen, setIsWebhookDialogOpen] = useState(false)
-    const [selectedEmailForWebhook, setSelectedEmailForWebhook] = useState<EmailAddress | null>(null)
+    const [selectedEmailForWebhook, setSelectedEmailForWebhook] = useState<any>(null)
     const [webhookDialogSelectedId, setWebhookDialogSelectedId] = useState<string>('none')
-    const [isUpdatingWebhook, setIsUpdatingWebhook] = useState(false)
 
     // Create webhook dialog state
     const [isCreateWebhookOpen, setIsCreateWebhookOpen] = useState(false)
-    const [isCreatingWebhook, setIsCreatingWebhook] = useState(false)
     const [createWebhookForm, setCreateWebhookForm] = useState({
         name: '',
         url: '',
@@ -178,374 +140,169 @@ export default function DomainDetailPage() {
     const [createWebhookError, setCreateWebhookError] = useState<string | null>(null)
 
     // Catch-all domain state
-    const [catchAllStatus, setCatchAllStatus] = useState<CatchAllStatus | null>(null)
-    const [isLoadingCatchAll, setIsLoadingCatchAll] = useState(false)
-    const [isTogglingCatchAll, setIsTogglingCatchAll] = useState(false)
     const [catchAllWebhookId, setCatchAllWebhookId] = useState<string>('none')
-    const [catchAllError, setCatchAllError] = useState<string | null>(null)
 
-    useEffect(() => {
-        if (session?.user && domainId) {
-            fetchDomainDetails()
-            fetchWebhooks()
-            fetchCatchAllStatus()
+    // Set catch-all webhook ID when data loads
+    useState(() => {
+        if (catchAllStatus?.catchAllWebhookId) {
+            setCatchAllWebhookId(catchAllStatus.catchAllWebhookId)
         }
-    }, [session, domainId])
-
-    const fetchDomainDetails = async () => {
-        try {
-            setIsLoading(true)
-            setError(null)
-            
-            // Use the verifications API
-            // For initial load, we use the existing domain name if available, otherwise use domainId as placeholder
-            const domainName = domainDetails?.domain?.domain || domainId
-            
-            const response = await fetch('/api/domain/verifications', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'getDomain',
-                    domain: domainName,
-                    domainId: domainId,
-                    refreshProvider: true
-                })
-            })
-
-            if (!response.ok) {
-                if (response.status === 404) {
-                    throw new Error('Domain not found')
-                }
-                throw new Error('Failed to fetch domain details')
-            }
-
-            const data: DomainDetails = await response.json()
-            setDomainDetails(data)
-        } catch (error) {
-            console.error('Error fetching domain details:', error)
-            setError(error instanceof Error ? error.message : 'Failed to load domain details')
-            toast.error('Failed to load domain details')
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    // Background refresh function that doesn't trigger main loading state
-    const fetchDomainDetailsBackground = async () => {
-        try {
-            setError(null)
-            
-            if (!domainDetails) return
-            
-            // Use the verifications API for background refresh
-            const response = await fetch('/api/domain/verifications', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'getDomain',
-                    domain: domainDetails.domain.domain,
-                    domainId: domainId,
-                    refreshProvider: true
-                })
-            })
-
-            if (!response.ok) {
-                if (response.status === 404) {
-                    throw new Error('Domain not found')
-                }
-                throw new Error('Failed to fetch domain details')
-            }
-
-            const data: DomainDetails = await response.json()
-            setDomainDetails(data)
-        } catch (error) {
-            console.error('Error fetching domain details:', error)
-            setError(error instanceof Error ? error.message : 'Failed to load domain details')
-            toast.error('Failed to load domain details')
-        }
-    }
-
-    const fetchWebhooks = async () => {
-        try {
-            setIsLoadingWebhooks(true)
-            const response = await fetch('/api/webhooks')
-            
-            if (response.ok) {
-                const data = await response.json()
-                setUserWebhooks(data.webhooks || [])
-            }
-        } catch (error) {
-            console.error('Error fetching webhooks:', error)
-        } finally {
-            setIsLoadingWebhooks(false)
-        }
-    }
-
-    const fetchCatchAllStatus = async () => {
-        try {
-            setIsLoadingCatchAll(true)
-            setCatchAllError(null)
-            
-            const result = await getDomainCatchAllStatus(domainId)
-            
-            if (result.success && result.data) {
-                setCatchAllStatus(result.data)
-                setCatchAllWebhookId(result.data.catchAllWebhookId || 'none')
-            } else {
-                setCatchAllError(result.error || 'Failed to fetch catch-all status')
-            }
-        } catch (error) {
-            console.error('Error fetching catch-all status:', error)
-            setCatchAllError('Network error occurred')
-        } finally {
-            setIsLoadingCatchAll(false)
-        }
-    }
+    })
 
     const refreshVerification = async () => {
-        if (!domainDetails) return
+        if (!domainDetailsData?.domain) return
 
-        setIsRefreshing(true)
         try {
-            // Call the domain verification API to check verification status
-            const response = await fetch('/api/domain/verifications', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'checkVerification',
-                    domain: domainDetails.domain.domain,
-                    domainId: domainDetails.domain.id
-                })
+            const result = await domainVerificationMutation.mutateAsync({
+                domain: domainDetailsData.domain.domain,
+                domainId: domainDetailsData.domain.id
             })
 
-            const result = await response.json()
-
-            if (response.ok) {
-                // Show appropriate success message based on verification status
-                if (result.allVerified) {
-                    toast.success('Domain fully verified! You can now manage email addresses.')
-                } else if (result.dnsVerified && !result.sesVerified) {
-                    toast.success('DNS records verified! SES verification in progress.')
-                } else if (!result.dnsVerified) {
-                    toast.warning('DNS records not yet propagated. Please wait and try again.')
-                } else {
-                    toast.info('Verification status updated.')
-                }
-
-                // Refresh the domain details to show updated status
-                await fetchDomainDetailsBackground()
+            if (result.allVerified) {
+                toast.success('Domain fully verified! You can now manage email addresses.')
+            } else if (result.dnsVerified && !result.sesVerified) {
+                toast.success('DNS records verified! SES verification in progress.')
+            } else if (!result.dnsVerified) {
+                toast.warning('DNS records not yet propagated. Please wait and try again.')
             } else {
-                toast.error(result.error || 'Failed to check verification status')
+                toast.info('Verification status updated.')
             }
         } catch (error) {
-            console.error('Error checking verification:', error)
-            toast.error('Network error occurred while checking verification')
-        } finally {
-            setIsRefreshing(false)
-        }
-    }
-
-    const copyToClipboard = async (text: string, key: string) => {
-        try {
-            await navigator.clipboard.writeText(text)
-            setCopiedValues(prev => ({ ...prev, [key]: true }))
-            setTimeout(() => {
-                setCopiedValues(prev => ({ ...prev, [key]: false }))
-            }, 2000)
-        } catch (err) {
-            console.error('Failed to copy text: ', err)
+            toast.error(error instanceof Error ? error.message : 'Failed to check verification')
         }
     }
 
     const addEmailAddressHandler = async () => {
-        if (!domainDetails || !newEmailAddress.trim()) return
+        if (!domainDetailsData?.domain || !newEmailAddress.trim()) return
 
-        setIsAddingEmail(true)
         setEmailError(null)
 
         try {
             const fullEmailAddress = newEmailAddress.includes('@')
                 ? newEmailAddress
-                : `${newEmailAddress}@${domainDetails.domain.domain}`
+                : `${newEmailAddress}@${domainDetailsData.domain.domain}`
 
-            const result = await addEmailAddress(
+            await addEmailMutation.mutateAsync({
                 domainId,
-                fullEmailAddress,
-                selectedWebhookId === 'none' ? undefined : selectedWebhookId
-            )
+                emailAddress: fullEmailAddress,
+                webhookId: selectedWebhookId === 'none' ? undefined : selectedWebhookId
+            })
 
-            if (result.success) {
-                setNewEmailAddress('')
-                setSelectedWebhookId('none')
-                await fetchDomainDetailsBackground() // Refresh the data
-                toast.success('Email address added successfully')
-                if (result.data?.warning) {
-                    toast.warning(result.data.warning)
-                }
-            } else {
-                setEmailError(result.error || 'Failed to add email address')
-                toast.error(result.error || 'Failed to add email address')
-            }
+            setNewEmailAddress('')
+            setSelectedWebhookId('none')
+            toast.success('Email address added successfully')
         } catch (error) {
-            console.error('Error adding email address:', error)
-            setEmailError('Network error occurred')
-            toast.error('Network error occurred')
-        } finally {
-            setIsAddingEmail(false)
+            const errorMessage = error instanceof Error ? error.message : 'Failed to add email address'
+            setEmailError(errorMessage)
+            toast.error(errorMessage)
         }
     }
 
     const deleteEmailAddressHandler = async (emailAddressId: string, emailAddress: string) => {
-        if (!domainDetails) return
+        if (!domainDetailsData?.domain) return
 
         if (!confirm(`Are you sure you want to delete ${emailAddress}?`)) {
             return
         }
 
         try {
-            const result = await deleteEmailAddress(domainId, emailAddressId)
-
-            if (result.success) {
-                await fetchDomainDetailsBackground() // Refresh the data
-                toast.success('Email address deleted successfully')
-            } else {
-                toast.error(result.error || 'Failed to delete email address')
-            }
+            await deleteEmailMutation.mutateAsync({
+                domainId,
+                emailAddressId
+            })
+            toast.success('Email address deleted successfully')
         } catch (error) {
-            console.error('Error deleting email address:', error)
-            toast.error('Network error occurred')
+            toast.error(error instanceof Error ? error.message : 'Failed to delete email address')
         }
     }
 
-    const deleteDomain = async () => {
-        if (!domainDetails) return
+    const deleteDomainHandler = async () => {
+        if (!domainDetailsData?.domain) return
 
         // Verify the user typed the domain name correctly
-        if (deleteConfirmText !== domainDetails.domain.domain) {
+        if (deleteConfirmText !== domainDetailsData.domain.domain) {
             toast.error('Please type the domain name exactly to confirm deletion')
             return
         }
 
-        setIsDeleting(true)
         try {
-            // Use the verifications API for domain deletion
-            const response = await fetch('/api/domain/verifications', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'deleteDomain',
-                    domain: domainDetails.domain.domain,
-                    domainId: domainId
-                })
+            await domainDeletionMutation.mutateAsync({
+                domain: domainDetailsData.domain.domain,
+                domainId: domainDetailsData.domain.id
             })
 
-            const result = await response.json()
-
-            if (response.ok) {
-                toast.success('Domain deleted successfully')
-                setIsDeleteDialogOpen(false)
-                // Redirect to domains list
-                router.push('/emails')
-            } else {
-                toast.error(result.error || 'Failed to delete domain')
-                console.error('Delete domain error:', result)
-            }
+            toast.success('Domain deleted successfully')
+            setIsDeleteDialogOpen(false)
+            router.push('/emails')
         } catch (error) {
-            console.error('Error deleting domain:', error)
-            toast.error('Network error occurred')
-        } finally {
-            setIsDeleting(false)
+            toast.error(error instanceof Error ? error.message : 'Failed to delete domain')
         }
     }
 
     const updateEmailWebhookHandler = async () => {
         if (!selectedEmailForWebhook) return
 
-        setIsUpdatingWebhook(true)
         try {
-            const result = await updateEmailWebhook(
+            await updateEmailWebhookMutation.mutateAsync({
                 domainId,
-                selectedEmailForWebhook.id,
-                webhookDialogSelectedId === 'none' ? undefined : webhookDialogSelectedId
-            )
+                emailAddressId: selectedEmailForWebhook.id,
+                webhookId: webhookDialogSelectedId === 'none' ? undefined : webhookDialogSelectedId
+            })
 
-            if (result.success) {
-                toast.success(result.message)
-                setIsWebhookDialogOpen(false)
-                setSelectedEmailForWebhook(null)
-                setWebhookDialogSelectedId('none')
-                await fetchDomainDetailsBackground() // Refresh the data
-            } else {
-                toast.error(result.error || 'Failed to update webhook assignment')
-            }
+            toast.success('Webhook updated successfully')
+            setIsWebhookDialogOpen(false)
+            setSelectedEmailForWebhook(null)
+            setWebhookDialogSelectedId('none')
         } catch (error) {
-            console.error('Error updating webhook assignment:', error)
-            toast.error('Network error occurred')
-        } finally {
-            setIsUpdatingWebhook(false)
+            toast.error(error instanceof Error ? error.message : 'Failed to update webhook')
         }
     }
 
-    const openWebhookDialog = (email: EmailAddress) => {
+    const openWebhookDialog = (email: any) => {
         setSelectedEmailForWebhook(email)
         setWebhookDialogSelectedId(email.webhookId || 'none')
         setIsWebhookDialogOpen(true)
     }
 
-    const createWebhook = async () => {
+    const createWebhookHandler = async () => {
         if (!createWebhookForm.name.trim() || !createWebhookForm.url.trim()) {
             setCreateWebhookError('Name and URL are required')
             return
         }
 
-        setIsCreatingWebhook(true)
         setCreateWebhookError(null)
 
         try {
-            const response = await fetch('/api/webhooks', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(createWebhookForm)
+            const newWebhook = await createWebhookMutation.mutateAsync(createWebhookForm)
+
+            toast.success('Webhook created successfully!')
+            setIsCreateWebhookOpen(false)
+            setCreateWebhookForm({
+                name: '',
+                url: '',
+                description: '',
+                timeout: 30,
+                retryAttempts: 3
             })
-
-            const result = await response.json()
-
-            if (response.ok) {
-                toast.success('Webhook created successfully!')
-                setIsCreateWebhookOpen(false)
-                setCreateWebhookForm({
-                    name: '',
-                    url: '',
-                    description: '',
-                    timeout: 30,
-                    retryAttempts: 3
-                })
-                setCreateWebhookError(null)
-                
-                // Refresh webhooks and auto-select the new one
-                await fetchWebhooks()
-                
-                // Auto-select the new webhook in the appropriate form
-                const newWebhookId = result.webhook.id
-                setSelectedWebhookId(newWebhookId)
-                
-                // If we're in the management dialog, also update that selection
-                if (isWebhookDialogOpen) {
-                    setWebhookDialogSelectedId(newWebhookId)
-                }
-                
-                // Also auto-select for catch-all if not currently enabled
-                if (!catchAllStatus?.isCatchAllEnabled) {
-                    setCatchAllWebhookId(newWebhookId)
-                }
-            } else {
-                setCreateWebhookError(result.error || 'Failed to create webhook')
+            setCreateWebhookError(null)
+            
+            // Auto-select the new webhook
+            const newWebhookId = newWebhook.id
+            setSelectedWebhookId(newWebhookId)
+            
+            // If we're in the management dialog, also update that selection
+            if (isWebhookDialogOpen) {
+                setWebhookDialogSelectedId(newWebhookId)
+            }
+            
+            // Also auto-select for catch-all if not currently enabled
+            if (!catchAllStatus?.isCatchAllEnabled) {
+                setCatchAllWebhookId(newWebhookId)
             }
         } catch (error) {
-            console.error('Error creating webhook:', error)
-            setCreateWebhookError('Network error occurred')
-        } finally {
-            setIsCreatingWebhook(false)
+            const errorMessage = error instanceof Error ? error.message : 'Failed to create webhook'
+            setCreateWebhookError(errorMessage)
+            toast.error(errorMessage)
         }
     }
 
@@ -576,48 +333,25 @@ export default function DomainDetailPage() {
     const toggleCatchAll = async () => {
         if (!catchAllStatus) return
 
-        setIsTogglingCatchAll(true)
-        setCatchAllError(null)
-
         try {
             if (catchAllStatus.isCatchAllEnabled) {
-                // Disable catch-all
-                const result = await disableDomainCatchAll(domainId)
-                
-                if (result.success) {
-                    toast.success('Catch-all disabled successfully')
-                    await fetchCatchAllStatus() // Refresh status
-                } else {
-                    setCatchAllError(result.error || 'Failed to disable catch-all')
-                    toast.error(result.error || 'Failed to disable catch-all')
-                }
+                await disableCatchAllMutation.mutateAsync({ domainId })
+                toast.success('Catch-all disabled successfully')
             } else {
-                // Enable catch-all
                 if (catchAllWebhookId === 'none') {
-                    setCatchAllError('Please select a webhook for catch-all emails')
+                    toast.error('Please select a webhook for catch-all emails')
                     return
                 }
 
-                const result = await enableDomainCatchAll(domainId, catchAllWebhookId)
-                
-                if (result.success) {
-                    toast.success('Catch-all enabled successfully')
-                    await fetchCatchAllStatus() // Refresh status
-                } else {
-                    setCatchAllError(result.error || 'Failed to enable catch-all')
-                    toast.error(result.error || 'Failed to enable catch-all')
-                }
+                await enableCatchAllMutation.mutateAsync({ domainId, webhookId: catchAllWebhookId })
+                toast.success('Catch-all enabled successfully')
             }
         } catch (error) {
-            console.error('Error toggling catch-all:', error)
-            setCatchAllError('Network error occurred')
-            toast.error('Network error occurred')
-        } finally {
-            setIsTogglingCatchAll(false)
+            toast.error(error instanceof Error ? error.message : 'Failed to toggle catch-all')
         }
     }
 
-    const getStatusBadge = (status: string, sesStatus?: string) => {
+    const getStatusBadge = (status: string) => {
         if (status === DOMAIN_STATUS.VERIFIED) {
             return (
                 <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
@@ -659,7 +393,8 @@ export default function DomainDetailPage() {
         }
     }
 
-    if (isLoading) {
+    // Loading state
+    if (isDomainLoading) {
         return (
             <div className="flex flex-1 flex-col gap-6 p-6">
                 {/* Header Skeleton */}
@@ -742,7 +477,8 @@ export default function DomainDetailPage() {
         )
     }
 
-    if (error || !domainDetails) {
+    // Error state
+    if (domainError || !domainDetailsData?.domain) {
         return (
             <div className="flex flex-1 flex-col gap-6 p-6">
                 <div className="flex items-center gap-4">
@@ -758,11 +494,11 @@ export default function DomainDetailPage() {
                     <CardContent className="pt-6">
                         <div className="flex items-center gap-2 text-red-600">
                             <XCircleIcon className="h-4 w-4" />
-                            <span>{error || 'Domain not found'}</span>
+                            <span>{domainError instanceof Error ? domainError.message : 'Domain not found'}</span>
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={fetchDomainDetails}
+                                onClick={() => refetchDomainDetails()}
                                 className="ml-auto text-red-600 hover:text-red-700"
                             >
                                 Try Again
@@ -774,7 +510,7 @@ export default function DomainDetailPage() {
         )
     }
 
-    const { domain, dnsRecords, emailAddresses, stats } = domainDetails
+    const { domain, dnsRecords = [], emailAddresses = [], stats = { totalEmailAddresses: 0, activeEmailAddresses: 0, configuredEmailAddresses: 0, totalEmailsLast24h: 0 } } = domainDetailsData
 
     // Determine what to show based on domain status
     const showEmailSection = domain.status === DOMAIN_STATUS.VERIFIED
@@ -798,15 +534,14 @@ export default function DomainDetailPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    {getStatusBadge(domain.status, domain.sesVerificationStatus)}
+                    {getStatusBadge(domain.status)}
                     <Button
                         variant="secondary"
                         size="sm"
                         onClick={refreshVerification}
-                        disabled={isRefreshing}
                     >
-                        <RefreshCwIcon className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                        {isRefreshing ? 'Checking...' : 'Refresh'}
+                        <RefreshCwIcon className="h-4 w-4 mr-2" />
+                        Refresh
                     </Button>
                     
                     {/* Delete Domain Button */}
@@ -848,13 +583,12 @@ export default function DomainDetailPage() {
                                         value={deleteConfirmText}
                                         onChange={(e) => setDeleteConfirmText(e.target.value)}
                                         onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && deleteConfirmText === domain.domain && !isDeleting) {
-                                                deleteDomain()
-                                            }
+                                                                                    if (e.key === 'Enter' && deleteConfirmText === domain.domain) {
+                                            deleteDomainHandler()
+                                        }
                                         }}
                                         placeholder={domain.domain}
                                         className="mt-2"
-                                        disabled={isDeleting}
                                     />
                                 </div>
                             </div>
@@ -865,26 +599,15 @@ export default function DomainDetailPage() {
                                         setIsDeleteDialogOpen(false)
                                         setDeleteConfirmText('')
                                     }}
-                                    disabled={isDeleting}
                                 >
                                     Cancel
                                 </Button>
                                 <Button
                                     variant="destructive"
-                                    onClick={deleteDomain}
-                                    disabled={isDeleting || deleteConfirmText !== domain.domain}
+                                    onClick={deleteDomainHandler}
+                                    disabled={deleteConfirmText !== domain.domain}
                                 >
-                                    {isDeleting ? (
-                                        <>
-                                            <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" />
-                                            Deleting...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <TrashIcon className="h-4 w-4 mr-2" />
-                                            Delete Domain
-                                        </>
-                                    )}
+                                    Delete Domain
                                 </Button>
                             </DialogFooter>
                         </DialogContent>
@@ -990,7 +713,7 @@ export default function DomainDetailPage() {
                         overrideRefreshFunction={refreshVerification}
                         onSuccess={(domainId) => {
                             // Refresh domain details when form succeeds
-                            fetchDomainDetailsBackground()
+                            refetchDomainDetails()
                         }}
                     />
                 </div>
@@ -1055,12 +778,12 @@ export default function DomainDetailPage() {
                                                     value={newEmailAddress}
                                                     onChange={(e) => setNewEmailAddress(e.target.value)}
                                                     onKeyDown={(e) => {
-                                                        if (e.key === 'Enter' && newEmailAddress.trim() && !isAddingEmail) {
+                                                        if (e.key === 'Enter' && newEmailAddress.trim() && !emailError) {
                                                             addEmailAddressHandler()
                                                         }
                                                     }}
                                                     className="border-0 rounded-r-none focus:ring-0 focus:border-0 flex-1 min-w-0 h-full"
-                                                    disabled={isAddingEmail}
+                                                    disabled={!!emailError}
                                                 />
                                                 <div className="px-3 bg-gray-50 border-l text-sm text-gray-600 rounded-r-md whitespace-nowrap flex items-center h-full" >
                                                     @{domain.domain}
@@ -1077,7 +800,7 @@ export default function DomainDetailPage() {
                                         <Select 
                                             value={selectedWebhookId} 
                                             onValueChange={handleWebhookSelection}
-                                            disabled={isAddingEmail || isLoadingWebhooks}
+                                            disabled={!!emailError || isWebhooksLoading}
                                         >
                                             <SelectTrigger className="mt-2 h-10">
                                                 <SelectValue placeholder="No webhook - emails stored only" />
@@ -1132,10 +855,10 @@ export default function DomainDetailPage() {
                                         <div className="mt-2">
                                             <Button
                                                 onClick={() => addEmailAddressHandler()}
-                                                disabled={isAddingEmail || !newEmailAddress.trim()}
+                                                disabled={!!emailError || !newEmailAddress.trim()}
                                                 className="shrink-0 h-10"
                                             >
-                                                {isAddingEmail ? (
+                                                {emailError ? (
                                                     <RefreshCwIcon className="h-4 w-4 animate-spin" />
                                                 ) : (
                                                     <PlusIcon className="h-4 w-4" />
@@ -1290,7 +1013,7 @@ export default function DomainDetailPage() {
                         </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        {isLoadingCatchAll ? (
+                        {isCatchAllLoading ? (
                             <div className="flex items-center gap-2 text-muted-foreground">
                                 <RefreshCwIcon className="h-4 w-4 animate-spin" />
                                 Loading catch-all configuration...
@@ -1319,15 +1042,14 @@ export default function DomainDetailPage() {
                                                     variant="destructive"
                                                     size="sm"
                                                     onClick={toggleCatchAll}
-                                                    disabled={isTogglingCatchAll}
                                                     className="ml-4 shrink-0"
                                                 >
-                                                    {isTogglingCatchAll ? (
-                                                        <RefreshCwIcon className="h-4 w-4 animate-spin mr-2" />
-                                                    ) : (
+                                                    {catchAllStatus.isCatchAllEnabled ? (
                                                         <XCircleIcon className="h-4 w-4 mr-2" />
+                                                    ) : (
+                                                        <CheckCircleIcon className="h-4 w-4 mr-2" />
                                                     )}
-                                                    {isTogglingCatchAll ? 'Processing...' : 'Disable Catch-All'}
+                                                    {catchAllStatus.isCatchAllEnabled ? 'Disable Catch-All' : 'Enable Catch-All'}
                                                 </Button>
                                             </div>
                                         ) : (
@@ -1352,7 +1074,7 @@ export default function DomainDetailPage() {
                                             <Select 
                                                 value={catchAllWebhookId} 
                                                 onValueChange={handleCatchAllWebhookSelection}
-                                                disabled={isTogglingCatchAll || isLoadingWebhooks}
+                                                disabled={catchAllStatus.isCatchAllEnabled || isWebhooksLoading}
                                             >
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Select a webhook for catch-all emails" />
@@ -1392,14 +1114,14 @@ export default function DomainDetailPage() {
                                             <Button
                                                 variant="primary"
                                                 onClick={toggleCatchAll}
-                                                disabled={isTogglingCatchAll || catchAllWebhookId === 'none'}
+                                                disabled={catchAllStatus.isCatchAllEnabled || catchAllWebhookId === 'none'}
                                             >
-                                                {isTogglingCatchAll ? (
-                                                    <RefreshCwIcon className="h-4 w-4 animate-spin mr-2" />
+                                                {catchAllStatus.isCatchAllEnabled ? (
+                                                    <XCircleIcon className="h-4 w-4 mr-2" />
                                                 ) : (
                                                     <CheckCircleIcon className="h-4 w-4 mr-2" />
                                                 )}
-                                                {isTogglingCatchAll ? 'Processing...' : 'Enable Catch-All'}
+                                                {catchAllStatus.isCatchAllEnabled ? 'Disable Catch-All' : 'Enable Catch-All'}
                                             </Button>
                                         </div>
                                     </div>
@@ -1410,7 +1132,7 @@ export default function DomainDetailPage() {
                                     <Alert className="border-red-200 bg-red-50">
                                         <XCircleIcon className="h-4 w-4 text-red-600" />
                                         <AlertDescription className="text-red-800">
-                                            {catchAllError}
+                                            {catchAllError instanceof Error ? catchAllError.message : catchAllError}
                                         </AlertDescription>
                                     </Alert>
                                 )}
@@ -1423,7 +1145,7 @@ export default function DomainDetailPage() {
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={fetchCatchAllStatus}
+                                    onClick={() => refetchCatchAllStatus()}
                                     className="mt-2"
                                 >
                                     <RefreshCwIcon className="h-4 w-4 mr-2" />
@@ -1450,7 +1172,7 @@ export default function DomainDetailPage() {
                             <Select 
                                 value={webhookDialogSelectedId} 
                                 onValueChange={handleWebhookDialogSelection}
-                                disabled={isUpdatingWebhook || isLoadingWebhooks}
+                                disabled={catchAllStatus?.isCatchAllEnabled || isWebhooksLoading}
                             >
                                 <SelectTrigger>
                                     <SelectValue placeholder="No webhook - emails stored only" />
@@ -1492,18 +1214,18 @@ export default function DomainDetailPage() {
                                 setSelectedEmailForWebhook(null)
                                 setWebhookDialogSelectedId('none')
                             }}
-                            disabled={isUpdatingWebhook}
+                            disabled={catchAllStatus?.isCatchAllEnabled || isWebhooksLoading}
                         >
                             Cancel
                         </Button>
                         <Button
                             onClick={() => updateEmailWebhookHandler()}
-                            disabled={isUpdatingWebhook}
+                            disabled={catchAllStatus?.isCatchAllEnabled || isWebhooksLoading}
                         >
-                            {isUpdatingWebhook ? (
+                            {catchAllStatus?.isCatchAllEnabled ? (
                                 <>
-                                    <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" />
-                                    Updating...
+                                    <XCircleIcon className="h-4 w-4 mr-2" />
+                                    Disable Webhook
                                 </>
                             ) : (
                                 'Update Webhook'
@@ -1530,7 +1252,7 @@ export default function DomainDetailPage() {
                                 value={createWebhookForm.name}
                                 onChange={(e) => setCreateWebhookForm(prev => ({ ...prev, name: e.target.value }))}
                                 placeholder="My Email Webhook"
-                                disabled={isCreatingWebhook}
+                                disabled={isWebhooksLoading}
                             />
                         </div>
                         <div className="grid gap-2">
@@ -1540,7 +1262,7 @@ export default function DomainDetailPage() {
                                 value={createWebhookForm.url}
                                 onChange={(e) => setCreateWebhookForm(prev => ({ ...prev, url: e.target.value }))}
                                 placeholder="https://api.example.com/webhooks/email"
-                                disabled={isCreatingWebhook}
+                                disabled={isWebhooksLoading}
                             />
                         </div>
                         <div className="grid gap-2">
@@ -1550,7 +1272,7 @@ export default function DomainDetailPage() {
                                 value={createWebhookForm.description}
                                 onChange={(e) => setCreateWebhookForm(prev => ({ ...prev, description: e.target.value }))}
                                 placeholder="Optional description for this webhook"
-                                disabled={isCreatingWebhook}
+                                disabled={isWebhooksLoading}
                                 rows={3}
                             />
                         </div>
@@ -1564,7 +1286,7 @@ export default function DomainDetailPage() {
                                     max="300"
                                     value={createWebhookForm.timeout}
                                     onChange={(e) => setCreateWebhookForm(prev => ({ ...prev, timeout: parseInt(e.target.value) || 30 }))}
-                                    disabled={isCreatingWebhook}
+                                    disabled={isWebhooksLoading}
                                 />
                             </div>
                             <div className="grid gap-2">
@@ -1576,7 +1298,7 @@ export default function DomainDetailPage() {
                                     max="10"
                                     value={createWebhookForm.retryAttempts}
                                     onChange={(e) => setCreateWebhookForm(prev => ({ ...prev, retryAttempts: parseInt(e.target.value) || 3 }))}
-                                    disabled={isCreatingWebhook}
+                                    disabled={isWebhooksLoading}
                                 />
                             </div>
                         </div>
@@ -1600,15 +1322,15 @@ export default function DomainDetailPage() {
                                     retryAttempts: 3
                                 })
                             }}
-                            disabled={isCreatingWebhook}
+                            disabled={isWebhooksLoading}
                         >
                             Cancel
                         </Button>
                         <Button
-                            onClick={createWebhook}
-                            disabled={isCreatingWebhook}
+                            onClick={() => createWebhookHandler()}
+                            disabled={isWebhooksLoading}
                         >
-                            {isCreatingWebhook ? (
+                            {isWebhooksLoading ? (
                                 <>
                                     <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" />
                                     Creating...

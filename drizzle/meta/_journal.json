@@ -71,6 +71,20 @@
       "when": 1749247346769,
       "tag": "0009_quick_purple_man",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1749420605894,
+      "tag": "0010_loving_nightshade",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1749423616135,
+      "tag": "0011_fast_tattoo",
+      "breakpoints": true
     }
   ]
 }

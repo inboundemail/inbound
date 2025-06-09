@@ -16,8 +16,6 @@ config({ path: path.join(__dirname, '../aws/cdk/.env') });
 const SERVICE_API_URL = process.env.SERVICE_API_URL || 'https://inbound.exon.dev';
 const SERVICE_API_KEY = process.env.SERVICE_API_KEY || '';
 const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || 'inbound-email-processor-bucket';
-const SENTRY_DSN = process.env.SENTRY_DSN || 'https://663ccebda453fcc61b3632c6fb3235c0@o4509397176745984.ingest.us.sentry.io/4509397177794560';
-const NODE_OPTIONS = process.env.NODE_OPTIONS || '-r @sentry/aws-serverless/awslambda-auto';
 
 console.log('🚀 Deploying Lambda function update...\n');
 
@@ -41,74 +39,114 @@ try {
     process.exit(1);
   }
 
-  // Update environment variables first
-  // Ask user to select environment
-  console.log('🌍 Select deployment environment:');
-  console.log('1. Development (dev)');
-  console.log('2. Production (prod)');
-  
+  // Ask user about environment variables
   const readline = require('readline');
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
   });
   
-  const environment = await new Promise<string>((resolve) => {
+  console.log('🔧 Environment Variables:');
+  console.log('1. Update environment variables');
+  console.log('2. Keep existing environment variables (code only deployment)');
+  
+  const updateEnvVars = await new Promise<boolean>((resolve) => {
     rl.question('Enter your choice (1 or 2): ', (answer: string) => {
-      rl.close();
-      if (answer === '1' || answer.toLowerCase() === 'dev') {
-        resolve('dev');
-      } else if (answer === '2' || answer.toLowerCase() === 'prod') {
-        resolve('prod');
+      if (answer === '1' || answer.toLowerCase() === 'update') {
+        resolve(true);
+      } else if (answer === '2' || answer.toLowerCase() === 'keep') {
+        resolve(false);
       } else {
-        console.log('Invalid choice, defaulting to development');
-        resolve('dev');
+        console.log('Invalid choice, defaulting to keep existing environment variables');
+        resolve(false);
       }
     });
   });
-  
-  // Set the appropriate API URL based on environment selection
-  let SELECTED_SERVICE_API_URL: string;
-  if (environment === 'prod') {
-    SELECTED_SERVICE_API_URL = process.env.PROD_SERVICE_API_URL || '';
-    console.log(`🚀 Deploying to PRODUCTION environment`);
-  } else {
-    SELECTED_SERVICE_API_URL = SERVICE_API_URL;
-    console.log(`🛠️  Deploying to DEVELOPMENT environment`);
-  }
-  
-  console.log('🔧 Updating Lambda environment variables...');
-  
-  if (!SELECTED_SERVICE_API_URL || !SERVICE_API_KEY) {
-    console.warn('⚠️  Warning: SERVICE_API_URL or SERVICE_API_KEY not set in environment');
-    console.warn('   Lambda will use default values or existing configuration');
-  }
-  
-  const envVarsCommand = `aws lambda update-function-configuration \
-    --function-name ${LAMBDA_FUNCTION_NAME} \
-    --environment "Variables={SERVICE_API_URL=${SELECTED_SERVICE_API_URL},SERVICE_API_KEY=${SERVICE_API_KEY},S3_BUCKET_NAME=${S3_BUCKET_NAME},SENTRY_DSN=${SENTRY_DSN},NODE_OPTIONS=${NODE_OPTIONS}}" \
-    --region ${AWS_REGION}`;
-  
-  try {
-    const envResult = execSync(envVarsCommand, { encoding: 'utf-8' });
-    const envResultJson = JSON.parse(envResult);
-    console.log('✅ Environment variables updated');
-    console.log(`   SERVICE_API_URL: ${envResultJson.Environment?.Variables?.SERVICE_API_URL || 'not set'}`);
-    console.log(`   SERVICE_API_KEY: ${envResultJson.Environment?.Variables?.SERVICE_API_KEY ? '[HIDDEN]' : 'not set'}`);
-    console.log(`   S3_BUCKET_NAME: ${envResultJson.Environment?.Variables?.S3_BUCKET_NAME || 'not set'}`);
-    console.log(`   SENTRY_DSN: ${envResultJson.Environment?.Variables?.SENTRY_DSN || 'not set'}`);
-    console.log(`   NODE_OPTIONS: ${envResultJson.Environment?.Variables?.NODE_OPTIONS || 'not set'}`);
-    // Wait for the configuration update to complete
-    console.log('\n⏳ Waiting for configuration update to complete...');
-    execSync(`aws lambda wait function-updated --function-name ${LAMBDA_FUNCTION_NAME} --region ${AWS_REGION}`, {
-      stdio: 'inherit'
+
+  if (updateEnvVars) {
+    // Ask user to select environment
+    console.log('\n🌍 Select deployment environment:');
+    console.log('1. Development (dev)');
+    console.log('2. Production (prod)');
+    
+    const environment = await new Promise<string>((resolve) => {
+      rl.question('Enter your choice (1 or 2): ', (answer: string) => {
+        rl.close();
+        if (answer === '1' || answer.toLowerCase() === 'dev') {
+          resolve('dev');
+        } else if (answer === '2' || answer.toLowerCase() === 'prod') {
+          resolve('prod');
+        } else {
+          console.log('Invalid choice, defaulting to development');
+          resolve('dev');
+        }
+      });
     });
-  } catch (error) {
-    console.error('❌ Failed to update environment variables:', error instanceof Error ? error.message : String(error));
-    console.error('   Continuing with code deployment...');
+    
+    // Set the appropriate API URL based on environment selection
+    let SELECTED_SERVICE_API_URL: string;
+    const SERVICE_API_URL_DEV = process.env.SERVICE_API_URL_DEV || SERVICE_API_URL;
+    
+    if (environment === 'prod') {
+      SELECTED_SERVICE_API_URL = process.env.PROD_SERVICE_API_URL || SERVICE_API_URL;
+      console.log(`🚀 Deploying to PRODUCTION environment`);
+    } else {
+      SELECTED_SERVICE_API_URL = SERVICE_API_URL;
+      console.log(`🛠️  Deploying to DEVELOPMENT environment`);
+    }
+    
+    console.log('\n🔧 Updating Lambda environment variables...');
+    
+    if (!SELECTED_SERVICE_API_URL || !SERVICE_API_KEY) {
+      console.warn('⚠️  Warning: SERVICE_API_URL or SERVICE_API_KEY not set in environment');
+      console.warn('   Lambda will use default values or existing configuration');
+    }
+    
+    const envVarsCommand = `aws lambda update-function-configuration \
+      --function-name ${LAMBDA_FUNCTION_NAME} \
+      --environment "Variables={SERVICE_API_URL=${SELECTED_SERVICE_API_URL},SERVICE_API_URL_DEV=${SERVICE_API_URL_DEV},SERVICE_API_KEY=${SERVICE_API_KEY},S3_BUCKET_NAME=${S3_BUCKET_NAME}}" \
+      --region ${AWS_REGION}`;
+    
+    try {
+      const envResult = execSync(envVarsCommand, { encoding: 'utf-8' });
+      const envResultJson = JSON.parse(envResult);
+      console.log('✅ Environment variables updated');
+      console.log(`   SERVICE_API_URL: ${envResultJson.Environment?.Variables?.SERVICE_API_URL || 'not set'}`);
+      console.log(`   SERVICE_API_URL_DEV: ${envResultJson.Environment?.Variables?.SERVICE_API_URL_DEV || 'not set'}`);
+      console.log(`   SERVICE_API_KEY: ${envResultJson.Environment?.Variables?.SERVICE_API_KEY ? '[HIDDEN]' : 'not set'}`);
+      console.log(`   S3_BUCKET_NAME: ${envResultJson.Environment?.Variables?.S3_BUCKET_NAME || 'not set'}`);
+      
+      // Wait for the configuration update to complete
+      console.log('\n⏳ Waiting for configuration update to complete...');
+      execSync(`aws lambda wait function-updated --function-name ${LAMBDA_FUNCTION_NAME} --region ${AWS_REGION}`, {
+        stdio: 'inherit'
+      });
+    } catch (error) {
+      console.error('❌ Failed to update environment variables:', error instanceof Error ? error.message : String(error));
+      console.error('   Continuing with code deployment...');
+    }
+  } else {
+    rl.close();
+    console.log('⏭️  Skipping environment variable update, keeping existing configuration');
   }
 
   console.log(`\n📦 Preparing Lambda deployment package for ${LAMBDA_FUNCTION_NAME}...`);
+
+  // Compile TypeScript to JavaScript first
+  console.log('🔨 Compiling TypeScript Lambda function...');
+  const lambdaDir = path.join(process.cwd(), 'aws/cdk/lib/lambda');
+  
+  try {
+    // Compile the TypeScript file
+    execSync('npx tsc email-processor.ts --target ES2020 --module commonjs --declaration --inlineSourceMap --inlineSources', {
+      cwd: lambdaDir,
+      stdio: 'inherit'
+    });
+    console.log('✅ TypeScript compilation completed');
+  } catch (compileError) {
+    console.error('❌ TypeScript compilation failed:', compileError instanceof Error ? compileError.message : String(compileError));
+    process.exit(1);
+  }
 
   // Create a temporary directory for the deployment package
   const tempDir = path.join(process.cwd(), '.lambda-deploy-temp');
@@ -117,12 +155,13 @@ try {
   }
   fs.mkdirSync(tempDir);
 
-  // Copy the Lambda source file
+  // Copy the compiled Lambda source file
   const lambdaSourcePath = path.join(process.cwd(), 'aws/cdk/lib/lambda/email-processor.js');
   const lambdaDestPath = path.join(tempDir, 'email-processor.js');
   
   if (!fs.existsSync(lambdaSourcePath)) {
-    console.error(`❌ Lambda source file not found at ${lambdaSourcePath}`);
+    console.error(`❌ Compiled Lambda source file not found at ${lambdaSourcePath}`);
+    console.error('   This should have been created by the TypeScript compilation step');
     process.exit(1);
   }
   

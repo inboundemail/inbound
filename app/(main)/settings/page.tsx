@@ -19,6 +19,13 @@ import {
   useDeleteApiKeyMutation,
   useBillingPortalMutation
 } from '@/features/settings/hooks'
+import {
+  Customer,
+  DomainStatsResponse,
+  ApiKey,
+  CreateApiKeyForm,
+  CircularProgressProps
+} from '@/features/settings/types'
 import { 
   CreditCardIcon, 
   TrendingUpIcon, 
@@ -35,34 +42,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 
 
 
-interface DomainStatsResponse {
-  totalDomains: number
-  verifiedDomains: number
-  totalEmailAddresses: number
-  totalEmailsLast24h: number
-  limits?: {
-    allowed: boolean
-    unlimited: boolean
-    balance: number | null
-    current: number
-    remaining: number | null
-  } | null
-}
-
-interface CreateApiKeyForm {
-  name: string
-  prefix: string
-}
-
-// Circular Progress Component
-interface CircularProgressProps {
-  value: number
-  max: number
-  size?: number
-  strokeWidth?: number
-  className?: string
-  children?: React.ReactNode
-}
+// Types are now imported from @/features/settings/types
 
 function CircularProgress({ value, max, size = 60, strokeWidth = 6, className = "", children }: CircularProgressProps) {
   const radius = (size - strokeWidth) / 2
@@ -119,18 +99,21 @@ export default function SettingsPage() {
   // React Query hooks
   const { 
     data: customerData, 
-    isLoading: isLoadingCustomer, 
+    isLoading: isLoadingCustomer,
+    error: customerError,
     refetch: refetchCustomer 
   } = useCustomerQuery()
   
   const { 
     data: domainStats, 
-    isLoading: isLoadingDomainStats 
+    isLoading: isLoadingDomainStats,
+    error: domainStatsError
   } = useDomainStatsQuery()
   
   const { 
     data: apiKeys = [], 
-    isLoading: isLoadingApiKeys 
+    isLoading: isLoadingApiKeys,
+    error: apiKeysError
   } = useApiKeysQuery()
   
   // Mutations
@@ -322,10 +305,10 @@ export default function SettingsPage() {
                     <Button 
                       variant="secondary" 
                       onClick={handleManageBilling}
-                      disabled={!customerData}
+                      disabled={!customerData || billingPortalMutation.isPending}
                       className='bg-slate-800 hover:bg-slate-700 text-white border-slate-600'
                     >
-                      Manage
+                      {billingPortalMutation.isPending ? 'Loading...' : 'Manage'}
                     </Button>
                     {showUpgradeButton && (
                       <Button 
@@ -417,10 +400,13 @@ export default function SettingsPage() {
                   )}
                 </div>
               </div>
-            ) : (
+            ) : customerError ? (
               <div className="text-center py-8 text-slate-400">
                 <CreditCardIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p>Unable to load subscription data</p>
+                <p className="text-sm text-red-400 mt-1">
+                  {customerError instanceof Error ? customerError.message : 'Unknown error'}
+                </p>
                 <Button 
                   variant="secondary" 
                   size="sm" 
@@ -429,6 +415,11 @@ export default function SettingsPage() {
                 >
                   Retry
                 </Button>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-400">
+                <CreditCardIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No subscription data available</p>
               </div>
             )}
           </CardContent>
@@ -508,7 +499,22 @@ export default function SettingsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {isLoadingApiKeys ? (
+            {apiKeysError ? (
+              <div className="text-center py-8">
+                <KeyIcon className="h-8 w-8 text-red-500 mx-auto mb-2" />
+                <p className="text-sm text-red-600 mb-3">Failed to load API keys</p>
+                <p className="text-xs text-muted-foreground mb-3">
+                  {apiKeysError instanceof Error ? apiKeysError.message : 'Unknown error'}
+                </p>
+                <Button 
+                  variant="secondary" 
+                  size="sm" 
+                  onClick={() => window.location.reload()}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : isLoadingApiKeys ? (
               <div className="space-y-3">
                 {[...Array(3)].map((_, i) => (
                   <div key={i} className="flex items-center justify-between p-3 rounded-lg border">
@@ -579,8 +585,9 @@ export default function SettingsPage() {
                          variant="ghost"
                          size="sm"
                          onClick={() => handleUpdateApiKey(apiKey.id, { enabled: !apiKey.enabled })}
+                         disabled={updateApiKeyMutation.isPending}
                        >
-                         {apiKey.enabled ? 'Disable' : 'Enable'}
+                         {updateApiKeyMutation.isPending ? 'Updating...' : (apiKey.enabled ? 'Disable' : 'Enable')}
                        </Button>
                        <Button 
                          variant="ghost" 

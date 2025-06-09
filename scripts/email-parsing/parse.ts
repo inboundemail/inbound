@@ -1,84 +1,11 @@
-import { simpleParser } from 'mailparser';
-import { readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { parseEmail as libParseEmail } from '@/lib/email-parser';
 
-async function parseEmail() {
+export async function parseEmail(emailContent: string) {
   try {
-    // Read the email file
-    const emailPath = join(__dirname, 'email.txt');
-    const emailContent = readFileSync(emailPath, 'utf8');
+    // Use the lib version of parseEmail
+    const emailData = await libParseEmail(emailContent);
     
-    // Parse the email
-    const parsed = await simpleParser(emailContent);
-    
-    // Helper function to extract address info
-    const extractAddressInfo = (addressObj: any) => {
-      if (!addressObj) return null;
-      
-      if (Array.isArray(addressObj)) {
-        return {
-          text: addressObj.map(addr => addr.text || `${addr.name || ''} <${addr.address || ''}>`).join(', '),
-          addresses: addressObj.map(addr => ({
-            name: addr.name || null,
-            address: addr.address || null
-          }))
-        };
-      } else if (addressObj.value && Array.isArray(addressObj.value)) {
-        // Handle AddressObject with value array
-        return {
-          text: addressObj.text,
-          addresses: addressObj.value.map((addr: any) => ({
-            name: addr.name || null,
-            address: addr.address || null
-          }))
-        };
-      } else if (addressObj.value) {
-        // Handle AddressObject with single value
-        return {
-          text: addressObj.text,
-          addresses: [{
-            name: addressObj.value.name || null,
-            address: addressObj.value.address || null
-          }]
-        };
-      } else {
-        // Handle direct address object
-        return {
-          text: addressObj.text || `${addressObj.name || ''} <${addressObj.address || ''}>`,
-          addresses: [{
-            name: addressObj.name || null,
-            address: addressObj.address || null
-          }]
-        };
-      }
-    };
-    
-    // Extract key information
-    const emailData = {
-      messageId: parsed.messageId,
-      date: parsed.date,
-      subject: parsed.subject,
-      from: extractAddressInfo(parsed.from),
-      to: extractAddressInfo(parsed.to),
-      cc: extractAddressInfo(parsed.cc),
-      bcc: extractAddressInfo(parsed.bcc),
-      replyTo: extractAddressInfo(parsed.replyTo),
-      inReplyTo: parsed.inReplyTo,
-      references: parsed.references,
-      textBody: parsed.text,
-      htmlBody: parsed.html,
-      attachments: parsed.attachments?.map(att => ({
-        filename: att.filename,
-        contentType: att.contentType,
-        size: att.size,
-        contentId: att.contentId,
-        contentDisposition: att.contentDisposition
-      })) || [],
-      headers: Object.fromEntries(parsed.headers),
-      priority: parsed.priority
-    };
-    
-    // Pretty print the parsed data
+    // Pretty print the parsed data for script usage
     console.log('=== PARSED EMAIL DATA ===\n');
     
     console.log('📧 Basic Info:');
@@ -140,11 +67,6 @@ async function parseEmail() {
       }
     });
     
-    // Save to JSON file
-    const outputPath = join(__dirname, 'parsed-email.json');
-    writeFileSync(outputPath, JSON.stringify(emailData, null, 2), 'utf8');
-    console.log(`\n💾 Email data saved to: ${outputPath}`);
-    
     // Return the full parsed data for programmatic use
     return emailData;
     
@@ -153,17 +75,3 @@ async function parseEmail() {
     throw error;
   }
 }
-
-// Run the parser if this file is executed directly
-if (require.main === module) {
-  parseEmail()
-    .then(() => {
-      console.log('\n✅ Email parsing completed successfully!');
-    })
-    .catch((error) => {
-      console.error('❌ Email parsing failed:', error);
-      process.exit(1);
-    });
-}
-
-export { parseEmail };

@@ -24,53 +24,7 @@ import {
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
-
-interface EmailDetails {
-  id: string
-  messageId: string
-  from: string
-  to: string
-  recipient: string
-  subject: string
-  receivedAt: string
-  processedAt: string
-  status: string
-  emailContent: {
-    htmlBody: string | null
-    textBody: string | null
-    attachments: Array<{
-      filename: string
-      contentType: string
-      size: number
-    }>
-    headers: Record<string, string>
-    rawContent: string
-  }
-  authResults: {
-    spf: string
-    dkim: string
-    dmarc: string
-    spam: string
-    virus: string
-  }
-  metadata: {
-    processingTime: number
-    timestamp: string
-    receiptTimestamp: string
-    actionType: string
-    s3Info: {
-      bucketName: string
-      objectKey: string
-      contentFetched: boolean
-      contentSize: number
-      error: string | null
-    }
-    commonHeaders: any
-    emailMetadata: any
-  }
-  createdAt: string
-  updatedAt: string
-}
+import { useEmailQuery, useMarkEmailAsReadMutation, type EmailDetails } from '@/features/emails/hooks'
 
 interface EmailDetailSheetProps {
   emailId: string | null
@@ -79,43 +33,25 @@ interface EmailDetailSheetProps {
 }
 
 export function EmailDetailSheet({ emailId, isOpen, onClose }: EmailDetailSheetProps) {
-  const [emailDetails, setEmailDetails] = useState<EmailDetails | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [copiedItems, setCopiedItems] = useState<Record<string, boolean>>({})
+  
+  // Use React Query hooks
+  const { 
+    data: emailDetails, 
+    isLoading, 
+    error,
+    refetch 
+  } = useEmailQuery(emailId && isOpen ? emailId : null)
+  
+  const markAsReadMutation = useMarkEmailAsReadMutation()
 
+  // Mark email as read when viewing (non-blocking)
   useEffect(() => {
-    if (emailId && isOpen) {
-      fetchEmailDetails()
+    if (emailDetails && emailId && isOpen) {
+      // Mark as read in the background using the mutation
+      markAsReadMutation.mutate(emailId)
     }
-  }, [emailId, isOpen])
-
-  const fetchEmailDetails = async () => {
-    if (!emailId) return
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const response = await fetch(`/api/emails/${emailId}`)
-      
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('Email not found')
-        }
-        throw new Error('Failed to fetch email details')
-      }
-
-      const data = await response.json()
-      setEmailDetails(data)
-    } catch (error) {
-      console.error('Error fetching email details:', error)
-      setError(error instanceof Error ? error.message : 'Failed to load email details')
-      toast.error('Failed to load email details')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  }, [emailDetails, emailId, isOpen, markAsReadMutation])
 
   const copyToClipboard = async (text: string, key: string) => {
     try {
@@ -189,8 +125,8 @@ export function EmailDetailSheet({ emailId, isOpen, onClose }: EmailDetailSheetP
         {error && (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <p className="text-red-600 mb-4">{error}</p>
-              <Button onClick={fetchEmailDetails} variant="secondary">
+              <p className="text-red-600 mb-4">{error.message}</p>
+              <Button onClick={() => refetch()} variant="secondary">
                 Try Again
               </Button>
             </div>
@@ -214,7 +150,7 @@ export function EmailDetailSheet({ emailId, isOpen, onClose }: EmailDetailSheetP
                     <span className="font-medium">Recipient:</span> {emailDetails.recipient}
                   </div>
                   <div>
-                    <span className="font-medium">Received:</span> {formatDistanceToNow(new Date(emailDetails.receivedAt), { addSuffix: true })}
+                    <span className="font-medium">Received:</span> {formatDistanceToNow(emailDetails.receivedAt, { addSuffix: true })}
                   </div>
                 </div>
               </div>
@@ -391,16 +327,16 @@ export function EmailDetailSheet({ emailId, isOpen, onClose }: EmailDetailSheetP
               <h4 className="font-medium mb-2">Metadata</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="font-medium">Processing Time:</span> {emailDetails.metadata.processingTime}ms
+                  <span className="font-medium">Processing Time:</span> {emailDetails.metadata.processingTime ? `${emailDetails.metadata.processingTime}ms` : 'Unknown'}
                 </div>
                 <div>
-                  <span className="font-medium">Action Type:</span> {emailDetails.metadata.actionType}
+                  <span className="font-medium">Action Type:</span> {emailDetails.metadata.actionType || 'Unknown'}
                 </div>
                 <div>
-                  <span className="font-medium">S3 Bucket:</span> {emailDetails.metadata.s3Info.bucketName}
+                  <span className="font-medium">S3 Bucket:</span> {emailDetails.metadata.s3Info.bucketName || 'Unknown'}
                 </div>
                 <div>
-                  <span className="font-medium">Content Size:</span> {formatBytes(emailDetails.metadata.s3Info.contentSize)}
+                  <span className="font-medium">Content Size:</span> {emailDetails.metadata.s3Info.contentSize ? formatBytes(emailDetails.metadata.s3Info.contentSize) : 'Unknown'}
                 </div>
               </div>
             </div>

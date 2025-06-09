@@ -4,8 +4,7 @@
   "description": "Lambda function for processing inbound emails",
   "main": "email-processor.js",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.0.0",
-    "@sentry/node": "^9.27.0"
+    "@aws-sdk/client-s3": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^18.0.0",
