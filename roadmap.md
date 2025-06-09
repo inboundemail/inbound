@@ -35,6 +35,12 @@ would be routed based on slug
 
 left off:
 
-- need to finalize the accept all domain
-- need to modify the way the emails are stored to be able to store and pull from S3 and be able to parse better
-- need to enable the email redirection and stuff
+- need to enable the email redirection and stuff 
+
+
+todo today (june 9th):
+
+- dashboard can be a server side rendered page
+- need to fix the mail/[id]/ page to be formatted better
+- domains can be a server side rendered page, we need to do something with a client search bar tho
+- need to fix issue on /analytics
