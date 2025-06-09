@@ -24,7 +24,7 @@ export default async function HomePage() {
               <span className="text-2xl font-bold text-black">inbound</span>
               <span className="text-xs text-gray-500 -mt-2">by exon</span>
             </div>
-            
+
           </div>
           {/* Conditionally show Sign In or Go to Dashboard based on auth state */}
           {session ? (
@@ -52,21 +52,21 @@ export default async function HomePage() {
               the easiest way to turn
               <br />
 
-              <img 
-                src="/mail-icon.png" 
-                alt="Email" 
-                width={48} 
-                height={48} 
-                className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_0.5s_forwards]" 
+              <img
+                src="/mail-icon.png"
+                alt="Email"
+                width={48}
+                height={48}
+                className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_0.5s_forwards]"
               />
               <span className="text-[#6C47FF]">emails</span> into
 
-              <img 
-                src="/domain-icon.png" 
-                alt="Email" 
-                width={48} 
-                height={48} 
-                className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_1s_forwards]" 
+              <img
+                src="/domain-icon.png"
+                alt="Email"
+                width={48}
+                height={48}
+                className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_1s_forwards]"
               />
               <span className="text-[#1C2894]">webhooks</span>
             </h1>
@@ -75,18 +75,23 @@ export default async function HomePage() {
               get webhooks when emails arrive, with automatic spam filtering and secure processing.
             </p>
 
-            <div className="mb-8 w-[300px] mx-auto bg-purple-600/20 border border-purple-300/30 text-purple-700 px-4 py-2 rounded-full">
-              <p className="text-center font-medium text-sm">
-              💫 email routing is coming soon 💫
-              </p>
-            </div>
+            <div className="flex items-center gap-4 max-w-md mx-auto mt-4"  >
+              <Input type="email" placeholder="user@inbound.new" />
+              <Button variant="primary" asChild className="text-white hover:text-gray-900">
+                {session ? (
+                  <a href="/add" className="text-white hover:text-gray-900">
+                    Get Started (its free)
+                    <FaArrowRight className="ml-2 w-3 h-3" />
+                  </a>
+                ) : (
+                  <a href="/login" className="text-white hover:text-gray-900">
+                    Get Started (its free)
+                    <FaArrowRight className="ml-2 w-3 h-3" />
+                  </a>
+                )}
 
-            <Button variant="primary" asChild className="text-white hover:text-gray-900">
-              <a href="/login" className="text-white hover:text-gray-900">
-                Get Started (its free)
-                <FaArrowRight className="ml-2 w-3 h-3" />
-              </a>
-            </Button>
+              </Button>
+            </div>
           </div>
 
           {/* Interactive Demo Section */}
@@ -272,14 +277,14 @@ export default async function HomePage() {
             <p className="text-lg text-gray-600 mb-12 text-center max-w-2xl mx-auto">
               Programmatically manage your email infrastructure with our TypeScript SDK and REST API.
             </p>
-            
+
             <div className="space-y-8 max-w-4xl mx-auto">
               {/* SDK Card */}
               <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-8 border border-purple-200 text-left">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
                     <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2L2 7v10c0 5.55 3.84 9.739 9 11 5.16-1.261 9-5.45 9-11V7l-10-5z"/>
+                      <path d="M12 2L2 7v10c0 5.55 3.84 9.739 9 11 5.16-1.261 9-5.45 9-11V7l-10-5z" />
                     </svg>
                   </div>
                   <h3 className="text-xl font-bold text-gray-900">TypeScript SDK</h3>
@@ -380,6 +385,8 @@ export default async function HomePage() {
             <span className="text-lg font-bold text-gray-900">inbound</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-gray-500">
+            <a href="https://twitter.com/intent/follow?screen_name=inbounddotnew" className="hover:text-gray-700 transition-colors flex items-center gap-1">Contact us on 
+              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 1200 1227"><path fill="#000" d="M714.163 519.284 1160.89 0h-105.86L667.137 450.887 357.328 0H0l468.492 681.821L0 1226.37h105.866l409.625-476.152 327.181 476.152H1200L714.137 519.284h.026ZM569.165 687.828l-47.468-67.894-377.686-540.24h162.604l304.797 435.991 47.468 67.894 396.2 566.721H892.476L569.165 687.854v-.026Z" /></svg></a>
             <a href="/privacy" className="hover:text-gray-700 transition-colors">Privacy</a>
             <a href="/terms" className="hover:text-gray-700 transition-colors">Terms</a>
             <a href="/docs" className="hover:text-gray-700 transition-colors">Docs</a>
