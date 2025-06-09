@@ -7,6 +7,8 @@ Project Rules:
 
 - only use bun for package manager
 - never run `bun run dev` or `bun run build` without my approval
+- Before every message say "Rules Loaded: Primary (any others)"
+- Never run npx tsc or any other build, type checker or anything else without my approval first. This will break the project. 
 
 Current Goal: 
 

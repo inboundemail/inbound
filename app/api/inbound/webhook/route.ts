@@ -2,83 +2,15 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { sesEvents, receivedEmails, parsedEmails, emailDomains, emailAddresses, webhooks, webhookDeliveries } from '@/lib/db/schema'
+import { sesEvents, receivedEmails, parsedEmails, structuredEmails, emailDomains, emailAddresses, webhooks, webhookDeliveries } from '@/lib/db/schema'
 import { nanoid } from 'nanoid'
 import { eq, and } from 'drizzle-orm'
 import { Autumn as autumn } from 'autumn-js'
 import { createHmac } from 'crypto'
 import { parseEmail, parseEmailContent, sanitizeHtml, type ParsedEmailData } from '@/lib/email-parser'
+import { type SESEvent, type SESRecord } from '@/lib/aws-ses'
 
-interface SESEvent {
-  Records: Array<{
-    eventSource: string
-    eventVersion: string
-    ses: {
-      receipt: {
-        timestamp: string
-        processingTimeMillis: number
-        recipients: string[]
-        spamVerdict: { status: string }
-        virusVerdict: { status: string }
-        spfVerdict: { status: string }
-        dkimVerdict: { status: string }
-        dmarcVerdict: { status: string }
-        action: {
-          type: string
-          bucketName: string
-          objectKey: string
-        }
-      }
-      mail: {
-        timestamp: string
-        messageId: string
-        source: string
-        destination: string[]
-        commonHeaders: {
-          from: string[]
-          to: string[]
-          subject: string
-          date?: string
-          messageId?: string
-        }
-      }
-    }
-  }>
-}
-
-interface ProcessedSESRecord {
-  eventSource: string
-  eventVersion: string
-  ses: {
-    receipt: {
-      timestamp: string
-      processingTimeMillis: number
-      recipients: string[]
-      spamVerdict: { status: string }
-      virusVerdict: { status: string }
-      spfVerdict: { status: string }
-      dkimVerdict: { status: string }
-      dmarcVerdict: { status: string }
-      action: {
-        type: string
-        bucketName: string
-        objectKey: string
-      }
-    }
-    mail: {
-      timestamp: string
-      messageId: string
-      source: string
-      destination: string[]
-      commonHeaders: {
-        from: string[]
-        to: string[]
-        subject: string
-        date?: string
-        messageId?: string
-      }
-    }
-  }
+interface ProcessedSESRecord extends SESRecord {
   emailContent?: string | null
   s3Location?: {
     bucket: string
@@ -341,11 +273,151 @@ async function createParsedEmailRecord(emailId: string, parsedEmailData: ParsedE
 }
 
 /**
- * Forward email to configured webhook for the recipient
+ * Create a structured email record from ParsedEmailData that matches the type exactly
  */
-async function forwardToWebhook(emailRecord: any, sesRecord: ProcessedSESRecord, parsedEmailData: ParsedEmailData | null = null): Promise<void> {
+async function createStructuredEmailRecord(
+  emailId: string, 
+  sesEventId: string, 
+  parsedEmailData: ParsedEmailData, 
+  userId: string
+): Promise<void> {
   try {
-    console.log(`🔗 Webhook - Looking up webhook for recipient: ${emailRecord.recipient}`)
+    console.log(`📝 Webhook - Creating structured email record for ${emailId}`)
+
+    const structuredEmailRecord = {
+      id: nanoid(),
+      emailId: emailId,
+      sesEventId: sesEventId,
+      
+      // Core email fields matching ParsedEmailData exactly
+      messageId: parsedEmailData.messageId || null,
+      date: parsedEmailData.date || null,
+      subject: parsedEmailData.subject || null,
+      
+      // Address fields - stored as JSON matching ParsedEmailAddress structure
+      fromData: parsedEmailData.from ? JSON.stringify(parsedEmailData.from) : null,
+      toData: parsedEmailData.to ? JSON.stringify(parsedEmailData.to) : null,
+      ccData: parsedEmailData.cc ? JSON.stringify(parsedEmailData.cc) : null,
+      bccData: parsedEmailData.bcc ? JSON.stringify(parsedEmailData.bcc) : null,
+      replyToData: parsedEmailData.replyTo ? JSON.stringify(parsedEmailData.replyTo) : null,
+      
+      // Threading fields
+      inReplyTo: parsedEmailData.inReplyTo || null,
+      references: parsedEmailData.references ? JSON.stringify(parsedEmailData.references) : null,
+      
+      // Content fields
+      textBody: parsedEmailData.textBody || null,
+      htmlBody: parsedEmailData.htmlBody || null,
+      rawContent: parsedEmailData.raw || null,
+      
+      // Attachments - stored as JSON array matching ParsedEmailData structure
+      attachments: parsedEmailData.attachments ? JSON.stringify(parsedEmailData.attachments) : null,
+      
+      // Headers - stored as JSON object matching enhanced headers structure
+      headers: parsedEmailData.headers ? JSON.stringify(parsedEmailData.headers) : null,
+      
+      // Priority field
+      priority: typeof parsedEmailData.priority === 'string' ? parsedEmailData.priority : 
+                parsedEmailData.priority === false ? 'false' : null,
+      
+      // Processing metadata
+      parseSuccess: true,
+      parseError: null,
+      
+      // User and timestamps
+      userId: userId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+
+    await db.insert(structuredEmails).values(structuredEmailRecord)
+    console.log(`✅ Webhook - Created structured email record ${structuredEmailRecord.id} for email ${emailId}`)
+
+  } catch (error) {
+    console.error(`❌ Webhook - Error creating structured email record for ${emailId}:`, error)
+    
+    // Create a minimal record indicating parse failure
+    try {
+      const failedStructuredRecord = {
+        id: nanoid(),
+        emailId: emailId,
+        sesEventId: sesEventId,
+        parseSuccess: false,
+        parseError: error instanceof Error ? error.message : 'Unknown parsing error',
+        userId: userId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+      await db.insert(structuredEmails).values(failedStructuredRecord)
+      console.log(`⚠️ Webhook - Created failed structured parse record for email ${emailId}`)
+    } catch (insertError) {
+      console.error(`❌ Webhook - Failed to create failed structured parse record for ${emailId}:`, insertError)
+    }
+  }
+}
+
+
+
+/**
+ * Trigger email action by emailID - looks up email data and sends to configured webhook
+ * This function separates webhook processing from the main email ingestion flow
+ */
+export async function triggerEmailAction(emailId: string): Promise<{ success: boolean; error?: string; deliveryId?: string }> {
+  try {
+    console.log(`🎯 triggerEmailAction - Processing email ID: ${emailId}`)
+
+    // Get the email record with structured data
+    const emailWithStructuredData = await db
+      .select({
+        // Email record fields
+        emailId: receivedEmails.id,
+        messageId: receivedEmails.messageId,
+        from: receivedEmails.from,
+        to: receivedEmails.to,
+        recipient: receivedEmails.recipient,
+        subject: receivedEmails.subject,
+        receivedAt: receivedEmails.receivedAt,
+        userId: receivedEmails.userId,
+        
+        // Structured email data (ParsedEmailData)
+        structuredId: structuredEmails.id,
+        structuredMessageId: structuredEmails.messageId,
+        structuredDate: structuredEmails.date,
+        structuredSubject: structuredEmails.subject,
+        fromData: structuredEmails.fromData,
+        toData: structuredEmails.toData,
+        ccData: structuredEmails.ccData,
+        bccData: structuredEmails.bccData,
+        replyToData: structuredEmails.replyToData,
+        inReplyTo: structuredEmails.inReplyTo,
+        references: structuredEmails.references,
+        textBody: structuredEmails.textBody,
+        htmlBody: structuredEmails.htmlBody,
+        rawContent: structuredEmails.rawContent,
+        attachments: structuredEmails.attachments,
+        headers: structuredEmails.headers,
+        priority: structuredEmails.priority,
+        parseSuccess: structuredEmails.parseSuccess,
+        parseError: structuredEmails.parseError,
+      })
+      .from(receivedEmails)
+      .leftJoin(structuredEmails, eq(receivedEmails.id, structuredEmails.emailId))
+      .where(eq(receivedEmails.id, emailId))
+      .limit(1)
+
+    if (!emailWithStructuredData[0]) {
+      return { success: false, error: 'Email not found' }
+    }
+
+    const emailData = emailWithStructuredData[0]
+
+    // Check if we have structured data
+    if (!emailData.structuredId || !emailData.parseSuccess) {
+      return { 
+        success: false, 
+        error: `No structured email data found or parsing failed: ${emailData.parseError || 'Unknown error'}` 
+      }
+    }
 
     // Look up the email address to find the configured webhook
     const emailAddressRecord = await db
@@ -356,14 +428,16 @@ async function forwardToWebhook(emailRecord: any, sesRecord: ProcessedSESRecord,
       })
       .from(emailAddresses)
       .where(and(
-        eq(emailAddresses.address, emailRecord.recipient),
+        eq(emailAddresses.address, emailData.recipient),
         eq(emailAddresses.isActive, true)
       ))
       .limit(1)
 
     if (!emailAddressRecord[0]?.webhookId) {
-      console.log(`ℹ️ Webhook - No webhook configured for ${emailRecord.recipient}, skipping forwarding`)
-      return
+      return { 
+        success: false, 
+        error: `No webhook configured for ${emailData.recipient}` 
+      }
     }
 
     const webhookId = emailAddressRecord[0].webhookId
@@ -379,97 +453,60 @@ async function forwardToWebhook(emailRecord: any, sesRecord: ProcessedSESRecord,
       .limit(1)
 
     if (!webhookRecord[0]) {
-      console.warn(`⚠️ Webhook - Webhook ${webhookId} not found or disabled for ${emailRecord.recipient}`)
-      return
+      return { 
+        success: false, 
+        error: `Webhook ${webhookId} not found or disabled for ${emailData.recipient}` 
+      }
     }
 
     const webhook = webhookRecord[0]
 
-    console.log(`📤 Webhook - Forwarding email ${emailRecord.messageId} to webhook: ${webhook.name} (${webhook.url})`)
+    console.log(`📤 triggerEmailAction - Sending email ${emailData.messageId} to webhook: ${webhook.name} (${webhook.url})`)
 
-    // Use the already parsed email data or create cleaned content from fallback
-    let cleanedContent = {
-      html: null as string | null,
-      text: null as string | null,
-      hasHtml: false,
-      hasText: false,
-      attachments: [] as any[],
-      headers: {} as Record<string, string>
+    // Reconstruct ParsedEmailData from structured data
+    const parsedEmailData: ParsedEmailData = {
+      messageId: emailData.structuredMessageId || undefined,
+      date: emailData.structuredDate || undefined,
+      subject: emailData.structuredSubject || undefined,
+      from: emailData.fromData ? JSON.parse(emailData.fromData) : null,
+      to: emailData.toData ? JSON.parse(emailData.toData) : null,
+      cc: emailData.ccData ? JSON.parse(emailData.ccData) : null,
+      bcc: emailData.bccData ? JSON.parse(emailData.bccData) : null,
+      replyTo: emailData.replyToData ? JSON.parse(emailData.replyToData) : null,
+      inReplyTo: emailData.inReplyTo || undefined,
+      references: emailData.references ? JSON.parse(emailData.references) : undefined,
+      textBody: emailData.textBody || undefined,
+      htmlBody: emailData.htmlBody || undefined,
+      raw: emailData.rawContent || undefined,
+      attachments: emailData.attachments ? JSON.parse(emailData.attachments) : [],
+      headers: emailData.headers ? JSON.parse(emailData.headers) : {},
+      priority: emailData.priority === 'false' ? false : (emailData.priority || undefined)
     }
 
-    if (parsedEmailData) {
-      // Use the already parsed email data
-      cleanedContent = {
-        html: parsedEmailData.htmlBody ? sanitizeHtml(parsedEmailData.htmlBody) : null,
-        text: parsedEmailData.textBody || null,
-        hasHtml: !!parsedEmailData.htmlBody,
-        hasText: !!parsedEmailData.textBody,
-        attachments: parsedEmailData.attachments || [],
-        headers: parsedEmailData.headers || {}
-      }
-    } else if (sesRecord.emailContent) {
-      // Fallback to legacy parser if no parsed data provided
-      console.warn(`⚠️ Webhook - No parsed email data provided, falling back to legacy parser for ${emailRecord.messageId}`)
-      try {
-        const legacyParsed = await parseEmailContent(sesRecord.emailContent)
-        cleanedContent = {
-          html: legacyParsed.htmlBody ? sanitizeHtml(legacyParsed.htmlBody) : null,
-          text: legacyParsed.textBody || null,
-          hasHtml: !!legacyParsed.htmlBody,
-          hasText: !!legacyParsed.textBody,
-          attachments: legacyParsed.attachments,
-          headers: legacyParsed.headers
-        }
-      } catch (parseError) {
-        console.error(`❌ Webhook - Failed to parse email for webhook forwarding:`, parseError)
-      }
-    }
-
-    // Create webhook payload
+    // Create webhook payload with the exact ParsedEmailData structure
     const webhookPayload = {
       event: 'email.received',
       timestamp: new Date().toISOString(),
       email: {
-        id: emailRecord.id,
-        messageId: emailRecord.messageId,
-        from: emailRecord.from,
-        to: JSON.parse(emailRecord.to),
-        recipient: emailRecord.recipient,
-        subject: emailRecord.subject,
-        receivedAt: emailRecord.receivedAt,
-        content: sesRecord.emailContent || null, // Raw content
-        cleanedContent: cleanedContent, // Parsed and cleaned content (same as analytics)
+        id: emailData.emailId,
+        messageId: emailData.messageId,
+        from: emailData.from,
+        to: JSON.parse(emailData.to),
+        recipient: emailData.recipient,
+        subject: emailData.subject,
+        receivedAt: emailData.receivedAt,
         
-        // Rich parsed email data
-        parsedData: parsedEmailData ? {
-          messageId: parsedEmailData.messageId,
-          date: parsedEmailData.date,
-          subject: parsedEmailData.subject,
-          from: parsedEmailData.from,
-          to: parsedEmailData.to,
-          cc: parsedEmailData.cc,
-          bcc: parsedEmailData.bcc,
-          replyTo: parsedEmailData.replyTo,
-          inReplyTo: parsedEmailData.inReplyTo,
-          references: parsedEmailData.references,
-          textBody: parsedEmailData.textBody,
-          htmlBody: parsedEmailData.htmlBody,
-          attachments: parsedEmailData.attachments,
-          headers: parsedEmailData.headers,
-          priority: parsedEmailData.priority
-        } : null,
+        // Full ParsedEmailData structure
+        parsedData: parsedEmailData,
         
-        headers: sesRecord.ses.mail.commonHeaders,
-        s3Location: sesRecord.s3Location || {
-          bucket: sesRecord.ses.receipt.action.bucketName,
-          key: sesRecord.ses.receipt.action.objectKey
-        },
-        authResults: {
-          spf: sesRecord.ses.receipt.spfVerdict.status,
-          dkim: sesRecord.ses.receipt.dkimVerdict.status,
-          dmarc: sesRecord.ses.receipt.dmarcVerdict.status,
-          spam: sesRecord.ses.receipt.spamVerdict.status,
-          virus: sesRecord.ses.receipt.virusVerdict.status,
+        // Cleaned content for backward compatibility
+        cleanedContent: {
+          html: parsedEmailData.htmlBody ? sanitizeHtml(parsedEmailData.htmlBody) : null,
+          text: parsedEmailData.textBody || null,
+          hasHtml: !!parsedEmailData.htmlBody,
+          hasText: !!parsedEmailData.textBody,
+          attachments: parsedEmailData.attachments || [],
+          headers: parsedEmailData.headers || {}
         }
       },
       webhook: {
@@ -495,8 +532,8 @@ async function forwardToWebhook(emailRecord: any, sesRecord: ProcessedSESRecord,
       'X-Webhook-Event': 'email.received',
       'X-Webhook-ID': webhook.id,
       'X-Webhook-Timestamp': webhookPayload.timestamp,
-      'X-Email-ID': emailRecord.id,
-      'X-Message-ID': emailRecord.messageId,
+      'X-Email-ID': emailData.emailId,
+      'X-Message-ID': emailData.messageId,
     }
 
     if (signature) {
@@ -537,7 +574,7 @@ async function forwardToWebhook(emailRecord: any, sesRecord: ProcessedSESRecord,
       responseBody = await response.text().catch(() => 'Unable to read response body')
       deliverySuccess = response.ok
 
-      console.log(`${deliverySuccess ? '✅' : '❌'} Webhook - Delivery ${deliverySuccess ? 'succeeded' : 'failed'} for ${emailRecord.recipient}: ${responseCode} in ${deliveryTime}ms`)
+      console.log(`${deliverySuccess ? '✅' : '❌'} triggerEmailAction - Delivery ${deliverySuccess ? 'succeeded' : 'failed'} for ${emailData.recipient}: ${responseCode} in ${deliveryTime}ms`)
 
     } catch (error) {
       deliveryTime = Date.now() - startTime
@@ -553,13 +590,13 @@ async function forwardToWebhook(emailRecord: any, sesRecord: ProcessedSESRecord,
         errorMessage = 'Unknown error'
       }
 
-      console.error(`❌ Webhook - Delivery failed for ${emailRecord.recipient}:`, errorMessage)
+      console.error(`❌ triggerEmailAction - Delivery failed for ${emailData.recipient}:`, errorMessage)
     }
 
     // Create final delivery record with all data
     const deliveryRecord = {
       id: deliveryId,
-      emailId: emailRecord.id,
+      emailId: emailData.emailId,
       webhookId: webhook.id,
       endpoint: webhook.url,
       payload: payloadString,
@@ -589,10 +626,20 @@ async function forwardToWebhook(emailRecord: any, sesRecord: ProcessedSESRecord,
       })
       .where(eq(webhooks.id, webhook.id))
 
-    console.log(`📊 Webhook - Updated webhook stats for ${webhook.name}`)
+    console.log(`📊 triggerEmailAction - Updated webhook stats for ${webhook.name}`)
+
+    return { 
+      success: deliverySuccess, 
+      error: deliverySuccess ? undefined : errorMessage,
+      deliveryId: deliveryId
+    }
 
   } catch (error) {
-    console.error(`❌ Webhook - Error forwarding email ${emailRecord.messageId} for ${emailRecord.recipient}:`, error)
+    console.error(`❌ triggerEmailAction - Error processing email ${emailId}:`, error)
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    }
   }
 }
 
@@ -633,8 +680,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const processedEmails = []
-    const rejectedEmails = []
+    const processedEmails: Array<{
+      emailId: string
+      sesEventId: string
+      messageId: string
+      recipient: string
+      subject: string
+      webhookDelivery: { success: boolean; deliveryId?: string; error?: string } | null
+    }> = []
+    
+    const rejectedEmails: Array<{
+      messageId: string
+      recipient: string
+      userId: string
+      reason: string
+      subject: string
+    }> = []
 
     // Process each enhanced SES record
     for (const record of payload.processedRecords) {
@@ -785,23 +846,40 @@ export async function POST(request: NextRequest) {
           }
 
           await db.insert(receivedEmails).values(emailRecord)
-          processedEmails.push({
+          
+          // Initialize email processing record
+          const emailProcessingRecord = {
             emailId: emailRecord.id,
             sesEventId: sesEventId,
             messageId: mail.messageId,
             recipient: recipient,
             subject: mail.commonHeaders.subject,
-          })
+            webhookDelivery: null as { success: boolean; deliveryId?: string; error?: string } | null,
+          }
 
           console.log(`✅ Webhook - Stored email ${mail.messageId} for ${recipient}`);
 
           // Create parsed email record if we have parsed data
           if (parsedEmailData) {
-            await createParsedEmailRecord(emailRecord.id, parsedEmailData)
+            await createParsedEmailRecord(emailRecord.id, parsedEmailData) // this will be deprecated in the future
+            // Create structured email record that matches ParsedEmailData type exactly
+            await createStructuredEmailRecord(emailRecord.id, sesEventId, parsedEmailData, userId)
           }
 
-          // Forward email to configured webhook
-          await forwardToWebhook(emailRecord, record, parsedEmailData)
+          // Trigger email action using the new separated workflow
+          const webhookResult = await triggerEmailAction(emailRecord.id)
+          if (!webhookResult.success && webhookResult.error) {
+            console.warn(`⚠️ Webhook - Failed to trigger email action for ${emailRecord.id}: ${webhookResult.error}`)
+          }
+
+          // Update processing record with webhook delivery result
+          emailProcessingRecord.webhookDelivery = {
+            success: webhookResult.success,
+            deliveryId: webhookResult.deliveryId,
+            error: webhookResult.error
+          }
+
+          processedEmails.push(emailProcessingRecord)
         }
       } catch (recordError) {
         console.error('❌ Webhook - Error processing SES record:', recordError);
@@ -837,22 +915,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-
-// GET endpoint for webhook health check
-export async function GET() {
-  return NextResponse.json({
-    status: 'healthy',
-    service: 'inbound-email-webhook',
-    timestamp: new Date(),
-    version: '3.0.0',
-    description: 'Receives SES events with email content from Lambda forwarder',
-    features: [
-      'Raw SES event processing',
-      'S3 email content fetching',
-      'Full email content storage',
-      'Enhanced metadata tracking',
-      'SES event storage in dedicated table',
-      'Autumn inbound trigger limits and tracking'
-    ]
-  })
-} 

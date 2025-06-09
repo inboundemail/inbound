@@ -8,6 +8,7 @@ import { emailDomains, emailAddresses, webhooks, sesEvents, receivedEmails, DOMA
 import { eq, and, sql, desc } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
+import { parseEmail as libParseEmail } from '@/lib/email-parser'
 
 // ============================================================================
 // PAYMENTS AND BILLING VIA AUTUMN
@@ -1488,6 +1489,45 @@ export async function markEmailAsRead(emailId: string) {
     } catch (error) {
         console.error('Error marking email as read:', error)
         return { error: 'Failed to mark email as read' }
+    }
+}
+
+// ============================================================================
+// EMAIL PARSING
+// ============================================================================
+
+export async function parseEmail(emailContent: string) {
+    try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+
+        if (!session?.user?.id) {
+            return { error: 'Unauthorized' }
+        }
+
+        if (!emailContent) {
+            return { error: 'Email content is required' }
+        }
+
+        // Use the lib version of parseEmail
+        const emailData = await libParseEmail(emailContent);
+        
+        // Output parsed email data as JSON
+        console.log('📧 Parsed Email Data:', JSON.stringify(emailData, null, 2));
+        
+        // Return the full parsed data for programmatic use
+        return {
+            success: true,
+            data: emailData
+        };
+        
+    } catch (error) {
+        console.error('Error parsing email:', error);
+        return { 
+            error: 'Failed to parse email',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        }
     }
 }
 

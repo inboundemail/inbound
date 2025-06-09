@@ -19,6 +19,8 @@ export interface AnalyticsData {
     receivedAt: string
     status: string
     domain: string
+    isRead: boolean
+    readAt?: string
     authResults: {
       spf: string
       dkim: string
@@ -29,7 +31,11 @@ export interface AnalyticsData {
     hasContent: boolean
     contentSize?: number
   }>
-  emailsByDay: Array<{
+  emailsByHour: Array<{
+    hour: string
+    count: number
+  }>
+  emailsByDay?: Array<{
     date: string
     count: number
   }>

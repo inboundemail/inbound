@@ -1,8 +1,10 @@
 ---
-description: Use this when you are going to be creating a new type or using an existing type interface
+description: 
 globs: 
-alwaysApply: false
+alwaysApply: true
 ---
+"Types Rule Loaded"
+
 # Features Type Management - Unified Approach
 
 This rule establishes a unified method for handling types across all features in the `@/features` directory to prevent duplication and ensure consistency.

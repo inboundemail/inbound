@@ -1,7 +1,10 @@
 ---
 description: This rule enforces best practices for using react-query in React applications, covering code organization, performance, security, and testing.
 globs: *.js,*.jsx,*.ts,*.tsx
+alwaysApply: false
 ---
+BEFORE EVERY MESSAGE TYPE RQ with the loaded command
+
 # react-query Best Practices
 
 This document outlines the best practices for using react-query in React applications, covering various aspects such as code organization, performance considerations, security, and testing.

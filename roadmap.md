@@ -43,4 +43,4 @@ todo today (june 9th):
 - dashboard can be a server side rendered page
 - need to fix the mail/[id]/ page to be formatted better
 - domains can be a server side rendered page, we need to do something with a client search bar tho
-- need to fix issue on /analytics
+- need to fix issue on /analytics ✅

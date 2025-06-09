@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { markEmailAsRead, getEmailsList, getEmailDetailsFromParsed } from '@/app/actions/primary'
 
+// Export the useEmailQuery hook and types from the dedicated file
+export { useEmailQuery, type EmailDetails } from './useEmailQuery'
+export { useMarkEmailAsReadMutation } from './useMarkEmailAsReadMutation'
+
 // Query keys
 export const emailKeys = {
   all: ['emails'] as const,
@@ -34,36 +38,5 @@ export function useEmailDetailsQuery(emailId: string, enabled = true) {
     enabled: enabled && !!emailId,
     staleTime: 60 * 1000, // 1 minute
     gcTime: 10 * 60 * 1000, // 10 minutes
-  })
-}
-
-// Hook for marking email as read
-export function useMarkEmailAsReadMutation() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: markEmailAsRead,
-    onSuccess: (data, emailId) => {
-      // Invalidate and refetch email lists
-      queryClient.invalidateQueries({ queryKey: emailKeys.lists() })
-      
-      // Update the specific email detail cache
-      queryClient.setQueryData(emailKeys.detail(emailId), (oldData: any) => {
-        if (oldData?.success) {
-          return {
-            ...oldData,
-            data: {
-              ...oldData.data,
-              isRead: true,
-              readAt: new Date().toISOString()
-            }
-          }
-        }
-        return oldData
-      })
-    },
-    onError: (error) => {
-      console.error('Failed to mark email as read:', error)
-    }
   })
 } 

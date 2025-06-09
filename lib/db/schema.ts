@@ -241,6 +241,52 @@ export const domainDnsRecords = pgTable('domain_dns_records', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+// Structured Emails table - matches ParsedEmailData type exactly
+export const structuredEmails = pgTable('structured_emails', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  emailId: varchar('email_id', { length: 255 }).notNull(), // Reference to receivedEmails table
+  sesEventId: varchar('ses_event_id', { length: 255 }).notNull(), // Reference to sesEvents table
+  
+  // Core email fields matching ParsedEmailData
+  messageId: varchar('message_id', { length: 255 }), // string | undefined
+  date: timestamp('date'), // Date | undefined  
+  subject: text('subject'), // string | undefined
+  
+  // Address fields - stored as JSON matching ParsedEmailAddress structure
+  fromData: text('from_data'), // ParsedEmailAddress | null - JSON: { text: string, addresses: Array<{name: string|null, address: string|null}> }
+  toData: text('to_data'), // ParsedEmailAddress | null
+  ccData: text('cc_data'), // ParsedEmailAddress | null
+  bccData: text('bcc_data'), // ParsedEmailAddress | null
+  replyToData: text('reply_to_data'), // ParsedEmailAddress | null
+  
+  // Threading fields
+  inReplyTo: varchar('in_reply_to', { length: 255 }), // string | undefined
+  references: text('references'), // string[] | undefined - stored as JSON array
+  
+  // Content fields
+  textBody: text('text_body'), // string | undefined
+  htmlBody: text('html_body'), // string | undefined
+  rawContent: text('raw_content'), // string | undefined (raw field from ParsedEmailData)
+  
+  // Attachments - stored as JSON array matching ParsedEmailData structure
+  attachments: text('attachments'), // Array<{filename: string | undefined, contentType: string | undefined, size: number | undefined, contentId: string | undefined, contentDisposition: string | undefined}>
+  
+  // Headers - stored as JSON object matching enhanced headers structure
+  headers: text('headers'), // Record<string, any> with specific typed properties
+  
+  // Priority field
+  priority: varchar('priority', { length: 50 }), // string | false | undefined
+  
+  // Processing metadata
+  parseSuccess: boolean('parse_success').default(true),
+  parseError: text('parse_error'),
+  
+  // User and timestamps
+  userId: varchar('user_id', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // Export types for Better Auth tables (using the imported tables)
 export { user, session, account, verification, apikey };
 
@@ -270,6 +316,8 @@ export type ReceivedEmail = typeof receivedEmails.$inferSelect;
 export type NewReceivedEmail = typeof receivedEmails.$inferInsert;
 export type ParsedEmail = typeof parsedEmails.$inferSelect;
 export type NewParsedEmail = typeof parsedEmails.$inferInsert;
+export type StructuredEmail = typeof structuredEmails.$inferSelect;
+export type NewStructuredEmail = typeof structuredEmails.$inferInsert;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 export type NewWebhookDelivery = typeof webhookDeliveries.$inferInsert;
 export type DomainDnsRecord = typeof domainDnsRecords.$inferSelect;

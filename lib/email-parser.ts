@@ -9,6 +9,26 @@ interface ParsedEmailAddress {
   }>
 }
 
+// Header value types for complex header structures
+interface ParsedEmailHeaderValue {
+  value?: Array<{
+    address: string
+    name: string
+  }> | string
+  html?: string
+  text?: string
+  params?: Record<string, string>
+}
+
+interface ParsedEmailListHeader {
+  unsubscribe?: {
+    url: string
+  }
+  'unsubscribe-post'?: {
+    name: string
+  }
+}
+
 interface ParsedEmailData {
   messageId: string | undefined
   date: Date | undefined
@@ -22,7 +42,7 @@ interface ParsedEmailData {
   references: string[] | undefined
   textBody: string | undefined
   htmlBody: string | undefined
-  raw: string
+  raw?: string
   attachments: Array<{
     filename: string | undefined
     contentType: string | undefined
@@ -30,7 +50,32 @@ interface ParsedEmailData {
     contentId: string | undefined
     contentDisposition: string | undefined
   }>
-  headers: Record<string, any>
+  headers: Record<string, any> & {
+    'return-path'?: ParsedEmailHeaderValue
+    'received'?: string
+    'received-spf'?: string
+    'authentication-results'?: string
+    'x-ses-receipt'?: string
+    'x-ses-dkim-signature'?: string
+    'dkim-signature'?: Array<{
+      value: string
+      params: Record<string, string>
+    }> | ParsedEmailHeaderValue
+    'list'?: ParsedEmailListHeader
+    'x-entity-ref-id'?: string
+    'from'?: ParsedEmailHeaderValue
+    'to'?: ParsedEmailHeaderValue
+    'subject'?: string
+    'message-id'?: string
+    'date'?: string
+    'mime-version'?: string
+    'content-type'?: {
+      value: string
+      params: Record<string, string>
+    }
+    'feedback-id'?: string
+    'x-ses-outgoing'?: string
+  }
   priority: string | false | undefined
 }
 
@@ -326,4 +371,4 @@ export function formatEmailAddress(email: string): { name: string; address: stri
 }
 
 // Export the ParsedEmailData type for use in other files
-export type { ParsedEmailData, ParsedEmailAddress } 
+export type { ParsedEmailData, ParsedEmailAddress, ParsedEmailHeaderValue, ParsedEmailListHeader } 

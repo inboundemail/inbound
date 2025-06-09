@@ -1,4 +1,6 @@
 // Domains API service layer
+import { getDomainStats } from '@/app/actions/primary'
+
 export interface DomainStats {
   id: string
   domain: string
@@ -14,8 +16,15 @@ export interface DomainStatsResponse {
   domains: DomainStats[]
   totalDomains: number
   verifiedDomains: number
-  pendingDomains: number
-  failedDomains: number
+  totalEmailAddresses: number
+  totalEmailsLast24h: number
+  limits?: {
+    allowed: boolean
+    unlimited: boolean
+    balance: number | null
+    current: number
+    remaining: number | null
+  } | null
 }
 
 export interface DomainDetails {
@@ -50,15 +59,15 @@ export interface DomainDetails {
 }
 
 export const domainsApi = {
-  // Fetch domain statistics
+  // Fetch domain statistics using server action
   getDomainStats: async (): Promise<DomainStatsResponse> => {
-    const response = await fetch('/api/domain/stats')
+    const result = await getDomainStats()
     
-    if (!response.ok) {
-      throw new Error('Failed to fetch domain statistics')
+    if ('error' in result) {
+      throw new Error(result.error || 'Failed to fetch domain statistics')
     }
     
-    return response.json()
+    return result
   },
 
   // Fetch domain details by ID

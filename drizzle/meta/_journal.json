@@ -85,6 +85,13 @@
       "when": 1749423616135,
       "tag": "0011_fast_tattoo",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1749506652942,
+      "tag": "0012_typical_living_tribunal",
+      "breakpoints": true
     }
   ]
 }

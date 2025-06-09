@@ -29,7 +29,7 @@ export const auth = betterAuth({
     },
     plugins: [
         oAuthProxy({
-            productionURL: process.env.BETTER_AUTH_URL || "https://inbound.new"
+            productionURL: process.env.BETTER_AUTH_URL || "http://localhost:3000"
         }),
         apiKey(),
         admin(),

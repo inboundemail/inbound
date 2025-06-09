@@ -54,8 +54,14 @@ async function parseEmailFile(filePath: string): Promise<ParsedEmailData | null>
     const dmarcStatus = typeof authResults === 'string' && authResults.includes('dmarc=pass');
     
     return {
-      sender: emailData.from?.addresses[0],
-      recipients: emailData.to?.addresses || [],
+      sender: emailData.from?.addresses[0] ? {
+        name: emailData.from.addresses[0].name || undefined,
+        address: emailData.from.addresses[0].address || undefined
+      } : undefined,
+      recipients: emailData.to?.addresses?.map(addr => ({
+        name: addr.name || undefined,
+        address: addr.address || undefined
+      })) || [],
       subject: emailData.subject || '',
       date: emailData.date,
       textContent: emailData.textBody || '',

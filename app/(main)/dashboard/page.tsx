@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useSession } from '@/lib/auth-client'
 import { useRouter } from 'next/navigation'
+import { useDomainsStatsQuery } from '@/features/domains/hooks/useDomainsQuery'
+import { useAnalyticsQuery } from '@/features/analytics/hooks/useAnalyticsQuery'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -32,7 +34,6 @@ import { Area, AreaChart, CartesianGrid, XAxis, Line, LineChart, Bar, BarChart }
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
-import { getDomainStats } from '@/app/actions/primary'
 
 import inboundData from "@/lib/data.json"
 
@@ -47,112 +48,54 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
-interface DomainStats {
-  id: string
-  domain: string
-  status: string
-  isVerified: boolean
-  emailAddressCount: number
-  emailsLast24h: number
-  createdAt: string
-  updatedAt: string
-}
-
-interface DomainStatsResponse {
-  domains: DomainStats[]
-  totalDomains: number
-  verifiedDomains: number
-  totalEmailAddresses: number
-  totalEmailsLast24h: number
-}
-
-interface AnalyticsData {
-  stats: {
-    totalEmails: number
-    emailsLast24h: number
-    emailsLast7d: number
-    emailsLast30d: number
-    totalDomains: number
-    verifiedDomains: number
-    totalEmailAddresses: number
-    avgProcessingTime: number
-  }
-  recentEmails: Array<{
-    id: string
-    messageId: string
-    from: string
-    recipient: string
-    subject: string
-    receivedAt: string
-    status: string
-    domain: string
-    authResults: {
-      spf: string
-      dkim: string
-      dmarc: string
-      spam: string
-      virus: string
-    }
-    hasContent: boolean
-    contentSize?: number
-  }>
-  emailsByHour?: Array<{
-    hour: string
-    count: number
-  }>
-}
-
 export default function Page() {
   const { data: session } = useSession()
   const router = useRouter()
   const { subscription, emailConfigurations, metrics } = inboundData
   
-  const [domainStats, setDomainStats] = useState<DomainStatsResponse | null>(null)
-  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // Use react-query hooks for data fetching
+  const { 
+    data: domainStats, 
+    isLoading: isLoadingDomains, 
+    error: domainsError, 
+    refetch: refetchDomains,
+    isRefetching: isRefetchingDomains 
+  } = useDomainsStatsQuery()
+  
+  const { 
+    data: analyticsData, 
+    isLoading: isLoadingAnalytics, 
+    error: analyticsError, 
+    refetch: refetchAnalytics,
+    isRefetching: isRefetchingAnalytics 
+  } = useAnalyticsQuery()
+  
   const [searchQuery, setSearchQuery] = useState('')
 
-  useEffect(() => {
-    if (session?.user) {
-      fetchData()
-    }
-  }, [session])
+  // Combined loading and error states
+  const isLoading = isLoadingDomains || isLoadingAnalytics
+  const isRefetching = isRefetchingDomains || isRefetchingAnalytics
+  const error = domainsError || analyticsError
 
-  const fetchData = async () => {
+  // Handle refetch errors with toast
+  useEffect(() => {
+    if (domainsError) {
+      toast.error('Failed to load domain data')
+    }
+    if (analyticsError) {
+      toast.error('Failed to load analytics data')
+    }
+  }, [domainsError, analyticsError])
+
+  const handleRefresh = async () => {
     try {
-      setIsLoading(true)
-      setError(null)
-      
-      // Fetch both domain stats and analytics data
-      const [domainsResult, analyticsResponse] = await Promise.all([
-        getDomainStats(),
-        fetch('/api/analytics')
-      ])
-      
-      // Handle domain stats result
-      if ('error' in domainsResult) {
-        console.error('Error fetching domain stats:', domainsResult.error)
-        setError(domainsResult.error || 'Unknown error occurred')
-      } else {
-        setDomainStats(domainsResult)
-      }
-      
-      // Handle analytics response
-      if (analyticsResponse.ok) {
-        const analyticsData: AnalyticsData = await analyticsResponse.json()
-        setAnalyticsData(analyticsData)
-      }
+      await Promise.all([refetchDomains(), refetchAnalytics()])
     } catch (error) {
-      console.error('Error fetching data:', error)
-      setError(error instanceof Error ? error.message : 'Failed to load data')
-      toast.error('Failed to load dashboard data')
-    } finally {
-      setIsLoading(false)
+      toast.error('Failed to refresh data')
     }
   }
 
-  const getStatusBadge = (domain: DomainStats) => {
+  const getStatusBadge = (domain: NonNullable<typeof domainStats>['domains'][0]) => {
     if (domain.isVerified) {
       return (
         <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
@@ -335,11 +278,11 @@ export default function Page() {
             <div className="flex items-center gap-3">
               <Button
                 variant="secondary"
-                onClick={fetchData}
-                disabled={isLoading}
+                onClick={handleRefresh}
+                disabled={isLoading || isRefetching}
                 className="bg-white/20 border-white/30 text-white hover:bg-white/30 backdrop-blur-sm"
               >
-                <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading || isRefetching ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
               <Button asChild className="bg-white text-purple-700 hover:bg-white/90 font-semibold shadow-lg">
@@ -363,11 +306,11 @@ export default function Page() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-red-600">
               <XCircleIcon className="h-4 w-4" />
-              <span>{error}</span>
+              <span>{error?.message || 'Failed to load data'}</span>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={fetchData}
+                onClick={handleRefresh}
                 className="ml-auto text-red-600 hover:text-red-700"
               >
                 Try Again
