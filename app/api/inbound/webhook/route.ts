@@ -645,7 +645,9 @@ export async function triggerEmailAction(emailId: string): Promise<{ success: bo
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('📧 Webhook - Received email event from Lambda');
+    console.log('===============================================')
+    console.log('📧 Webhook - Received email event from Lambda')
+    console.log('===============================================')
     
     // Verify the request is from our Lambda function
     const authHeader = request.headers.get('authorization')
@@ -701,6 +703,9 @@ export async function POST(request: NextRequest) {
     for (const record of payload.processedRecords) {
       try {
         const sesData = record.ses
+        console.log('===============================================')
+        console.log('Record Full Data:', JSON.stringify(record, null, 2))
+        console.log('===============================================')
         const mail = sesData.mail
         const receipt = sesData.receipt
 
@@ -764,7 +769,9 @@ export async function POST(request: NextRequest) {
 
           // Parse the email content using the new parseEmail function
           let parsedEmailData: ParsedEmailData | null = null
+          console.log('Email content:', record.emailContent)
           if (record.emailContent) {
+            console.log(`📧📧📧 Webhook - Parsing email content for ${mail.messageId}`)
             try {
               parsedEmailData = await parseEmail(record.emailContent)
               console.log(`✅ Webhook - Successfully parsed email content for ${mail.messageId}`)
