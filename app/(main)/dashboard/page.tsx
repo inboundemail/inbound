@@ -1,57 +1,30 @@
 "use client"
 
-import { useEffect, useState } from 'react'
-import { useSession } from '@/lib/auth-client'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useDomainsStatsQuery } from '@/features/domains/hooks/useDomainsQuery'
 import { useAnalyticsQuery } from '@/features/analytics/hooks/useAnalyticsQuery'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart"
+
 import { Skeleton } from "@/components/ui/skeleton"
 import { 
   MailIcon, 
   TrendingUpIcon, 
-  ActivityIcon, 
-  AlertCircleIcon, 
-  ExternalLinkIcon, 
-  TrendingDownIcon, 
-  BarChart3Icon,
   GlobeIcon,
   CheckCircleIcon,
   XCircleIcon,
   ClockIcon,
-  SearchIcon,
   RefreshCwIcon,
-  PlusIcon,
-  CalendarIcon,
-  ServerIcon
+  PlusIcon
 } from "lucide-react"
-import { Area, AreaChart, CartesianGrid, XAxis, Line, LineChart, Bar, BarChart } from "recharts"
-import { formatDistanceToNow, format } from 'date-fns'
+import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
 
-import inboundData from "@/lib/data.json"
-
-const chartConfig = {
-  emails: {
-    label: "Emails",
-    color: "hsl(var(--chart-1))",
-  },
-  api: {
-    label: "API Calls",
-    color: "hsl(var(--chart-2))",
-  },
-} satisfies ChartConfig
-
 export default function Page() {
-  const { data: session } = useSession()
   const router = useRouter()
-  const { subscription, emailConfigurations, metrics } = inboundData
   
   // Use react-query hooks for data fetching
   const { 
@@ -69,8 +42,6 @@ export default function Page() {
     refetch: refetchAnalytics,
     isRefetching: isRefetchingAnalytics 
   } = useAnalyticsQuery()
-  
-  const [searchQuery, setSearchQuery] = useState('')
 
   // Combined loading and error states
   const isLoading = isLoadingDomains || isLoadingAnalytics
@@ -186,50 +157,9 @@ export default function Page() {
     router.push(`/analytics?emailid=${emailId}`)
   }
 
-  // Filter domains based on search
-  const filteredDomains = domainStats?.domains.filter(domain =>
-    domain.domain.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || []
-
-  // Filter recent emails based on search
-  const filteredEmails = analyticsData?.recentEmails.filter(email =>
-    email.from.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    email.recipient.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    email.subject.toLowerCase().includes(searchQuery.toLowerCase())
-  ).slice(0, 5) || []
-
-  // Prepare chart data from API response or use fallback
-  const emailsChartData = analyticsData?.emailsByHour?.map(hour => ({
-    hour: hour.hour,
-    emails: hour.count,
-    api: Math.floor(hour.count * 0.8) // Approximate API calls as 80% of emails
-  })) || [
-    // Fallback data if API doesn't provide chart data
-    { hour: "12 AM", emails: 0, api: 0 },
-    { hour: "1 AM", emails: 0, api: 0 },
-    { hour: "2 AM", emails: 0, api: 0 },
-    { hour: "3 AM", emails: 0, api: 0 },
-    { hour: "4 AM", emails: 0, api: 0 },
-    { hour: "5 AM", emails: 0, api: 0 },
-    { hour: "6 AM", emails: 0, api: 0 },
-    { hour: "7 AM", emails: 0, api: 0 },
-    { hour: "8 AM", emails: 0, api: 0 },
-    { hour: "9 AM", emails: 0, api: 0 },
-    { hour: "10 AM", emails: 0, api: 0 },
-    { hour: "11 AM", emails: 0, api: 0 },
-    { hour: "12 PM", emails: 0, api: 0 },
-    { hour: "1 PM", emails: 0, api: 0 },
-    { hour: "2 PM", emails: 0, api: 0 },
-    { hour: "3 PM", emails: 0, api: 0 },
-    { hour: "4 PM", emails: 0, api: 0 },
-    { hour: "5 PM", emails: 0, api: 0 },
-    { hour: "6 PM", emails: 0, api: 0 },
-    { hour: "7 PM", emails: 0, api: 0 },
-    { hour: "8 PM", emails: 0, api: 0 },
-    { hour: "9 PM", emails: 0, api: 0 },
-    { hour: "10 PM", emails: 0, api: 0 },
-    { hour: "11 PM", emails: 0, api: 0 },
-  ]
+  // Get domains and emails for display
+  const displayDomains = domainStats?.domains || []
+  const displayEmails = analyticsData?.recentEmails?.slice(0, 5) || []
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -320,59 +250,8 @@ export default function Page() {
         </Card>
       )}
 
-      {/* Metrics Cards with Charts */}
-      <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-4">
-        {/* Emails Received Card with Edge-to-Edge Chart */}
-        <Card className="relative overflow-hidden p-0 h-[140px]">
-          {/* Background Chart - Edge to Edge */}
-          <div className="absolute bottom-0 left-0 right-0 h-1/2 w-full">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <Skeleton className="h-full w-full" />
-              </div>
-            ) : (
-              <ChartContainer config={chartConfig} className="h-full w-full">
-                <AreaChart data={emailsChartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="fillEmails" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6C47FF" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#6C47FF" stopOpacity={0.05} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis 
-                    dataKey="hour" 
-                    hide={true}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Area
-                    dataKey="emails"
-                    type="linear"
-                    fill="url(#fillEmails)"
-                    stroke="#6C47FF"
-                    strokeWidth={1.5}
-                  />
-                </AreaChart>
-              </ChartContainer>
-            )}
-          </div>
-          
-          {/* Overlaid Content */}
-          <div className="relative z-10 p-6">
-            <div className="flex items-end justify-between mb-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Emails Received</p>
-              </div>
-            </div>
-          </div>
-          <div className="absolute bottom-6 right-6 text-right">
-            {isLoading ? (
-              <Skeleton className="h-8 w-16" />
-            ) : (
-              <span className="text-2xl font-bold">{analyticsData?.stats.totalEmails?.toLocaleString() || 0}</span>
-            )}
-          </div>
-        </Card>
+      {/* Metrics Cards */}
+      <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-3">
 
         {/* Weekly Volume */}
         <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 h-[140px]">
@@ -482,7 +361,7 @@ export default function Page() {
                   </div>
                 ))}
               </div>
-            ) : filteredDomains.length === 0 ? (
+            ) : displayDomains.length === 0 ? (
               <div className="text-center py-8">
                 <GlobeIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground mb-3">No domains configured yet</p>
@@ -495,7 +374,7 @@ export default function Page() {
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredDomains.slice(0, 5).map((domain) => (
+                {displayDomains.slice(0, 5).map((domain) => (
                   <div 
                     key={domain.id}
                     className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 cursor-pointer transition-colors"
@@ -517,11 +396,11 @@ export default function Page() {
                     </div>
                   </div>
                 ))}
-                {filteredDomains.length > 5 && (
+                {displayDomains.length > 5 && (
                   <div className="text-center pt-2">
                     <Button variant="ghost" size="sm" asChild>
                       <a href="/emails">
-                        View {filteredDomains.length - 5} more domains
+                        View {displayDomains.length - 5} more domains
                       </a>
                     </Button>
                   </div>
@@ -568,14 +447,14 @@ export default function Page() {
                   </div>
                 ))}
               </div>
-            ) : filteredEmails.length === 0 ? (
+            ) : displayEmails.length === 0 ? (
               <div className="text-center py-8">
                 <MailIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground">No recent emails</p>
               </div>
             ) : (
               <div className="divide-y divide-border">
-                {filteredEmails.map((email, index) => (
+                {displayEmails.map((email, index) => (
                   <div 
                     key={email.id}
                     className="py-4 hover:bg-muted/30 cursor-pointer transition-colors -mx-6 px-6"

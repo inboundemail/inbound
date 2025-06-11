@@ -32,10 +32,12 @@ export default function RootLayout({
         className={`${outfit.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
+        {process.env.NODE_ENV === "development" && (
         <script
           crossOrigin="anonymous"
-          src="//unpkg.com/react-scan/dist/auto.global.js"
-        />
+            src="//unpkg.com/react-scan/dist/auto.global.js"
+          />
+        )}
         <QueryProvider>
           <AutumnProvider backendUrl={process.env.BETTER_AUTH_URL || ""}>
             {children}

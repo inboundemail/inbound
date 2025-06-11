@@ -14,12 +14,6 @@ export const useDomainsStatsQuery = () => {
   return useQuery({
     queryKey: domainKeys.stats(),
     queryFn: domainsApi.getDomainStats,
-    // Refetch every 2 minutes for domain stats
-    refetchInterval: 2 * 60 * 1000,
-    // Keep previous data while refetching
-    placeholderData: (previousData) => previousData,
-    // Consider data stale after 5 minutes
-    staleTime: 5 * 60 * 1000,
   })
 }
 
@@ -30,10 +24,6 @@ export const useDomainDetailsQuery = (domainId: string) => {
     queryFn: () => domainsApi.getDomainDetails(domainId),
     // Only fetch if domainId is provided
     enabled: !!domainId,
-    // Refetch every 5 minutes for domain details
-    refetchInterval: 5 * 60 * 1000,
-    // Consider data stale after 2 minutes
-    staleTime: 2 * 60 * 1000,
   })
 }
 
