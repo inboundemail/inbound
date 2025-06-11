@@ -40,7 +40,7 @@ import {
 } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
-import type { AnalyticsData } from '@/features/analytics/api/analyticsApi'
+import type { AnalyticsData } from '@/app/actions/analytics'
 
 export default function AnalyticsPage() {
   const { data: session } = useSession()

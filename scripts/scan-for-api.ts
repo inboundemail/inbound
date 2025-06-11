@@ -47,7 +47,6 @@ const log = {
 }
 
 const apiRoutes = [
-  '/api/analytics',
   '/api/auth/[...all]',
   '/api/autumn/[...all]',
   '/api/domain/verifications',

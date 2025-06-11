@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { Autumn as autumn, Customer } from "autumn-js"
 import { db } from '@/lib/db'
-import { emailDomains, emailAddresses, webhooks, sesEvents, receivedEmails, DOMAIN_STATUS } from '@/lib/db/schema'
+import { emailDomains, emailAddresses, webhooks, sesEvents, structuredEmails, DOMAIN_STATUS } from '@/lib/db/schema'
 import { eq, and, sql, desc } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
@@ -1010,21 +1010,31 @@ export async function getEmailDetails(emailId: string) {
         // Fetch email details with SES event data
         const emailDetails = await db
             .select({
-                // Email details
-                id: receivedEmails.id,
-                messageId: receivedEmails.messageId,
-                from: receivedEmails.from,
-                to: receivedEmails.to,
-                recipient: receivedEmails.recipient,
-                subject: receivedEmails.subject,
-                receivedAt: receivedEmails.receivedAt,
-                processedAt: receivedEmails.processedAt,
-                status: receivedEmails.status,
-                metadata: receivedEmails.metadata,
-                userId: receivedEmails.userId,
-                sesEventId: receivedEmails.sesEventId,
-                createdAt: receivedEmails.createdAt,
-                updatedAt: receivedEmails.updatedAt,
+                // Structured email details
+                id: structuredEmails.id,
+                emailId: structuredEmails.emailId,
+                messageId: structuredEmails.messageId,
+                subject: structuredEmails.subject,
+                date: structuredEmails.date,
+                fromData: structuredEmails.fromData,
+                toData: structuredEmails.toData,
+                ccData: structuredEmails.ccData,
+                bccData: structuredEmails.bccData,
+                replyToData: structuredEmails.replyToData,
+                inReplyTo: structuredEmails.inReplyTo,
+                references: structuredEmails.references,
+                textBody: structuredEmails.textBody,
+                htmlBody: structuredEmails.htmlBody,
+                rawContent: structuredEmails.rawContent,
+                attachments: structuredEmails.attachments,
+                headers: structuredEmails.headers,
+                priority: structuredEmails.priority,
+                parseSuccess: structuredEmails.parseSuccess,
+                parseError: structuredEmails.parseError,
+                userId: structuredEmails.userId,
+                sesEventId: structuredEmails.sesEventId,
+                createdAt: structuredEmails.createdAt,
+                updatedAt: structuredEmails.updatedAt,
                 
                 // SES event details
                 emailContent: sesEvents.emailContent,
@@ -1044,12 +1054,12 @@ export async function getEmailDetails(emailId: string) {
                 timestamp: sesEvents.timestamp,
                 receiptTimestamp: sesEvents.receiptTimestamp,
             })
-            .from(receivedEmails)
-            .leftJoin(sesEvents, eq(receivedEmails.sesEventId, sesEvents.id))
+            .from(structuredEmails)
+            .leftJoin(sesEvents, eq(structuredEmails.sesEventId, sesEvents.id))
             .where(
                 and(
-                    eq(receivedEmails.id, emailId),
-                    eq(receivedEmails.userId, session.user.id)
+                    eq(structuredEmails.id, emailId),
+                    eq(structuredEmails.userId, session.user.id)
                 )
             )
             .limit(1)
@@ -1060,47 +1070,100 @@ export async function getEmailDetails(emailId: string) {
 
         const email = emailDetails[0]
 
+        // Parse JSON fields from structured emails
+        let parsedFromData = null
+        if (email.fromData) {
+            try {
+                parsedFromData = JSON.parse(email.fromData)
+            } catch (e) {
+                console.error('Failed to parse fromData:', e)
+            }
+        }
+
+        let parsedToData = null
+        if (email.toData) {
+            try {
+                parsedToData = JSON.parse(email.toData)
+            } catch (e) {
+                console.error('Failed to parse toData:', e)
+            }
+        }
+
+        let parsedAttachments = []
+        if (email.attachments) {
+            try {
+                parsedAttachments = JSON.parse(email.attachments)
+            } catch (e) {
+                console.error('Failed to parse attachments:', e)
+            }
+        }
+
+        let parsedHeaders = {}
+        if (email.headers) {
+            try {
+                parsedHeaders = JSON.parse(email.headers)
+            } catch (e) {
+                console.error('Failed to parse headers:', e)
+            }
+        }
+
+        let parsedReferences = []
+        if (email.references) {
+            try {
+                parsedReferences = JSON.parse(email.references)
+            } catch (e) {
+                console.error('Failed to parse references:', e)
+            }
+        }
+
         // Parse common headers if available
-        let parsedHeaders = null
+        let parsedCommonHeaders = null
         if (email.commonHeaders) {
             try {
-                parsedHeaders = JSON.parse(email.commonHeaders)
+                parsedCommonHeaders = JSON.parse(email.commonHeaders)
             } catch (e) {
                 console.error('Failed to parse common headers:', e)
             }
         }
 
-        // Parse metadata if available
-        let parsedMetadata = null
-        if (email.metadata) {
-            try {
-                parsedMetadata = JSON.parse(email.metadata)
-            } catch (e) {
-                console.error('Failed to parse metadata:', e)
-            }
-        }
+        // Sanitize HTML content
+        const { sanitizeHtml } = await import('@/lib/email-parser')
+        const sanitizedHtmlBody = email.htmlBody ? sanitizeHtml(email.htmlBody) : null
 
-        // Parse email content
-        const { parseEmailContent, sanitizeHtml } = await import('@/lib/email-parser')
-        const parsedEmail = await parseEmailContent(email.emailContent || '')
+        // Extract recipient from toData for backward compatibility
+        const recipient = parsedToData?.addresses?.[0]?.address || 'unknown'
+        const fromAddress = parsedFromData?.addresses?.[0]?.address || 'unknown'
 
         // Format the response
         const response = {
             id: email.id,
+            emailId: email.emailId,
             messageId: email.messageId,
-            from: email.from,
-            to: email.to,
-            recipient: email.recipient,
+            from: fromAddress,
+            to: parsedToData?.text || '',
+            recipient: recipient,
             subject: email.subject,
-            receivedAt: email.receivedAt,
-            processedAt: email.processedAt,
-            status: email.status,
+            receivedAt: email.date,
+            processedAt: email.createdAt, // Use createdAt as processedAt equivalent
+            status: 'processed', // Default status since structuredEmails are processed
             emailContent: {
-                htmlBody: parsedEmail.htmlBody ? sanitizeHtml(parsedEmail.htmlBody) : null,
-                textBody: parsedEmail.textBody,
-                attachments: parsedEmail.attachments,
-                headers: parsedEmail.headers,
-                rawContent: email.emailContent, // Include raw content for debugging
+                htmlBody: sanitizedHtmlBody,
+                textBody: email.textBody,
+                attachments: parsedAttachments,
+                headers: parsedHeaders,
+                rawContent: email.rawContent,
+            },
+            parsedData: {
+                fromData: parsedFromData,
+                toData: parsedToData,
+                ccData: email.ccData ? JSON.parse(email.ccData) : null,
+                bccData: email.bccData ? JSON.parse(email.bccData) : null,
+                replyToData: email.replyToData ? JSON.parse(email.replyToData) : null,
+                inReplyTo: email.inReplyTo,
+                references: parsedReferences,
+                priority: email.priority,
+                parseSuccess: email.parseSuccess,
+                parseError: email.parseError,
             },
             authResults: {
                 spf: email.spfVerdict || 'UNKNOWN',
@@ -1121,8 +1184,7 @@ export async function getEmailDetails(emailId: string) {
                     contentSize: email.s3ContentSize,
                     error: email.s3Error,
                 },
-                commonHeaders: parsedHeaders,
-                emailMetadata: parsedMetadata,
+                commonHeaders: parsedCommonHeaders,
             },
             createdAt: email.createdAt,
             updatedAt: email.updatedAt,
@@ -1149,56 +1211,39 @@ export async function getEmailDetailsFromParsed(emailId: string) {
             return { error: 'Email ID is required' }
         }
 
-        // Import parsedEmails table
-        const { parsedEmails } = await import('@/lib/db/schema')
-
-        // Fetch email details from both receivedEmails and parsedEmails tables
+        // Fetch email details from structuredEmails table
         const emailDetails = await db
             .select({
-                // Received email details
-                id: receivedEmails.id,
-                messageId: receivedEmails.messageId,
-                from: receivedEmails.from,
-                to: receivedEmails.to,
-                recipient: receivedEmails.recipient,
-                subject: receivedEmails.subject,
-                receivedAt: receivedEmails.receivedAt,
-                processedAt: receivedEmails.processedAt,
-                status: receivedEmails.status,
-                isRead: receivedEmails.isRead,
-                readAt: receivedEmails.readAt,
-                userId: receivedEmails.userId,
-                createdAt: receivedEmails.createdAt,
-                updatedAt: receivedEmails.updatedAt,
-                
-                // Parsed email details
-                parsedFromText: parsedEmails.fromText,
-                parsedFromAddress: parsedEmails.fromAddress,
-                parsedFromName: parsedEmails.fromName,
-                parsedToText: parsedEmails.toText,
-                parsedToAddresses: parsedEmails.toAddresses,
-                parsedSubject: parsedEmails.subject,
-                parsedTextBody: parsedEmails.textBody,
-                parsedHtmlBody: parsedEmails.htmlBody,
-                parsedAttachments: parsedEmails.attachments,
-                parsedAttachmentCount: parsedEmails.attachmentCount,
-                parsedHasAttachments: parsedEmails.hasAttachments,
-                parsedHeaders: parsedEmails.headers,
-                parsedEmailDate: parsedEmails.emailDate,
-                parsedInReplyTo: parsedEmails.inReplyTo,
-                parsedReferences: parsedEmails.references,
-                parsedPriority: parsedEmails.priority,
-                parsedHasTextBody: parsedEmails.hasTextBody,
-                parsedHasHtmlBody: parsedEmails.hasHtmlBody,
-                parseSuccess: parsedEmails.parseSuccess,
-                parseError: parsedEmails.parseError,
+                // Structured email details
+                id: structuredEmails.id,
+                emailId: structuredEmails.emailId,
+                messageId: structuredEmails.messageId,
+                subject: structuredEmails.subject,
+                date: structuredEmails.date,
+                fromData: structuredEmails.fromData,
+                toData: structuredEmails.toData,
+                ccData: structuredEmails.ccData,
+                bccData: structuredEmails.bccData,
+                replyToData: structuredEmails.replyToData,
+                inReplyTo: structuredEmails.inReplyTo,
+                references: structuredEmails.references,
+                textBody: structuredEmails.textBody,
+                htmlBody: structuredEmails.htmlBody,
+                rawContent: structuredEmails.rawContent,
+                attachments: structuredEmails.attachments,
+                headers: structuredEmails.headers,
+                priority: structuredEmails.priority,
+                parseSuccess: structuredEmails.parseSuccess,
+                parseError: structuredEmails.parseError,
+                userId: structuredEmails.userId,
+                createdAt: structuredEmails.createdAt,
+                updatedAt: structuredEmails.updatedAt,
             })
-            .from(receivedEmails)
-            .leftJoin(parsedEmails, eq(receivedEmails.id, parsedEmails.emailId))
+            .from(structuredEmails)
             .where(
                 and(
-                    eq(receivedEmails.id, emailId),
-                    eq(receivedEmails.userId, session.user.id)
+                    eq(structuredEmails.id, emailId),
+                    eq(structuredEmails.userId, session.user.id)
                 )
             )
             .limit(1)
@@ -1209,38 +1254,47 @@ export async function getEmailDetailsFromParsed(emailId: string) {
 
         const email = emailDetails[0]
 
-        // Parse JSON fields
-        let parsedAttachments = []
-        if (email.parsedAttachments) {
+        // Parse JSON fields from structured emails
+        let parsedFromData = null
+        if (email.fromData) {
             try {
-                parsedAttachments = JSON.parse(email.parsedAttachments)
+                parsedFromData = JSON.parse(email.fromData)
+            } catch (e) {
+                console.error('Failed to parse fromData:', e)
+            }
+        }
+
+        let parsedToData = null
+        if (email.toData) {
+            try {
+                parsedToData = JSON.parse(email.toData)
+            } catch (e) {
+                console.error('Failed to parse toData:', e)
+            }
+        }
+
+        let parsedAttachments = []
+        if (email.attachments) {
+            try {
+                parsedAttachments = JSON.parse(email.attachments)
             } catch (e) {
                 console.error('Failed to parse attachments:', e)
             }
         }
 
         let parsedHeaders = {}
-        if (email.parsedHeaders) {
+        if (email.headers) {
             try {
-                parsedHeaders = JSON.parse(email.parsedHeaders)
+                parsedHeaders = JSON.parse(email.headers)
             } catch (e) {
                 console.error('Failed to parse headers:', e)
             }
         }
 
-        let parsedToAddresses = []
-        if (email.parsedToAddresses) {
-            try {
-                parsedToAddresses = JSON.parse(email.parsedToAddresses)
-            } catch (e) {
-                console.error('Failed to parse to addresses:', e)
-            }
-        }
-
         let parsedReferences = []
-        if (email.parsedReferences) {
+        if (email.references) {
             try {
-                parsedReferences = JSON.parse(email.parsedReferences)
+                parsedReferences = JSON.parse(email.references)
             } catch (e) {
                 console.error('Failed to parse references:', e)
             }
@@ -1248,42 +1302,47 @@ export async function getEmailDetailsFromParsed(emailId: string) {
 
         // Sanitize HTML content
         const { sanitizeHtml } = await import('@/lib/email-parser')
-        const sanitizedHtmlBody = email.parsedHtmlBody ? sanitizeHtml(email.parsedHtmlBody) : null
+        const sanitizedHtmlBody = email.htmlBody ? sanitizeHtml(email.htmlBody) : null
+
+        // Extract recipient and from address for backward compatibility
+        const recipient = parsedToData?.addresses?.[0]?.address || 'unknown'
+        const fromAddress = parsedFromData?.addresses?.[0]?.address || 'unknown'
 
         // Format the response
         const response = {
             id: email.id,
+            emailId: email.emailId,
             messageId: email.messageId,
-            from: email.from,
-            to: email.to,
-            recipient: email.recipient,
-            subject: email.subject || email.parsedSubject,
-            receivedAt: email.receivedAt,
-            processedAt: email.processedAt,
-            status: email.status,
-            isRead: email.isRead,
-            readAt: email.readAt,
+            from: fromAddress,
+            to: parsedToData?.text || '',
+            recipient: recipient,
+            subject: email.subject,
+            receivedAt: email.date,
+            processedAt: email.createdAt, // Use createdAt as processedAt equivalent
+            status: 'processed', // Default status since structuredEmails are processed
+            isRead: false, // structuredEmails doesn't have isRead field
+            readAt: null, // structuredEmails doesn't have readAt field
             emailContent: {
                 htmlBody: sanitizedHtmlBody,
-                textBody: email.parsedTextBody,
+                textBody: email.textBody,
                 attachments: parsedAttachments,
                 headers: parsedHeaders,
             },
             parsedData: {
-                fromText: email.parsedFromText,
-                fromAddress: email.parsedFromAddress,
-                fromName: email.parsedFromName,
-                toText: email.parsedToText,
-                toAddresses: parsedToAddresses,
-                subject: email.parsedSubject,
-                emailDate: email.parsedEmailDate,
-                inReplyTo: email.parsedInReplyTo,
+                fromData: parsedFromData,
+                toData: parsedToData,
+                ccData: email.ccData ? JSON.parse(email.ccData) : null,
+                bccData: email.bccData ? JSON.parse(email.bccData) : null,
+                replyToData: email.replyToData ? JSON.parse(email.replyToData) : null,
+                subject: email.subject,
+                emailDate: email.date,
+                inReplyTo: email.inReplyTo,
                 references: parsedReferences,
-                priority: email.parsedPriority,
-                attachmentCount: email.parsedAttachmentCount,
-                hasAttachments: email.parsedHasAttachments,
-                hasTextBody: email.parsedHasTextBody,
-                hasHtmlBody: email.parsedHasHtmlBody,
+                priority: email.priority,
+                attachmentCount: parsedAttachments.length,
+                hasAttachments: parsedAttachments.length > 0,
+                hasTextBody: !!email.textBody,
+                hasHtmlBody: !!email.htmlBody,
                 parseSuccess: email.parseSuccess,
                 parseError: email.parseError,
             },
@@ -1322,110 +1381,120 @@ export async function getEmailsList(options?: {
             domainFilter = 'all'
         } = options || {}
 
-        // Import parsedEmails table
-        const { parsedEmails } = await import('@/lib/db/schema')
-
         // Build where conditions
-        let whereConditions = [eq(receivedEmails.userId, session.user.id)]
+        let whereConditions = [eq(structuredEmails.userId, session.user.id)]
 
-        // Add status filter
-        if (statusFilter !== 'all') {
-            whereConditions.push(eq(receivedEmails.status, statusFilter))
+        // Add status filter - since structuredEmails are all processed, we'll ignore this filter
+        // or we could add a parseSuccess filter instead
+        if (statusFilter !== 'all' && statusFilter === 'failed') {
+            whereConditions.push(eq(structuredEmails.parseSuccess, false))
+        } else if (statusFilter !== 'all' && statusFilter === 'processed') {
+            whereConditions.push(eq(structuredEmails.parseSuccess, true))
         }
 
-        // Add domain filter
+        // Add domain filter - extract domain from toData JSON
         if (domainFilter !== 'all') {
-            whereConditions.push(sql`SPLIT_PART(${receivedEmails.recipient}, '@', 2) = ${domainFilter}`)
+            whereConditions.push(
+                sql`${structuredEmails.toData}::jsonb->'addresses'->0->>'address' LIKE ${`%@${domainFilter}`}`
+            )
         }
 
         // Add search filter
         if (searchQuery) {
             whereConditions.push(
                 sql`(
-                    ${receivedEmails.from} ILIKE ${`%${searchQuery}%`} OR
-                    ${receivedEmails.recipient} ILIKE ${`%${searchQuery}%`} OR
-                    ${receivedEmails.subject} ILIKE ${`%${searchQuery}%`} OR
-                    ${receivedEmails.messageId} ILIKE ${`%${searchQuery}%`} OR
-                    ${parsedEmails.fromText} ILIKE ${`%${searchQuery}%`} OR
-                    ${parsedEmails.subject} ILIKE ${`%${searchQuery}%`}
+                    ${structuredEmails.subject} ILIKE ${`%${searchQuery}%`} OR
+                    ${structuredEmails.messageId} ILIKE ${`%${searchQuery}%`} OR
+                    ${structuredEmails.fromData}::text ILIKE ${`%${searchQuery}%`} OR
+                    ${structuredEmails.toData}::text ILIKE ${`%${searchQuery}%`}
                 )`
             )
         }
 
-        // Fetch emails with parsed data
+        // Fetch emails from structuredEmails
         const emailsList = await db
             .select({
-                // Basic email info
-                id: receivedEmails.id,
-                messageId: receivedEmails.messageId,
-                from: receivedEmails.from,
-                recipient: receivedEmails.recipient,
-                subject: receivedEmails.subject,
-                receivedAt: receivedEmails.receivedAt,
-                status: receivedEmails.status,
-                isRead: receivedEmails.isRead,
-                readAt: receivedEmails.readAt,
-                
-                // Parsed email info
-                parsedFromText: parsedEmails.fromText,
-                parsedFromAddress: parsedEmails.fromAddress,
-                parsedFromName: parsedEmails.fromName,
-                parsedSubject: parsedEmails.subject,
-                parsedAttachmentCount: parsedEmails.attachmentCount,
-                parsedHasAttachments: parsedEmails.hasAttachments,
-                parsedEmailDate: parsedEmails.emailDate,
-                parseSuccess: parsedEmails.parseSuccess,
+                // Structured email info
+                id: structuredEmails.id,
+                emailId: structuredEmails.emailId,
+                messageId: structuredEmails.messageId,
+                subject: structuredEmails.subject,
+                date: structuredEmails.date,
+                fromData: structuredEmails.fromData,
+                toData: structuredEmails.toData,
+                attachments: structuredEmails.attachments,
+                parseSuccess: structuredEmails.parseSuccess,
+                parseError: structuredEmails.parseError,
+                createdAt: structuredEmails.createdAt,
             })
-            .from(receivedEmails)
-            .leftJoin(parsedEmails, eq(receivedEmails.id, parsedEmails.emailId))
+            .from(structuredEmails)
             .where(and(...whereConditions))
-            .orderBy(desc(receivedEmails.receivedAt))
+            .orderBy(desc(structuredEmails.date))
             .limit(limit)
             .offset(offset)
 
         // Get total count for pagination
         const totalCountResult = await db
             .select({ count: sql<number>`count(*)` })
-            .from(receivedEmails)
-            .leftJoin(parsedEmails, eq(receivedEmails.id, parsedEmails.emailId))
+            .from(structuredEmails)
             .where(and(...whereConditions))
 
         const totalCount = totalCountResult[0]?.count || 0
 
-        // Get unique domains for filter options
+        // Get unique domains for filter options - extract from toData JSON
         const uniqueDomainsResult = await db
             .select({
-                domain: sql<string>`DISTINCT SPLIT_PART(${receivedEmails.recipient}, '@', 2)`
+                domain: sql<string>`DISTINCT SPLIT_PART(${structuredEmails.toData}::jsonb->'addresses'->0->>'address', '@', 2)`
             })
-            .from(receivedEmails)
-            .where(eq(receivedEmails.userId, session.user.id))
-            .orderBy(sql`SPLIT_PART(${receivedEmails.recipient}, '@', 2)`)
+            .from(structuredEmails)
+            .where(eq(structuredEmails.userId, session.user.id))
+            .orderBy(sql`SPLIT_PART(${structuredEmails.toData}::jsonb->'addresses'->0->>'address', '@', 2)`)
 
         const uniqueDomains = uniqueDomainsResult.map(row => row.domain).filter(Boolean)
 
         // Format the emails
-        const formattedEmails = emailsList.map(email => ({
-            id: email.id,
-            messageId: email.messageId,
-            from: email.from,
-            recipient: email.recipient,
-            subject: email.subject || email.parsedSubject || 'No Subject',
-            receivedAt: email.receivedAt.toISOString(),
-            status: email.status,
-            domain: email.recipient.split('@')[1] || '',
-            isRead: email.isRead || false,
-            readAt: email.readAt?.toISOString(),
-            parsedData: {
-                fromText: email.parsedFromText,
-                fromAddress: email.parsedFromAddress,
-                fromName: email.parsedFromName,
-                subject: email.parsedSubject,
-                attachmentCount: email.parsedAttachmentCount || 0,
-                hasAttachments: email.parsedHasAttachments || false,
-                emailDate: email.parsedEmailDate?.toISOString(),
-                parseSuccess: email.parseSuccess,
+        const formattedEmails = emailsList.map(email => {
+            // Parse JSON fields for display
+            let parsedFromData = null
+            let parsedToData = null
+            let parsedAttachments = []
+
+            try {
+                if (email.fromData) parsedFromData = JSON.parse(email.fromData)
+                if (email.toData) parsedToData = JSON.parse(email.toData)
+                if (email.attachments) parsedAttachments = JSON.parse(email.attachments)
+            } catch (e) {
+                console.error('Failed to parse email data for display:', e)
             }
-        }))
+
+            const fromAddress = parsedFromData?.addresses?.[0]?.address || 'unknown'
+            const recipient = parsedToData?.addresses?.[0]?.address || 'unknown'
+            const domain = recipient.split('@')[1] || ''
+
+            return {
+                id: email.id,
+                emailId: email.emailId,
+                messageId: email.messageId,
+                from: fromAddress,
+                recipient: recipient,
+                subject: email.subject || 'No Subject',
+                receivedAt: email.date?.toISOString() || email.createdAt?.toISOString(),
+                status: email.parseSuccess ? 'processed' : 'failed',
+                domain: domain,
+                isRead: false, // structuredEmails doesn't have isRead field
+                readAt: null, // structuredEmails doesn't have readAt field
+                parsedData: {
+                    fromData: parsedFromData,
+                    toData: parsedToData,
+                    subject: email.subject,
+                    attachmentCount: parsedAttachments.length,
+                    hasAttachments: parsedAttachments.length > 0,
+                    emailDate: email.date?.toISOString(),
+                    parseSuccess: email.parseSuccess,
+                    parseError: email.parseError,
+                }
+            }
+        })
 
         return {
             success: true,
@@ -1462,29 +1531,29 @@ export async function markEmailAsRead(emailId: string) {
             return { error: 'Email ID is required' }
         }
 
-        // Update the email to mark it as read
-        const result = await db
-            .update(receivedEmails)
-            .set({
-                isRead: true,
-                readAt: new Date(),
-                updatedAt: new Date()
-            })
+        // Since structuredEmails doesn't have isRead/readAt fields,
+        // we'll just verify the email exists and belongs to the user
+        const emailExists = await db
+            .select({ id: structuredEmails.id })
+            .from(structuredEmails)
             .where(
                 and(
-                    eq(receivedEmails.id, emailId),
-                    eq(receivedEmails.userId, session.user.id)
+                    eq(structuredEmails.id, emailId),
+                    eq(structuredEmails.userId, session.user.id)
                 )
             )
-            .returning()
+            .limit(1)
 
-        if (result.length === 0) {
+        if (emailExists.length === 0) {
             return { error: 'Email not found or access denied' }
         }
 
+        // For now, we'll just return success since structuredEmails doesn't support read tracking
+        // In the future, you might want to create a separate table for tracking read status
         return { 
             success: true, 
-            data: result[0] 
+            message: 'Email marked as read (read tracking not implemented for structured emails)',
+            data: { id: emailId }
         }
     } catch (error) {
         console.error('Error marking email as read:', error)

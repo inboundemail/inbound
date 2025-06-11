@@ -1,11 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { receivedEmails, sesEvents, emailDomains, emailAddresses, SES_VERIFICATION_STATUS, DOMAIN_STATUS } from '@/lib/db/schema'
-import { eq, and, gte, desc, sql, count } from 'drizzle-orm'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+"use server"
 
-interface AnalyticsData {
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
+import { db } from '@/lib/db'
+import { structuredEmails, sesEvents, emailDomains, emailAddresses, DOMAIN_STATUS } from '@/lib/db/schema'
+import { eq, and, gte, desc, sql, count } from 'drizzle-orm'
+
+// Analytics response interface - only defining the API response structure
+export interface AnalyticsData {
   stats: {
     totalEmails: number
     emailsLast24h: number
@@ -41,6 +43,10 @@ interface AnalyticsData {
     hour: string
     count: number
   }>
+  emailsByDay?: Array<{
+    date: string
+    count: number
+  }>
   emailsByDomain: Array<{
     domain: string
     count: number
@@ -55,7 +61,7 @@ interface AnalyticsData {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function getAnalytics(): Promise<{ success: true; data: AnalyticsData } | { success: false; error: string }> {
   try {
     // Get user session
     const session = await auth.api.getSession({
@@ -65,10 +71,10 @@ export async function GET(request: NextRequest) {
     const timeStart = performance.now()
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+      return {
+        success: false,
+        error: 'Unauthorized'
+      }
     }
 
     const userId = session.user.id
@@ -79,7 +85,7 @@ export async function GET(request: NextRequest) {
     const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
     const last30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
-    // Get basic stats
+    // Get basic stats using structuredEmails instead of receivedEmails
     const [
       totalEmailsResult,
       emails24hResult,
@@ -91,31 +97,31 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       // Total emails
       db.select({ count: count() })
-        .from(receivedEmails)
-        .where(eq(receivedEmails.userId, userId)),
+        .from(structuredEmails)
+        .where(eq(structuredEmails.userId, userId)),
       
       // Emails last 24h
       db.select({ count: count() })
-        .from(receivedEmails)
+        .from(structuredEmails)
         .where(and(
-          eq(receivedEmails.userId, userId),
-          gte(receivedEmails.receivedAt, last24h)
+          eq(structuredEmails.userId, userId),
+          gte(structuredEmails.createdAt, last24h)
         )),
       
       // Emails last 7d
       db.select({ count: count() })
-        .from(receivedEmails)
+        .from(structuredEmails)
         .where(and(
-          eq(receivedEmails.userId, userId),
-          gte(receivedEmails.receivedAt, last7d)
+          eq(structuredEmails.userId, userId),
+          gte(structuredEmails.createdAt, last7d)
         )),
       
       // Emails last 30d
       db.select({ count: count() })
-        .from(receivedEmails)
+        .from(structuredEmails)
         .where(and(
-          eq(receivedEmails.userId, userId),
-          gte(receivedEmails.receivedAt, last30d)
+          eq(structuredEmails.userId, userId),
+          gte(structuredEmails.createdAt, last30d)
         )),
       
       // Total domains
@@ -138,19 +144,18 @@ export async function GET(request: NextRequest) {
         .where(eq(emailAddresses.userId, userId))
     ])
 
-    // Get recent emails with SES event data (last 7 days only)
+    // Get recent emails with SES event data (last 7 days only) using structuredEmails
     const recentEmailsQuery = await db
       .select({
-        id: receivedEmails.id,
-        messageId: receivedEmails.messageId,
-        from: receivedEmails.from,
-        recipient: receivedEmails.recipient,
-        subject: receivedEmails.subject,
-        receivedAt: receivedEmails.receivedAt,
-        status: receivedEmails.status,
-        isRead: receivedEmails.isRead,
-        readAt: receivedEmails.readAt,
-        metadata: receivedEmails.metadata,
+        id: structuredEmails.id,
+        messageId: structuredEmails.messageId,
+        fromData: structuredEmails.fromData,
+        toData: structuredEmails.toData,
+        subject: structuredEmails.subject,
+        createdAt: structuredEmails.createdAt,
+        textBody: structuredEmails.textBody,
+        htmlBody: structuredEmails.htmlBody,
+        rawContent: structuredEmails.rawContent,
         spamVerdict: sesEvents.spamVerdict,
         virusVerdict: sesEvents.virusVerdict,
         spfVerdict: sesEvents.spfVerdict,
@@ -160,28 +165,28 @@ export async function GET(request: NextRequest) {
         s3ContentSize: sesEvents.s3ContentSize,
         processingTimeMillis: sesEvents.processingTimeMillis
       })
-      .from(receivedEmails)
-      .leftJoin(sesEvents, eq(receivedEmails.sesEventId, sesEvents.id))
+      .from(structuredEmails)
+      .leftJoin(sesEvents, eq(structuredEmails.sesEventId, sesEvents.id))
       .where(and(
-        eq(receivedEmails.userId, userId),
-        gte(receivedEmails.receivedAt, last7d)
+        eq(structuredEmails.userId, userId),
+        gte(structuredEmails.createdAt, last7d)
       ))
-      .orderBy(desc(receivedEmails.receivedAt))
+      .orderBy(desc(structuredEmails.createdAt))
       .limit(100)
 
-    // Get emails by hour for the last 24 hours
+    // Get emails by hour for the last 24 hours using structuredEmails
     const emailsByHourQuery = await db
       .select({
-        hour: sql<string>`DATE_TRUNC('hour', ${receivedEmails.receivedAt})`,
+        hour: sql<string>`DATE_TRUNC('hour', ${structuredEmails.createdAt})`,
         count: count()
       })
-      .from(receivedEmails)
+      .from(structuredEmails)
       .where(and(
-        eq(receivedEmails.userId, userId),
-        gte(receivedEmails.receivedAt, last24h)
+        eq(structuredEmails.userId, userId),
+        gte(structuredEmails.createdAt, last24h)
       ))
-      .groupBy(sql`DATE_TRUNC('hour', ${receivedEmails.receivedAt})`)
-      .orderBy(sql`DATE_TRUNC('hour', ${receivedEmails.receivedAt})`)
+      .groupBy(sql`DATE_TRUNC('hour', ${structuredEmails.createdAt})`)
+      .orderBy(sql`DATE_TRUNC('hour', ${structuredEmails.createdAt})`)
 
     // Process emails by hour with proper formatting
     const emailsByHourMap = new Map<string, number>()
@@ -204,18 +209,19 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Get emails by domain (last 7 days)
+    // Get emails by domain (last 7 days) - extract domain from toData JSON
     const emailsByDomainQuery = await db
       .select({
-        domain: sql<string>`SPLIT_PART(${receivedEmails.recipient}, '@', 2)`,
+        domain: sql<string>`SPLIT_PART(JSON_EXTRACT_PATH_TEXT(${structuredEmails.toData}, 'addresses', '0', 'address'), '@', 2)`,
         count: count()
       })
-      .from(receivedEmails)
+      .from(structuredEmails)
       .where(and(
-        eq(receivedEmails.userId, userId),
-        gte(receivedEmails.receivedAt, last7d)
+        eq(structuredEmails.userId, userId),
+        gte(structuredEmails.createdAt, last7d),
+        sql`${structuredEmails.toData} IS NOT NULL`
       ))
-      .groupBy(sql`SPLIT_PART(${receivedEmails.recipient}, '@', 2)`)
+      .groupBy(sql`SPLIT_PART(JSON_EXTRACT_PATH_TEXT(${structuredEmails.toData}, 'addresses', '0', 'address'), '@', 2)`)
       .orderBy(desc(count()))
       .limit(10)
 
@@ -225,10 +231,10 @@ export async function GET(request: NextRequest) {
         avg: sql<number>`AVG(${sesEvents.processingTimeMillis})`
       })
       .from(sesEvents)
-      .innerJoin(receivedEmails, eq(receivedEmails.sesEventId, sesEvents.id))
+      .innerJoin(structuredEmails, eq(structuredEmails.sesEventId, sesEvents.id))
       .where(and(
-        eq(receivedEmails.userId, userId),
-        gte(receivedEmails.receivedAt, last30d)
+        eq(structuredEmails.userId, userId),
+        gte(structuredEmails.createdAt, last30d)
       ))
 
     // Get auth results stats (last 7 days)
@@ -242,10 +248,10 @@ export async function GET(request: NextRequest) {
         count: count()
       })
       .from(sesEvents)
-      .innerJoin(receivedEmails, eq(receivedEmails.sesEventId, sesEvents.id))
+      .innerJoin(structuredEmails, eq(structuredEmails.sesEventId, sesEvents.id))
       .where(and(
-        eq(receivedEmails.userId, userId),
-        gte(receivedEmails.receivedAt, last7d)
+        eq(structuredEmails.userId, userId),
+        gte(structuredEmails.createdAt, last7d)
       ))
       .groupBy(
         sesEvents.spfVerdict,
@@ -255,36 +261,60 @@ export async function GET(request: NextRequest) {
         sesEvents.virusVerdict
       )
 
+    // Helper function to parse email address from JSON data
+    const parseEmailAddress = (jsonData: string | null): { address: string; name?: string } | null => {
+      if (!jsonData) return null
+      try {
+        const parsed = JSON.parse(jsonData)
+        if (parsed?.addresses?.[0]?.address) {
+          return {
+            address: parsed.addresses[0].address,
+            name: parsed.addresses[0].name || undefined
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to parse email address JSON:', e)
+      }
+      return null
+    }
+
     // Process recent emails
-    const recentEmails = recentEmailsQuery.map(email => ({
-      id: email.id,
-      messageId: email.messageId,
-      from: email.from,
-      recipient: email.recipient,
-      subject: email.subject || 'No Subject',
-      receivedAt: email.receivedAt.toISOString(),
-      status: email.status,
-      domain: email.recipient.split('@')[1] || '',
-      isRead: email.isRead || false,
-      readAt: email.readAt?.toISOString(),
-      authResults: {
-        spf: email.spfVerdict || 'UNKNOWN',
-        dkim: email.dkimVerdict || 'UNKNOWN',
-        dmarc: email.dmarcVerdict || 'UNKNOWN',
-        spam: email.spamVerdict || 'UNKNOWN',
-        virus: email.virusVerdict || 'UNKNOWN'
-      },
-      hasContent: !!email.emailContent,
-      contentSize: email.s3ContentSize || undefined
-    }))
+    const recentEmails = recentEmailsQuery.map(email => {
+      const fromParsed = parseEmailAddress(email.fromData)
+      const toParsed = parseEmailAddress(email.toData)
+      
+      return {
+        id: email.id,
+        messageId: email.messageId || '',
+        from: fromParsed?.address || 'Unknown',
+        recipient: toParsed?.address || 'Unknown',
+        subject: email.subject || 'No Subject',
+        receivedAt: (email.createdAt || new Date()).toISOString(),
+        status: 'received', // Default status since structuredEmails doesn't have status field
+        domain: toParsed?.address?.split('@')[1] || '',
+        isRead: false, // structuredEmails doesn't track read status
+        readAt: undefined,
+        authResults: {
+          spf: email.spfVerdict || 'UNKNOWN',
+          dkim: email.dkimVerdict || 'UNKNOWN',
+          dmarc: email.dmarcVerdict || 'UNKNOWN',
+          spam: email.spamVerdict || 'UNKNOWN',
+          virus: email.virusVerdict || 'UNKNOWN'
+        },
+        hasContent: !!(email.textBody || email.htmlBody || email.rawContent || email.emailContent),
+        contentSize: email.s3ContentSize || undefined
+      }
+    })
 
     // Process emails by domain with percentages
     const totalEmailsForDomains = emailsByDomainQuery.reduce((sum, item) => sum + item.count, 0)
-    const emailsByDomain = emailsByDomainQuery.map(item => ({
-      domain: item.domain,
-      count: item.count,
-      percentage: totalEmailsForDomains > 0 ? Math.round((item.count / totalEmailsForDomains) * 100) : 0
-    }))
+    const emailsByDomain = emailsByDomainQuery
+      .filter(item => item.domain && item.domain !== '') // Filter out null/empty domains
+      .map(item => ({
+        domain: item.domain,
+        count: item.count,
+        percentage: totalEmailsForDomains > 0 ? Math.round((item.count / totalEmailsForDomains) * 100) : 0
+      }))
 
     // Process auth results stats
     const authResultsStats = {
@@ -341,14 +371,17 @@ export async function GET(request: NextRequest) {
 
     const timeEnd = performance.now()
     const timeTaken = timeEnd - timeStart
-    console.log(`🕑 Analytics API took ${timeTaken.toFixed(2)}ms`)
+    console.log(`🕑 Analytics Server Action took ${timeTaken.toFixed(2)}ms`)
 
-    return NextResponse.json(analyticsData)
+    return {
+      success: true,
+      data: analyticsData
+    }
   } catch (error) {
-    console.error('Analytics API error:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch analytics data' },
-      { status: 500 }
-    )
+    console.error('Analytics Server Action error:', error)
+    return {
+      success: false,
+      error: 'Failed to fetch analytics data'
+    }
   }
 } 

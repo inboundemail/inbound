@@ -208,7 +208,7 @@ export default async function MailPage({ searchParams }: PageProps) {
                 <div className="border border-border rounded-lg overflow-hidden bg-background">
                     {emails.map((email, index) => {
                         // Get first letter of sender name for avatar
-                        const senderName = email.parsedData.fromName || 
+                        const senderName = email.parsedData.fromData?.addresses?.[0]?.name || 
                                          email.from.split('@')[0] || 
                                          email.from.split('<')[0] || 
                                          email.from
@@ -259,7 +259,7 @@ export default async function MailPage({ searchParams }: PageProps) {
                                             {/* Time and Status */}
                                             <div className="text-right flex-shrink-0">
                                                 <div className="text-xs text-muted-foreground whitespace-nowrap mb-1">
-                                                    {formatDistanceToNow(new Date(email.receivedAt), { addSuffix: true })}
+                                                    {formatDistanceToNow(new Date(email.receivedAt || new Date()), { addSuffix: true })}
                                                 </div>
                                                 {getStatusBadge(email.status)}
                                             </div>

@@ -19,6 +19,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "inbound",
   description: "inbound email management platform",
+  metadataBase: new URL(process.env.BETTER_AUTH_URL || 'http://localhost:3000'),
 };
 
 export default function RootLayout({

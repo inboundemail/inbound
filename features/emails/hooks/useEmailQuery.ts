@@ -5,24 +5,51 @@ import { getEmailDetails } from '@/app/actions/primary'
 
 export interface EmailDetails {
   id: string
-  messageId: string
+  emailId: string
+  messageId: string | null
   from: string
   to: string
   recipient: string
   subject: string | null
-  receivedAt: Date
+  receivedAt: Date | null
   processedAt: Date | null
   status: string
   emailContent: {
     htmlBody: string | null
     textBody: string | null
     attachments: Array<{
-      filename: string
-      contentType: string
-      size: number
+      filename?: string
+      contentType?: string
+      size?: number
+      contentId?: string
+      contentDisposition?: string
     }>
-    headers: Record<string, string>
-    rawContent: string
+    headers: Record<string, any>
+    rawContent: string | null
+  }
+  parsedData: {
+    fromData: {
+      text: string
+      addresses: Array<{
+        name: string | null
+        address: string | null
+      }>
+    } | null
+    toData: {
+      text: string
+      addresses: Array<{
+        name: string | null
+        address: string | null
+      }>
+    } | null
+    ccData: any
+    bccData: any
+    replyToData: any
+    inReplyTo: string | null
+    references: string[]
+    priority: string | null
+    parseSuccess: boolean | null
+    parseError: string | null
   }
   authResults: {
     spf: string
@@ -44,7 +71,6 @@ export interface EmailDetails {
       error: string | null
     }
     commonHeaders: any
-    emailMetadata: any
   }
   createdAt: Date | null
   updatedAt: Date | null

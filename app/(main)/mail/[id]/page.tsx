@@ -74,8 +74,8 @@ export default async function EmailViewPage({ params }: PageProps) {
   }
 
   // Use parsed data when available, fallback to original data
-  const displayFrom = emailDetails.parsedData.fromText || emailDetails.from
-  const displaySubject = emailDetails.parsedData.subject || emailDetails.subject
+  const displayFrom = emailDetails.parsedData.fromData?.text || emailDetails.from
+  const displaySubject = emailDetails.subject
 
   return (
     <div className="flex flex-1 flex-col h-full bg-white">
@@ -104,7 +104,7 @@ export default async function EmailViewPage({ params }: PageProps) {
                   className="w-10 h-10 rounded-full flex items-center justify-center text-white font-medium"
                   style={{
                     background: (() => {
-                      const hash = displayFrom.split('').reduce((a, b) => {
+                      const hash = displayFrom.split('').reduce((a: number, b: string) => {
                         a = ((a << 5) - a) + b.charCodeAt(0)
                         return a & a
                       }, 0)
@@ -114,15 +114,15 @@ export default async function EmailViewPage({ params }: PageProps) {
                     })()
                   }}
                 >
-                  {(emailDetails.parsedData.fromName || displayFrom).charAt(0).toUpperCase()}
+                  {(emailDetails.parsedData.fromData?.addresses?.[0]?.name || displayFrom).charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-gray-900">
-                      {emailDetails.parsedData.fromName || displayFrom.split('<')[0].trim() || displayFrom.split('@')[0]}
+                      {emailDetails.parsedData.fromData?.addresses?.[0]?.name || displayFrom.split('<')[0].trim() || displayFrom.split('@')[0]}
                     </span>
                     <span className="text-gray-500 text-sm">
-                      &lt;{emailDetails.parsedData.fromAddress || (displayFrom.includes('<') ? displayFrom.split('<')[1].replace('>', '') : displayFrom)}&gt;
+                      &lt;{emailDetails.parsedData.fromData?.addresses?.[0]?.address || (displayFrom.includes('<') ? displayFrom.split('<')[1].replace('>', '') : displayFrom)}&gt;
                     </span>
                   </div>
                   <div className="text-sm text-gray-600 mt-1">
@@ -133,7 +133,14 @@ export default async function EmailViewPage({ params }: PageProps) {
 
               <div className="text-right">
                 <div className="text-sm text-gray-600">
-                  {format(emailDetails.parsedData.emailDate ? new Date(emailDetails.parsedData.emailDate) : emailDetails.receivedAt, 'MMM d, yyyy, h:mm a')}
+                  {format(
+                    emailDetails.parsedData.emailDate 
+                      ? new Date(emailDetails.parsedData.emailDate) 
+                      : emailDetails.receivedAt 
+                        ? new Date(emailDetails.receivedAt) 
+                        : new Date(), 
+                    'MMM d, yyyy, h:mm a'
+                  )}
                 </div>
                 <div className="flex items-center gap-2 mt-1">
                   <Badge className="bg-slate-100 text-slate-700 border-slate-200">

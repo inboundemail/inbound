@@ -38,9 +38,7 @@ left off:
 - need to enable the email redirection and stuff 
 
 
-todo today (june 9th):
+todo today (june 11th):
 
-- dashboard can be a server side rendered page
-- need to fix the mail/[id]/ page to be formatted better
-- domains can be a server side rendered page, we need to do something with a client search bar tho
-- need to fix issue on /analytics ✅
+- finish updating all of the tables to use the structuredEmails table (for analytics and everything) (need to move away from @parsedEmails & @receivedEmails)
+- implement the email sending once we have fully migrated to the structured emails table

@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { receivedEmails } from '@/lib/db/schema'
-import { eq } from 'drizzle-orm'
 
 export async function POST(request: NextRequest) {
   try {

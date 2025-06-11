@@ -106,7 +106,7 @@ export const sesEvents = pgTable('ses_events', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-export const receivedEmails = pgTable('received_emails', {
+export const receivedEmails = pgTable('received_emails', { // deprecating.... use structuredEmails instead
   id: varchar('id', { length: 255 }).primaryKey(),
   sesEventId: varchar('ses_event_id', { length: 255 }).notNull(), // Reference to sesEvents table
   messageId: varchar('message_id', { length: 255 }).notNull(),
@@ -157,7 +157,7 @@ export const receivedEmails = pgTable('received_emails', {
 });
 
 // Parsed Emails table - stores structured parsed email data with individual columns
-export const parsedEmails = pgTable('parsed_emails', {
+export const parsedEmails = pgTable('parsed_emails', { // deprecating.... use structuredEmails insteadc
   id: varchar('id', { length: 255 }).primaryKey(),
   emailId: varchar('email_id', { length: 255 }).notNull(), // Reference to receivedEmails table
   messageId: varchar('message_id', { length: 255 }), // Parsed message ID from email headers
@@ -212,36 +212,6 @@ export const parsedEmails = pgTable('parsed_emails', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-export const webhookDeliveries = pgTable('webhook_deliveries', {
-  id: varchar('id', { length: 255 }).primaryKey(),
-  emailId: varchar('email_id', { length: 255 }),
-  webhookId: varchar('webhook_id', { length: 255 }).notNull(), // Reference to webhooks table
-  endpoint: varchar('endpoint', { length: 500 }).notNull(), // Keep for backward compatibility
-  payload: text('payload'), // JSON payload sent
-  status: varchar('status', { length: 50 }).notNull(), // 'pending', 'success', 'failed'
-  attempts: integer('attempts').default(0),
-  lastAttemptAt: timestamp('last_attempt_at'),
-  responseCode: integer('response_code'),
-  responseBody: text('response_body'),
-  error: text('error'),
-  deliveryTime: integer('delivery_time'), // Time in milliseconds
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-});
-
-export const domainDnsRecords = pgTable('domain_dns_records', {
-  id: varchar('id', { length: 255 }).primaryKey(),
-  domainId: varchar('domain_id', { length: 255 }).notNull(),
-  recordType: varchar('record_type', { length: 10 }).notNull(), // 'TXT', 'MX', etc.
-  name: varchar('name', { length: 255 }).notNull(),
-  value: text('value').notNull(),
-  isRequired: boolean('is_required').default(true),
-  isVerified: boolean('is_verified').default(false),
-  lastChecked: timestamp('last_checked'),
-  createdAt: timestamp('created_at').defaultNow(),
-});
-
-// Structured Emails table - matches ParsedEmailData type exactly
 export const structuredEmails = pgTable('structured_emails', {
   id: varchar('id', { length: 255 }).primaryKey(),
   emailId: varchar('email_id', { length: 255 }).notNull(), // Reference to receivedEmails table
@@ -286,6 +256,38 @@ export const structuredEmails = pgTable('structured_emails', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
+
+export const webhookDeliveries = pgTable('webhook_deliveries', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  emailId: varchar('email_id', { length: 255 }),
+  webhookId: varchar('webhook_id', { length: 255 }).notNull(), // Reference to webhooks table
+  endpoint: varchar('endpoint', { length: 500 }).notNull(), // Keep for backward compatibility
+  payload: text('payload'), // JSON payload sent
+  status: varchar('status', { length: 50 }).notNull(), // 'pending', 'success', 'failed'
+  attempts: integer('attempts').default(0),
+  lastAttemptAt: timestamp('last_attempt_at'),
+  responseCode: integer('response_code'),
+  responseBody: text('response_body'),
+  error: text('error'),
+  deliveryTime: integer('delivery_time'), // Time in milliseconds
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const domainDnsRecords = pgTable('domain_dns_records', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  domainId: varchar('domain_id', { length: 255 }).notNull(),
+  recordType: varchar('record_type', { length: 10 }).notNull(), // 'TXT', 'MX', etc.
+  name: varchar('name', { length: 255 }).notNull(),
+  value: text('value').notNull(),
+  isRequired: boolean('is_required').default(true),
+  isVerified: boolean('is_verified').default(false),
+  lastChecked: timestamp('last_checked'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Structured Emails table - matches ParsedEmailData type exactly
+
 
 // Export types for Better Auth tables (using the imported tables)
 export { user, session, account, verification, apikey };

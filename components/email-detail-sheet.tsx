@@ -150,7 +150,7 @@ export function EmailDetailSheet({ emailId, isOpen, onClose }: EmailDetailSheetP
                     <span className="font-medium">Recipient:</span> {emailDetails.recipient}
                   </div>
                   <div>
-                    <span className="font-medium">Received:</span> {formatDistanceToNow(emailDetails.receivedAt, { addSuffix: true })}
+                    <span className="font-medium">Received:</span> {formatDistanceToNow(emailDetails.receivedAt || new Date(), { addSuffix: true })}
                   </div>
                 </div>
               </div>
@@ -279,7 +279,7 @@ export function EmailDetailSheet({ emailId, isOpen, onClose }: EmailDetailSheetP
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => copyToClipboard(emailDetails.emailContent.rawContent, 'raw')}
+                      onClick={() => copyToClipboard(emailDetails.emailContent.rawContent || '', 'raw')}
                     >
                       {copiedItems.raw ? (
                         <CheckIcon className="h-4 w-4 mr-2" />
@@ -311,7 +311,7 @@ export function EmailDetailSheet({ emailId, isOpen, onClose }: EmailDetailSheetP
                         <div className="flex-1">
                           <div className="font-medium">{attachment.filename}</div>
                           <div className="text-sm text-muted-foreground">
-                            {attachment.contentType} • {formatBytes(attachment.size)}
+                            {attachment.contentType} • {formatBytes(attachment.size || 0)}
                           </div>
                         </div>
                       </div>

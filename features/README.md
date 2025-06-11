@@ -7,10 +7,8 @@ This directory follows the react-query best practices outlined in the project ru
 ```
 features/
 ├── analytics/
-│   ├── api/
-│   │   └── analyticsApi.ts      # API service layer
 │   ├── hooks/
-│   │   └── useAnalyticsQuery.ts # React Query hooks
+│   │   └── useAnalyticsQuery.ts # React Query hooks (uses server actions)
 │   └── components/              # Feature-specific components (optional)
 ├── domains/
 │   ├── api/
@@ -27,10 +25,10 @@ features/
 - Each feature has its own directory with `api/`, `hooks/`, and optionally `components/`
 - This improves modularity and makes features easy to find and maintain
 
-### 2. API Service Layer
-- All API interactions are abstracted into service modules
-- Provides consistent error handling and request/response typing
-- Makes testing easier by allowing easy mocking
+### 2. Server Actions Integration
+- Features can use either API service layers or Next.js server actions
+- Server actions provide type-safe server-side logic with automatic serialization
+- API service layers still useful for external APIs or complex client-side logic
 
 ### 3. Custom Hooks for Data Fetching
 - Encapsulate react-query logic within custom hooks
@@ -44,19 +42,25 @@ features/
 
 ## Usage Examples
 
-### Basic Query Hook
+### Basic Query Hook with Server Actions
 
 ```typescript
 // features/analytics/hooks/useAnalyticsQuery.ts
 import { useQuery } from '@tanstack/react-query'
-import { analyticsApi } from '../api/analyticsApi'
+import { getAnalytics } from '@/app/actions/analytics'
 
 export const useAnalyticsQuery = () => {
   return useQuery({
     queryKey: ['analytics', 'data'],
-    queryFn: analyticsApi.getAnalytics,
-    refetchInterval: 30 * 1000, // 30 seconds
-    staleTime: 1 * 60 * 1000,   // 1 minute
+    queryFn: async () => {
+      const result = await getAnalytics()
+      if (!result.success) {
+        throw new Error(result.error)
+      }
+      return result.data
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
   })
 }
 ```
@@ -116,18 +120,23 @@ export const useDomainVerifyMutation = () => {
 
 ## Error Handling
 
-### API Layer
+### Server Action Layer
 ```typescript
-export const analyticsApi = {
-  getAnalytics: async (): Promise<AnalyticsData> => {
-    const response = await fetch('/api/analytics')
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch analytics data')
+// app/actions/analytics.ts
+export async function getAnalytics(): Promise<{ success: true; data: AnalyticsData } | { success: false; error: string }> {
+  try {
+    const session = await auth.api.getSession({ headers: await headers() })
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' }
     }
     
-    return response.json()
-  },
+    // Database queries...
+    const analyticsData = { /* ... */ }
+    
+    return { success: true, data: analyticsData }
+  } catch (error) {
+    return { success: false, error: 'Failed to fetch analytics data' }
+  }
 }
 ```
 
@@ -152,16 +161,16 @@ useEffect(() => {
 
 ## Testing
 
-### Mock API Services
+### Mock Server Actions
 ```typescript
 // __tests__/analytics.test.ts
-import { analyticsApi } from '@/features/analytics/api/analyticsApi'
+import { getAnalytics } from '@/app/actions/analytics'
 
-jest.mock('@/features/analytics/api/analyticsApi')
-const mockAnalyticsApi = analyticsApi as jest.Mocked<typeof analyticsApi>
+jest.mock('@/app/actions/analytics')
+const mockGetAnalytics = getAnalytics as jest.MockedFunction<typeof getAnalytics>
 
 test('should fetch analytics data', async () => {
-  mockAnalyticsApi.getAnalytics.mockResolvedValue(mockData)
+  mockGetAnalytics.mockResolvedValue({ success: true, data: mockData })
   // Test component using useAnalyticsQuery
 })
 ```
