@@ -320,7 +320,8 @@ export const handler = async (event: any, context: any) => {
     // const targetApiUrl = hasTestSubject && serviceApiUrlDev ? serviceApiUrlDev : serviceApiUrl;
 
     // Build list of endpoints, filtering out null/undefined values
-    const endpoints = [serviceApiUrl, serviceApiUrlDev, 'https://inbound.new'].filter(Boolean);
+    // const endpoints = [serviceApiUrl, serviceApiUrlDev, 'https://inbound.new'].filter(Boolean);
+    const endpoints = [serviceApiUrl].filter(Boolean);
     
     console.log(`🚀 Lambda - Will attempt to send to ${endpoints.length} endpoints:`, endpoints);
 
