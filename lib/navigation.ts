@@ -28,7 +28,7 @@ export const navigationConfig: NavigationConfig = {
       description: "View and manage your received emails"
     },
     {
-      title: "Domains",
+      title: "Email Addresses",
       url: "/emails",
       icon: GlobeIcon,
       description: "Manage your email domains and addresses"

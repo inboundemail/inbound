@@ -1,3 +1,32 @@
+// This is the primary initialization file for the inbound AWS implementation. 
+
+/**
+ * Inbound Email Processing System - AWS CDK Stack
+ * 
+ * This stack creates a complete email processing infrastructure for receiving and processing
+ * inbound emails through AWS SES (Simple Email Service). The system consists of:
+ * 
+ * Core Services:
+ * - S3 Bucket: Stores raw email messages (references existing bucket)
+ * - Lambda Function: Processes incoming emails and forwards to API
+ * - SES Receipt Rules: Routes incoming emails to S3 and triggers Lambda
+ * - SQS Dead Letter Queue: Handles failed email processing attempts
+ * 
+ * Monitoring & Observability:
+ * - CloudWatch Alarms: Monitor Lambda errors, duration, and throttling
+ * - CloudWatch Logs: Automatic logging for Lambda function
+ * 
+ * Security & Permissions:
+ * - IAM Roles: Grant necessary permissions for SES, S3, and Lambda interactions
+ * - Resource Policies: Control access between services
+ * 
+ * Configuration:
+ * - Environment Variables: Service API URL, API keys, bucket names
+ * - Outputs: Resource names and ARNs for application configuration
+ * 
+ * Flow: Email → SES → S3 Storage → Lambda Processing → External API
+ */
+
 import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as s3 from 'aws-cdk-lib/aws-s3';

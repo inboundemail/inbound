@@ -18,13 +18,17 @@ export const auth = betterAuth({
         github: {
             clientId: process.env.GITHUB_CLIENT_ID as string,
             clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
-            redirectURI: "https://inbound.new/api/auth/callback/github"
+            ...(process.env.NODE_ENV !== 'development' && {
+                redirectURI: "https://inbound.new/api/auth/callback/github"
+            })
         },
         google: { 
             prompt: "select_account", 
             clientId: process.env.GOOGLE_CLIENT_ID as string, 
             clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-            redirectURI: "https://inbound.new/api/auth/callback/google"
+            ...(process.env.NODE_ENV !== 'development' && {
+                redirectURI: "https://inbound.new/api/auth/callback/google"
+            })
         },
     },
     plugins: [

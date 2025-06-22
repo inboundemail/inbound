@@ -212,16 +212,17 @@ export async function getAnalytics(): Promise<{ success: true; data: AnalyticsDa
     // Get emails by domain (last 7 days) - extract domain from toData JSON
     const emailsByDomainQuery = await db
       .select({
-        domain: sql<string>`SPLIT_PART(JSON_EXTRACT_PATH_TEXT(${structuredEmails.toData}, 'addresses', '0', 'address'), '@', 2)`,
+        domain: sql<string>`SPLIT_PART((${structuredEmails.toData}::jsonb->'addresses'->0->>'address'), '@', 2)`,
         count: count()
       })
       .from(structuredEmails)
       .where(and(
         eq(structuredEmails.userId, userId),
         gte(structuredEmails.createdAt, last7d),
-        sql`${structuredEmails.toData} IS NOT NULL`
+        sql`${structuredEmails.toData} IS NOT NULL`,
+        sql`${structuredEmails.toData}::jsonb->'addresses'->0->>'address' IS NOT NULL`
       ))
-      .groupBy(sql`SPLIT_PART(JSON_EXTRACT_PATH_TEXT(${structuredEmails.toData}, 'addresses', '0', 'address'), '@', 2)`)
+      .groupBy(sql`SPLIT_PART((${structuredEmails.toData}::jsonb->'addresses'->0->>'address'), '@', 2)`)
       .orderBy(desc(count()))
       .limit(10)
 

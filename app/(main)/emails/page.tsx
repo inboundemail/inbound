@@ -1,566 +1,405 @@
 "use client"
 
-import { useEffect, useState } from 'react'
-import { useSession } from '@/lib/auth-client'
-import { useRouter } from 'next/navigation'
-import { Card, CardContent } from '@/components/ui/card'
+import { useState, useEffect } from 'react'
+import { getDomainStats } from '@/app/actions/primary'
+import { getDomainDetails } from '@/app/actions/domains'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-
-import { 
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-
-import { 
-  CheckCircleIcon, 
-  XCircleIcon, 
-  ClockIcon, 
-  SearchIcon,
-  PlusIcon,
-  MailIcon,
-  GlobeIcon,
-  TrendingUpIcon,
-  CalendarIcon,
-  RefreshCwIcon,
-  ExternalLinkIcon,
-  ArrowUpDownIcon,
-  ArrowUpIcon,
-  ArrowDownIcon,
-  CloudIcon,
-} from 'lucide-react'
+import { CopyButton } from '@/components/copy-button'
+import { HiCheckCircle, HiChevronDown, HiClipboard, HiGlobeAlt, HiLightningBolt, HiMail, HiPlus, HiRefresh, HiX } from 'react-icons/hi'
+import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { formatDistanceToNow } from 'date-fns'
-import { toast } from 'sonner'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
-import { getDomainStats } from '@/app/actions/primary'
+import Link from 'next/link'
 
-interface DomainStats {
-  id: string
-  domain: string
-  status: string
-  isVerified: boolean
-  emailAddressCount: number
-  emailsLast24h: number
-  createdAt: string
-  updatedAt: string
+interface ProcessedDomain {
+  domain: any
+  details: any
 }
-
-interface DomainStatsResponse {
-  domains: DomainStats[]
-  totalDomains: number
-  verifiedDomains: number
-  totalEmailAddresses: number
-  totalEmailsLast24h: number
-  limits?: {
-    allowed: boolean
-    unlimited: boolean
-    balance: number | null
-    current: number
-    remaining: number | null
-  } | null
-}
-
-type SortField = 'domain' | 'status' | 'emailAddressCount' | 'emailsLast24h' | 'createdAt'
-type SortDirection = 'asc' | 'desc'
 
 export default function EmailsPage() {
-  const { data: session } = useSession()
-  const router = useRouter()
-  const [domainStats, setDomainStats] = useState<DomainStatsResponse | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [domainStats, setDomainStats] = useState<any>(null)
+  const [allDomainsWithDetails, setAllDomainsWithDetails] = useState<ProcessedDomain[]>([])
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [filteredDomains, setFilteredDomains] = useState<DomainStats[]>([])
+  const [expandedDomains, setExpandedDomains] = useState<Record<string, boolean>>({})
+  const [copiedEmail, setCopiedEmail] = useState<string | null>(null)
 
-  // Sorting state
-  const [sortField, setSortField] = useState<SortField>('createdAt')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
-
-  useEffect(() => {
-    if (session?.user) {
-      fetchDomainStats()
-    }
-  }, [session])
-
-  useEffect(() => {
-    if (domainStats) {
-      let filtered = domainStats.domains.filter(domain => {
-        const matchesSearch = domain.domain.toLowerCase().includes(searchQuery.toLowerCase())
-        
-        const matchesStatus = statusFilter === 'all' || 
-          (statusFilter === 'verified' && domain.isVerified) ||
-          (statusFilter === DOMAIN_STATUS.PENDING && domain.status === DOMAIN_STATUS.PENDING) ||
-          (statusFilter === DOMAIN_STATUS.FAILED && domain.status === DOMAIN_STATUS.FAILED)
-        return matchesSearch && matchesStatus
-      })
-
-      // Apply sorting
-      filtered.sort((a, b) => {
-        let aValue: any = a[sortField]
-        let bValue: any = b[sortField]
-
-        // Handle special cases
-        if (sortField === 'status') {
-          // Sort by verification status first, then by status
-          const statusOrder = {
-            [DOMAIN_STATUS.VERIFIED]: 4,
-            [DOMAIN_STATUS.PENDING]: 2,
-            [DOMAIN_STATUS.FAILED]: 1
-          }
-          aValue = statusOrder[a.status as keyof typeof statusOrder] || 0
-          bValue = statusOrder[b.status as keyof typeof statusOrder] || 0
-        } else if (sortField === 'createdAt') {
-          aValue = new Date(a.createdAt).getTime()
-          bValue = new Date(b.createdAt).getTime()
-        }
-
-        if (sortDirection === 'asc') {
-          return aValue > bValue ? 1 : -1
-        } else {
-          return aValue < bValue ? 1 : -1
-        }
-      })
-
-      setFilteredDomains(filtered)
-    }
-  }, [domainStats, searchQuery, statusFilter, sortField, sortDirection])
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortField(field)
-      setSortDirection('asc')
-    }
-  }
-
-  const getSortIcon = (field: SortField) => {
-    if (sortField !== field) {
-      return <ArrowUpDownIcon className="h-3 w-3 text-muted-foreground" />
-    }
-    return sortDirection === 'asc' 
-      ? <ArrowUpIcon className="h-3 w-3 text-purple-600" />
-      : <ArrowDownIcon className="h-3 w-3 text-purple-600" />
-  }
-
-  const fetchDomainStats = async () => {
+  const fetchData = async () => {
     try {
-      setIsLoading(true)
+      setLoading(true)
       setError(null)
       
-      const result = await getDomainStats()
+      // Fetch domain stats
+      const domainStatsResult = await getDomainStats()
       
-      if ('error' in result) {
-        console.error('Error fetching domain stats:', result.error)
-        setError(result.error || 'Unknown error occurred')
-        toast.error('Failed to load domain statistics')
-      } else {
-        setDomainStats(result)
-      }
-    } catch (error) {
-      console.error('Error fetching domain stats:', error)
-      setError(error instanceof Error ? error.message : 'Failed to load domain statistics')
-      toast.error('Failed to load domain statistics')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+             if ('error' in domainStatsResult) {
+         setError(domainStatsResult.error || 'Unknown error occurred')
+         return
+       }
 
-  const handleRowClick = (domainId: string) => {
-    // Navigate directly to domain detail page
-    router.push(`/emails/${domainId}`)
-  }
-
-
-
-  const getStatusBadge = (domain: DomainStats) => {
-    if (domain.isVerified) {
-      return (
-        <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
-          <CheckCircleIcon className="h-3 w-3 mr-1" />
-          Verified
-        </Badge>
+      setDomainStats(domainStatsResult)
+      
+      // Fetch detailed information for all domains to show email addresses
+      const domainsWithDetails = await Promise.allSettled(
+        domainStatsResult.domains.map(async (domain: any) => {
+          // Only fetch details for verified domains that might have email addresses
+          if (domain.isVerified && domain.emailAddressCount > 0) {
+            const detailsResult = await getDomainDetails(domain.domain, domain.id)
+            return {
+              domain,
+              details: 'success' in detailsResult && detailsResult.success ? detailsResult : null
+            }
+          }
+          return {
+            domain,
+            details: null
+          }
+        })
       )
+
+      const processedDomains = domainsWithDetails
+        .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
+        .map(result => result.value)
+
+      setAllDomainsWithDetails(processedDomains)
+      
+      // Auto-expand domains with email addresses
+      const autoExpanded: Record<string, boolean> = {}
+      processedDomains.forEach(({ domain, details }) => {
+        if (details?.emailAddresses && details.emailAddresses.length > 0) {
+          autoExpanded[domain.id] = true
+        }
+      })
+      setExpandedDomains(autoExpanded)
+      
+    } catch (err) {
+      setError('Failed to load domain data')
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  const toggleDomain = (domainId: string) => {
+    setExpandedDomains(prev => ({
+      ...prev,
+      [domainId]: !prev[domainId]
+    }))
+  }
+
+  const copyEmail = async (email: string) => {
+    try {
+      await navigator.clipboard.writeText(email)
+      setCopiedEmail(email)
+      setTimeout(() => setCopiedEmail(null), 2000)
+    } catch (err) {
+      console.error("Failed to copy email:", err)
+    }
+  }
+
+  const getDomainIconColor = (domain: any) => {
+    if (domain.isVerified) {
+      return '#059669' // green-600 - verified
     }
     
     switch (domain.status) {
       case DOMAIN_STATUS.PENDING:
-        return (
-          <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200 transition-colors">
-            <ClockIcon className="h-3 w-3 mr-1" />
-            Pending
-          </Badge>
-        )
+        return '#eab308' // yellow-500 - pending DNS check
       case DOMAIN_STATUS.VERIFIED:
-        return (
-          <Badge className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 transition-colors">
-            <ClockIcon className="h-3 w-3 mr-1" />
-            SES Pending
-          </Badge>
-        )
+        return '#2563eb' // blue-600 - SES setup
       case DOMAIN_STATUS.FAILED:
-        return (
-          <Badge className="bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-200 transition-colors">
-            <XCircleIcon className="h-3 w-3 mr-1" />
-            Failed
-          </Badge>
-        )
+        return '#dc2626' // red-600 - failed
       default:
-        return (
-          <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors">
-            <ClockIcon className="h-3 w-3 mr-1" />
-            {domain.status}
-          </Badge>
-        )
+        return '#64748b' // slate-500 - unknown
     }
   }
 
-  const getGlobeIconColor = (domain: DomainStats) => {
-    if (domain.isVerified || domain.status === DOMAIN_STATUS.VERIFIED) {
-      return {
-        bgColor: 'bg-purple-100',
-        borderColor: 'border-purple-200',
-        iconColor: 'text-purple-600'
-      }
-    }
-    
-    switch (domain.status) {
-      case DOMAIN_STATUS.PENDING:
-        return {
-          bgColor: 'bg-amber-100',
-          borderColor: 'border-amber-200',
-          iconColor: 'text-amber-600'
-        }
-      case DOMAIN_STATUS.VERIFIED:
-        return {
-          bgColor: 'bg-blue-100',
-          borderColor: 'border-blue-200',
-          iconColor: 'text-blue-600'
-        }
-      case DOMAIN_STATUS.FAILED:
-        return {
-          bgColor: 'bg-rose-100',
-          borderColor: 'border-rose-200',
-          iconColor: 'text-rose-600'
-        }
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "active":
+      case "verified":
+      case "ready":
+        return "bg-emerald-500"
+      case "pending":
+      case "processing":
+        return "bg-amber-500"
+      case "inactive":
+      case "error":
+        return "bg-red-500"
       default:
-        return {
-          bgColor: 'bg-slate-100',
-          borderColor: 'border-slate-200',
-          iconColor: 'text-slate-600'
-        }
+        return "bg-gray-400"
     }
   }
 
-  if (isLoading) {
+  const getBorderColor = (isActive: boolean, isConfigured: boolean) => {
+    if (isActive && isConfigured) {
+      return "border-l-emerald-500"
+    } else if (isActive) {
+      return "border-l-amber-500" 
+    } else {
+      return "border-l-red-500"
+    }
+  }
+
+  const getEmailStatus = (email: any) => {
+    if (email.isActive && email.isReceiptRuleConfigured) {
+      return "active"
+    } else if (email.isActive) {
+      return "pending"
+    } else {
+      return "inactive"
+    }
+  }
+
+  const getReadyStatus = (email: any) => {
+    if (email.isReceiptRuleConfigured) {
+      return "ready"
+    } else if (email.isActive) {
+      return "processing"
+    } else {
+      return "error"
+    }
+  }
+
+  if (loading) {
     return (
-      <div className="flex flex-1 flex-col gap-6 p-6">
-        {/* Header with Gradient */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-8 text-white shadow-xl">
-          <div className="absolute inset-0 bg-black/10"></div>
-          <div className="relative z-10">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-4xl font-bold tracking-tight mb-2">Domains</h1>
-                <p className="text-purple-100 text-lg">
-                  Manage your email domains and monitor their performance
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Button variant="secondary" disabled className="bg-white/20 border-white/30 text-white hover:bg-white/30">
-                  <RefreshCwIcon className="h-4 w-4 mr-2" />
-                  Refresh
-                </Button>
-              </div>
-            </div>
-          </div>
-          {/* Decorative elements */}
-          <div className="absolute -top-4 -right-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-          <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
-        </div>
-
-        {/* Loading Table */}
-        <div>
-          {/* Search and Filters */}
-          <div className="flex items-center gap-4 mb-6">
-            <div className="relative flex-1">
-              <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search..."
-                disabled
-                className="pl-10 bg-background"
-              />
-            </div>
-            <Select disabled>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="All Statuses" />
-              </SelectTrigger>
-            </Select>
-            <Select disabled>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="All Regions" />
-              </SelectTrigger>
-            </Select>
-          </div>
-          
-          <div className="flex items-center justify-center py-12">
-            <div className="flex items-center gap-2">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-              <span className="text-muted-foreground">Loading domains...</span>
-            </div>
-          </div>
+      <div className="flex flex-1 flex-col gap-4 p-4">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-slate-500">Loading domains...</div>
         </div>
       </div>
     )
   }
 
-  return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
-      {/* Header with Gradient */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-8 text-white shadow-xl">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative z-10">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold tracking-tight mb-2">Domains</h1>
-              <p className="text-purple-100 text-lg">
-                Manage your email domains and monitor their performance
-              </p>
-              {domainStats && (
-                <div className="flex items-center gap-6 mt-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-white rounded-full"></div>
-                    <span className="text-purple-100">{domainStats.totalDomains} Total Domains</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-300 rounded-full"></div>
-                    <span className="text-purple-100">{domainStats.verifiedDomains} Verified</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-300 rounded-full"></div>
-                    <span className="text-purple-100">{domainStats.totalEmailAddresses} Email Addresses</span>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="secondary"
-                onClick={fetchDomainStats}
-                disabled={isLoading}
-                className="bg-white/20 border-white/30 text-white hover:bg-white/30 backdrop-blur-sm"
-              >
-                <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-              
-              <Button
-                onClick={() => router.push("/add")}
-                disabled={isLoading || (domainStats?.limits ? !domainStats.limits.allowed : false)}
-                className="bg-white text-purple-700 hover:bg-white/90 border-white/30 backdrop-blur-sm font-medium"
-              >
-                <PlusIcon className="h-4 w-4 mr-2" />
-                Add Domain
-              </Button>
-            </div>
-          </div>
-        </div>
-        {/* Decorative elements */}
-        <div className="absolute -top-4 -right-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-        <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
-        <div className="absolute top-1/2 right-1/4 w-16 h-16 bg-white/5 rounded-full blur-lg"></div>
-      </div>
-
-      {/* Error State */}
-      {error && (
+  if (error) {
+    return (
+      <div className="flex flex-1 flex-col gap-4 p-4">
         <Card className="border-red-200 bg-red-50">
-          <CardContent className="pt-6">
+          <CardContent className="p-6">
             <div className="flex items-center gap-2 text-red-600">
-              <XCircleIcon className="h-4 w-4" />
+              <HiX className="h-4 w-4" />
               <span>{error}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={fetchDomainStats}
-                className="ml-auto text-red-600 hover:text-red-700"
-              >
+              <Button variant="ghost" size="sm" onClick={fetchData} className="ml-auto text-red-600 hover:text-red-700">
                 Try Again
               </Button>
             </div>
           </CardContent>
         </Card>
-      )}
+      </div>
+    )
+  }
 
-      {/* Domains Table */}
-      <div>
-        {/* Search and Filters */}
-        <div className="flex items-center gap-4 mb-3">
-          <div className="relative flex-1">
-            <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 bg-background"
-            />
+  if (!domainStats) return null
+
+  const totalActiveEmails = allDomainsWithDetails.reduce(
+    (sum: number, item: any) => sum + (item.details?.emailAddresses?.filter((e: any) => e.isActive).length || 0), 0
+  )
+  const totalConfiguredEmails = allDomainsWithDetails.reduce(
+    (sum: number, item: any) => sum + (item.details?.emailAddresses?.filter((e: any) => e.isReceiptRuleConfigured).length || 0), 0
+  )
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+      <div className="max-w-5xl mx-auto">
+        {/* Compact Header */}
+        <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4 mb-6">
+          <div>
+            <h1 className="text-xl font-semibold mb-1">Email Management</h1>
+            <div className="flex items-center gap-4 text-sm text-slate-300">
+              <span>{domainStats.verifiedDomains}/{domainStats.totalDomains} domains verified</span>
+              <span>{totalActiveEmails} active addresses</span>
+              <span className="flex items-center gap-1">
+                <HiLightningBolt className="h-3 w-3" />
+                {totalConfiguredEmails} configured
+              </span>
+            </div>
           </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="All Statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="verified">Verified</SelectItem>
-              <SelectItem value={DOMAIN_STATUS.PENDING}>Pending</SelectItem>
-              <SelectItem value={DOMAIN_STATUS.FAILED}>Failed</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={fetchData}
+              disabled={loading}
+              className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+            >
+              <HiRefresh className="h-3 w-3 mr-1" />
+              Refresh
+            </Button>
+            <Button size="sm" asChild>
+              <Link href="/add">
+                <HiPlus className="h-3 w-3 mr-1" />
+                Add Domain
+              </Link>
+            </Button>
+          </div>
         </div>
 
-        {filteredDomains.length === 0 ? (
-          <div className="text-center py-12">
-            <GlobeIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No domains found</h3>
-            <p className="text-muted-foreground mb-4">
-              {searchQuery || statusFilter !== 'all'
-                ? 'No domains match your search criteria.' 
-                : 'Get started by adding your first domain.'}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-hidden">
-            {/* Table Header with Rounded Border and Sorting */}
-            <div className="border border-border bg-muted/30 rounded-lg px-6 py-3">
-              <div className="grid grid-cols-5 gap-4 text-sm font-medium text-muted-foreground">
-                <button 
-                  className="flex items-center gap-2 hover:text-foreground transition-colors text-left"
-                  onClick={() => handleSort('domain')}
-                >
-                  <span>Domain</span>
-                  {getSortIcon('domain')}
-                </button>
-                <button 
-                  className="flex items-center gap-2 hover:text-foreground transition-colors text-left"
-                  onClick={() => handleSort('status')}
-                >
-                  <span>Status</span>
-                  {getSortIcon('status')}
-                </button>
-                <button 
-                  className="flex items-center gap-2 hover:text-foreground transition-colors text-left"
-                  onClick={() => handleSort('emailAddressCount')}
-                >
-                  <span>Email Addresses</span>
-                  {getSortIcon('emailAddressCount')}
-                </button>
-                <button 
-                  className="flex items-center gap-2 hover:text-foreground transition-colors text-left"
-                  onClick={() => handleSort('emailsLast24h')}
-                >
-                  <span>Emails (24h)</span>
-                  {getSortIcon('emailsLast24h')}
-                </button>
-                <button 
-                  className="flex items-center gap-2 hover:text-foreground transition-colors text-left"
-                  onClick={() => handleSort('createdAt')}
-                >
-                  <span>Created</span>
-                  {getSortIcon('createdAt')}
-                </button>
-              </div>
-            </div>
-            
-            {/* Table Body */}
-            <div className="">
-              <Table>
-                <TableBody>
-                  {filteredDomains.map((domain, index) => {
-                    const iconColors = getGlobeIconColor(domain)
-                    return (
-                      <TableRow 
-                        key={domain.id} 
-                        className={`hover:bg-muted/50 cursor-pointer transition-colors ${
-                          index < filteredDomains.length - 1 ? 'border-b border-border/50' : ''
-                        }`}
-                        onClick={() => handleRowClick(domain.id)}
-                      >
-                        <TableCell className="w-1/5">
-                          <div className="flex items-center gap-3">
-                            <div className={`flex items-center justify-center w-8 h-8 rounded-md ${iconColors.bgColor} border-2 ${iconColors.borderColor}`}>
-                              <GlobeIcon className={`h-4 w-4 ${iconColors.iconColor}`} />
+        {/* Domain and Email Management */}
+        <div className="mb-6">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-1 tracking-tight">
+            Domains & Email Addresses ({domainStats.totalDomains})
+          </h2>
+          <p className="text-gray-600 text-sm font-medium">Manage your email domains and addresses</p>
+        </div>
+
+        <div className="space-y-4">
+          {allDomainsWithDetails.length === 0 ? (
+            <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
+              <CardContent className="p-8">
+                                 <div className="text-center">
+                   <CustomInboundIcon 
+                     Icon={HiGlobeAlt} 
+                     size={48} 
+                     backgroundColor="#8b5cf6" 
+                     className="mx-auto mb-4" 
+                   />
+                  <p className="text-sm text-slate-500 mb-4">No domains configured</p>
+                  <Button variant="secondary" asChild>
+                    <Link href="/add">
+                      <HiPlus className="h-4 w-4 mr-2" />
+                      Add Your First Domain
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            allDomainsWithDetails.map(({ domain, details }: { domain: any, details: any }) => (
+              <Card
+                key={domain.id}
+                className="bg-white/95 backdrop-blur-sm shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-200/60 rounded-xl overflow-hidden group"
+              >
+                <CardContent className="p-0">
+                  {/* Domain Header */}
+                  <div
+                    className="p-4 cursor-pointer hover:bg-gray-50/80 transition-colors duration-200 border-b border-gray-100/80"
+                    onClick={() => toggleDomain(domain.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                                             <div className="flex items-center space-x-3">
+                         <CustomInboundIcon 
+                           Icon={HiGlobeAlt} 
+                           size={36} 
+                           backgroundColor={getDomainIconColor(domain)} 
+                         />
+                        <div>
+                          <h3 className="text-base font-semibold text-gray-900 tracking-tight">{domain.domain}</h3>
+                          <div className="flex items-center space-x-3 mt-0.5">
+                            <span className="text-xs text-gray-600 font-medium">
+                              {domain.emailAddressCount} address{domain.emailAddressCount !== 1 ? "es" : ""}
+                            </span>
+                            <span className="text-xs text-gray-600 font-medium">
+                              {domain.emailsLast24h || 0} emails today
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              Added {formatDistanceToNow(new Date(domain.createdAt), { addSuffix: true })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {domain.isVerified && (
+                          <Badge className="bg-emerald-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
+                            <HiCheckCircle className="w-3 h-3 mr-1" />
+                            Verified
+                          </Badge>
+                        )}
+                        {details?.emailAddresses && details.emailAddresses.length > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                            <HiChevronDown 
+                              className={`w-4 h-4 text-gray-500 transition-transform duration-300 ease-in-out ${
+                                expandedDomains[domain.id] ? 'rotate-0' : '-rotate-90'
+                              }`}
+                            />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Email Addresses - Smooth expansion */}
+                  {details?.emailAddresses && details.emailAddresses.length > 0 && (
+                    <div 
+                      className="bg-gray-50/30 overflow-hidden transition-all duration-300 ease-in-out"
+                      style={{
+                        maxHeight: expandedDomains[domain.id] ? `${details.emailAddresses.length * 80 + 16}px` : '0px',
+                        opacity: expandedDomains[domain.id] ? 1 : 0
+                      }}
+                    >
+                      {details.emailAddresses.map((email: any, index: number) => (
+                        <div
+                          key={email.id}
+                          className={`group/email relative px-4 py-3 hover:bg-white/60 transition-colors duration-200 border-l-3 ${getBorderColor(email.isActive, email.isReceiptRuleConfigured)} ${
+                            index !== details.emailAddresses.length - 1 ? "border-b border-gray-100/60" : ""
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                                                         <div className="flex items-center space-x-3 flex-1">
+                               <CustomInboundIcon 
+                                 Icon={HiMail} 
+                                 size={28} 
+                                 backgroundColor="#10b981" 
+                               />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center space-x-2 mb-1">
+                                  <span className="text-sm font-medium text-gray-900 truncate">{email.address}</span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="opacity-0 group-hover/email:opacity-100 transition-all duration-200 p-1 h-auto hover:bg-gray-100 rounded hover:scale-105 active:scale-95"
+                                    onClick={() => copyEmail(email.address)}
+                                  >
+                                    {copiedEmail === email.address ? (
+                                      <HiCheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                                    ) : (
+                                      <HiClipboard className="w-3.5 h-3.5 text-gray-400 transition-all duration-150 hover:text-gray-600" />
+                                    )}
+                                  </Button>
+                                </div>
+                                <div className="flex items-center space-x-3 text-xs">
+                                  <div className="flex items-center space-x-1.5">
+                                    <div className={`w-1.5 h-1.5 rounded-full ${getStatusColor(getEmailStatus(email))}`} />
+                                    <span className="text-gray-600 font-medium capitalize">{getEmailStatus(email)}</span>
+                                  </div>
+                                  <span className="text-gray-500">{email.emailsLast24h || 0} emails today</span>
+                                  {email.webhookName && (
+                                    <div className="flex items-center space-x-1">
+                                      <HiLightningBolt className="w-3 h-3 text-amber-500" />
+                                      <span className="text-gray-500">{email.webhookName}</span>
+                                    </div>
+                                  )}
+                                  <span className="text-gray-400">
+                                    Added {formatDistanceToNow(new Date(email.createdAt), { addSuffix: true })}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
-                            <div>
-                              <div className="font-medium text-base py-2">
-                                {domain.domain}
+                            <div className="flex items-center space-x-2">
+                              <div className="flex items-center space-x-1.5">
+                                <div className={`w-1.5 h-1.5 rounded-full ${getStatusColor(getReadyStatus(email))}`} />
+                                <span className="text-xs text-gray-600 font-medium capitalize">{getReadyStatus(email)}</span>
                               </div>
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell className="w-1/5">
-                          {getStatusBadge(domain)}
-                        </TableCell>
-                        <TableCell className="w-1/5">
-                          <div className="flex items-center gap-2">
-                            <MailIcon className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{domain.emailAddressCount}</span>
-                            <span className="text-sm text-muted-foreground">addresses</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="w-1/5">
-                          <div className="flex items-center gap-2">
-                            <TrendingUpIcon className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{domain.emailsLast24h}</span>
-                            <span className="text-sm text-muted-foreground">emails</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="w-1/5">
-                          <div className="flex items-center gap-2">
-                            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">
-                              {(() => {
-                                const createdAt = new Date(domain.createdAt);
-                                const now = new Date();
-                                const diffInDays = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
-                                let colorClass = 'text-muted-foreground';
-                                if (diffInDays < 1) {
-                                  colorClass = 'text-purple-500';
-                                } else if (diffInDays < 7) {
-                                  colorClass = 'text-purple-600';
-                                } else if (diffInDays < 30) {
-                                  colorClass = 'text-purple-800';
-                                } else {
-                                  colorClass = 'text-purple-800';
-                                }
-                                return (
-                                  <span className={colorClass}>
-                                    {formatDistanceToNow(createdAt, { addSuffix: true })}
-                                  </span>
-                                );
-                              })()}
-                            </span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
       </div>
     </div>
   )

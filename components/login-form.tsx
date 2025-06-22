@@ -45,9 +45,9 @@ export function LoginForm({
   return (
     <form className={cn("flex flex-col gap-6", className)} {...props}>
       <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-2xl font-bold">Login to your account</h1>
+        <h1 className="text-2xl font-bold">login to your account</h1>
         <p className="text-balance text-sm text-muted-foreground">
-          Choose your preferred login method
+          choose your preferred login method
         </p>
       </div>
       <div className="grid gap-4">

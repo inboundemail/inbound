@@ -1,274 +1,26 @@
-"use client"
-
-import { useEffect, useState } from 'react'
-import { useSession } from '@/lib/auth-client'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useAnalyticsQuery } from '@/features/analytics/hooks/useAnalyticsQuery'
+import { getAnalytics } from '@/app/actions/analytics'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import {
-  Table,
-  TableBody,
-  TableCell,  
-  TableRow,
-} from '@/components/ui/table'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { EmailDetailSheet } from '@/components/email-detail-sheet'
-import {
-  BarChart3Icon,
-  TrendingUpIcon,
-  MailIcon,
-  GlobeIcon,
-  ClockIcon,
-  AlertTriangleIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  SearchIcon,
-  RefreshCwIcon,
-  CalendarIcon,
-  ServerIcon,
-  FilterIcon,
-  DownloadIcon
-} from 'lucide-react'
-import { formatDistanceToNow, format } from 'date-fns'
-import { toast } from 'sonner'
-import type { AnalyticsData } from '@/app/actions/analytics'
+import { formatDistanceToNow, format, subDays, isAfter } from 'date-fns'
+import Link from 'next/link'
+import { HiClock, HiDatabase, HiDocumentText, HiExclamationCircle, HiEye, HiFilter, HiGlobeAlt, HiRefresh, HiSearch, HiShieldCheck, HiX,  } from 'react-icons/hi'
 
-export default function AnalyticsPage() {
-  const { data: session } = useSession()
-  const router = useRouter()
-  const searchParams = useSearchParams()
+export default async function AnalyticsPage() {
+  // Fetch analytics data server-side
+  const analyticsResult = await getAnalytics()
   
-  // Use react-query for data fetching
-  const { 
-    data: analyticsData, 
-    isLoading, 
-    error, 
-    refetch,
-    isRefetching 
-  } = useAnalyticsQuery()
-  
-  const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [domainFilter, setDomainFilter] = useState('all')
-  const [filteredEmails, setFilteredEmails] = useState<AnalyticsData['recentEmails']>([])
-  
-  // Email detail sheet state
-  const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null)
-  const [isSheetOpen, setIsSheetOpen] = useState(false)
-
-  // Handle URL parameters for email ID
-  useEffect(() => {
-    const emailId = searchParams.get('emailid')
-    if (emailId && analyticsData) {
-      setSelectedEmailId(emailId)
-      setIsSheetOpen(true)
-    }
-  }, [searchParams, analyticsData])
-
-  // Filter emails based on search criteria
-  useEffect(() => {
-    if (analyticsData) {
-      let filtered = analyticsData.recentEmails.filter(email => {
-        const matchesSearch = 
-          email.from.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          email.recipient.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          email.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          email.messageId.toLowerCase().includes(searchQuery.toLowerCase())
-        
-        const matchesStatus = statusFilter === 'all' || email.status === statusFilter
-        const matchesDomain = domainFilter === 'all' || email.domain === domainFilter
-        
-        return matchesSearch && matchesStatus && matchesDomain
-      })
-
-      setFilteredEmails(filtered)
-    }
-  }, [analyticsData, searchQuery, statusFilter, domainFilter])
-
-  // Handle refetch errors with toast
-  useEffect(() => {
-    if (error) {
-      toast.error('Failed to load analytics data')
-    }
-  }, [error])
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'received':
-        return (
-          <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
-            <CheckCircleIcon className="h-3 w-3 mr-1" />
-            Received
-          </Badge>
-        )
-      case 'processing':
-        return (
-          <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200 transition-colors">
-            <ClockIcon className="h-3 w-3 mr-1" />
-            Processing
-          </Badge>
-        )
-      case 'forwarded':
-        return (
-          <Badge className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 transition-colors">
-            <TrendingUpIcon className="h-3 w-3 mr-1" />
-            Forwarded
-          </Badge>
-        )
-      case 'failed':
-        return (
-          <Badge className="bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-200 transition-colors">
-            <XCircleIcon className="h-3 w-3 mr-1" />
-            Failed
-          </Badge>
-        )
-      default:
-        return (
-          <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors">
-            <ClockIcon className="h-3 w-3 mr-1" />
-            {status}
-          </Badge>
-        )
-    }
-  }
-
-  const getAuthBadge = (result: string, type: 'spf' | 'dkim' | 'dmarc' | 'spam' | 'virus') => {
-    const isPass = result === 'PASS'
-    const isFail = result === 'FAIL'
-    
-    if (isPass) {
-      return (
-        <Badge className="bg-green-100 text-green-800 border-green-200 text-xs">
-          <CheckCircleIcon className="h-2 w-2 mr-1" />
-          {type.toUpperCase()}
-        </Badge>
-      )
-    } else if (isFail) {
-      return (
-        <Badge className="bg-red-100 text-red-800 border-red-200 text-xs">
-          <XCircleIcon className="h-2 w-2 mr-1" />
-          {type.toUpperCase()}
-        </Badge>
-      )
-    } else {
-      return (
-        <Badge className="bg-gray-100 text-gray-600 border-gray-200 text-xs">
-          <AlertTriangleIcon className="h-2 w-2 mr-1" />
-          {type.toUpperCase()}
-        </Badge>
-      )
-    }
-  }
-
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B'
-    const k = 1024
-    const sizes = ['B', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-  }
-
-  const handleEmailClick = (emailId: string) => {
-    setSelectedEmailId(emailId)
-    setIsSheetOpen(true)
-    // Update URL with emailid parameter
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('emailid', emailId)
-    router.push(`/analytics?${params.toString()}`)
-  }
-
-  const handleSheetClose = () => {
-    setIsSheetOpen(false)
-    setSelectedEmailId(null)
-    // Remove emailid parameter from URL
-    const params = new URLSearchParams(searchParams.toString())
-    params.delete('emailid')
-    const newUrl = params.toString() ? `/analytics?${params.toString()}` : '/analytics'
-    router.push(newUrl)
-  }
-
-  if (isLoading) {
+  if (!analyticsResult.success) {
     return (
-      <div className="flex flex-1 flex-col gap-6 p-6">
-        {/* Header with Gradient */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-8 text-white shadow-xl">
-          <div className="absolute inset-0 bg-black/10"></div>
-          <div className="relative z-10">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-4xl font-bold tracking-tight mb-2">Analytics</h1>
-                <p className="text-purple-100 text-lg">
-                  Monitor your email traffic and performance metrics
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Button variant="secondary" disabled className="bg-white/20 border-white/30 text-white hover:bg-white/30">
-                  <RefreshCwIcon className="h-4 w-4 mr-2" />
-                  Refresh
-                </Button>
-              </div>
-            </div>
-          </div>
-          {/* Decorative elements */}
-          <div className="absolute -top-4 -right-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-          <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
-        </div>
-
-        <div className="flex items-center justify-center py-12">
-          <div className="flex items-center gap-2">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-            <span className="text-muted-foreground">Loading analytics...</span>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (error || !analyticsData) {
-    return (
-      <div className="flex flex-1 flex-col gap-6 p-6">
-        {/* Header with Gradient */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-8 text-white shadow-xl">
-          <div className="absolute inset-0 bg-black/10"></div>
-          <div className="relative z-10">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-4xl font-bold tracking-tight mb-2">Analytics</h1>
-                <p className="text-purple-100 text-lg">
-                  Monitor your email traffic and performance metrics
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                              <Button
-                variant="secondary"
-                onClick={() => refetch()}
-                className="bg-white/20 border-white/30 text-white hover:bg-white/30 backdrop-blur-sm"
-              >
-                <RefreshCwIcon className="h-4 w-4 mr-2" />
-                Retry
-              </Button>
-              </div>
-            </div>
-          </div>
-          {/* Decorative elements */}
-          <div className="absolute -top-4 -right-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-          <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
-        </div>
-
+      <div className="flex flex-1 flex-col gap-4 p-4">
         <Card className="border-red-200 bg-red-50">
-          <CardContent className="pt-6">
+          <CardContent className="p-6">
             <div className="flex items-center gap-2 text-red-600">
-              <XCircleIcon className="h-4 w-4" />
-              <span>{error?.message || 'Failed to load analytics'}</span>
+              <HiX className="h-4 w-4" />
+              <span>{analyticsResult.error}</span>
+              <Button variant="ghost" size="sm" asChild className="ml-auto text-red-600 hover:text-red-700">
+                <Link href="/analytics">Try Again</Link>
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -276,260 +28,381 @@ export default function AnalyticsPage() {
     )
   }
 
-  const { stats, recentEmails } = analyticsData
+  const { stats, recentEmails } = analyticsResult.data
 
-  // Get unique domains for filter
-  const uniqueDomains = Array.from(new Set(recentEmails.map(email => email.domain)))
+  // Deep analytics calculations
+  const last24hEmails = recentEmails.filter(email => 
+    isAfter(new Date(email.receivedAt), subDays(new Date(), 1))
+  )
+  const last7dEmails = recentEmails.filter(email => 
+    isAfter(new Date(email.receivedAt), subDays(new Date(), 7))
+  )
+
+  // Security analysis
+  const securityAnalysis = {
+    spfFailures: recentEmails.filter(e => e.authResults.spf === 'FAIL').length,
+    dkimFailures: recentEmails.filter(e => e.authResults.dkim === 'FAIL').length,
+    dmarcFailures: recentEmails.filter(e => e.authResults.dmarc === 'FAIL').length,
+    spamDetected: recentEmails.filter(e => e.authResults.spam === 'FAIL').length,
+    virusDetected: recentEmails.filter(e => e.authResults.virus === 'FAIL').length,
+  }
+
+  // Performance analysis
+  const avgProcessingTime = stats.avgProcessingTime
+  const slowEmails = recentEmails.filter(e => e.contentSize && e.contentSize > 1000000) // Large emails over 1MB
+
+  // Error analysis based on auth failures and verdicts
+  const errorAnalysis = {
+    totalErrors: recentEmails.filter(e => 
+      e.authResults.spf === 'FAIL' || 
+      e.authResults.dkim === 'FAIL' || 
+      e.authResults.spam === 'FAIL' || 
+      e.authResults.virus === 'FAIL'
+    ).length,
+    authErrors: recentEmails.filter(e => 
+      e.authResults.spf === 'FAIL' || e.authResults.dkim === 'FAIL'
+    ).length,
+    spamErrors: recentEmails.filter(e => e.authResults.spam === 'FAIL').length,
+    virusErrors: recentEmails.filter(e => e.authResults.virus === 'FAIL').length,
+  }
+
+  // Domain patterns
+  const domainStats = recentEmails.reduce((acc, email) => {
+    const domain = email.domain
+    if (!acc[domain]) {
+      acc[domain] = { total: 0, failed: 0, avgSize: 0, contentSizes: [] }
+    }
+    acc[domain].total++
+    // Count auth failures as "failed"
+    if (email.authResults.spf === 'FAIL' || email.authResults.dkim === 'FAIL') {
+      acc[domain].failed++
+    }
+    if (email.contentSize) acc[domain].contentSizes.push(email.contentSize)
+    return acc
+  }, {} as Record<string, any>)
+
+  // Calculate average content size per domain
+  Object.keys(domainStats).forEach(domain => {
+    const sizes = domainStats[domain].contentSizes
+    domainStats[domain].avgSize = sizes.length > 0 
+      ? Math.round(sizes.reduce((a: number, b: number) => a + b, 0) / sizes.length)
+      : 0
+  })
+
+  // Sender patterns
+  const senderPatterns = recentEmails.reduce((acc, email) => {
+    const sender = email.from
+    if (!acc[sender]) acc[sender] = 0
+    acc[sender]++
+    return acc
+  }, {} as Record<string, number>)
+
+  const topSenders = Object.entries(senderPatterns)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 10)
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
-      {/* Header with Gradient */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-8 text-white shadow-xl">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative z-10">
+    <div className="flex flex-1 flex-col gap-4 p-4">
+      {/* Compact Header */}
+      <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4">
+        <div>
+          <h1 className="text-xl font-semibold mb-1">Email Analytics & Insights</h1>
+          <div className="flex items-center gap-4 text-sm text-slate-300">
+            <span className="flex items-center gap-1">
+              <HiDatabase className="h-3 w-3" />
+              {recentEmails.length} log entries
+            </span>
+            <span className="flex items-center gap-1">
+              <HiExclamationCircle className="h-3 w-3" />
+              {errorAnalysis.totalErrors} errors
+            </span>
+            <span className="flex items-center gap-1">
+              <HiShieldCheck className="h-3 w-3" />
+              {securityAnalysis.spfFailures + securityAnalysis.dkimFailures} auth failures
+            </span>
+            <span className="flex items-center gap-1">
+              <HiClock className="h-3 w-3" />
+              {avgProcessingTime}ms avg processing
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            asChild
+            className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+          >
+            <Link href="/analytics">
+              <HiRefresh className="h-3 w-3 mr-1" />
+              Refresh
+            </Link>
+          </Button>
+          <Button size="sm" asChild>
+            <Link href="/analytics?export=true">
+              <HiDocumentText className="h-3 w-3 mr-1" />
+              Export Logs
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Security Analysis */}
+      <Card className="border-red-100">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <HiShieldCheck className="h-4 w-4 text-red-600" />
+            Security Analysis
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="grid grid-cols-5 gap-3 mb-4">
+            <div className="text-center p-3 bg-red-50 rounded-lg border border-red-100">
+              <div className="text-lg font-semibold text-red-700">{securityAnalysis.spfFailures}</div>
+              <div className="text-xs text-red-600 mt-1">SPF Failures</div>
+              <div className="text-xs text-slate-500 mt-1">
+                {recentEmails.length > 0 ? Math.round((securityAnalysis.spfFailures / recentEmails.length) * 100) : 0}%
+              </div>
+            </div>
+            <div className="text-center p-3 bg-orange-50 rounded-lg border border-orange-100">
+              <div className="text-lg font-semibold text-orange-700">{securityAnalysis.dkimFailures}</div>
+              <div className="text-xs text-orange-600 mt-1">DKIM Failures</div>
+              <div className="text-xs text-slate-500 mt-1">
+                {recentEmails.length > 0 ? Math.round((securityAnalysis.dkimFailures / recentEmails.length) * 100) : 0}%
+              </div>
+            </div>
+            <div className="text-center p-3 bg-yellow-50 rounded-lg border border-yellow-100">
+              <div className="text-lg font-semibold text-yellow-700">{securityAnalysis.dmarcFailures}</div>
+              <div className="text-xs text-yellow-600 mt-1">DMARC Failures</div>
+              <div className="text-xs text-slate-500 mt-1">Authentication</div>
+            </div>
+            <div className="text-center p-3 bg-purple-50 rounded-lg border border-purple-100">
+              <div className="text-lg font-semibold text-purple-700">{securityAnalysis.spamDetected}</div>
+              <div className="text-xs text-purple-600 mt-1">Spam Detected</div>
+              <div className="text-xs text-slate-500 mt-1">Content filter</div>
+            </div>
+            <div className="text-center p-3 bg-pink-50 rounded-lg border border-pink-100">
+              <div className="text-lg font-semibold text-pink-700">{securityAnalysis.virusDetected}</div>
+              <div className="text-xs text-pink-600 mt-1">Virus Detected</div>
+              <div className="text-xs text-slate-500 mt-1">Malware scan</div>
+            </div>
+          </div>
+          
+          {(securityAnalysis.spfFailures > 0 || securityAnalysis.dkimFailures > 0 || securityAnalysis.spamDetected > 0) && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center gap-2 text-red-700 text-sm font-medium mb-2">
+                <HiExclamationCircle className="h-4 w-4" />
+                Security Recommendations
+              </div>
+              <div className="text-sm text-red-600 space-y-1">
+                {securityAnalysis.spfFailures > 5 && <div>• High SPF failure rate detected - verify sender authentication</div>}
+                {securityAnalysis.dkimFailures > 5 && <div>• DKIM signature issues - check domain key configuration</div>}
+                {securityAnalysis.spamDetected > 0 && <div>• Spam detected - review content filtering rules</div>}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Performance Analysis & Error Insights - Two Column */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Performance Analysis */}
+        <Card className="border-blue-100">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <HiClock className="h-4 w-4 text-blue-600" />
+              Performance Analysis
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                  <div className="text-lg font-semibold text-blue-700">{avgProcessingTime}ms</div>
+                  <div className="text-xs text-blue-600">Avg Processing Time</div>
+                </div>
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
+                  <div className="text-lg font-semibold text-amber-700">{slowEmails.length}</div>
+                  <div className="text-xs text-amber-600">Slow Emails (over 5s)</div>
+                </div>
+              </div>
+
+              {/* Domain Performance */}
+              <div>
+                <h4 className="text-sm font-medium text-slate-700 mb-2">Domain Performance</h4>
+                <div className="space-y-2">
+                  {Object.entries(domainStats)
+                    .sort(([, a], [, b]) => b.total - a.total)
+                    .slice(0, 5)
+                    .map(([domain, stats]: [string, any]) => (
+                      <div key={domain} className="flex items-center justify-between p-2 bg-slate-50 rounded">
+                        <div className="flex items-center gap-2">
+                          <HiGlobeAlt className="h-3 w-3 text-slate-500" />
+                          <span className="text-sm font-mono">{domain}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs">
+                          <span className="text-slate-600">{stats.total} emails</span>
+                          <span className="text-slate-600">{Math.round(stats.avgSize / 1024)}KB avg</span>
+                          {stats.failed > 0 && (
+                            <span className="text-red-600">{stats.failed} failed</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Error Analysis */}
+        <Card className="border-red-100">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <HiExclamationCircle className="h-4 w-4 text-red-600" />
+              Error Analysis
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-red-50 rounded-lg border border-red-100">
+                  <div className="text-lg font-semibold text-red-700">{errorAnalysis.totalErrors}</div>
+                  <div className="text-xs text-red-600">Total Errors</div>
+                </div>
+                <div className="p-3 bg-orange-50 rounded-lg border border-orange-100">
+                  <div className="text-lg font-semibold text-orange-700">{errorAnalysis.authErrors}</div>
+                  <div className="text-xs text-orange-600">Auth Errors</div>
+                </div>
+              </div>
+
+              {/* Error Breakdown */}
+              <div>
+                <h4 className="text-sm font-medium text-slate-700 mb-2">Error Breakdown</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
+                    <span className="text-sm">Auth Errors</span>
+                    <span className="text-sm text-red-600">{errorAnalysis.authErrors}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
+                    <span className="text-sm">Spam Detected</span>
+                    <span className="text-sm text-red-600">{errorAnalysis.spamErrors}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
+                    <span className="text-sm">Virus Detected</span>
+                    <span className="text-sm text-red-600">{errorAnalysis.virusErrors}</span>
+                  </div>
+                </div>
+              </div>
+
+              {errorAnalysis.totalErrors > 10 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-amber-700 text-sm font-medium mb-1">
+                    <HiExclamationCircle className="h-4 w-4" />
+                    High Error Rate Detected
+                  </div>
+                  <div className="text-sm text-amber-600">
+                    Review endpoint configurations and network connectivity
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Detailed Email Logs */}
+      <Card>
+        <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold tracking-tight mb-2">Analytics</h1>
-              <p className="text-purple-100 text-lg">
-                Monitor your email traffic and performance metrics
-              </p>
-              <div className="flex items-center gap-6 mt-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-white rounded-full"></div>
-                  <span className="text-purple-100">{stats.totalEmails} Total Emails</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-300 rounded-full"></div>
-                  <span className="text-purple-100">{stats.emailsLast7d} Last 7 Days</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-300 rounded-full"></div>
-                  <span className="text-purple-100">{stats.avgProcessingTime}ms Avg Processing</span>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => refetch()}
-                disabled={isLoading || isRefetching}
-                className="bg-white/20 border-white/30 text-white hover:bg-white/30 backdrop-blur-sm"
-              >
-                <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading || isRefetching ? 'animate-spin' : ''}`} />
-                Refresh
+            <CardTitle className="text-base flex items-center gap-2">
+              <HiDocumentText className="h-4 w-4" />
+              Email Processing Logs ({recentEmails.length})
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" className="h-auto p-1 text-xs">
+                <HiFilter className="h-3 w-3 mr-1" />
+                Filter
               </Button>
-              <Button className="bg-white text-purple-700 hover:bg-white/90 font-semibold shadow-lg">
-                <DownloadIcon className="h-4 w-4 mr-2" />
-                Export
+              <Button variant="ghost" size="sm" className="h-auto p-1 text-xs">
+                <HiSearch className="h-3 w-3 mr-1" />
+                Search
               </Button>
             </div>
           </div>
-        </div>
-        {/* Decorative elements */}
-        <div className="absolute -top-4 -right-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-        <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
-        <div className="absolute top-1/2 right-1/4 w-16 h-16 bg-white/5 rounded-full blur-lg"></div>
-      </div>
-
-      {/* Analytics Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Total Emails */}
-        <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-purple-700">Total Emails</CardTitle>
-            <MailIcon className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-900">{stats.totalEmails.toLocaleString()}</div>
-            <p className="text-xs text-purple-600 mt-1">
-              {stats.emailsLast24h} in last 24h
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Weekly Growth */}
-        <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-blue-700">Weekly Volume</CardTitle>
-            <TrendingUpIcon className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-900">{stats.emailsLast7d.toLocaleString()}</div>
-            <p className="text-xs text-blue-600 mt-1">
-              {stats.emailsLast30d} in last 30d
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Domains */}
-        <Card className="border-green-200 bg-gradient-to-br from-green-50 to-green-100">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-green-700">Active Domains</CardTitle>
-            <GlobeIcon className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-900">{stats.verifiedDomains}</div>
-            <p className="text-xs text-green-600 mt-1">
-              {stats.totalDomains} total configured
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Processing Time */}
-        <Card className="border-amber-200 bg-gradient-to-br from-amber-50 to-amber-100">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-amber-700">Avg Processing</CardTitle>
-            <ClockIcon className="h-4 w-4 text-amber-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-amber-900">{stats.avgProcessingTime}ms</div>
-            <p className="text-xs text-amber-600 mt-1">
-              last 30 days average
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Email Activity Section - No Card */}
-      <div>
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <BarChart3Icon className="h-6 w-6 text-purple-600" />
-              Email Activity (Last 7 Days)
-            </h2>
-            <p className="text-muted-foreground mt-1">
-              Inbound emails received in the past week
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-sm">
-              {filteredEmails.length} of {recentEmails.length} emails
-            </Badge>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="flex items-center gap-4 mb-3">
-          <div className="relative flex-1">
-            <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search emails..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 bg-background"
-            />
-          </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="All Statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="received">Received</SelectItem>
-              <SelectItem value="processing">Processing</SelectItem>
-              <SelectItem value="forwarded">Forwarded</SelectItem>
-              <SelectItem value="failed">Failed</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={domainFilter} onValueChange={setDomainFilter}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="All Domains" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Domains</SelectItem>
-              {uniqueDomains.map(domain => (
-                <SelectItem key={domain} value={domain}>{domain}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Email Table */}
-        {filteredEmails.length === 0 ? (
-          <div className="text-center py-12">
-            <MailIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No emails found</h3>
-            <p className="text-muted-foreground">
-              {searchQuery || statusFilter !== 'all' || domainFilter !== 'all' 
-                ? 'No emails match your search criteria.' 
-                : 'No emails have been received yet.'}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-hidden">
-            {/* Table Header with Rounded Border */}
-            <div className="border border-border bg-muted/30 rounded-lg px-6 py-3">
-              <div className="grid grid-cols-7 gap-4 text-sm font-medium text-muted-foreground">
-                <div className="col-span-1">From</div>
-                <div className="col-span-1">To</div>
-                <div className="col-span-2">Subject</div>
-                <div className="col-span-1">Status</div>
-                <div className="col-span-1">Auth</div>
-                <div className="col-span-1">Received</div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="space-y-2">
+            {recentEmails.slice(0, 20).map((email, index) => (
+              <div key={email.id} className="border border-slate-200 rounded-lg p-3 hover:bg-slate-50 transition-colors">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3 min-w-0 flex-1">
+                    <div className="text-xs text-slate-400 font-mono w-16 flex-shrink-0 mt-0.5">
+                      {format(new Date(email.receivedAt), 'HH:mm:ss')}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge 
+                          variant="secondary" 
+                          className={`text-xs ${
+                            email.status === 'forwarded' ? 'bg-green-50 text-green-700 border-green-200' :
+                            email.status === 'failed' ? 'bg-red-50 text-red-700 border-red-200' :
+                            email.status === 'processing' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                            'bg-blue-50 text-blue-700 border-blue-200'
+                          }`}>
+                          {email.status.toUpperCase()}
+                        </Badge>
+                         {email.contentSize && (
+                           <Badge variant="secondary" className="bg-slate-50 text-slate-600 border-slate-200 text-xs">
+                             {Math.round(email.contentSize / 1024)}KB
+                           </Badge>
+                         )}
+                        <div className="flex gap-1">
+                          {email.authResults.spf === 'PASS' && (
+                            <Badge variant="secondary" className="bg-green-50 text-green-600 border-green-200 text-xs">SPF</Badge>
+                          )}
+                          {email.authResults.dkim === 'PASS' && (
+                            <Badge variant="secondary" className="bg-green-50 text-green-600 border-green-200 text-xs">DKIM</Badge>
+                          )}
+                          {email.authResults.spf === 'FAIL' && (
+                            <Badge variant="secondary" className="bg-red-50 text-red-600 border-red-200 text-xs">SPF✗</Badge>
+                          )}
+                          {email.authResults.dkim === 'FAIL' && (
+                            <Badge variant="secondary" className="bg-red-50 text-red-600 border-red-200 text-xs">DKIM✗</Badge>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-sm text-slate-900 mb-1">
+                        <span className="font-medium">{email.from}</span> → <span className="font-medium">{email.recipient}</span>
+                      </div>
+                      <div className="text-sm text-slate-600 truncate mb-1">{email.subject}</div>
+                                             <div className="text-xs text-slate-500 font-mono">
+                         {email.messageId} • {email.domain}
+                         {(email.authResults.spf === 'FAIL' || email.authResults.dkim === 'FAIL') && (
+                           <span className="text-red-600 ml-2">Auth Failed</span>
+                         )}
+                       </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 ml-4">
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                      <HiEye className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </div>
-            
-            {/* Table Body */}
-            <div className="">
-              <Table>
-                <TableBody>
-                  {filteredEmails.map((email, index) => (
-                    <TableRow 
-                      key={email.id} 
-                      className={`hover:bg-muted/50 transition-colors cursor-pointer ${
-                        index < filteredEmails.length - 1 ? 'border-b border-border/50' : ''
-                      }`}
-                      onClick={() => handleEmailClick(email.id)}
-                    >
-                      <TableCell className="w-1/7">
-                        <div className="font-medium text-sm truncate max-w-[120px]">{email.from}</div>
-                        <div className="text-xs text-muted-foreground font-mono truncate max-w-[120px]">
-                          {email.messageId.substring(0, 15)}...
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-1/7">
-                        <div className="font-medium text-sm">{email.recipient}</div>
-                        <div className="text-xs text-muted-foreground">{email.domain}</div>
-                      </TableCell>
-                      <TableCell className="w-2/7">
-                        <div className="font-medium text-sm max-w-[250px] truncate">
-                          {email.subject}
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-1/7">
-                        {getStatusBadge(email.status)}
-                      </TableCell>
-                      <TableCell className="w-1/7">
-                        <div className="flex flex-wrap gap-1">
-                          {getAuthBadge(email.authResults.spf, 'spf')}
-                          {getAuthBadge(email.authResults.dkim, 'dkim')}
-                          {getAuthBadge(email.authResults.spam, 'spam')}
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-1/7">
-                        <div className="text-sm">
-                          {formatDistanceToNow(new Date(email.receivedAt), { addSuffix: true })}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {format(new Date(email.receivedAt), 'MMM d, HH:mm')}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            ))}
           </div>
-        )}
-      </div>
-      
-      {/* Email Detail Sheet */}
-      <EmailDetailSheet
-        emailId={selectedEmailId}
-        isOpen={isSheetOpen}
-        onClose={handleSheetClose}
-      />
+          
+          {recentEmails.length > 20 && (
+            <div className="text-center pt-4">
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/analytics?view=all">View All {recentEmails.length} Logs</Link>
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 } 

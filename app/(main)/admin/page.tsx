@@ -10,21 +10,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
-  ShieldCheckIcon, 
-  UsersIcon, 
-  SettingsIcon,
-  AlertTriangleIcon,
-  LoaderIcon,
-  SearchIcon,
-  PlusIcon,
-  BanIcon,
-  UnlockIcon,
-  TrashIcon,
-  UserIcon,
-  MailIcon,
-  CalendarIcon
-} from "lucide-react"
-import { 
   Table,
   TableBody,
   TableCell,
@@ -48,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { HiBan, HiCalendar, HiCog, HiExclamationCircle, HiLockOpen, HiPlus, HiRefresh, HiSearch, HiShieldCheck, HiTrash, HiUser, HiUserGroup } from "react-icons/hi"
 
 
 // Auth client with admin functions is imported above
@@ -212,7 +198,7 @@ export default function AdminPage() {
       <div className="flex flex-1 flex-col gap-6 p-6">
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="flex items-center gap-2">
-            <LoaderIcon className="h-6 w-6 animate-spin" />
+            <HiRefresh className="h-6 w-6 animate-spin" />
             <span>Loading admin panel...</span>
           </div>
         </div>
@@ -227,7 +213,7 @@ export default function AdminPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-red-600">
-              <AlertTriangleIcon className="h-4 w-4" />
+              <HiExclamationCircle className="h-4 w-4" />
               <span>Error loading admin panel: {error.message}</span>
             </div>
           </CardContent>
@@ -249,7 +235,7 @@ export default function AdminPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <ShieldCheckIcon className="h-8 w-8" />
+            <HiShieldCheck className="h-8 w-8" />
             Admin Panel
           </h1>
           <p className="text-muted-foreground">
@@ -257,7 +243,7 @@ export default function AdminPage() {
           </p>
         </div>
         <Badge variant="secondary" className="flex items-center gap-1">
-          <ShieldCheckIcon className="h-3 w-3" />
+          <HiShieldCheck className="h-3 w-3" />
           Administrator
         </Badge>
       </div>
@@ -266,11 +252,11 @@ export default function AdminPage() {
       <Tabs defaultValue="users" className="space-y-6">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="users" className="flex items-center gap-2">
-            <UsersIcon className="h-4 w-4" />
+            <HiUserGroup className="h-4 w-4" />
             User Management
           </TabsTrigger>
           <TabsTrigger value="development" className="flex items-center gap-2">
-            <SettingsIcon className="h-4 w-4" />
+            <HiCog className="h-4 w-4" />
             Development
           </TabsTrigger>
         </TabsList>
@@ -327,7 +313,7 @@ export default function AdminPage() {
                 <Dialog open={isCreateUserOpen} onOpenChange={setIsCreateUserOpen}>
                   <DialogTrigger asChild>
                     <Button className="flex items-center gap-2">
-                      <PlusIcon className="h-4 w-4" />
+                      <HiPlus className="h-4 w-4" />
                       Create User
                     </Button>
                   </DialogTrigger>
@@ -403,7 +389,7 @@ export default function AdminPage() {
                   />
                 </div>
                 <Button onClick={handleSearch} variant="secondary">
-                  <SearchIcon className="h-4 w-4" />
+                  <HiSearch className="h-4 w-4" />
                 </Button>
               </div>
 
@@ -423,7 +409,7 @@ export default function AdminPage() {
                     {isLoadingUsers ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-8">
-                          <LoaderIcon className="h-6 w-6 animate-spin mx-auto" />
+                          <HiRefresh className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
                     ) : users.length === 0 ? (
@@ -437,7 +423,7 @@ export default function AdminPage() {
                         <TableRow key={user.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <UserIcon className="h-4 w-4" />
+                              <HiUser className="h-4 w-4" />
                               <div>
                                 <div className="font-medium">{user.name || "No name"}</div>
                                 <div className="text-sm text-muted-foreground">{user.email}</div>
@@ -468,7 +454,7 @@ export default function AdminPage() {
                            </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                              <CalendarIcon className="h-3 w-3" />
+                              <HiCalendar className="h-3 w-3" />
                               {new Date(user.createdAt).toLocaleDateString()}
                             </div>
                           </TableCell>
@@ -485,7 +471,7 @@ export default function AdminPage() {
                                        onClick={() => handleUnbanUser(user.id)}
                                        title="Unban user"
                                      >
-                                       <UnlockIcon className="h-3 w-3" />
+                                       <HiLockOpen className="h-3 w-3" />
                                      </Button>
                                    ) : (
                                      <Button
@@ -494,7 +480,7 @@ export default function AdminPage() {
                                        onClick={() => handleBanUser(user.id)}
                                        title="Ban user"
                                      >
-                                       <BanIcon className="h-3 w-3" />
+                                       <HiBan className="h-3 w-3" />
                                      </Button>
                                    )}
                                    <Button
@@ -503,7 +489,7 @@ export default function AdminPage() {
                                      onClick={() => handleDeleteUser(user.id)}
                                      title="Delete user"
                                    >
-                                     <TrashIcon className="h-3 w-3" />
+                                     <HiTrash className="h-3 w-3" />
                                    </Button>
                                  </>
                                )}

@@ -10,13 +10,13 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-[#6C47FF] text-white border-[rgba(27,31,35,0.15)] shadow-[rgba(27,31,35,0.1)_0_1px_0] font-semibold hover:bg-[#6341f2] focus:shadow-[rgba(108,71,255,0.4)_0_0_0_3px] focus:outline-none active:bg-[#5a3de6] active:shadow-[rgba(20,70,32,0.2)_0_1px_0_inset] disabled:bg-[#b3a3ff] disabled:border-[rgba(27,31,35,0.1)] disabled:text-[rgba(255,255,255,0.8)] disabled:cursor-default",
+          "bg-[#6C47FF] text-white border-[rgba(27,31,35,0.15)] shadow-[rgba(27,31,35,0.1)_0_1px_0] font-semibold hover:bg-[#6341f2] hover:scale-[1.02] hover:shadow-[rgba(108,71,255,0.3)_0_4px_12px] focus:shadow-[rgba(108,71,255,0.4)_0_0_0_3px] focus:outline-none active:bg-[#5a3de6] active:scale-[0.98] active:shadow-[rgba(20,70,32,0.2)_0_1px_0_inset] disabled:bg-[#b3a3ff] disabled:border-[rgba(27,31,35,0.1)] disabled:text-[rgba(255,255,255,0.8)] disabled:cursor-default",
         secondary:
-          "bg-[#FAFBFC] text-[#24292E] border-[rgba(27,31,35,0.15)] shadow-[rgba(27,31,35,0.04)_0_1px_0,rgba(255,255,255,0.25)_0_1px_0_inset] font-medium hover:bg-[#F3F4F6] hover:transition-duration-100 active:bg-[#EDEFF2] active:shadow-[rgba(225,228,232,0.2)_0_1px_0_inset] active:transition-none disabled:bg-[#FAFBFC] disabled:border-[rgba(27,31,35,0.15)] disabled:text-[#959DA5] disabled:cursor-default",
+          "bg-[#FAFBFC] text-[#24292E] border-[rgba(27,31,35,0.15)] shadow-[rgba(27,31,35,0.04)_0_1px_0,rgba(255,255,255,0.25)_0_1px_0_inset] font-medium hover:bg-[#F3F4F6] hover:text-[#586069] hover:transition-duration-100 active:bg-[#EDEFF2] active:shadow-[rgba(225,228,232,0.2)_0_1px_0_inset] active:transition-none disabled:bg-[#FAFBFC] disabled:border-[rgba(27,31,35,0.15)] disabled:text-[#959DA5] disabled:cursor-default",
         destructive:
           "bg-[#dc2626] text-white border-[rgba(27,31,35,0.15)] shadow-[rgba(27,31,35,0.1)_0_1px_0] font-semibold hover:bg-[#c82222] focus:shadow-[rgba(220,38,38,0.4)_0_0_0_3px] focus:outline-none active:bg-[#b41e1e] active:shadow-[rgba(20,70,32,0.2)_0_1px_0_inset] disabled:bg-[#f88383] disabled:border-[rgba(27,31,35,0.1)] disabled:text-[rgba(255,255,255,0.8)] disabled:cursor-default",
         ghost:
-          "bg-transparent text-[#24292E] border-none shadow-none font-medium hover:bg-[#F3F4F6] hover:transition-duration-100 active:bg-[#EDEFF2] active:shadow-[rgba(225,228,232,0.2)_0_1px_0_inset] active:transition-none disabled:bg-[#FAFBFC] disabled:border-[rgba(27,31,35,0.15)] disabled:text-[#959DA5] disabled:cursor-default",
+          "bg-transparent text-[#24292E] border-none shadow-none font-medium hover:bg-[#F3F4F6] hover:text-[#586069] hover:transition-duration-100 active:bg-[#EDEFF2] active:shadow-[rgba(225,228,232,0.2)_0_1px_0_inset] active:transition-none disabled:bg-[#FAFBFC] disabled:border-[rgba(27,31,35,0.15)] disabled:text-[#959DA5] disabled:cursor-default",
       },
       size: {
         default: "text-sm leading-5 px-4 py-1.5",

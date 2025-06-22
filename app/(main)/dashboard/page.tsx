@@ -1,14 +1,9 @@
-"use client"
-
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { useDomainsStatsQuery } from '@/features/domains/hooks/useDomainsQuery'
-import { useAnalyticsQuery } from '@/features/analytics/hooks/useAnalyticsQuery'
+import { getAnalytics } from '@/app/actions/analytics'
+import { getDomainStats } from '@/app/actions/primary'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-
-import { Skeleton } from "@/components/ui/skeleton"
+import { Progress } from "@/components/ui/progress"
 import { 
   MailIcon, 
   TrendingUpIcon, 
@@ -17,61 +12,46 @@ import {
   XCircleIcon,
   ClockIcon,
   RefreshCwIcon,
-  PlusIcon
+  PlusIcon,
+  AlertTriangleIcon,
+  ActivityIcon,
+  ServerIcon,
+  DatabaseIcon,
+  ArrowRightIcon,
+  ZapIcon
 } from "lucide-react"
 import { formatDistanceToNow } from 'date-fns'
-import { toast } from 'sonner'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
+import Link from 'next/link'
 
-export default function Page() {
-  const router = useRouter()
-  
-  // Use react-query hooks for data fetching
-  const { 
-    data: domainStats, 
-    isLoading: isLoadingDomains, 
-    error: domainsError, 
-    refetch: refetchDomains,
-    isRefetching: isRefetchingDomains 
-  } = useDomainsStatsQuery()
-  
-  const { 
-    data: analyticsData, 
-    isLoading: isLoadingAnalytics, 
-    error: analyticsError, 
-    refetch: refetchAnalytics,
-    isRefetching: isRefetchingAnalytics 
-  } = useAnalyticsQuery()
+export default async function Page() {
+  // Fetch data using server actions
+  const [analyticsResult, domainStatsResult] = await Promise.allSettled([
+    getAnalytics(),
+    getDomainStats()
+  ])
 
-  // Combined loading and error states
-  const isLoading = isLoadingDomains || isLoadingAnalytics
-  const isRefetching = isRefetchingDomains || isRefetchingAnalytics
-  const error = domainsError || analyticsError
+  // Handle results and provide fallback data
+  const analyticsData = analyticsResult.status === 'fulfilled' && analyticsResult.value.success 
+    ? analyticsResult.value.data 
+    : null
 
-  // Handle refetch errors with toast
-  useEffect(() => {
-    if (domainsError) {
-      toast.error('Failed to load domain data')
-    }
-    if (analyticsError) {
-      toast.error('Failed to load analytics data')
-    }
-  }, [domainsError, analyticsError])
+  const domainStats = domainStatsResult.status === 'fulfilled' && !('error' in domainStatsResult.value)
+    ? domainStatsResult.value
+    : null
 
-  const handleRefresh = async () => {
-    try {
-      await Promise.all([refetchDomains(), refetchAnalytics()])
-    } catch (error) {
-      toast.error('Failed to refresh data')
-    }
-  }
+  // Error states
+  const analyticsError = analyticsResult.status === 'rejected' || 
+    (analyticsResult.status === 'fulfilled' && !analyticsResult.value.success)
+  const domainsError = domainStatsResult.status === 'rejected' || 
+    (domainStatsResult.status === 'fulfilled' && 'error' in domainStatsResult.value)
 
   const getStatusBadge = (domain: NonNullable<typeof domainStats>['domains'][0]) => {
     if (domain.isVerified) {
       return (
-        <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
+        <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-200 text-xs">
           <CheckCircleIcon className="h-3 w-3 mr-1" />
-          Verified
+          Active
         </Badge>
       )
     }
@@ -79,29 +59,28 @@ export default function Page() {
     switch (domain.status) {
       case DOMAIN_STATUS.PENDING:
         return (
-          <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200 transition-colors">
+          <Badge variant="secondary" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
             <ClockIcon className="h-3 w-3 mr-1" />
-            Pending
+            DNS Check
           </Badge>
         )
       case DOMAIN_STATUS.VERIFIED:
         return (
-          <Badge className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 transition-colors">
-            <ClockIcon className="h-3 w-3 mr-1" />
-            SES Pending
+          <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
+            <ServerIcon className="h-3 w-3 mr-1" />
+            SES Setup
           </Badge>
         )
-
       case DOMAIN_STATUS.FAILED:
         return (
-          <Badge className="bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-200 transition-colors">
+          <Badge variant="secondary" className="bg-red-50 text-red-700 border-red-200 text-xs">
             <XCircleIcon className="h-3 w-3 mr-1" />
-            Failed
+            Error
           </Badge>
         )
       default:
         return (
-          <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors">
+          <Badge variant="secondary" className="bg-gray-50 text-gray-700 border-gray-200 text-xs">
             <ClockIcon className="h-3 w-3 mr-1" />
             {domain.status}
           </Badge>
@@ -110,298 +89,233 @@ export default function Page() {
   }
 
   const getEmailStatusBadge = (status: string) => {
-    switch (status) {
-      case 'received':
-        return (
-          <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 transition-colors">
-            <CheckCircleIcon className="h-3 w-3 mr-1" />
-            Received
-          </Badge>
-        )
-      case 'processing':
-        return (
-          <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200 transition-colors">
-            <ClockIcon className="h-3 w-3 mr-1" />
-            Processing
-          </Badge>
-        )
-      case 'forwarded':
-        return (
-          <Badge className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 transition-colors">
-            <TrendingUpIcon className="h-3 w-3 mr-1" />
-            Forwarded
-          </Badge>
-        )
-      case 'failed':
-        return (
-          <Badge className="bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-200 transition-colors">
-            <XCircleIcon className="h-3 w-3 mr-1" />
-            Failed
-          </Badge>
-        )
-      default:
-        return (
-          <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors">
-            <ClockIcon className="h-3 w-3 mr-1" />
-            {status}
-          </Badge>
-        )
+    const statusConfig = {
+      received: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: DatabaseIcon },
+      processing: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: ZapIcon },
+      forwarded: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: CheckCircleIcon },
+      failed: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: XCircleIcon },
     }
-  }
-
-  const handleDomainClick = (domainId: string) => {
-    router.push(`/emails/${domainId}`)
-  }
-
-  const handleEmailClick = (emailId: string) => {
-    router.push(`/analytics?emailid=${emailId}`)
+    
+    const config = statusConfig[status as keyof typeof statusConfig] || {
+      bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', icon: ClockIcon
+    }
+    
+    const Icon = config.icon
+    
+    return (
+      <Badge variant="secondary" className={`${config.bg} ${config.text} ${config.border} text-xs`}>
+        <Icon className="h-3 w-3 mr-1" />
+        {status}
+      </Badge>
+    )
   }
 
   // Get domains and emails for display
   const displayDomains = domainStats?.domains || []
-  const displayEmails = analyticsData?.recentEmails?.slice(0, 5) || []
+  const displayEmails = analyticsData?.recentEmails?.slice(0, 8) || []
+
+  // Calculate pipeline metrics
+  const pipelineStats = {
+    received: analyticsData?.stats.totalEmails || 0,
+    processing: displayEmails.filter(e => e.status === 'processing').length,
+    forwarded: displayEmails.filter(e => e.status === 'forwarded').length,
+    failed: displayEmails.filter(e => e.status === 'failed').length,
+  }
+
+  const successRate = pipelineStats.received > 0 
+    ? Math.round((pipelineStats.forwarded / pipelineStats.received) * 100) 
+    : 0
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
-      {/* Header with Gradient */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-8 text-white shadow-xl">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative z-10">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold tracking-tight mb-2">Dashboard</h1>
-              <p className="text-purple-100 text-lg">
-                Overview of your email domains and activity
-              </p>
-              {isLoading ? (
-                <div className="flex items-center gap-6 mt-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse"></div>
-                    <Skeleton className="h-4 w-24 bg-white/20" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse"></div>
-                    <Skeleton className="h-4 w-32 bg-white/20" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse"></div>
-                    <Skeleton className="h-4 w-20 bg-white/20" />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-6 mt-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-white rounded-full"></div>
-                    <span className="text-purple-100">{analyticsData?.stats.totalEmails || 0} Total Emails</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-300 rounded-full"></div>
-                    <span className="text-purple-100">{domainStats?.verifiedDomains || 0} Verified Domains</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-300 rounded-full"></div>
-                    <span className="text-purple-100">{analyticsData?.stats.emailsLast24h || 0} Last 24h</span>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="secondary"
-                onClick={handleRefresh}
-                disabled={isLoading || isRefetching}
-                className="bg-white/20 border-white/30 text-white hover:bg-white/30 backdrop-blur-sm"
-              >
-                <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading || isRefetching ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-              <Button asChild className="bg-white text-purple-700 hover:bg-white/90 font-semibold shadow-lg">
-                <a href="/add">
-                  <PlusIcon className="h-4 w-4 mr-2" />
-                  Add Domain
-                </a>
-              </Button>
-            </div>
+    <div className="flex flex-1 flex-col gap-4 p-4">
+      {/* Compact Header */}
+      <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4">
+        <div>
+          <h1 className="text-xl font-semibold mb-1">Email Pipeline Dashboard</h1>
+          <div className="flex items-center gap-4 text-sm text-slate-300">
+            <span className="flex items-center gap-1">
+              <ActivityIcon className="h-3 w-3" />
+              {analyticsData?.stats.totalEmails || 0} processed
+            </span>
+            <span className="flex items-center gap-1">
+              <GlobeIcon className="h-3 w-3" />
+              {domainStats?.verifiedDomains || 0}/{domainStats?.totalDomains || 0} domains active
+            </span>
+            <span className="flex items-center gap-1">
+              <ZapIcon className="h-3 w-3" />
+              {successRate}% success rate
+            </span>
           </div>
         </div>
-        {/* Decorative elements */}
-        <div className="absolute -top-4 -right-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-        <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
-        <div className="absolute top-1/2 right-1/4 w-16 h-16 bg-white/5 rounded-full blur-lg"></div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            asChild
+            className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+          >
+            <Link href="/dashboard">
+              <RefreshCwIcon className="h-3 w-3 mr-1" />
+              Refresh
+            </Link>
+          </Button>
+          <Button size="sm" asChild>
+            <Link href="/add">
+              <PlusIcon className="h-3 w-3 mr-1" />
+              Add Domain
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Error State */}
-      {error && (
+      {(analyticsError || domainsError) && (
         <Card className="border-red-200 bg-red-50">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-red-600">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 text-red-600 text-sm">
               <XCircleIcon className="h-4 w-4" />
-              <span>{error?.message || 'Failed to load data'}</span>
+              <span>
+                {analyticsError && domainsError ? 'Failed to load dashboard data' :
+                 analyticsError ? 'Failed to load analytics data' :
+                 'Failed to load domain data'}
+              </span>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleRefresh}
-                className="ml-auto text-red-600 hover:text-red-700"
+                asChild
+                className="ml-auto text-red-600 hover:text-red-700 h-auto p-1"
               >
-                Try Again
+                <Link href="/dashboard">Retry</Link>
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Metrics Cards */}
-      <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-3">
-
-        {/* Weekly Volume */}
-        <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 h-[140px]">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-blue-700">Weekly Volume</CardTitle>
-            <TrendingUpIcon className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <>
-                <Skeleton className="h-8 w-20 mb-1" />
-                <Skeleton className="h-3 w-24" />
-              </>
-            ) : (
-              <>
-                <div className="text-2xl font-bold text-blue-900">{analyticsData?.stats.emailsLast7d?.toLocaleString() || 0}</div>
-                <p className="text-xs text-blue-600 mt-1">
-                  {analyticsData?.stats.emailsLast24h || 0} in last 24h
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Active Domains */}
-        <Card className="border-green-200 bg-gradient-to-br from-green-50 to-green-100 h-[140px]">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-green-700">Active Domains</CardTitle>
-            <GlobeIcon className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <>
-                <Skeleton className="h-8 w-12 mb-1" />
-                <Skeleton className="h-3 w-28" />
-              </>
-            ) : (
-              <>
-                <div className="text-2xl font-bold text-green-900">{domainStats?.verifiedDomains || 0}</div>
-                <p className="text-xs text-green-600 mt-1">
-                  {domainStats?.totalDomains || 0} total configured
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Processing Time */}
-        <Card className="border-amber-200 bg-gradient-to-br from-amber-50 to-amber-100 h-[140px]">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-amber-700">Avg Processing</CardTitle>
-            <ClockIcon className="h-4 w-4 text-amber-600" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <>
-                <Skeleton className="h-8 w-16 mb-1" />
-                <Skeleton className="h-3 w-32" />
-              </>
-            ) : (
-              <>
-                <div className="text-2xl font-bold text-amber-900">{analyticsData?.stats.avgProcessingTime || 0}ms</div>
-                <p className="text-xs text-amber-600 mt-1">
-                  last 30 days average
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Two Column Layout */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Domains Overview */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <GlobeIcon className="h-5 w-5 text-purple-600" />
-                  Your Domains
-                </CardTitle>
-                <CardDescription>
-                  Manage and monitor your email domains
-                </CardDescription>
+      {/* Email Flow Pipeline */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ActivityIcon className="h-4 w-4" />
+            Email Processing Pipeline
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div>
+            {/* Pipeline Flow Visualization */}
+            <div className="flex items-center justify-between mb-4 p-3 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  Receive
+                </div>
+                <ArrowRightIcon className="h-3 w-3 text-slate-400" />
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                  Process
+                </div>
+                <ArrowRightIcon className="h-3 w-3 text-slate-400" />
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  Forward
+                </div>
               </div>
-              <Button variant="secondary" size="sm" asChild>
-                <a href="/emails">
-                  View All
-                </a>
+              <div className="text-sm text-slate-600">
+                Avg: {analyticsData?.stats.avgProcessingTime || 0}ms
+              </div>
+            </div>
+
+            {/* Pipeline Metrics */}
+            <div className="grid grid-cols-4 gap-3">
+              <div className="text-center p-3 bg-blue-50 rounded-lg border border-blue-100">
+                <div className="text-lg font-semibold text-blue-700">{pipelineStats.received}</div>
+                <div className="text-xs text-blue-600 mt-1">Received</div>
+                <div className="text-xs text-slate-500 mt-1">
+                  {analyticsData?.stats.emailsLast24h || 0} today
+                </div>
+              </div>
+              <div className="text-center p-3 bg-amber-50 rounded-lg border border-amber-100">
+                <div className="text-lg font-semibold text-amber-700">{pipelineStats.processing}</div>
+                <div className="text-xs text-amber-600 mt-1">Processing</div>
+                <div className="text-xs text-slate-500 mt-1">Active queue</div>
+              </div>
+              <div className="text-center p-3 bg-green-50 rounded-lg border border-green-100">
+                <div className="text-lg font-semibold text-green-700">{pipelineStats.forwarded}</div>
+                <div className="text-xs text-green-600 mt-1">Forwarded</div>
+                <div className="text-xs text-slate-500 mt-1">{successRate}% rate</div>
+              </div>
+              <div className="text-center p-3 bg-red-50 rounded-lg border border-red-100">
+                <div className="text-lg font-semibold text-red-700">{pipelineStats.failed}</div>
+                <div className="text-xs text-red-600 mt-1">Failed</div>
+                <div className="text-xs text-slate-500 mt-1">Need attention</div>
+              </div>
+            </div>
+
+            {/* Success Rate Progress */}
+            <div className="mt-4 p-3 bg-slate-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">Success Rate</span>
+                <span className="text-sm text-slate-600">{successRate}%</span>
+              </div>
+              <Progress value={successRate} className="h-2" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Domain Status & Recent Activity - Two Column */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Domain Status */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <GlobeIcon className="h-4 w-4" />
+                Domain Status
+              </CardTitle>
+              <Button variant="ghost" size="sm" asChild className="h-auto p-1 text-xs">
+                <Link href="/emails">View All →</Link>
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="space-y-3">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-lg border">
-                    <div className="flex items-center gap-3">
-                      <Skeleton className="w-8 h-8 rounded-md" />
-                      <div>
-                        <Skeleton className="h-4 w-32 mb-1" />
-                        <Skeleton className="h-3 w-40" />
-                      </div>
-                    </div>
-                    <Skeleton className="h-6 w-16 rounded-full" />
-                  </div>
-                ))}
-              </div>
-            ) : displayDomains.length === 0 ? (
-              <div className="text-center py-8">
-                <GlobeIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground mb-3">No domains configured yet</p>
+          <CardContent className="pt-0">
+            {displayDomains.length === 0 ? (
+              <div className="text-center py-6">
+                <GlobeIcon className="h-6 w-6 text-slate-400 mx-auto mb-2" />
+                <p className="text-sm text-slate-500 mb-2">No domains configured</p>
                 <Button variant="secondary" size="sm" asChild>
-                  <a href="/emails">
-                    <PlusIcon className="h-4 w-4 mr-2" />
-                    Add Your First Domain
-                  </a>
+                  <Link href="/add">
+                    <PlusIcon className="h-3 w-3 mr-1" />
+                    Add Domain
+                  </Link>
                 </Button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {displayDomains.slice(0, 5).map((domain) => (
-                  <div 
+              <div className="divide-y divide-slate-200">
+                {displayDomains.slice(0, 6).map((domain) => (
+                  <Link 
                     key={domain.id}
-                    className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 cursor-pointer transition-colors"
-                    onClick={() => handleDomainClick(domain.id)}
+                    href={`/emails/${domain.id}`}
+                    className="flex items-center justify-between py-3 -mx-6 px-6 hover:bg-slate-50 transition-colors block"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-md bg-purple-100 border border-purple-200">
-                        <GlobeIcon className="h-4 w-4 text-purple-600" />
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className="flex items-center justify-center w-6 h-6 rounded bg-slate-100">
+                        <GlobeIcon className="h-3 w-3 text-slate-600" />
                       </div>
-                      <div>
-                        <div className="font-medium text-sm">{domain.domain}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {domain.emailAddressCount} addresses • {domain.emailsLast24h} emails today
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-xs truncate">{domain.domain}</div>
+                        <div className="text-xs text-slate-500">
+                          {domain.emailAddressCount} addresses • {domain.emailsLast24h} today
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {getStatusBadge(domain)}
-                    </div>
-                  </div>
+                    {getStatusBadge(domain)}
+                  </Link>
                 ))}
-                {displayDomains.length > 5 && (
+                {displayDomains.length > 6 && (
                   <div className="text-center pt-2">
-                    <Button variant="ghost" size="sm" asChild>
-                      <a href="/emails">
-                        View {displayDomains.length - 5} more domains
-                      </a>
+                    <Button variant="ghost" size="sm" asChild className="text-xs">
+                      <Link href="/emails">+{displayDomains.length - 6} more</Link>
                     </Button>
                   </div>
                 )}
@@ -410,82 +324,51 @@ export default function Page() {
           </CardContent>
         </Card>
 
-        {/* Recent Email Activity */}
+        {/* Recent Activity Stream */}
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <MailIcon className="h-5 w-5 text-purple-600" />
-                  Recent Activity
-                </CardTitle>
-                <CardDescription>
-                  Latest inbound emails received
-                </CardDescription>
-              </div>
-              <Button variant="secondary" size="sm" asChild>
-                <a href="/analytics">
-                  View All
-                </a>
+              <CardTitle className="text-base flex items-center gap-2">
+                <MailIcon className="h-4 w-4" />
+                Activity Stream
+              </CardTitle>
+              <Button variant="ghost" size="sm" asChild className="h-auto p-1 text-xs">
+                <Link href="/analytics">View All →</Link>
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="space-y-4">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="flex items-start justify-between py-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-5 w-16 rounded-full" />
-                      </div>
-                      <Skeleton className="h-3 w-40 mb-1" />
-                      <Skeleton className="h-4 w-48 mb-1" />
-                      <Skeleton className="h-3 w-24" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : displayEmails.length === 0 ? (
-              <div className="text-center py-8">
-                <MailIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">No recent emails</p>
+          <CardContent className="pt-0">
+            {displayEmails.length === 0 ? (
+              <div className="text-center py-6">
+                <MailIcon className="h-6 w-6 text-slate-400 mx-auto mb-2" />
+                <p className="text-sm text-slate-500">No recent activity</p>
               </div>
             ) : (
-              <div className="divide-y divide-border">
-                {displayEmails.map((email, index) => (
-                  <div 
+              <div className="space-y-2">
+                {displayEmails.map((email) => (
+                  <Link 
                     key={email.id}
-                    className="py-4 hover:bg-muted/30 cursor-pointer transition-colors -mx-6 px-6"
-                    onClick={() => handleEmailClick(email.id)}
+                    href={`/analytics?emailid=${email.id}`}
+                    className="flex items-start gap-2 p-2 hover:bg-slate-50 transition-colors border rounded block"
                   >
+                    <div className="w-1 h-8 bg-blue-200 rounded-full mt-1 flex-shrink-0"></div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <div className="font-medium text-sm truncate">{email.from}</div>
+                        <div className="font-medium text-xs truncate">{email.from}</div>
                         {getEmailStatusBadge(email.status)}
                       </div>
-                      <div className="text-sm text-muted-foreground truncate mb-1">
-                        To: {email.recipient}
+                      <div className="text-xs text-slate-600 truncate mb-0.5">
+                        → {email.recipient}
                       </div>
-                      <div className="text-sm font-medium truncate mb-1">
+                      <div className="text-xs text-slate-500 truncate mb-1">
                         {email.subject}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-slate-400">
                         {formatDistanceToNow(new Date(email.receivedAt), { addSuffix: true })}
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 ))}
-                {analyticsData && analyticsData.recentEmails.length > 5 && (
-                  <div className="text-center pt-4">
-                    <Button variant="ghost" size="sm" asChild>
-                      <a href="/analytics">
-                        View {analyticsData.recentEmails.length - 5} more emails
-                      </a>
-                    </Button>
-                  </div>
-                )}
               </div>
             )}
           </CardContent>

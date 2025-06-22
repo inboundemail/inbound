@@ -2,11 +2,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import InboundIcon from "@/components/InboundIcon"
 import { PricingTable } from "@/components/autumn/pricing-table"
-import { FaArrowRight, FaEnvelope, FaGlobe, FaLock, FaCheckCircle, FaBolt, FaArrowDown, FaTimes, FaStar } from "react-icons/fa"
+import { HiArrowRight, HiMail, HiGlobeAlt, HiLockClosed, HiCheckCircle, HiLightningBolt, HiArrowDown, HiX, HiStar, HiMailOpen, HiChip, HiCog, HiLightBulb, HiSparkles } from "react-icons/hi"
 import Image from "next/image"
-import { Sparkle, Sparkles } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
+import CustomInboundIcon from "@/components/icons/customInbound"
 
 export default async function HomePage() {
   const session = await auth.api.getSession({
@@ -29,13 +29,13 @@ export default async function HomePage() {
           {/* Conditionally show Sign In or Go to Dashboard based on auth state */}
           {session ? (
             <Button variant="primary" asChild>
-              <a href="/dashboard" className="text-white hover:text-gray-900">
+              <a href="/dashboard">
                 Go to Dashboard
               </a>
             </Button>
           ) : (
             <Button variant="primary" asChild>
-              <a href="/login" className="text-white hover:text-gray-900">
+              <a href="/login">
                 Sign In
               </a>
             </Button>
@@ -49,44 +49,41 @@ export default async function HomePage() {
           {/* Hero Section */}
           <div className="mb-16">
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
-              the easiest way to turn
-              <br />
-
-              <img
-                src="/mail-icon.png"
-                alt="Email"
-                width={48}
-                height={48}
+              email
+              <CustomInboundIcon
                 className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_0.5s_forwards]"
+                backgroundColor="#1C2894"
+                Icon={HiGlobeAlt}
+                size={48}
               />
-              <span className="text-[#6C47FF]">emails</span> into
-
-              <img
-                src="/domain-icon.png"
-                alt="Email"
-                width={48}
-                height={48}
-                className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_1s_forwards]"
+              <span className="text-[#1C2894]">infrastructure</span>
+              <br />
+              for
+              <CustomInboundIcon
+                className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_0.5s_forwards]"
+                backgroundColor="#6C47FF"
+                Icon={HiSparkles}
+                size={48}
               />
-              <span className="text-[#1C2894]">webhooks</span>
+              <span className="text-[#6C47FF]">ai agents</span>
             </h1>
             <p className="text-xl text-gray-600 mb-4 max-w-2xl mx-auto leading-relaxed">
-              set up email receiving for your domain in minutes.
-              get webhooks when emails arrive, with automatic spam filtering and secure processing.
+              connect ai agents directly to email addresses. full programmatic control,
+              webhook integration, and intelligent email processing out of the box.
             </p>
 
             <div className="flex items-center gap-4 max-w-md mx-auto mt-4"  >
               <Input type="email" placeholder="user@inbound.new" />
-              <Button variant="primary" asChild className="text-white hover:text-gray-900">
+              <Button variant="primary" asChild>
                 {session ? (
-                  <a href="/add" className="text-white hover:text-gray-900">
+                  <a href="/add">
                     Get Started (its free)
-                    <FaArrowRight className="ml-2 w-3 h-3" />
+                    <HiArrowRight className="ml-2 w-3 h-3" />
                   </a>
                 ) : (
-                  <a href="/login" className="text-white hover:text-gray-900">
+                  <a href="/login">
                     Get Started (its free)
-                    <FaArrowRight className="ml-2 w-3 h-3" />
+                    <HiArrowRight className="ml-2 w-3 h-3" />
                   </a>
                 )}
 
@@ -96,7 +93,7 @@ export default async function HomePage() {
 
           {/* Interactive Demo Section */}
           <div className="mb-32 text-left">
-            <h2 className="text-3xl font-bold text-gray-900 mb-12 text-center">See it in action</h2>
+            <h2 className="text-3xl font-bold text-gray-900 mb-12 text-center">watch your ai agent work</h2>
 
             <div className="max-w-4xl mx-auto">
               {/* Email Draft */}
@@ -108,7 +105,7 @@ export default async function HomePage() {
                       <div className="flex justify-between items-center border-b border-[#313135] pb-3">
                         <div className="flex items-center gap-2 justify-start">
                           <span className="text-[#8C8C8C] text-sm ">To:</span>
-                          <span className="text-white text-sm ml-2 px-2 py-1 bg-[#2A2A2A] rounded-md gap-2 flex items-center">user@inbound.exon.dev <FaTimes className="w-4 h-4 text-[#8C8C8C] inline-block ml-2" /></span>
+                          <span className="text-white text-sm ml-2 px-2 py-1 bg-[#2A2A2A] rounded-md gap-2 flex items-center">user@inbound.exon.dev <HiX className="w-4 h-4 text-[#8C8C8C] inline-block ml-2" /></span>
                         </div>
                         <button className="text-[#8C8C8C] hover:text-[#A8A8A8] text-sm ml-2">
                           Cc Bcc
@@ -168,7 +165,7 @@ export default async function HomePage() {
                           <path d="M38.125 190.625V152.5H0V38.125H38.125V0H152.5V38.125H190.625V152.5H152.5V190.625H38.125ZM38.125 114.375H76.25V150.975H152.5V76.25H114.375V114.375H76.25V76.25H114.375V39.65H38.125V114.375Z" fill="white" />
                         </svg>
                         <button className="flex items-center gap-1 text-white text-sm bg-[#2B2B2B] px-2 py-1 rounded-md border-purple-500 border">
-                          <Sparkles className="w-4 h-4" />
+                          <HiSparkles className="w-4 h-4" />
                           Generate
                         </button>
 
@@ -184,7 +181,7 @@ export default async function HomePage() {
                 <div className="relative">
                   <div className="absolute inset-x-0 top-1/2 h-px bg-gray-300 -translate-y-1/2"></div>
                   <div className="relative bg-white px-4">
-                    <FaArrowDown className="w-6 h-6 text-gray-400" />
+                    <HiArrowDown className="w-6 h-6 text-gray-400" />
                   </div>
                 </div>
               </div>
@@ -194,14 +191,14 @@ export default async function HomePage() {
                 <div className="bg-gray-900 rounded-xl shadow-lg overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-800">
                     <h3 className="text-white font-semibold flex items-center gap-2">
-                      <FaEnvelope className="w-4 h-4 text-green-400" />
+                      <HiMail className="w-4 h-4 text-green-400" />
                       Incoming Email Logs
                     </h3>
                   </div>
                   <div className="p-6 font-mono text-sm">
                     <div className="flex items-start gap-3 text-gray-300">
                       <span className="text-gray-500">{new Date().toLocaleTimeString()}</span>
-                      <FaCheckCircle className="w-4 h-4 text-green-400 mt-0.5" />
+                      <HiCheckCircle className="w-4 h-4 text-green-400 mt-0.5" />
                       <div>
                         <div>Email received from <span className="text-white">sender@0.email</span></div>
                         <div className="text-gray-400">To: user@inbound.exon.dev</div>
@@ -217,7 +214,7 @@ export default async function HomePage() {
                 <div className="relative">
                   <div className="absolute inset-x-0 top-1/2 h-px bg-gray-300 -translate-y-1/2"></div>
                   <div className="relative bg-white px-4">
-                    <FaArrowDown className="w-6 h-6 text-gray-400" />
+                    <HiArrowDown className="w-6 h-6 text-gray-400" />
                   </div>
                 </div>
               </div>
@@ -227,13 +224,13 @@ export default async function HomePage() {
                 <div className="bg-purple-50 rounded-xl shadow-lg overflow-hidden border border-purple-200">
                   <div className="px-6 py-4 border-b border-purple-200 bg-purple-100">
                     <h3 className="text-purple-900 font-semibold flex items-center gap-2">
-                      <FaBolt className="w-4 h-4 text-purple-600" />
-                      Webhook Triggered
+                      <HiChip className="w-4 h-4 text-purple-600" />
+                      AI Agent Processing
                     </h3>
                   </div>
                   <div className="p-6">
                     <div className="font-mono text-sm bg-white rounded-lg p-4 border border-purple-200">
-                      <div className="text-purple-600">POST https://api.yourapp.com/webhooks/email</div>
+                      <div className="text-purple-600">POST https://api.yourapp.com/agent/process-email</div>
                       <div className="mt-3 text-gray-700">
                         <pre className="whitespace-pre-wrap">{`{
   "id": "em_1o2jaosd8daks",
@@ -273,9 +270,9 @@ export default async function HomePage() {
 
           {/* Docs and Developer Support */}
           <div className="mb-32">
-            <h2 className="text-3xl font-bold text-gray-900 mb-6 text-center">Built for Developers</h2>
+            <h2 className="text-3xl font-bold text-gray-900 mb-6 text-center">built for ai builders</h2>
             <p className="text-lg text-gray-600 mb-12 text-center max-w-2xl mx-auto">
-              Programmatically manage your email infrastructure with our TypeScript SDK and REST API.
+              deploy ai agents to email addresses with our typescript sdk and rest api. full programmatic control over your agent mail infrastructure.
             </p>
 
             <div className="space-y-8 max-w-4xl mx-auto">
@@ -301,7 +298,7 @@ export default async function HomePage() {
                 <Button variant="secondary" asChild className="w-full">
                   <a href="/docs" className="flex items-center justify-center gap-2">
                     View SDK Docs
-                    <FaArrowRight className="w-3 h-3" />
+                    <HiArrowRight className="w-3 h-3" />
                   </a>
                 </Button>
               </div>
@@ -334,7 +331,7 @@ export default async function HomePage() {
                 <Button variant="secondary" asChild className="w-full">
                   <a href="/docs" className="flex items-center justify-center gap-2">
                     View API Docs
-                    <FaArrowRight className="w-3 h-3" />
+                    <HiArrowRight className="w-3 h-3" />
                   </a>
                 </Button>
               </div>
@@ -344,21 +341,21 @@ export default async function HomePage() {
             <div className="mt-12 grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
               <div className="text-center">
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                  <FaCheckCircle className="w-6 h-6 text-green-600" />
+                  <HiCheckCircle className="w-6 h-6 text-green-600" />
                 </div>
                 <h4 className="font-semibold text-gray-900 mb-2">Domain Management</h4>
                 <p className="text-sm text-gray-600">List, verify, and manage your email domains programmatically</p>
               </div>
               <div className="text-center">
                 <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                  <FaEnvelope className="w-6 h-6 text-purple-600" />
+                  <HiMail className="w-6 h-6 text-purple-600" />
                 </div>
                 <h4 className="font-semibold text-gray-900 mb-2">Email Addresses</h4>
                 <p className="text-sm text-gray-600">Create and delete email addresses on your verified domains</p>
               </div>
               <div className="text-center">
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                  <FaBolt className="w-6 h-6 text-blue-600" />
+                  <HiLightningBolt className="w-6 h-6 text-blue-600" />
                 </div>
                 <h4 className="font-semibold text-gray-900 mb-2">Webhook Setup</h4>
                 <p className="text-sm text-gray-600">Configure webhook endpoints to receive email notifications</p>
@@ -385,7 +382,7 @@ export default async function HomePage() {
             <span className="text-lg font-bold text-gray-900">inbound</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-gray-500">
-            <a href="https://twitter.com/intent/follow?screen_name=inbounddotnew" className="hover:text-gray-700 transition-colors flex items-center gap-1">Contact us on 
+            <a href="https://twitter.com/intent/follow?screen_name=inbounddotnew" className="hover:text-gray-700 transition-colors flex items-center gap-1">Contact us on
               <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 1200 1227"><path fill="#000" d="M714.163 519.284 1160.89 0h-105.86L667.137 450.887 357.328 0H0l468.492 681.821L0 1226.37h105.866l409.625-476.152 327.181 476.152H1200L714.137 519.284h.026ZM569.165 687.828l-47.468-67.894-377.686-540.24h162.604l304.797 435.991 47.468 67.894 396.2 566.721H892.476L569.165 687.854v-.026Z" /></svg></a>
             <a href="/privacy" className="hover:text-gray-700 transition-colors">Privacy</a>
             <a href="/terms" className="hover:text-gray-700 transition-colors">Terms</a>

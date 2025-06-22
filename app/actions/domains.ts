@@ -570,28 +570,7 @@ export async function getDomainDetails(domain: string, domainId: string, refresh
     } else if (refreshProvider && !sesClient) {
       console.log(`⚠️ Get Domain - SES client not available for comprehensive verification check`)
     } else {
-      // Auto-check SES verification if domain is in verified status
-      if (domainData.status === DOMAIN_STATUS.VERIFIED) {
-        try {
-          console.log(`Get Domain - Auto-checking SES verification for domain: ${domainData.domain}`)
-          const verificationResult = await initiateDomainVerification(domainData.domain, userId)
-          
-          if (verificationResult.status === DOMAIN_STATUS.VERIFIED) {
-            const updatedDomainRecord = await db
-              .select()
-              .from(emailDomains)
-              .where(and(eq(emailDomains.id, domainId), eq(emailDomains.userId, userId)))
-              .limit(1)
-            
-            if (updatedDomainRecord[0]) {
-              updatedDomain = updatedDomainRecord[0]
-              console.log(`Get Domain - Domain status updated from ${domainData.status} to ${updatedDomain.status}`)
-            }
-          }
-        } catch (error) {
-          console.error('Get Domain - Error auto-checking SES verification:', error)
-        }
-      }
+      console.log(`ℹ️ Get Domain - Domain status is ${domainData.status}, skipping verification checks`)
     }
 
     // Get DNS records

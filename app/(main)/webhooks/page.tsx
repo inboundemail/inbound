@@ -1,190 +1,94 @@
-"use client"
-
-import { useState } from 'react'
-import { useSession } from '@/lib/auth-client'
-import { Card, CardContent } from '@/components/ui/card'
+import { getWebhooks } from '@/app/actions/webhooks'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-} from '@/components/ui/table'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  CheckCircleIcon,
-  XCircleIcon,
+import { Progress } from '@/components/ui/progress'
+import { CopyButton } from '@/components/copy-button'
+import { 
+  CheckCircleIcon, 
+  XCircleIcon, 
+  ClockIcon, 
   PlusIcon,
-  TrendingUpIcon,
-  CalendarIcon,
   RefreshCwIcon,
-  TrashIcon,
-  SettingsIcon,
-  PlayIcon,
+  ActivityIcon,
+  ZapIcon,
+  WebhookIcon,
+  TrendingUpIcon,
   AlertTriangleIcon,
-  WebhookIcon
+  CalendarIcon,
+  ShieldCheckIcon,
+  PlayIcon,
+  SettingsIcon,
+  TrashIcon,
+  BarChart3Icon,
+  GlobeIcon,
+  MoreHorizontalIcon
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { toast } from 'sonner'
-import {
-  useWebhooksQuery,
-  useCreateWebhookMutation,
-  useUpdateWebhookMutation,
-  useDeleteWebhookMutation,
-  useTestWebhookMutation
-} from '@/features/webhooks/hooks'
+import Link from 'next/link'
 import { Webhook } from '@/features/webhooks/types'
 
-export default function WebhooksPage() {
-  const { data: session } = useSession()
-
-  // React Query hooks
-  const {
-    data: webhooks = [],
-    isLoading,
-    error,
-    refetch: refetchWebhooks
-  } = useWebhooksQuery()
-
-  const createWebhookMutation = useCreateWebhookMutation()
-  const updateWebhookMutation = useUpdateWebhookMutation()
-  const deleteWebhookMutation = useDeleteWebhookMutation()
-  const testWebhookMutation = useTestWebhookMutation()
-
-  // Create webhook state
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [createForm, setCreateForm] = useState({
-    name: '',
-    url: '',
-    description: '',
-    timeout: 30,
-    retryAttempts: 3
-  })
-  const [createError, setCreateError] = useState<string | null>(null)
-
-  // Edit webhook state
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [editingWebhook, setEditingWebhook] = useState<Webhook | null>(null)
-  const [editForm, setEditForm] = useState({
-    name: '',
-    url: '',
-    description: '',
-    isActive: true,
-    timeout: 30,
-    retryAttempts: 3
-  })
-  const [editError, setEditError] = useState<string | null>(null)
-
-  const handleCreateWebhook = async () => {
-    if (!createForm.name.trim() || !createForm.url.trim()) {
-      setCreateError('Name and URL are required')
-      return
-    }
-
-    setCreateError(null)
-
-    try {
-      await createWebhookMutation.mutateAsync(createForm)
-      toast.success('Webhook created successfully!')
-      setIsCreateDialogOpen(false)
-      setCreateForm({
-        name: '',
-        url: '',
-        description: '',
-        timeout: 30,
-        retryAttempts: 3
-      })
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create webhook'
-      setCreateError(errorMessage)
-      toast.error(errorMessage)
-    }
+export default async function EndpointsPage() {
+  // Fetch webhooks data (will expand to fetch all endpoint types)
+  const webhooksResult = await getWebhooks()
+  
+  if ('error' in webhooksResult) {
+    return (
+      <div className="flex flex-1 flex-col gap-4 p-4">
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 text-red-600">
+              <XCircleIcon className="h-4 w-4" />
+              <span>{webhooksResult.error}</span>
+              <Button variant="ghost" size="sm" asChild className="ml-auto text-red-600 hover:text-red-700">
+                <Link href="/webhooks">Try Again</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
-  const handleTestWebhook = async (webhookId: string) => {
-    try {
-      const result = await testWebhookMutation.mutateAsync(webhookId)
-      toast.success(`Webhook test successful! Response: ${result.statusCode}`)
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to test webhook'
-      toast.error(`Webhook test failed: ${errorMessage}`)
-    }
-  }
+  const webhooks = webhooksResult.webhooks
 
-  const handleDeleteWebhook = async (webhookId: string, webhookName: string) => {
-    if (!confirm(`Are you sure you want to delete the webhook "${webhookName}"?`)) {
-      return
-    }
-
-    try {
-      await deleteWebhookMutation.mutateAsync(webhookId)
-      toast.success('Webhook deleted successfully')
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to delete webhook'
-      toast.error(errorMessage)
-    }
-  }
-
-  const openEditDialog = (webhook: Webhook) => {
-    setEditingWebhook(webhook)
-    setEditForm({
-      name: webhook.name,
-      url: webhook.url,
-      description: webhook.description || '',
-      isActive: webhook.isActive || true,
-      timeout: webhook.timeout || 30,
-      retryAttempts: webhook.retryAttempts || 3
-    })
-    setEditError(null)
-    setIsEditDialogOpen(true)
-  }
-
-  const handleEditWebhook = async () => {
-    if (!editForm.name.trim() || !editForm.url.trim() || !editingWebhook) {
-      setEditError('Name and URL are required')
-      return
-    }
-
-    setEditError(null)
-
-    try {
-      await updateWebhookMutation.mutateAsync({
-        id: editingWebhook.id,
-        data: editForm
-      })
-      toast.success('Webhook updated successfully!')
-      setIsEditDialogOpen(false)
-      setEditingWebhook(null)
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update webhook'
-      setEditError(errorMessage)
-      toast.error(errorMessage)
-    }
-  }
-
+  // Helper functions
   const getStatusBadge = (webhook: Webhook) => {
     if (webhook.isActive) {
+      const successRate = getSuccessRate(webhook)
+      if ((webhook.totalDeliveries || 0) === 0) {
+        return (
+          <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
+            <ZapIcon className="h-3 w-3 mr-1" />
+            Ready
+          </Badge>
+        )
+      }
+      if (successRate >= 95) {
+        return (
+          <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-200 text-xs">
+            <CheckCircleIcon className="h-3 w-3 mr-1" />
+            Excellent
+          </Badge>
+        )
+      }
+      if (successRate >= 80) {
+        return (
+          <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
+            <TrendingUpIcon className="h-3 w-3 mr-1" />
+            Good
+          </Badge>
+        )
+      }
       return (
-        <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-200 transition-colors">
-          <CheckCircleIcon className="h-3 w-3 mr-1" />
-          Active
+        <Badge variant="secondary" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
+          <AlertTriangleIcon className="h-3 w-3 mr-1" />
+          Needs Attention
         </Badge>
       )
     } else {
       return (
-        <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors">
+        <Badge variant="secondary" className="bg-gray-50 text-gray-700 border-gray-200 text-xs">
           <XCircleIcon className="h-3 w-3 mr-1" />
           Disabled
         </Badge>
@@ -197,487 +101,175 @@ export default function WebhooksPage() {
     return Math.round(((webhook.successfulDeliveries || 0) / webhook.totalDeliveries) * 100)
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-1 flex-col gap-6 p-6">
-        {/* Header with Gradient */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-8 text-white shadow-xl">
-          <div className="absolute inset-0 bg-black/10"></div>
-          <div className="relative z-10">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-4xl font-bold tracking-tight mb-2">Webhooks</h1>
-                <p className="text-purple-100 text-lg">
-                  Manage webhook endpoints for email notifications
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Button variant="secondary" disabled className="bg-white/20 border-white/30 text-white hover:bg-white/30">
-                  <RefreshCwIcon className="h-4 w-4 mr-2" />
-                  Refresh
-                </Button>
-                <Button disabled className="bg-white text-purple-700 hover:bg-white/90 font-semibold shadow-lg">
-                  <PlusIcon className="h-4 w-4 mr-2" />
-                  Create Webhook
-                </Button>
-              </div>
-            </div>
-          </div>
-          {/* Decorative elements */}
-          <div className="absolute -top-4 -right-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-          <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
-        </div>
-
-        <div className="flex items-center justify-center py-12">
-          <div className="flex items-center gap-2">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-            <span className="text-muted-foreground">Loading webhooks...</span>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Calculate webhook stats
-  const totalWebhooks = webhooks.length
-  const activeWebhooks = webhooks.filter(w => w.isActive).length
+  // Calculate metrics
+  const totalEndpoints = webhooks.length
+  const activeEndpoints = webhooks.filter(w => w.isActive).length
   const totalDeliveries = webhooks.reduce((sum, w) => sum + (w.totalDeliveries || 0), 0)
   const successfulDeliveries = webhooks.reduce((sum, w) => sum + (w.successfulDeliveries || 0), 0)
   const overallSuccessRate = totalDeliveries > 0 ? Math.round((successfulDeliveries / totalDeliveries) * 100) : 0
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
-      {/* Header with Gradient */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-8 text-white shadow-xl">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative z-10">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold tracking-tight mb-2">Webhooks</h1>
-              <p className="text-purple-100 text-lg">
-                Manage webhook endpoints for email notifications
-              </p>
-              {webhooks.length > 0 && (
-                <div className="flex items-center gap-6 mt-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-white rounded-full"></div>
-                    <span className="text-purple-100">{totalWebhooks} Total Webhooks</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-300 rounded-full"></div>
-                    <span className="text-purple-100">{activeWebhooks} Active</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-300 rounded-full"></div>
-                    <span className="text-purple-100">{overallSuccessRate}% Success Rate</span>
-                  </div>
-                </div>
-              )}
+    <div className="flex flex-1 flex-col gap-4 p-4">
+      {/* Compact Header */}
+      <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4">
+        <div>
+          <h1 className="text-xl font-semibold mb-1">Endpoint Management</h1>
+          <div className="flex items-center gap-4 text-sm text-slate-300">
+            <span className="flex items-center gap-1">
+              <ZapIcon className="h-3 w-3" />
+              {totalEndpoints} endpoints
+            </span>
+            <span className="flex items-center gap-1">
+              <ActivityIcon className="h-3 w-3" />
+              {activeEndpoints} active
+            </span>
+            <span className="flex items-center gap-1">
+              <TrendingUpIcon className="h-3 w-3" />
+              {overallSuccessRate}% success rate
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            asChild
+            className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+          >
+            <Link href="/webhooks">
+              <RefreshCwIcon className="h-3 w-3 mr-1" />
+              Refresh
+            </Link>
+          </Button>
+          <Button size="sm" asChild>
+            <Link href="/webhooks?create=true">
+              <PlusIcon className="h-3 w-3 mr-1" />
+              Add Endpoint
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Compact Performance Overview */}
+      {totalDeliveries > 0 && (
+        <div className="flex items-center gap-6 bg-white border border-slate-200 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+            <BarChart3Icon className="h-4 w-4 text-slate-600" />
+            <span className="text-sm font-medium text-slate-700">Performance:</span>
+          </div>
+          <div className="flex items-center gap-6 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+              <span className="text-slate-600">{totalDeliveries} total</span>
             </div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => refetchWebhooks()}
-                disabled={isLoading}
-                className="bg-white/20 border-white/30 text-white hover:bg-white/30 backdrop-blur-sm"
-              >
-                <RefreshCwIcon className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-              <Button onClick={() => setIsCreateDialogOpen(true)} className="bg-white text-purple-700 hover:bg-white/90 font-semibold shadow-lg">
-                <PlusIcon className="h-4 w-4 mr-2" />
-                Create Webhook
-              </Button>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span className="text-slate-600">{successfulDeliveries} successful</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+              <span className="text-slate-600">{totalDeliveries - successfulDeliveries} failed</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-sm font-medium text-slate-700">{overallSuccessRate}%</span>
+            <div className="w-16">
+              <Progress value={overallSuccessRate} className="h-1" />
             </div>
           </div>
         </div>
-        {/* Decorative elements */}
-        <div className="absolute -top-4 -right-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-        <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
-      </div>
-
-      {/* Error State */}
-      {error && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-red-600">
-              <XCircleIcon className="h-4 w-4" />
-              <span>{error.message}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => refetchWebhooks()}
-                className="ml-auto text-red-600 hover:text-red-700"
-              >
-                Try Again
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
       )}
 
-      {/* Webhooks Table */}
-      <div>
-        {webhooks.length === 0 ? (
-          <div className="text-center py-12">
-            <WebhookIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No webhooks configured</h3>
-            <p className="text-muted-foreground mb-4">
-              Create your first webhook to receive email notifications.
-            </p>
-            <Button onClick={() => setIsCreateDialogOpen(true)}>
-              <PlusIcon className="h-4 w-4 mr-2" />
-              Create Your First Webhook
-            </Button>
+      {/* Endpoints Table */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">
+              Active Endpoints ({totalEndpoints})
+            </CardTitle>
           </div>
-        ) : (
-          <div className="overflow-hidden">
-            {/* Table Header with Rounded Border */}
-            <div className="border border-border bg-muted/30 rounded-lg px-6 py-3">
-              <div className="grid grid-cols-6 gap-4 text-sm font-medium text-muted-foreground">
-                <span className="flex items-center gap-2">
-                  <WebhookIcon className="h-4 w-4" />
-                  Name
-                </span>
-                <span>URL</span>
-                <span>Status</span>
-                <span>Success Rate</span>
-                <span>Last Used</span>
-                <span className="text-right">Actions</span>
-              </div>
-            </div>
-
-            {/* Table Body */}
-            <div className="">
-              <Table>
-                <TableBody>
-                  {webhooks.map((webhook, index) => (
-                    <TableRow
-                      key={webhook.id}
-                      className={`hover:bg-muted/50 transition-colors ${index < webhooks.length - 1 ? 'border-b border-border/50' : ''
-                        }`}
-                    >
-                      <TableCell className="w-1/6">
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-purple-100 border-2 border-purple-200">
-                            <WebhookIcon className="h-4 w-4 text-purple-600" />
-                          </div>
-                          <div>
-                            <div className="font-medium text-base py-2">{webhook.name}</div>
-                            {webhook.description && (
-                              <div className="text-sm text-muted-foreground">
-                                {webhook.description}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-1/6">
-                        <div className="font-mono text-sm max-w-xs truncate">
-                          {webhook.url}
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-1/6">
-                        {getStatusBadge(webhook)}
-                      </TableCell>
-                      <TableCell className="w-1/6">
-                        <div className="flex items-center gap-2">
-                          <TrendingUpIcon className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-medium">
-                            {getSuccessRate(webhook)}%
-                          </span>
-                          <span className="text-sm text-muted-foreground">
-                            ({webhook.successfulDeliveries}/{webhook.totalDeliveries})
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-1/6">
-                        <div className="flex items-center gap-2">
-                          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                          {webhook.lastUsed ? (
-                            <span className="text-sm">
-                              {formatDistanceToNow(new Date(webhook.lastUsed), { addSuffix: true })}
-                            </span>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">Never</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-1/6 text-right">
-                        <div className="flex items-center gap-1 justify-end">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => testWebhookMutation.mutateAsync(webhook.id)}
-                            disabled={testWebhookMutation.isPending || !webhook.isActive}
-                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          >
-                            {testWebhookMutation.isPending ? (
-                              <RefreshCwIcon className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <PlayIcon className="h-4 w-4" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditDialog(webhook)}
-                            className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
-                          >
-                            <SettingsIcon className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteWebhookMutation.mutateAsync(webhook.id)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <TrashIcon className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Create Webhook Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Create New Webhook</DialogTitle>
-            <DialogDescription>
-              Add a new webhook endpoint to receive email notifications.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="webhook-name">Name *</Label>
-              <Input
-                id="webhook-name"
-                placeholder="My Email Webhook"
-                value={createForm.name}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, name: e.target.value }))}
-                disabled={createWebhookMutation.isPending}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="webhook-url">URL *</Label>
-              <Input
-                id="webhook-url"
-                placeholder="https://api.example.com/webhooks/email"
-                value={createForm.url}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, url: e.target.value }))}
-                disabled={createWebhookMutation.isPending}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="webhook-description">Description</Label>
-              <Textarea
-                id="webhook-description"
-                placeholder="Optional description for this webhook"
-                value={createForm.description}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, description: e.target.value }))}
-                disabled={createWebhookMutation.isPending}
-                rows={3}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="webhook-timeout">Timeout (seconds)</Label>
-                <Input
-                  id="webhook-timeout"
-                  type="number"
-                  min="1"
-                  max="300"
-                  value={createForm.timeout}
-                  onChange={(e) => setCreateForm(prev => ({ ...prev, timeout: parseInt(e.target.value) || 30 }))}
-                  disabled={createWebhookMutation.isPending}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="webhook-retries">Retry Attempts</Label>
-                <Input
-                  id="webhook-retries"
-                  type="number"
-                  min="0"
-                  max="10"
-                  value={createForm.retryAttempts}
-                  onChange={(e) => setCreateForm(prev => ({ ...prev, retryAttempts: parseInt(e.target.value) || 3 }))}
-                  disabled={createWebhookMutation.isPending}
-                />
-              </div>
-            </div>
-            {createError && (
-              <div className="flex items-center gap-2 text-red-600 text-sm">
-                <AlertTriangleIcon className="h-4 w-4" />
-                <span>{createError}</span>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setIsCreateDialogOpen(false)
-                setCreateForm({
-                  name: '',
-                  url: '',
-                  description: '',
-                  timeout: 30,
-                  retryAttempts: 3
-                })
-                setCreateError(null)
-              }}
-              disabled={createWebhookMutation.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateWebhook}
-              disabled={createWebhookMutation.isPending || !createForm.name.trim() || !createForm.url.trim()}
-            >
-              {createWebhookMutation.isPending ? (
-                <>
-                  <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {webhooks.length === 0 ? (
+            <div className="text-center py-8">
+              <ZapIcon className="h-12 w-12 text-slate-400 mx-auto mb-3" />
+              <h3 className="text-lg font-medium text-slate-900 mb-2">No endpoints configured</h3>
+              <p className="text-sm text-slate-500 mb-4">
+                Create your first endpoint to start routing emails
+              </p>
+              <Button asChild>
+                <Link href="/webhooks?create=true">
                   <PlusIcon className="h-4 w-4 mr-2" />
-                  Create Webhook
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                  Add Your First Endpoint
+                </Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {webhooks.map((webhook: Webhook) => (
+                <div 
+                  key={webhook.id} 
+                  className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-lg hover:border-slate-300 hover:shadow-sm transition-all"
+                >
+                  {/* Left Side - Main Info */}
+                  <div className="flex items-center gap-4 min-w-0 flex-1">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-purple-100">
+                      <WebhookIcon className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-slate-900 truncate">{webhook.name}</h3>
+                        <Badge variant="secondary" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                          Webhook
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <span className="font-mono truncate">
+                          {new URL(webhook.url).hostname}
+                        </span>
+                        <CopyButton text={webhook.url} label="endpoint URL" />
+                        {webhook.secret && (
+                          <div className="flex items-center gap-1 text-green-600">
+                            <ShieldCheckIcon className="h-3 w-3" />
+                            <span className="text-xs">Secured</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
 
-      {/* Edit Webhook Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Edit Webhook</DialogTitle>
-            <DialogDescription>
-              Edit the details of the webhook.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="webhook-name">Name *</Label>
-              <Input
-                id="webhook-name"
-                placeholder="My Email Webhook"
-                value={editForm.name}
-                onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                disabled={updateWebhookMutation.isPending}
-              />
+                  {/* Right Side - Status & Actions */}
+                  <div className="flex items-center gap-4 ml-4">
+                    {/* Performance */}
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-slate-900">{getSuccessRate(webhook)}%</div>
+                      <div className="text-xs text-slate-500">success</div>
+                    </div>
+
+                    {/* Status */}
+                    <div>
+                      {getStatusBadge(webhook)}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                        <PlayIcon className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-600 hover:text-slate-700 hover:bg-slate-50">
+                        <SettingsIcon className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-600 hover:text-slate-700 hover:bg-slate-50">
+                        <MoreHorizontalIcon className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="webhook-url">URL *</Label>
-              <Input
-                id="webhook-url"
-                placeholder="https://api.example.com/webhooks/email"
-                value={editForm.url}
-                onChange={(e) => setEditForm(prev => ({ ...prev, url: e.target.value }))}
-                disabled={updateWebhookMutation.isPending}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="webhook-description">Description</Label>
-              <Textarea
-                id="webhook-description"
-                placeholder="Optional description for this webhook"
-                value={editForm.description}
-                onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
-                disabled={updateWebhookMutation.isPending}
-                rows={3}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="webhook-timeout">Timeout (seconds)</Label>
-                <Input
-                  id="webhook-timeout"
-                  type="number"
-                  min="1"
-                  max="300"
-                  value={editForm.timeout}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, timeout: parseInt(e.target.value) || 30 }))}
-                  disabled={updateWebhookMutation.isPending}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="webhook-retries">Retry Attempts</Label>
-                <Input
-                  id="webhook-retries"
-                  type="number"
-                  min="0"
-                  max="10"
-                  value={editForm.retryAttempts}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, retryAttempts: parseInt(e.target.value) || 3 }))}
-                  disabled={updateWebhookMutation.isPending}
-                />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="webhook-isActive">Status</Label>
-              <Switch
-                id="webhook-isActive"
-                checked={editForm.isActive}
-                onCheckedChange={(value) => setEditForm(prev => ({ ...prev, isActive: value }))}
-                disabled={updateWebhookMutation.isPending}
-              />
-            </div>
-            {editError && (
-              <div className="flex items-center gap-2 text-red-600 text-sm">
-                <AlertTriangleIcon className="h-4 w-4" />
-                <span>{editError}</span>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setIsEditDialogOpen(false)
-                setEditForm({
-                  name: '',
-                  url: '',
-                  description: '',
-                  isActive: true,
-                  timeout: 30,
-                  retryAttempts: 3
-                })
-                setEditError(null)
-              }}
-              disabled={updateWebhookMutation.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleEditWebhook}
-              disabled={updateWebhookMutation.isPending || !editForm.name.trim() || !editForm.url.trim()}
-            >
-              {updateWebhookMutation.isPending ? (
-                <>
-                  <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" />
-                  Updating...
-                </>
-              ) : (
-                <>
-                  <SettingsIcon className="h-4 w-4 mr-2" />
-                  Update Webhook
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 } 
