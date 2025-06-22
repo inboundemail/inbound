@@ -1445,6 +1445,17 @@ export async function getEmailsList(options?: {
 
         const totalCount = totalCountResult[0]?.count || 0
 
+        // Get unread count for the user (regardless of filters)
+        const unreadCountResult = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(structuredEmails)
+            .where(and(
+                eq(structuredEmails.userId, session.user.id),
+                eq(structuredEmails.isRead, false)
+            ))
+
+        const unreadCount = unreadCountResult[0]?.count || 0
+
         // Get unique domains for filter options - extract from toData JSON
         const uniqueDomainsResult = await db
             .select({
@@ -1512,7 +1523,8 @@ export async function getEmailsList(options?: {
                 },
                 filters: {
                     uniqueDomains
-                }
+                },
+                unreadCount: unreadCount
             }
         }
     } catch (error) {
@@ -1563,6 +1575,43 @@ export async function markEmailAsRead(emailId: string) {
     } catch (error) {
         console.error('Error marking email as read:', error)
         return { error: 'Failed to mark email as read' }
+    }
+}
+
+export async function markAllEmailsAsRead() {
+    try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+
+        if (!session?.user?.id) {
+            return { error: 'Unauthorized' }
+        }
+
+        // Update all unread emails for the user
+        const updatedEmails = await db
+            .update(structuredEmails)
+            .set({
+                isRead: true,
+                readAt: new Date(),
+                updatedAt: new Date()
+            })
+            .where(
+                and(
+                    eq(structuredEmails.userId, session.user.id),
+                    eq(structuredEmails.isRead, false)
+                )
+            )
+            .returning({ id: structuredEmails.id })
+
+        return { 
+            success: true, 
+            message: `Marked ${updatedEmails.length} emails as read`,
+            data: { count: updatedEmails.length }
+        }
+    } catch (error) {
+        console.error('Error marking all emails as read:', error)
+        return { error: 'Failed to mark all emails as read' }
     }
 }
 

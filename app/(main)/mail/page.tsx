@@ -7,6 +7,7 @@ import { getEmailsList } from '@/app/actions/primary'
 import Link from 'next/link'
 import { HiCheckCircle, HiClock, HiSearch, HiTrendingUp, HiX, HiDocumentText } from 'react-icons/hi'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
+import { MarkAllReadButton } from '@/components/mark-all-read-button'
 
 interface MailPageProps {
     searchParams: Promise<{
@@ -55,7 +56,7 @@ export default async function MailPage({ searchParams }: MailPageProps) {
         )
     }
 
-    const { emails, pagination, filters } = emailsResult.data!
+    const { emails, pagination, filters, unreadCount } = emailsResult.data!
 
     const getStatusBadge = (status: string) => {
         switch (status) {
@@ -102,10 +103,15 @@ export default async function MailPage({ searchParams }: MailPageProps) {
             <div className="max-w-5xl mx-auto">
                 {/* Header Section */}
                 <div className="mb-6">
-                    <h2 className="text-2xl font-semibold text-gray-900 mb-1 tracking-tight">
-                        Email Management ({pagination.total})
-                    </h2>
-                    <p className="text-gray-600 text-sm font-medium">Search and filter your received emails</p>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-semibold text-gray-900 mb-1 tracking-tight">
+                                Email Management ({unreadCount} unread)
+                            </h2>
+                            <p className="text-gray-600 text-sm font-medium">Search and filter your received emails</p>
+                        </div>
+                        <MarkAllReadButton unreadCount={unreadCount} />
+                    </div>
                 </div>
 
                 {/* Search and Filters Form */}
@@ -133,7 +139,7 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                         </select>
 
                         <Button type="submit" className="h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
-                            <HiSearch className="h-4 w-4 mr-2" />
+                            <HiSearch className="h-4 w-4" />
                             Filter
                         </Button>
                     </form>
