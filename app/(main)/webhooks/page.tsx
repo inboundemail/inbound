@@ -1,56 +1,72 @@
-import { getWebhooks } from '@/app/actions/webhooks'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+"use client"
+
+import React, { useState } from 'react'
+import { useWebhooksQuery, useTestWebhookMutation } from '@/features/webhooks/hooks'
+import { CreateWebhookDialog, EditWebhookDialog, DeleteWebhookDialog, TestWebhookDialog } from '@/components/webhooks'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { CopyButton } from '@/components/copy-button'
 import { 
-  CheckCircleIcon, 
-  XCircleIcon, 
-  ClockIcon, 
-  PlusIcon,
-  RefreshCwIcon,
-  ActivityIcon,
-  ZapIcon,
-  WebhookIcon,
-  TrendingUpIcon,
-  AlertTriangleIcon,
-  CalendarIcon,
-  ShieldCheckIcon,
-  PlayIcon,
-  SettingsIcon,
-  TrashIcon,
-  BarChart3Icon,
-  GlobeIcon,
-  MoreHorizontalIcon
-} from 'lucide-react'
+  HiCheckCircle, 
+  HiX, 
+  HiClock, 
+  HiPlus,
+  HiRefresh,
+  HiLightningBolt,
+  HiGlobeAlt,
+  HiTrendingUp,
+  HiExclamationCircle,
+  HiShieldCheck,
+  HiPlay,
+  HiCog,
+  HiDotsHorizontal,
+  HiChartBar,
+  HiClipboard,
+  HiTrash
+} from 'react-icons/hi'
+import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { formatDistanceToNow } from 'date-fns'
 import Link from 'next/link'
 import { Webhook } from '@/features/webhooks/types'
 
-export default async function EndpointsPage() {
-  // Fetch webhooks data (will expand to fetch all endpoint types)
-  const webhooksResult = await getWebhooks()
+export default function WebhooksPage() {
+  const { data: webhooks = [], isLoading, error, refetch } = useWebhooksQuery()
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
+  const testWebhookMutation = useTestWebhookMutation()
   
-  if ('error' in webhooksResult) {
-    return (
-      <div className="flex flex-1 flex-col gap-4 p-4">
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2 text-red-600">
-              <XCircleIcon className="h-4 w-4" />
-              <span>{webhooksResult.error}</span>
-              <Button variant="ghost" size="sm" asChild className="ml-auto text-red-600 hover:text-red-700">
-                <Link href="/webhooks">Try Again</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
+  // Dialog state
+  const [selectedWebhook, setSelectedWebhook] = useState<Webhook | null>(null)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [testDialogOpen, setTestDialogOpen] = useState(false)
+
+  const copyUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiedUrl(url)
+      setTimeout(() => setCopiedUrl(null), 2000)
+    } catch (err) {
+      console.error("Failed to copy URL:", err)
+    }
   }
 
-  const webhooks = webhooksResult.webhooks
+  const handleTestWebhook = (webhook: Webhook) => {
+    setSelectedWebhook(webhook)
+    setTestDialogOpen(true)
+  }
+
+  const handleEditWebhook = (webhook: Webhook) => {
+    setSelectedWebhook(webhook)
+    setEditDialogOpen(true)
+  }
+
+  const handleDeleteWebhook = (webhook: Webhook) => {
+    setSelectedWebhook(webhook)
+    setDeleteDialogOpen(true)
+  }
 
   // Helper functions
   const getStatusBadge = (webhook: Webhook) => {
@@ -58,38 +74,38 @@ export default async function EndpointsPage() {
       const successRate = getSuccessRate(webhook)
       if ((webhook.totalDeliveries || 0) === 0) {
         return (
-          <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
-            <ZapIcon className="h-3 w-3 mr-1" />
+          <Badge className="bg-blue-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
+            <HiLightningBolt className="w-3 h-3 mr-1" />
             Ready
           </Badge>
         )
       }
       if (successRate >= 95) {
         return (
-          <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-200 text-xs">
-            <CheckCircleIcon className="h-3 w-3 mr-1" />
+          <Badge className="bg-emerald-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
+            <HiCheckCircle className="w-3 h-3 mr-1" />
             Excellent
           </Badge>
         )
       }
       if (successRate >= 80) {
         return (
-          <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
-            <TrendingUpIcon className="h-3 w-3 mr-1" />
+          <Badge className="bg-blue-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
+            <HiTrendingUp className="w-3 h-3 mr-1" />
             Good
           </Badge>
         )
       }
       return (
-        <Badge variant="secondary" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
-          <AlertTriangleIcon className="h-3 w-3 mr-1" />
+        <Badge className="bg-amber-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
+          <HiExclamationCircle className="w-3 h-3 mr-1" />
           Needs Attention
         </Badge>
       )
     } else {
       return (
-        <Badge variant="secondary" className="bg-gray-50 text-gray-700 border-gray-200 text-xs">
-          <XCircleIcon className="h-3 w-3 mr-1" />
+        <Badge className="bg-gray-400 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
+          <HiX className="w-3 h-3 mr-1" />
           Disabled
         </Badge>
       )
@@ -101,6 +117,26 @@ export default async function EndpointsPage() {
     return Math.round(((webhook.successfulDeliveries || 0) / webhook.totalDeliveries) * 100)
   }
 
+  const getStatusColor = (webhook: Webhook) => {
+    if (!webhook.isActive) return "bg-gray-400"
+    
+    const successRate = getSuccessRate(webhook)
+    if ((webhook.totalDeliveries || 0) === 0) return "bg-blue-500"
+    if (successRate >= 95) return "bg-emerald-500"
+    if (successRate >= 80) return "bg-blue-500"
+    return "bg-amber-500"
+  }
+
+  const getWebhookIconColor = (webhook: Webhook) => {
+    if (!webhook.isActive) return '#64748b' // gray
+    
+    const successRate = getSuccessRate(webhook)
+    if ((webhook.totalDeliveries || 0) === 0) return '#3b82f6' // blue
+    if (successRate >= 95) return '#10b981' // emerald
+    if (successRate >= 80) return '#3b82f6' // blue
+    return '#f59e0b' // amber
+  }
+
   // Calculate metrics
   const totalEndpoints = webhooks.length
   const activeEndpoints = webhooks.filter(w => w.isActive).length
@@ -108,168 +144,276 @@ export default async function EndpointsPage() {
   const successfulDeliveries = webhooks.reduce((sum, w) => sum + (w.successfulDeliveries || 0), 0)
   const overallSuccessRate = totalDeliveries > 0 ? Math.round((successfulDeliveries / totalDeliveries) * 100) : 0
 
-  return (
-    <div className="flex flex-1 flex-col gap-4 p-4">
-      {/* Compact Header */}
-      <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4">
-        <div>
-          <h1 className="text-xl font-semibold mb-1">Endpoint Management</h1>
-          <div className="flex items-center gap-4 text-sm text-slate-300">
-            <span className="flex items-center gap-1">
-              <ZapIcon className="h-3 w-3" />
-              {totalEndpoints} endpoints
-            </span>
-            <span className="flex items-center gap-1">
-              <ActivityIcon className="h-3 w-3" />
-              {activeEndpoints} active
-            </span>
-            <span className="flex items-center gap-1">
-              <TrendingUpIcon className="h-3 w-3" />
-              {overallSuccessRate}% success rate
-            </span>
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+        <div className="max-w-5xl mx-auto">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-slate-500">Loading webhooks...</div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            asChild
-            className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
-          >
-            <Link href="/webhooks">
-              <RefreshCwIcon className="h-3 w-3 mr-1" />
-              Refresh
-            </Link>
-          </Button>
-          <Button size="sm" asChild>
-            <Link href="/webhooks?create=true">
-              <PlusIcon className="h-3 w-3 mr-1" />
-              Add Endpoint
-            </Link>
-          </Button>
         </div>
       </div>
+    )
+  }
 
-      {/* Compact Performance Overview */}
-      {totalDeliveries > 0 && (
-        <div className="flex items-center gap-6 bg-white border border-slate-200 rounded-lg p-4">
-          <div className="flex items-center gap-2">
-            <BarChart3Icon className="h-4 w-4 text-slate-600" />
-            <span className="text-sm font-medium text-slate-700">Performance:</span>
-          </div>
-          <div className="flex items-center gap-6 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              <span className="text-slate-600">{totalDeliveries} total</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span className="text-slate-600">{successfulDeliveries} successful</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-              <span className="text-slate-600">{totalDeliveries - successfulDeliveries} failed</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 ml-auto">
-            <span className="text-sm font-medium text-slate-700">{overallSuccessRate}%</span>
-            <div className="w-16">
-              <Progress value={overallSuccessRate} className="h-1" />
-            </div>
-          </div>
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+        <div className="max-w-5xl mx-auto">
+          <Card className="border-red-200 bg-red-50">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2 text-red-600">
+                <HiX className="h-4 w-4" />
+                <span>{error.message}</span>
+                <Button variant="ghost" size="sm" onClick={() => refetch()} className="ml-auto text-red-600 hover:text-red-700">
+                  Try Again
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      )}
+      </div>
+    )
+  }
 
-      {/* Endpoints Table */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">
-              Active Endpoints ({totalEndpoints})
-            </CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-0">
-          {webhooks.length === 0 ? (
-            <div className="text-center py-8">
-              <ZapIcon className="h-12 w-12 text-slate-400 mx-auto mb-3" />
-              <h3 className="text-lg font-medium text-slate-900 mb-2">No endpoints configured</h3>
-              <p className="text-sm text-slate-500 mb-4">
-                Create your first endpoint to start routing emails
-              </p>
-              <Button asChild>
-                <Link href="/webhooks?create=true">
-                  <PlusIcon className="h-4 w-4 mr-2" />
-                  Add Your First Endpoint
-                </Link>
+    return (
+    <>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+        <div className="max-w-5xl mx-auto">
+          {/* Compact Header */}
+          <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4 mb-6">
+            <div>
+              <h1 className="text-xl font-semibold mb-1">Webhook Management</h1>
+              <div className="flex items-center gap-4 text-sm text-slate-300">
+                <span>{totalEndpoints} webhooks</span>
+                <span>{activeEndpoints} active</span>
+                <span className="flex items-center gap-1">
+                  <HiLightningBolt className="h-3 w-3" />
+                  {totalDeliveries} deliveries
+                </span>
+                {totalDeliveries > 0 && (
+                  <span className="flex items-center gap-1">
+                    <HiTrendingUp className="h-3 w-3" />
+                    {overallSuccessRate}% success rate
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => refetch()}
+                disabled={isLoading}
+                className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+              >
+                <HiRefresh className="h-3 w-3 mr-1" />
+                Refresh
+              </Button>
+              <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+                <HiPlus className="h-3 w-3 mr-1" />
+                Add Webhook
               </Button>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {webhooks.map((webhook: Webhook) => (
-                <div 
-                  key={webhook.id} 
-                  className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-lg hover:border-slate-300 hover:shadow-sm transition-all"
-                >
-                  {/* Left Side - Main Info */}
-                  <div className="flex items-center gap-4 min-w-0 flex-1">
-                    <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-purple-100">
-                      <WebhookIcon className="h-5 w-5 text-purple-600" />
+          </div>
+
+          {/* Performance Overview */}
+          {totalDeliveries > 0 && (
+            <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl mb-6">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-2">
+                    <HiChartBar className="h-4 w-4 text-slate-600" />
+                    <span className="text-sm font-medium text-slate-700">Performance Overview:</span>
+                  </div>
+                  <div className="flex items-center gap-6 text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <span className="text-slate-600">{totalDeliveries} total</span>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold text-slate-900 truncate">{webhook.name}</h3>
-                        <Badge variant="secondary" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
-                          Webhook
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-slate-500">
-                        <span className="font-mono truncate">
-                          {new URL(webhook.url).hostname}
-                        </span>
-                        <CopyButton text={webhook.url} label="endpoint URL" />
-                        {webhook.secret && (
-                          <div className="flex items-center gap-1 text-green-600">
-                            <ShieldCheckIcon className="h-3 w-3" />
-                            <span className="text-xs">Secured</span>
-                          </div>
-                        )}
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <span className="text-slate-600">{successfulDeliveries} successful</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                      <span className="text-slate-600">{totalDeliveries - successfulDeliveries} failed</span>
                     </div>
                   </div>
-
-                  {/* Right Side - Status & Actions */}
-                  <div className="flex items-center gap-4 ml-4">
-                    {/* Performance */}
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-slate-900">{getSuccessRate(webhook)}%</div>
-                      <div className="text-xs text-slate-500">success</div>
-                    </div>
-
-                    {/* Status */}
-                    <div>
-                      {getStatusBadge(webhook)}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50">
-                        <PlayIcon className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-600 hover:text-slate-700 hover:bg-slate-50">
-                        <SettingsIcon className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-600 hover:text-slate-700 hover:bg-slate-50">
-                        <MoreHorizontalIcon className="h-4 w-4" />
-                      </Button>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <span className="text-sm font-medium text-slate-700">{overallSuccessRate}%</span>
+                    <div className="w-16">
+                      <Progress value={overallSuccessRate} className="h-1" />
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              </CardContent>
+            </Card>
           )}
-        </CardContent>
-      </Card>
-    </div>
+
+          {/* Webhooks List */}
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-1 tracking-tight">
+              Active Webhooks ({totalEndpoints})
+            </h2>
+            <p className="text-gray-600 text-sm font-medium">Manage your webhook endpoints and delivery settings</p>
+          </div>
+
+          <div className="space-y-4">
+            {webhooks.length === 0 ? (
+              <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
+                <CardContent className="p-8">
+                  <div className="text-center">
+                    <CustomInboundIcon 
+                      Icon={HiLightningBolt} 
+                      size={48} 
+                      backgroundColor="#8b5cf6" 
+                      className="mx-auto mb-4" 
+                    />
+                    <p className="text-sm text-slate-500 mb-4">No webhooks configured</p>
+                    <Button variant="secondary" onClick={() => setCreateDialogOpen(true)}>
+                      <HiPlus className="h-4 w-4 mr-2" />
+                      Add Your First Webhook
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              webhooks.map((webhook: Webhook) => (
+                <Card
+                  key={webhook.id}
+                  className="bg-white/95 backdrop-blur-sm shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-200/60 rounded-xl group"
+                >
+                  <CardContent className="p-0">
+                    <div className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3 flex-1 min-w-0">
+                          <CustomInboundIcon 
+                            Icon={HiLightningBolt} 
+                            size={36} 
+                            backgroundColor={getWebhookIconColor(webhook)} 
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <h3 className="text-base font-semibold text-gray-900 tracking-tight truncate">{webhook.name}</h3>
+                              <Badge className="bg-purple-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
+                                Webhook
+                              </Badge>
+                              {getStatusBadge(webhook)}
+                            </div>
+                            <div className="flex items-center space-x-3 text-sm">
+                              <div className="flex items-center space-x-2 text-gray-600">
+                                <span className="font-mono truncate">
+                                  {new URL(webhook.url).hostname}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-1 h-auto hover:bg-gray-100 rounded hover:scale-105 active:scale-95"
+                                  onClick={() => copyUrl(webhook.url)}
+                                >
+                                  {copiedUrl === webhook.url ? (
+                                    <HiCheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                                  ) : (
+                                    <HiClipboard className="w-3.5 h-3.5 text-gray-400 transition-all duration-150 hover:text-gray-600" />
+                                  )}
+                                </Button>
+                              </div>
+                              {webhook.secret && (
+                                <div className="flex items-center space-x-1 text-green-600">
+                                  <HiShieldCheck className="w-3 h-3" />
+                                  <span className="text-xs font-medium">Secured</span>
+                                </div>
+                              )}
+                              {webhook.description && (
+                                <span className="text-gray-500 text-xs truncate">{webhook.description}</span>
+                              )}
+                              <span className="text-gray-400 text-xs">
+                                Added {webhook.createdAt ? formatDistanceToNow(new Date(webhook.createdAt), { addSuffix: true }) : 'recently'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-4 ml-4">
+                          {/* Performance Metrics */}
+                          {(webhook.totalDeliveries || 0) > 0 && (
+                            <div className="text-center">
+                              <div className="flex items-center space-x-1.5 mb-1">
+                                <div className={`w-1.5 h-1.5 rounded-full ${getStatusColor(webhook)}`} />
+                                <span className="text-lg font-bold text-gray-900">{getSuccessRate(webhook)}%</span>
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {webhook.totalDeliveries} deliveries
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Action Buttons */}
+                          <div className="flex items-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg"
+                              onClick={() => handleTestWebhook(webhook)}
+                              disabled={testWebhookMutation.isPending}
+                              title="Test webhook"
+                            >
+                              <HiPlay className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0 text-slate-600 hover:text-slate-700 hover:bg-slate-50 rounded-lg"
+                              onClick={() => handleEditWebhook(webhook)}
+                              title="Configure webhook"
+                            >
+                              <HiCog className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg"
+                              onClick={() => handleDeleteWebhook(webhook)}
+                              title="Delete webhook"
+                            >
+                              <HiTrash className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Dialogs */}
+      <CreateWebhookDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+      />
+      
+      <EditWebhookDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        webhook={selectedWebhook}
+      />
+      
+      <DeleteWebhookDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        webhook={selectedWebhook}
+      />
+      
+      <TestWebhookDialog
+        open={testDialogOpen}
+        onOpenChange={setTestDialogOpen}
+        webhook={selectedWebhook}
+      />
+    </>
   )
 } 
