@@ -250,6 +250,8 @@ export const structuredEmails = pgTable('structured_emails', {
   // Processing metadata
   parseSuccess: boolean('parse_success').default(true),
   parseError: text('parse_error'),
+  isRead: boolean('is_read').default(false),
+  readAt: timestamp('read_at'), // When the email was marked as read
   
   // User and timestamps
   userId: varchar('user_id', { length: 255 }).notNull(),

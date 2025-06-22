@@ -1235,6 +1235,8 @@ export async function getEmailDetailsFromParsed(emailId: string) {
                 priority: structuredEmails.priority,
                 parseSuccess: structuredEmails.parseSuccess,
                 parseError: structuredEmails.parseError,
+                isRead: structuredEmails.isRead,
+                readAt: structuredEmails.readAt,
                 userId: structuredEmails.userId,
                 createdAt: structuredEmails.createdAt,
                 updatedAt: structuredEmails.updatedAt,
@@ -1320,8 +1322,8 @@ export async function getEmailDetailsFromParsed(emailId: string) {
             receivedAt: email.date,
             processedAt: email.createdAt, // Use createdAt as processedAt equivalent
             status: 'processed', // Default status since structuredEmails are processed
-            isRead: false, // structuredEmails doesn't have isRead field
-            readAt: null, // structuredEmails doesn't have readAt field
+            isRead: email.isRead || false,
+            readAt: email.readAt,
             emailContent: {
                 htmlBody: sanitizedHtmlBody,
                 textBody: email.textBody,
@@ -1426,6 +1428,8 @@ export async function getEmailsList(options?: {
                 parseSuccess: structuredEmails.parseSuccess,
                 parseError: structuredEmails.parseError,
                 createdAt: structuredEmails.createdAt,
+                isRead: structuredEmails.isRead,
+                readAt: structuredEmails.readAt,
             })
             .from(structuredEmails)
             .where(and(...whereConditions))
@@ -1481,8 +1485,8 @@ export async function getEmailsList(options?: {
                 receivedAt: email.date?.toISOString() || email.createdAt?.toISOString(),
                 status: email.parseSuccess ? 'processed' : 'failed',
                 domain: domain,
-                isRead: false, // structuredEmails doesn't have isRead field
-                readAt: null, // structuredEmails doesn't have readAt field
+                isRead: email.isRead || false,
+                readAt: email.readAt?.toISOString() || null,
                 parsedData: {
                     fromData: parsedFromData,
                     toData: parsedToData,
@@ -1531,28 +1535,29 @@ export async function markEmailAsRead(emailId: string) {
             return { error: 'Email ID is required' }
         }
 
-        // Since structuredEmails doesn't have isRead/readAt fields,
-        // we'll just verify the email exists and belongs to the user
-        const emailExists = await db
-            .select({ id: structuredEmails.id })
-            .from(structuredEmails)
+        // Update the email to mark it as read
+        const updatedEmails = await db
+            .update(structuredEmails)
+            .set({
+                isRead: true,
+                readAt: new Date(),
+                updatedAt: new Date()
+            })
             .where(
                 and(
                     eq(structuredEmails.id, emailId),
                     eq(structuredEmails.userId, session.user.id)
                 )
             )
-            .limit(1)
+            .returning({ id: structuredEmails.id })
 
-        if (emailExists.length === 0) {
+        if (updatedEmails.length === 0) {
             return { error: 'Email not found or access denied' }
         }
 
-        // For now, we'll just return success since structuredEmails doesn't support read tracking
-        // In the future, you might want to create a separate table for tracking read status
         return { 
             success: true, 
-            message: 'Email marked as read (read tracking not implemented for structured emails)',
+            message: 'Email marked as read',
             data: { id: emailId }
         }
     } catch (error) {
