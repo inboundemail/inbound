@@ -59,7 +59,7 @@ export async function getAutumnCustomer() {
 // EMAIL ADDRESS MANAGEMENT
 // ============================================================================
 
-export async function addEmailAddress(domainId: string, emailAddress: string, webhookId?: string) {
+export async function addEmailAddress(domainId: string, emailAddress: string, webhookId?: string, endpointId?: string) {
     try {
         // Get user session
         const session = await auth.api.getSession({
@@ -70,7 +70,7 @@ export async function addEmailAddress(domainId: string, emailAddress: string, we
             return { error: 'Unauthorized' }
         }
 
-        console.log('📧 Creating email address:', { emailAddress, webhookId, domainId })
+        console.log('📧 Creating email address:', { emailAddress, webhookId, endpointId, domainId })
 
         if (!domainId || !emailAddress) {
             return { error: 'Domain ID and email address are required' }
@@ -82,8 +82,27 @@ export async function addEmailAddress(domainId: string, emailAddress: string, we
             return { error: 'Invalid email address format' }
         }
 
-        // If webhookId is provided, verify it exists and belongs to the user
-        if (webhookId) {
+        // Validate endpoint or webhook (priority: endpointId > webhookId)
+        if (endpointId) {
+            const { endpoints } = await import('@/lib/db/schema')
+            const endpointRecord = await db
+                .select()
+                .from(endpoints)
+                .where(and(
+                    eq(endpoints.id, endpointId),
+                    eq(endpoints.userId, session.user.id)
+                ))
+                .limit(1)
+
+            if (!endpointRecord[0]) {
+                return { error: 'Endpoint not found or does not belong to user' }
+            }
+
+            if (!endpointRecord[0].isActive) {
+                return { error: 'Selected endpoint is disabled' }
+            }
+        } else if (webhookId) {
+            // Legacy webhook support for backward compatibility
             const webhookRecord = await db
                 .select()
                 .from(webhooks)
@@ -143,6 +162,7 @@ export async function addEmailAddress(domainId: string, emailAddress: string, we
             address: emailAddress,
             domainId: domainId,
             webhookId: webhookId || null,
+            endpointId: endpointId || null,
             userId: session.user.id,
             isActive: true,
             isReceiptRuleConfigured: false,
@@ -358,7 +378,7 @@ export async function getEmailAddresses(domainId: string) {
     }
 }
 
-export async function updateEmailWebhook(domainId: string, emailId: string, webhookId?: string) {
+export async function updateEmailWebhook(domainId: string, emailId: string, webhookId?: string, endpointId?: string) {
     try {
         const session = await auth.api.getSession({
             headers: await headers()
@@ -368,7 +388,7 @@ export async function updateEmailWebhook(domainId: string, emailId: string, webh
             return { error: 'Unauthorized' }
         }
 
-        console.log('🔗 Updating webhook assignment:', { emailId, webhookId, domainId })
+        console.log('🔗 Updating endpoint assignment:', { emailId, webhookId, endpointId, domainId })
 
         // Get domain record to verify ownership
         const domainRecord = await db
@@ -399,8 +419,27 @@ export async function updateEmailWebhook(domainId: string, emailId: string, webh
             return { error: 'Email address not found' }
         }
 
-        // If webhookId is provided, verify it exists and belongs to the user
-        if (webhookId) {
+        // Validate endpoint or webhook (priority: endpointId > webhookId)
+        if (endpointId) {
+            const { endpoints } = await import('@/lib/db/schema')
+            const endpointRecord = await db
+                .select()
+                .from(endpoints)
+                .where(and(
+                    eq(endpoints.id, endpointId),
+                    eq(endpoints.userId, session.user.id)
+                ))
+                .limit(1)
+
+            if (!endpointRecord[0]) {
+                return { error: 'Endpoint not found or does not belong to user' }
+            }
+
+            if (!endpointRecord[0].isActive) {
+                return { error: 'Selected endpoint is disabled' }
+            }
+        } else if (webhookId) {
+            // Legacy webhook support for backward compatibility
             const webhookRecord = await db
                 .select()
                 .from(webhooks)
@@ -419,10 +458,11 @@ export async function updateEmailWebhook(domainId: string, emailId: string, webh
             }
         }
 
-        // Update the email address with the new webhook assignment
+        // Update the email address with the new endpoint/webhook assignment
         const [updatedEmail] = await db
             .update(emailAddresses)
             .set({
+                endpointId: endpointId || null,
                 webhookId: webhookId || null,
                 updatedAt: new Date()
             })
@@ -435,14 +475,16 @@ export async function updateEmailWebhook(domainId: string, emailId: string, webh
         return {
             success: true,
             data: updatedEmail,
-            message: webhookId 
+            message: endpointId 
+                ? 'Endpoint assigned successfully' 
+                : webhookId 
                 ? 'Webhook assigned successfully' 
-                : 'Webhook removed successfully'
+                : 'Assignment removed successfully'
         }
 
     } catch (error) {
-        console.error('Error updating webhook assignment:', error)
-        return { error: 'Failed to update webhook assignment' }
+        console.error('Error updating endpoint assignment:', error)
+        return { error: 'Failed to update endpoint assignment' }
     }
 }
 
@@ -450,7 +492,7 @@ export async function updateEmailWebhook(domainId: string, emailId: string, webh
 // CATCH-ALL DOMAIN MANAGEMENT
 // ============================================================================
 
-export async function enableDomainCatchAll(domainId: string, webhookId: string) {
+export async function enableDomainCatchAll(domainId: string, webhookId?: string, endpointId?: string) {
     try {
         const session = await auth.api.getSession({
             headers: await headers()
@@ -460,10 +502,10 @@ export async function enableDomainCatchAll(domainId: string, webhookId: string) 
             return { error: 'Unauthorized' }
         }
 
-        console.log('🌐 Enabling catch-all for domain:', { domainId, webhookId })
+        console.log('🌐 Enabling catch-all for domain:', { domainId, webhookId, endpointId })
 
-        if (!domainId || !webhookId) {
-            return { error: 'Domain ID and webhook ID are required' }
+        if (!domainId || (!webhookId && !endpointId)) {
+            return { error: 'Domain ID and either webhook ID or endpoint ID are required' }
         }
 
         // Get domain record to verify ownership
@@ -487,22 +529,50 @@ export async function enableDomainCatchAll(domainId: string, webhookId: string) 
             return { error: 'Domain must be fully verified before enabling catch-all' }
         }
 
-        // Verify webhook exists and belongs to the user
-        const webhookRecord = await db
-            .select()
-            .from(webhooks)
-            .where(and(
-                eq(webhooks.id, webhookId),
-                eq(webhooks.userId, session.user.id)
-            ))
-            .limit(1)
+        // Validate endpoint or webhook (priority: endpointId > webhookId)
+        let targetWebhookId = null
+        let targetEndpointId = null
 
-        if (!webhookRecord[0]) {
-            return { error: 'Webhook not found or does not belong to user' }
-        }
+        if (endpointId) {
+            const { endpoints } = await import('@/lib/db/schema')
+            const endpointRecord = await db
+                .select()
+                .from(endpoints)
+                .where(and(
+                    eq(endpoints.id, endpointId),
+                    eq(endpoints.userId, session.user.id)
+                ))
+                .limit(1)
 
-        if (!webhookRecord[0].isActive) {
-            return { error: 'Selected webhook is disabled' }
+            if (!endpointRecord[0]) {
+                return { error: 'Endpoint not found or does not belong to user' }
+            }
+
+            if (!endpointRecord[0].isActive) {
+                return { error: 'Selected endpoint is disabled' }
+            }
+
+            targetEndpointId = endpointId
+        } else if (webhookId) {
+            // Legacy webhook support for backward compatibility
+            const webhookRecord = await db
+                .select()
+                .from(webhooks)
+                .where(and(
+                    eq(webhooks.id, webhookId),
+                    eq(webhooks.userId, session.user.id)
+                ))
+                .limit(1)
+
+            if (!webhookRecord[0]) {
+                return { error: 'Webhook not found or does not belong to user' }
+            }
+
+            if (!webhookRecord[0].isActive) {
+                return { error: 'Selected webhook is disabled' }
+            }
+
+            targetWebhookId = webhookId
         }
 
         // Configure SES catch-all receipt rule
@@ -529,7 +599,7 @@ export async function enableDomainCatchAll(domainId: string, webhookId: string) 
 
             const receiptResult = await sesManager.configureCatchAllDomain({
                 domain: domain.domain,
-                webhookId: webhookId,
+                webhookId: targetWebhookId || 'endpoint-based',
                 lambdaFunctionArn: lambdaArn,
                 s3BucketName
             })
@@ -540,7 +610,8 @@ export async function enableDomainCatchAll(domainId: string, webhookId: string) 
                     .update(emailDomains)
                     .set({
                         isCatchAllEnabled: true,
-                        catchAllWebhookId: webhookId,
+                        catchAllWebhookId: targetWebhookId,
+                        catchAllEndpointId: targetEndpointId,
                         catchAllReceiptRuleName: receiptResult.ruleName,
                         updatedAt: new Date(),
                     })
@@ -552,9 +623,10 @@ export async function enableDomainCatchAll(domainId: string, webhookId: string) 
                     data: {
                         domain: updatedDomain.domain,
                         isCatchAllEnabled: true,
-                        catchAllWebhookId: webhookId,
+                        catchAllWebhookId: targetWebhookId,
+                        catchAllEndpointId: targetEndpointId,
                         receiptRuleName: receiptResult.ruleName,
-                        webhookUrl: webhookRecord[0].url
+                        webhookUrl: targetWebhookId ? 'legacy-webhook' : 'endpoint-based'
                     },
                     message: 'Catch-all enabled successfully'
                 }
@@ -670,6 +742,7 @@ export async function disableDomainCatchAll(domainId: string) {
                     .set({
                         isCatchAllEnabled: false,
                         catchAllWebhookId: null,
+                        catchAllEndpointId: null,
                         catchAllReceiptRuleName: null,
                         updatedAt: new Date(),
                     })
@@ -726,6 +799,7 @@ export async function getDomainCatchAllStatus(domainId: string) {
                 status: emailDomains.status,
                 isCatchAllEnabled: emailDomains.isCatchAllEnabled,
                 catchAllWebhookId: emailDomains.catchAllWebhookId,
+                catchAllEndpointId: emailDomains.catchAllEndpointId,
                 catchAllReceiptRuleName: emailDomains.catchAllReceiptRuleName
             })
             .from(emailDomains)
@@ -741,21 +815,41 @@ export async function getDomainCatchAllStatus(domainId: string) {
 
         const domain = domainRecord[0]
 
-        // If catch-all is enabled, get webhook details
+        // If catch-all is enabled, get webhook or endpoint details
         let webhookDetails = null
-        if (domain.isCatchAllEnabled && domain.catchAllWebhookId) {
-            const webhookRecord = await db
-                .select({
-                    id: webhooks.id,
-                    name: webhooks.name,
-                    url: webhooks.url,
-                    isActive: webhooks.isActive
-                })
-                .from(webhooks)
-                .where(eq(webhooks.id, domain.catchAllWebhookId))
-                .limit(1)
+        let endpointDetails = null
+        
+        if (domain.isCatchAllEnabled) {
+            if (domain.catchAllEndpointId) {
+                // New endpoints system
+                const { endpoints } = await import('@/lib/db/schema')
+                const endpointRecord = await db
+                    .select({
+                        id: endpoints.id,
+                        name: endpoints.name,
+                        type: endpoints.type,
+                        isActive: endpoints.isActive
+                    })
+                    .from(endpoints)
+                    .where(eq(endpoints.id, domain.catchAllEndpointId))
+                    .limit(1)
 
-            webhookDetails = webhookRecord[0] || null
+                endpointDetails = endpointRecord[0] || null
+            } else if (domain.catchAllWebhookId) {
+                // Legacy webhook system
+                const webhookRecord = await db
+                    .select({
+                        id: webhooks.id,
+                        name: webhooks.name,
+                        url: webhooks.url,
+                        isActive: webhooks.isActive
+                    })
+                    .from(webhooks)
+                    .where(eq(webhooks.id, domain.catchAllWebhookId))
+                    .limit(1)
+
+                webhookDetails = webhookRecord[0] || null
+            }
         }
 
         return {
@@ -765,8 +859,10 @@ export async function getDomainCatchAllStatus(domainId: string) {
                 domainStatus: domain.status,
                 isCatchAllEnabled: domain.isCatchAllEnabled,
                 catchAllWebhookId: domain.catchAllWebhookId,
+                catchAllEndpointId: domain.catchAllEndpointId,
                 receiptRuleName: domain.catchAllReceiptRuleName,
-                webhook: webhookDetails
+                webhook: webhookDetails,
+                endpoint: endpointDetails
             }
         }
 

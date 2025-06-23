@@ -1,0 +1,1 @@
+ALTER TABLE "email_domains" ADD COLUMN "catch_all_endpoint_id" varchar(255);

@@ -99,13 +99,15 @@ export const useAddEmailAddressMutation = () => {
     mutationFn: async ({ 
       domainId, 
       emailAddress, 
-      webhookId 
+      webhookId,
+      endpointId 
     }: { 
       domainId: string; 
       emailAddress: string; 
-      webhookId?: string 
+      webhookId?: string;
+      endpointId?: string; 
     }) => {
-      const result = await addEmailAddress(domainId, emailAddress, webhookId)
+      const result = await addEmailAddress(domainId, emailAddress, webhookId, endpointId)
       if (!result.success) {
         throw new Error(result.error || 'Failed to add email address')
       }
@@ -143,7 +145,7 @@ export const useDeleteEmailAddressMutation = () => {
   })
 }
 
-// Hook for updating email webhook mutation
+// Hook for updating email webhook/endpoint mutation
 export const useUpdateEmailWebhookMutation = () => {
   const queryClient = useQueryClient()
 
@@ -151,15 +153,18 @@ export const useUpdateEmailWebhookMutation = () => {
     mutationFn: async ({ 
       domainId, 
       emailAddressId, 
-      webhookId 
+      webhookId,
+      endpointId 
     }: { 
       domainId: string; 
       emailAddressId: string; 
-      webhookId?: string 
+      webhookId?: string;
+      endpointId?: string; 
     }) => {
-      const result = await updateEmailWebhook(domainId, emailAddressId, webhookId)
+      // Use the updated updateEmailWebhook function that supports both webhooks and endpoints
+      const result = await updateEmailWebhook(domainId, emailAddressId, webhookId, endpointId)
       if (!result.success) {
-        throw new Error(result.error || 'Failed to update webhook')
+        throw new Error(result.error || 'Failed to update endpoint')
       }
       return result
     },
@@ -177,12 +182,14 @@ export const useEnableCatchAllMutation = () => {
   return useMutation({
     mutationFn: async ({ 
       domainId, 
-      webhookId 
+      webhookId,
+      endpointId 
     }: { 
       domainId: string; 
-      webhookId: string 
+      webhookId?: string;
+      endpointId?: string; 
     }) => {
-      const result = await enableDomainCatchAll(domainId, webhookId)
+      const result = await enableDomainCatchAll(domainId, webhookId, endpointId)
       if (!result.success) {
         throw new Error(result.error || 'Failed to enable catch-all')
       }

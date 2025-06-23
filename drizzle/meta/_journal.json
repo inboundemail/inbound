@@ -120,6 +120,13 @@
       "when": 1750648079214,
       "tag": "0016_cold_adam_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1750702488196,
+      "tag": "0017_blue_vision",
+      "breakpoints": true
     }
   ]
 }

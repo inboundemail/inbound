@@ -33,7 +33,8 @@ export const emailDomains = pgTable('email_domains', {
   lastSesCheck: timestamp('last_ses_check'),
   // Catch-all configuration
   isCatchAllEnabled: boolean('is_catch_all_enabled').default(false),
-  catchAllWebhookId: varchar('catch_all_webhook_id', { length: 255 }), // Link to webhooks table for catch-all emails
+  catchAllWebhookId: varchar('catch_all_webhook_id', { length: 255 }), // Link to webhooks table for catch-all emails (legacy)
+  catchAllEndpointId: varchar('catch_all_endpoint_id', { length: 255 }), // Link to endpoints table for catch-all emails (new unified system)
   catchAllReceiptRuleName: varchar('catch_all_receipt_rule_name', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),

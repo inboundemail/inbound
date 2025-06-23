@@ -582,13 +582,14 @@ export async function getDomainDetails(domain: string, domainId: string, refresh
     // Calculate 24 hours ago
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
-    // Get email addresses with their statistics and webhook information
+    // Get email addresses with their statistics and webhook/endpoint information
     const emailAddressesWithStats = await db
       .select({
         id: emailAddresses.id,
         address: emailAddresses.address,
         webhookId: emailAddresses.webhookId,
         webhookName: webhooks.name,
+        endpointId: emailAddresses.endpointId,
         isActive: emailAddresses.isActive,
         isReceiptRuleConfigured: emailAddresses.isReceiptRuleConfigured,
         receiptRuleName: emailAddresses.receiptRuleName,
@@ -653,6 +654,7 @@ export async function getDomainDetails(domain: string, domainId: string, refresh
         address: email.address,
         webhookId: email.webhookId || undefined,
         webhookName: email.webhookName || undefined,
+        endpointId: email.endpointId || undefined,
         isActive: email.isActive ?? false,
         isReceiptRuleConfigured: email.isReceiptRuleConfigured ?? false,
         receiptRuleName: email.receiptRuleName || undefined,
