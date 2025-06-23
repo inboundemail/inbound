@@ -47,6 +47,8 @@ import {
     LinkIcon,
     ExternalLinkIcon
 } from 'lucide-react'
+import { CustomInboundIcon } from '@/components/icons/customInbound'
+import { HiCheckCircle, HiGlobeAlt, HiLightningBolt, HiMail, HiPlus, HiRefresh, HiX, HiCog } from 'react-icons/hi'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { Webhook } from '@/features/webhooks/types'
@@ -516,31 +518,53 @@ export default function DomainDetailPage() {
     const showEmailSection = domain.status === DOMAIN_STATUS.VERIFIED
 
     return (
-        <div className="flex flex-1 flex-col gap-6 p-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+            <div className="max-w-5xl mx-auto space-y-6">
+            {/* Compact Header */}
+            <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4 mb-6">
                 <div className="flex items-center gap-4">
+                    <CustomInboundIcon 
+                        Icon={HiGlobeAlt} 
+                        size={40} 
+                        backgroundColor="#3b82f6" 
+                    />
                     <div>
-                        <Link href="/emails" className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Link href="/emails" className="flex items-center gap-2 text-sm text-slate-300 hover:text-white mb-1">
                             <ArrowLeftIcon className="h-4 w-4" />
                             Back to Domains
                         </Link>
-                        <h1 className="text-3xl font-bold tracking-tight">{domain.domain}</h1>
-                        <p className="text-muted-foreground">
+                        <h1 className="text-xl font-semibold mb-1">{domain.domain}</h1>
+                        <div className="text-sm text-slate-300">
                             {domain.status === DOMAIN_STATUS.PENDING && "Add DNS records to complete verification"}
                             {domain.status === DOMAIN_STATUS.VERIFIED && "Domain verified - manage email addresses below"}
                             {domain.status === DOMAIN_STATUS.FAILED && "Domain verification failed - please check your DNS records"}
-                        </p>
+                        </div>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    {getStatusBadge(domain.status)}
+                    {domain.status === DOMAIN_STATUS.VERIFIED ? (
+                        <Badge className="bg-emerald-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
+                            <HiCheckCircle className="w-3 h-3 mr-1" />
+                            Verified
+                        </Badge>
+                    ) : domain.status === DOMAIN_STATUS.PENDING ? (
+                        <Badge className="bg-amber-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
+                            <ClockIcon className="w-3 h-3 mr-1" />
+                            Pending
+                        </Badge>
+                    ) : (
+                        <Badge className="bg-red-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
+                            <HiX className="w-3 h-3 mr-1" />
+                            Failed
+                        </Badge>
+                    )}
                     <Button
                         variant="secondary"
                         size="sm"
                         onClick={refreshVerification}
+                        className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
                     >
-                        <RefreshCwIcon className="h-4 w-4 mr-2" />
+                        <HiRefresh className="h-3 w-3 mr-1" />
                         Refresh
                     </Button>
                     
@@ -552,7 +576,7 @@ export default function DomainDetailPage() {
                                 size="sm"
                             >
                                 <TrashIcon className="h-4 w-4 mr-2" />
-                                Delete Domain
+                                Delete
                             </Button>
                         </DialogTrigger>
                         <DialogContent>
@@ -618,23 +642,27 @@ export default function DomainDetailPage() {
             {/* Stats Cards - Only show for SES verified domains */}
             {showEmailSection && (
                 <div className="grid gap-4 md:grid-cols-4">
-                    <Card>
+                    <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Email Configuration</CardTitle>
-                            <MailIcon className="h-4 w-4 text-muted-foreground" />
+                            <CardTitle className="text-sm font-medium text-gray-900">Email Configuration</CardTitle>
+                            <CustomInboundIcon 
+                                Icon={HiMail} 
+                                size={24} 
+                                backgroundColor="#10b981" 
+                            />
                         </CardHeader>
                         <CardContent>
                             {catchAllStatus?.isCatchAllEnabled ? (
                                 <>
-                                    <div className="text-2xl font-bold">Catch-All</div>
-                                    <p className="text-xs text-muted-foreground">
+                                    <div className="text-2xl font-bold text-gray-900">Catch-All</div>
+                                    <p className="text-xs text-gray-500">
                                         All emails captured
                                     </p>
                                 </>
                             ) : (
                                 <>
-                                    <div className="text-2xl font-bold">{stats.totalEmailAddresses}</div>
-                                    <p className="text-xs text-muted-foreground">
+                                    <div className="text-2xl font-bold text-gray-900">{stats.totalEmailAddresses}</div>
+                                    <p className="text-xs text-gray-500">
                                         {stats.configuredEmailAddresses} configured
                                     </p>
                                 </>
@@ -642,42 +670,54 @@ export default function DomainDetailPage() {
                         </CardContent>
                     </Card>
 
-                    <Card>
+                    <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Emails (24h)</CardTitle>
-                            <TrendingUpIcon className="h-4 w-4 text-muted-foreground" />
+                            <CardTitle className="text-sm font-medium text-gray-900">Emails (24h)</CardTitle>
+                            <CustomInboundIcon 
+                                Icon={HiLightningBolt} 
+                                size={24} 
+                                backgroundColor="#f59e0b" 
+                            />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{stats.totalEmailsLast24h}</div>
-                            <p className="text-xs text-muted-foreground">
+                            <div className="text-2xl font-bold text-gray-900">{stats.totalEmailsLast24h}</div>
+                            <p className="text-xs text-gray-500">
                                 received today
                             </p>
                         </CardContent>
                     </Card>
 
-                    <Card>
+                    <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Provider</CardTitle>
-                            <GlobeIcon className="h-4 w-4 text-muted-foreground" />
+                            <CardTitle className="text-sm font-medium text-gray-900">Provider</CardTitle>
+                            <CustomInboundIcon 
+                                Icon={HiGlobeAlt} 
+                                size={24} 
+                                backgroundColor="#3b82f6" 
+                            />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{domain.domainProvider || 'Unknown'}</div>
-                            <p className="text-xs text-muted-foreground">
+                            <div className="text-2xl font-bold text-gray-900">{domain.domainProvider || 'Unknown'}</div>
+                            <p className="text-xs text-gray-500">
                                 {domain.providerConfidence || 'unknown'} confidence
                             </p>
                         </CardContent>
                     </Card>
 
-                    <Card>
+                    <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Created</CardTitle>
-                            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                            <CardTitle className="text-sm font-medium text-gray-900">Created</CardTitle>
+                            <CustomInboundIcon 
+                                Icon={CalendarIcon} 
+                                size={24} 
+                                backgroundColor="#8b5cf6" 
+                            />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">
+                            <div className="text-2xl font-bold text-gray-900">
                                 {formatDistanceToNow(new Date(domain.createdAt), { addSuffix: true })}
                             </div>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-gray-500">
                                 domain added
                             </p>
                         </CardContent>
@@ -687,13 +727,24 @@ export default function DomainDetailPage() {
 
             {/* MX Records Warning - Show if domain has MX records */}
             {domain.hasMxRecords && (
-                <Alert className="border-amber-200 bg-amber-50">
-                    <AlertTriangleIcon className="h-4 w-4 text-amber-600" />
-                    <AlertDescription className="text-amber-800">
-                        <strong>Warning:</strong> This domain has existing MX records for email receiving. 
-                        This may conflict with other email services. If you experience issues, consider using a subdomain instead.
-                    </AlertDescription>
-                </Alert>
+                <Card className="bg-amber-50/80 backdrop-blur-sm shadow-sm border border-amber-200/60 rounded-xl">
+                    <CardContent className="p-4">
+                        <div className="flex items-start gap-3">
+                            <CustomInboundIcon 
+                                Icon={AlertTriangleIcon} 
+                                size={24} 
+                                backgroundColor="#f59e0b" 
+                            />
+                            <div>
+                                <h4 className="font-semibold text-amber-800 mb-1">MX Records Conflict Warning</h4>
+                                <p className="text-sm text-amber-700">
+                                    This domain has existing MX records for email receiving. 
+                                    This may conflict with other email services. If you experience issues, consider using a subdomain instead.
+                                </p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
             )}
 
             {/* Show AddDomainForm for pending domains */}
@@ -745,15 +796,19 @@ export default function DomainDetailPage() {
 
             {/* Email Addresses Section - Only show for SES verified domains and when catch-all is not enabled */}
             {showEmailSection && !catchAllStatus?.isCatchAllEnabled && (
-                <Card>
+                <Card className="bg-white/95 backdrop-blur-sm shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-200/60 rounded-xl">
                     <CardHeader>
                         <div className="flex items-center justify-between">
                             <div>
-                                <CardTitle className="flex items-center gap-2">
-                                    <MailIcon className="h-5 w-5" />
+                                <CardTitle className="flex items-center gap-2 text-gray-900">
+                                    <CustomInboundIcon 
+                                        Icon={HiMail} 
+                                        size={28} 
+                                        backgroundColor="#10b981" 
+                                    />
                                     Email Addresses
                                 </CardTitle>
-                                <CardDescription>
+                                <CardDescription className="text-gray-600">
                                     Manage email addresses that can receive emails for this domain
                                 </CardDescription>
                             </div>
@@ -992,21 +1047,25 @@ export default function DomainDetailPage() {
 
             {/* Catch-All Domain Configuration - Only show for SES verified domains */}
             {showEmailSection && (
-                <Card>
+                <Card className="bg-white/95 backdrop-blur-sm shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-200/60 rounded-xl">
                     <CardHeader>
                         <div className="flex items-center justify-between">
                             <div>
-                                <CardTitle className="flex items-center gap-2">
-                                    <GlobeIcon className="h-5 w-5" />
+                                <CardTitle className="flex items-center gap-2 text-gray-900">
+                                    <CustomInboundIcon 
+                                        Icon={HiGlobeAlt} 
+                                        size={28} 
+                                        backgroundColor="#3b82f6" 
+                                    />
                                     Catch-All Configuration
                                 </CardTitle>
-                                <CardDescription>
+                                <CardDescription className="text-gray-600">
                                     Configure catch-all email receiving for all addresses on this domain
                                 </CardDescription>
                             </div>
                             {catchAllStatus?.isCatchAllEnabled && (
-                                <Badge className="bg-green-100 text-green-800 border-green-200">
-                                    <CheckCircleIcon className="h-3 w-3 mr-1" />
+                                <Badge className="bg-emerald-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm">
+                                    <HiCheckCircle className="h-3 w-3 mr-1" />
                                     Active
                                 </Badge>
                             )}
@@ -1342,6 +1401,7 @@ export default function DomainDetailPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            </div>
         </div>
     )
 } 

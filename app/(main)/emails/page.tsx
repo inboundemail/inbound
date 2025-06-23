@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/copy-button'
-import { HiCheckCircle, HiChevronDown, HiClipboard, HiGlobeAlt, HiLightningBolt, HiMail, HiPlus, HiRefresh, HiX } from 'react-icons/hi'
+import { HiCheckCircle, HiChevronDown, HiClipboard, HiCog, HiGlobeAlt, HiLightningBolt, HiMail, HiPlus, HiRefresh, HiX } from 'react-icons/hi'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { formatDistanceToNow } from 'date-fns'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
@@ -310,11 +310,26 @@ export default function EmailsPage() {
                             Verified
                           </Badge>
                         )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                          asChild
+                        >
+                          <Link href={`/emails/${domain.id}`}>
+                            <HiCog className="w-4 h-4 text-gray-500 hover:text-gray-700" />
+                          </Link>
+                        </Button>
                         {details?.emailAddresses && details.emailAddresses.length > 0 && (
                           <Button
                             variant="ghost"
                             size="sm"
                             className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleDomain(domain.id)
+                            }}
                           >
                             <HiChevronDown 
                               className={`w-4 h-4 text-gray-500 transition-transform duration-300 ease-in-out ${
