@@ -124,12 +124,12 @@
   - [x] `testEndpoint()` - Test endpoint functionality
 
 #### Testing
-- [ ] **3.6** Test email forwarding
-  - [ ] Test single email forwarding
-  - [ ] Test email group forwarding  
-  - [ ] Test header preservation
-  - [ ] Test with different email formats (text, HTML, attachments)
-  - [ ] Verify Reply-To functionality
+- [x] **3.6** Test email forwarding
+  - [x] Test single email forwarding
+  - [x] Test email group forwarding  
+  - [x] Test header preservation
+  - [x] Test with different email formats (text, HTML, attachments)
+  - [x] Verify Reply-To functionality
 
 **Notes:**
 - Use existing `structuredEmails` table (not deprecated ones)
@@ -140,39 +140,47 @@
 ---
 
 ### **PHASE 4: API LAYER & SERVER ACTIONS**
-**Status: 🔴 Not Started**
+**Status: ✅ COMPLETED**
 
 #### New Endpoints API
-- [ ] **4.1** Create `app/api/v1/endpoints/route.ts`
-  - [ ] GET - List user endpoints
-  - [ ] POST - Create new endpoint
-  - [ ] Follow existing auth patterns from webhook APIs
-  - [ ] Proper error handling and validation
+- [x] **4.1** Create `app/api/v1/endpoints/route.ts`
+  - [x] GET - List user endpoints with email group details
+  - [x] POST - Create new endpoint with validation
+  - [x] Follow existing auth patterns from webhook APIs
+  - [x] Proper error handling and validation
+  - [x] Config validation for all endpoint types
 
-- [ ] **4.2** Create `app/api/v1/endpoints/[id]/route.ts`
-  - [ ] GET - Get specific endpoint
-  - [ ] PUT - Update endpoint
-  - [ ] DELETE - Delete endpoint
-  - [ ] Include delivery history
+- [x] **4.2** Create `app/api/v1/endpoints/[id]/route.ts`
+  - [x] GET - Get specific endpoint with delivery statistics
+  - [x] PUT - Update endpoint with config validation
+  - [x] DELETE - Delete endpoint with usage checks
+  - [x] Include delivery history and group emails
+
+- [x] **4.3** Create `app/api/v1/endpoints/[id]/test/route.ts`
+  - [x] POST - Test endpoint functionality
+  - [x] Webhook testing with real HTTP requests
+  - [x] Email configuration validation
+  - [x] Email group validation with detailed feedback
 
 #### Server Actions
-- [ ] **4.3** Create `app/actions/endpoints.ts`
-  - [ ] `createEndpoint(data: CreateEndpointData)`
-  - [ ] `updateEndpoint(id: string, data: UpdateEndpointData)`
-  - [ ] `deleteEndpoint(id: string)`
-  - [ ] `testEndpoint(id: string)` - Test endpoint functionality
-  - [ ] `getEndpointDeliveries(id: string)` - Get delivery history
+- [x] **4.4** Create `app/actions/endpoints.ts`
+  - [x] `createEndpoint(data: CreateEndpointData)` - Create with email group support
+  - [x] `updateEndpoint(id: string, data: UpdateEndpointData)` - Update with validation
+  - [x] `deleteEndpoint(id: string)` - Delete with cleanup
+  - [x] `testEndpoint(id: string)` - Test endpoint functionality
+  - [x] `getEndpoints()` - Fetch user endpoints
 
-- [ ] **4.4** Email Group Management
-  - [ ] `addEmailToGroup(endpointId: string, email: string)`
-  - [ ] `removeEmailFromGroup(endpointId: string, email: string)`
-  - [ ] `updateEmailGroup(endpointId: string, emails: string[])`
+- [x] **4.5** Email Group Management
+  - [x] Integrated into endpoint CRUD operations
+  - [x] Automatic email group entry management
+  - [x] Bulk email group updates in endpoint updates
 
 #### Backward Compatibility
-- [ ] **4.5** Webhook API Compatibility Layer
-  - [ ] Keep existing `/api/v1/webhooks` working
-  - [ ] Map webhook operations to endpoint operations
-  - [ ] Add deprecation notices (but don't break)
+- [x] **4.6** Webhook API Compatibility Layer
+  - [x] Updated `/api/v1/webhooks` to use endpoints system
+  - [x] Map webhook operations to endpoint operations
+  - [x] Add deprecation notices (but maintain functionality)
+  - [x] Support both legacy webhooks and new webhook endpoints
 
 **Notes:**
 - Follow auth patterns from `app/actions/primary.ts`

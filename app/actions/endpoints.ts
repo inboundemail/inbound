@@ -7,6 +7,7 @@ import { endpoints, emailGroups } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import type { CreateEndpointData, UpdateEndpointData } from '@/features/endpoints/types'
+import { migrateUserWebhooksToEndpoints, checkWebhookMigrationNeeded } from '@/lib/webhook-migration'
 
 export async function createEndpoint(data: CreateEndpointData) {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -292,6 +293,58 @@ export async function testEndpoint(id: string) {
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Failed to test endpoint' 
+    }
+  }
+}
+
+export async function checkMigrationNeeded() {
+  const session = await auth.api.getSession({
+    headers: await headers()
+  })
+
+  if (!session?.user?.id) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  try {
+    const migrationNeeded = await checkWebhookMigrationNeeded(session.user.id)
+    return { success: true, migrationNeeded }
+  } catch (error) {
+    console.error('Error checking migration status:', error)
+    return { success: false, error: 'Failed to check migration status' }
+  }
+}
+
+export async function migrateWebhooksToEndpoints() {
+  const session = await auth.api.getSession({
+    headers: await headers()
+  })
+
+  if (!session?.user?.id) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  try {
+    const result = await migrateUserWebhooksToEndpoints(session.user.id)
+    
+    if (result.success) {
+      return { 
+        success: true, 
+        migratedCount: result.migratedCount,
+        skippedCount: result.skippedCount,
+        message: `Successfully migrated ${result.migratedCount} webhooks to endpoints`
+      }
+    } else {
+      return { 
+        success: false, 
+        error: `Migration failed: ${result.errors.join(', ')}` 
+      }
+    }
+  } catch (error) {
+    console.error('Error in migrateWebhooksToEndpoints:', error)
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to migrate webhooks' 
     }
   }
 } 

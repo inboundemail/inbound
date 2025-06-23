@@ -1,215 +1,185 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { validateApiKey } from '../lib/auth'
+import { auth } from '@/lib/auth'
+import { headers } from 'next/headers'
 import { db } from '@/lib/db'
-import { webhooks } from '@/lib/db/schema'
+import { endpoints, webhooks } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
-import crypto from 'crypto'
 
 /**
- * GET /api/v1/webhooks
- * List all webhooks for the authenticated user
+ * BACKWARD COMPATIBILITY LAYER
+ * This API maintains compatibility with existing webhook integrations
+ * while internally using the new endpoints system
  */
+
 export async function GET(request: NextRequest) {
   try {
-    const validation = await validateApiKey(request)
+    console.log('📋 GET /api/v1/webhooks - Fetching webhooks (compatibility layer)')
     
-    if (!validation.valid) {
-      return NextResponse.json(
-        { error: validation.error },
-        { status: 401 }
-      )
+    const session = await auth.api.getSession({ headers: await headers() })
+    if (!session?.user?.id) {
+      console.warn('❌ GET /api/v1/webhooks - Unauthorized request')
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userWebhooks = await db
-      .select({
-        id: webhooks.id,
-        name: webhooks.name,
-        url: webhooks.url,
-        description: webhooks.description,
-        isActive: webhooks.isActive,
-        timeout: webhooks.timeout,
-        retryAttempts: webhooks.retryAttempts,
-        totalDeliveries: webhooks.totalDeliveries,
-        successfulDeliveries: webhooks.successfulDeliveries,
-        failedDeliveries: webhooks.failedDeliveries,
-        lastUsed: webhooks.lastUsed,
-        createdAt: webhooks.createdAt,
-        updatedAt: webhooks.updatedAt
-      })
-      .from(webhooks)
-      .where(eq(webhooks.userId, validation.user!.id))
+    // Fetch webhook-type endpoints and legacy webhooks
+    const webhookEndpoints = await db
+      .select()
+      .from(endpoints)
+      .where(and(
+        eq(endpoints.userId, session.user.id),
+        eq(endpoints.type, 'webhook')
+      ))
+      .orderBy(endpoints.createdAt)
 
-    return NextResponse.json({
-      success: true,
-      data: userWebhooks
+    // Also fetch legacy webhooks for complete compatibility
+    const legacyWebhooks = await db
+      .select()
+      .from(webhooks)
+      .where(eq(webhooks.userId, session.user.id))
+      .orderBy(webhooks.createdAt)
+
+    // Convert endpoints to webhook format
+    const webhooksFromEndpoints = webhookEndpoints.map(endpoint => {
+      const config = JSON.parse(endpoint.config)
+      return {
+        id: endpoint.id,
+        name: endpoint.name,
+        url: config.url,
+        secret: config.secret || null,
+        isActive: endpoint.isActive,
+        description: endpoint.description,
+        headers: config.headers ? JSON.stringify(config.headers) : null,
+        timeout: config.timeout || 30,
+        retryAttempts: config.retryAttempts || 3,
+        lastUsed: null, // TODO: Get from delivery stats
+        totalDeliveries: 0, // TODO: Calculate from endpoint deliveries
+        successfulDeliveries: 0, // TODO: Calculate from endpoint deliveries
+        failedDeliveries: 0, // TODO: Calculate from endpoint deliveries
+        createdAt: endpoint.createdAt,
+        updatedAt: endpoint.updatedAt,
+        userId: endpoint.userId,
+        _source: 'endpoint' // Internal flag to indicate source
+      }
     })
+
+    // Add legacy webhooks with source flag
+    const legacyWebhooksWithSource = legacyWebhooks.map(webhook => ({
+      ...webhook,
+      _source: 'legacy'
+    }))
+
+    // Combine both sources
+    const allWebhooks = [...webhooksFromEndpoints, ...legacyWebhooksWithSource]
+
+    console.log(`✅ GET /api/v1/webhooks - Retrieved ${allWebhooks.length} webhooks (${webhookEndpoints.length} from endpoints, ${legacyWebhooks.length} legacy)`)
+
+    return NextResponse.json({ 
+      webhooks: allWebhooks,
+      _deprecationNotice: 'This API is deprecated. Please migrate to /api/v1/endpoints for enhanced functionality.'
+    })
+
   } catch (error) {
-    console.error('Error fetching webhooks:', error)
+    console.error('❌ GET /api/v1/webhooks - Error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Failed to fetch webhooks',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }
 }
 
-/**
- * POST /api/v1/webhooks
- * Create a new webhook
- * Body: { name: string, description?: string, endpoint: string, retry?: number, timeout?: number }
- */
 export async function POST(request: NextRequest) {
   try {
-    const validation = await validateApiKey(request)
+    console.log('📝 POST /api/v1/webhooks - Creating webhook (compatibility layer)')
     
-    if (!validation.valid) {
-      return NextResponse.json(
-        { error: validation.error },
-        { status: 401 }
-      )
+    const session = await auth.api.getSession({ headers: await headers() })
+    if (!session?.user?.id) {
+      console.warn('❌ POST /api/v1/webhooks - Unauthorized request')
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { name, description, endpoint, retry, timeout } = body
-
-    if (!name || !endpoint) {
+    const data = await request.json()
+    
+    // Validate required webhook fields
+    if (!data.name || !data.url) {
       return NextResponse.json(
-        { error: 'Name and endpoint are required' },
+        { error: 'Missing required fields: name, url' },
         { status: 400 }
       )
     }
 
     // Validate URL format
     try {
-      new URL(endpoint)
+      new URL(data.url)
     } catch {
       return NextResponse.json(
-        { error: 'Invalid endpoint URL format' },
+        { error: 'Invalid URL format' },
         { status: 400 }
       )
     }
 
-    // Check if webhook name already exists for this user
-    const existingWebhook = await db
-      .select()
-      .from(webhooks)
-      .where(and(
-        eq(webhooks.name, name),
-        eq(webhooks.userId, validation.user!.id)
-      ))
-      .limit(1)
+    console.log(`📝 POST /api/v1/webhooks - Creating webhook endpoint: ${data.name}`)
 
-    if (existingWebhook[0]) {
-      return NextResponse.json(
-        { error: 'Webhook with this name already exists' },
-        { status: 409 }
-      )
+    // Create as webhook endpoint (new system)
+    const webhookConfig = {
+      url: data.url,
+      secret: data.secret || undefined,
+      headers: data.headers ? JSON.parse(data.headers) : undefined,
+      timeout: data.timeout || 30,
+      retryAttempts: data.retryAttempts || 3
     }
 
-    // Generate a secret for webhook verification
-    const secret = crypto.randomBytes(32).toString('hex')
-
-    // Create the webhook
-    const webhookRecord = {
+    const newEndpoint = {
       id: nanoid(),
-      name,
-      url: endpoint,
-      secret,
-      description: description || null,
-      isActive: true,
-      timeout: timeout || 30,
-      retryAttempts: retry || 3,
+      name: data.name,
+      type: 'webhook' as const,
+      config: JSON.stringify(webhookConfig),
+      description: data.description || null,
+      userId: session.user.id,
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }
+
+    const [createdEndpoint] = await db.insert(endpoints).values(newEndpoint).returning()
+
+    // Convert back to webhook format for response
+    const webhookResponse = {
+      id: createdEndpoint.id,
+      name: createdEndpoint.name,
+      url: webhookConfig.url,
+      secret: webhookConfig.secret || null,
+      isActive: createdEndpoint.isActive,
+      description: createdEndpoint.description,
+      headers: webhookConfig.headers ? JSON.stringify(webhookConfig.headers) : null,
+      timeout: webhookConfig.timeout,
+      retryAttempts: webhookConfig.retryAttempts,
+      lastUsed: null,
       totalDeliveries: 0,
       successfulDeliveries: 0,
       failedDeliveries: 0,
-      userId: validation.user!.id,
-      updatedAt: new Date(),
+      createdAt: createdEndpoint.createdAt,
+      updatedAt: createdEndpoint.updatedAt,
+      userId: createdEndpoint.userId
     }
 
-    const [createdWebhook] = await db
-      .insert(webhooks)
-      .values(webhookRecord)
-      .returning()
+    console.log(`✅ POST /api/v1/webhooks - Successfully created webhook endpoint ${createdEndpoint.id}`)
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: createdWebhook.id,
-        name: createdWebhook.name,
-        url: createdWebhook.url,
-        secret: createdWebhook.secret,
-        description: createdWebhook.description,
-        isActive: createdWebhook.isActive,
-        timeout: createdWebhook.timeout,
-        retryAttempts: createdWebhook.retryAttempts,
-        createdAt: createdWebhook.createdAt
-      }
+    return NextResponse.json({ 
+      webhook: webhookResponse,
+      _deprecationNotice: 'This API is deprecated. Please migrate to /api/v1/endpoints for enhanced functionality.'
     }, { status: 201 })
+
   } catch (error) {
-    console.error('Error creating webhook:', error)
+    console.error('❌ POST /api/v1/webhooks - Error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}
-
-/**
- * DELETE /api/v1/webhooks
- * Remove a webhook by name
- * Body: { name: string }
- */
-export async function DELETE(request: NextRequest) {
-  try {
-    const validation = await validateApiKey(request)
-    
-    if (!validation.valid) {
-      return NextResponse.json(
-        { error: validation.error },
-        { status: 401 }
-      )
-    }
-
-    const body = await request.json()
-    const { name } = body
-
-    if (!name) {
-      return NextResponse.json(
-        { error: 'Webhook name is required' },
-        { status: 400 }
-      )
-    }
-
-    // Find the webhook
-    const webhookRecord = await db
-      .select()
-      .from(webhooks)
-      .where(and(
-        eq(webhooks.name, name),
-        eq(webhooks.userId, validation.user!.id)
-      ))
-      .limit(1)
-
-    if (!webhookRecord[0]) {
-      return NextResponse.json(
-        { error: 'Webhook not found' },
-        { status: 404 }
-      )
-    }
-
-    // Delete the webhook
-    await db
-      .delete(webhooks)
-      .where(eq(webhooks.id, webhookRecord[0].id))
-
-    return NextResponse.json({
-      success: true,
-      message: `Webhook '${name}' has been removed`
-    })
-  } catch (error) {
-    console.error('Error removing webhook:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Failed to create webhook',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }

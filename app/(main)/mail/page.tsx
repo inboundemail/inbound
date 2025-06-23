@@ -138,7 +138,7 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                             ))}
                         </select>
 
-                        <Button type="submit" className="h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
+                        <Button type="submit">
                             <HiSearch className="h-4 w-4" />
                             Filter
                         </Button>
