@@ -148,7 +148,7 @@ export default async function AnalyticsPage() {
       </div>
 
       {/* Security Analysis */}
-      <Card className="border-red-100">
+      {/* <Card className="border-red-100">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <HiShieldCheck className="h-4 w-4 text-red-600" />
@@ -202,7 +202,7 @@ export default async function AnalyticsPage() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Performance Analysis & Error Insights - Two Column */}
       <div className="grid gap-4 lg:grid-cols-2">

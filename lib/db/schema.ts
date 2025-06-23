@@ -44,7 +44,8 @@ export const emailAddresses = pgTable('email_addresses', {
   id: varchar('id', { length: 255 }).primaryKey(),
   address: varchar('address', { length: 255 }).notNull().unique(),
   domainId: varchar('domain_id', { length: 255 }).notNull(),
-  webhookId: varchar('webhook_id', { length: 255 }), // Link to webhooks table
+  webhookId: varchar('webhook_id', { length: 255 }), // Link to webhooks table (kept for backward compatibility)
+  endpointId: varchar('endpoint_id', { length: 255 }), // Link to endpoints table (new unified system)
   isActive: boolean('is_active').default(true),
   isReceiptRuleConfigured: boolean('is_receipt_rule_configured').default(false),
   receiptRuleName: varchar('receipt_rule_name', { length: 255 }),
@@ -288,6 +289,41 @@ export const domainDnsRecords = pgTable('domain_dns_records', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+// Endpoints table - unified system for webhooks, email forwards, and email groups
+export const endpoints = pgTable('endpoints', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(), // User-friendly name
+  type: varchar('type', { length: 50 }).notNull(), // 'webhook', 'email', 'email_group'
+  config: text('config').notNull(), // JSON configuration based on type
+  isActive: boolean('is_active').default(true),
+  description: text('description'), // Optional description
+  userId: varchar('user_id', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Email Groups table - stores individual email addresses for email group endpoints
+export const emailGroups = pgTable('email_groups', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  endpointId: varchar('endpoint_id', { length: 255 }).notNull(), // Reference to endpoints table
+  emailAddress: varchar('email_address', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Endpoint Deliveries table - tracks deliveries for all endpoint types (extends webhook deliveries)
+export const endpointDeliveries = pgTable('endpoint_deliveries', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  emailId: varchar('email_id', { length: 255 }), // Reference to structured_emails table
+  endpointId: varchar('endpoint_id', { length: 255 }).notNull(), // Reference to endpoints table
+  deliveryType: varchar('delivery_type', { length: 50 }).notNull(), // 'webhook', 'email_forward'
+  status: varchar('status', { length: 50 }).notNull(), // 'pending', 'success', 'failed'
+  attempts: integer('attempts').default(0),
+  lastAttemptAt: timestamp('last_attempt_at'),
+  responseData: text('response_data'), // JSON response/error data
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // Structured Emails table - matches ParsedEmailData type exactly
 
 
@@ -326,6 +362,12 @@ export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 export type NewWebhookDelivery = typeof webhookDeliveries.$inferInsert;
 export type DomainDnsRecord = typeof domainDnsRecords.$inferSelect;
 export type NewDomainDnsRecord = typeof domainDnsRecords.$inferInsert;
+export type Endpoint = typeof endpoints.$inferSelect;
+export type NewEndpoint = typeof endpoints.$inferInsert;
+export type EmailGroup = typeof emailGroups.$inferSelect;
+export type NewEmailGroup = typeof emailGroups.$inferInsert;
+export type EndpointDelivery = typeof endpointDeliveries.$inferSelect;
+export type NewEndpointDelivery = typeof endpointDeliveries.$inferInsert;
 
 // Domain status enums
 export const DOMAIN_STATUS = {
@@ -359,9 +401,29 @@ export const WEBHOOK_STATUS = {
   FAILED: 'failed'
 } as const;
 
+export const ENDPOINT_TYPES = {
+  WEBHOOK: 'webhook',
+  EMAIL: 'email',
+  EMAIL_GROUP: 'email_group'
+} as const;
+
+export const DELIVERY_TYPES = {
+  WEBHOOK: 'webhook',
+  EMAIL_FORWARD: 'email_forward'
+} as const;
+
+export const DELIVERY_STATUS = {
+  PENDING: 'pending',
+  SUCCESS: 'success',
+  FAILED: 'failed'
+} as const;
+
 // Type definitions
 export type DomainStatus = typeof DOMAIN_STATUS[keyof typeof DOMAIN_STATUS];
 export type SesVerificationStatus = typeof SES_VERIFICATION_STATUS[keyof typeof SES_VERIFICATION_STATUS];
 export type ProviderConfidence = typeof PROVIDER_CONFIDENCE[keyof typeof PROVIDER_CONFIDENCE];
 export type EmailStatus = typeof EMAIL_STATUS[keyof typeof EMAIL_STATUS];
 export type WebhookStatus = typeof WEBHOOK_STATUS[keyof typeof WEBHOOK_STATUS];
+export type EndpointType = typeof ENDPOINT_TYPES[keyof typeof ENDPOINT_TYPES];
+export type DeliveryType = typeof DELIVERY_TYPES[keyof typeof DELIVERY_TYPES];
+export type DeliveryStatus = typeof DELIVERY_STATUS[keyof typeof DELIVERY_STATUS];

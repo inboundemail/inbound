@@ -3,7 +3,6 @@ import { getDomainStats } from '@/app/actions/primary'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { 
   MailIcon, 
   TrendingUpIcon, 
@@ -17,7 +16,6 @@ import {
   ActivityIcon,
   ServerIcon,
   DatabaseIcon,
-  ArrowRightIcon,
   ZapIcon
 } from "lucide-react"
 import { formatDistanceToNow } from 'date-fns'
@@ -114,28 +112,16 @@ export default async function Page() {
   const displayDomains = domainStats?.domains || []
   const displayEmails = analyticsData?.recentEmails?.slice(0, 8) || []
 
-  // Calculate pipeline metrics
-  const pipelineStats = {
-    received: analyticsData?.stats.totalEmails || 0,
-    processing: displayEmails.filter(e => e.status === 'processing').length,
-    forwarded: displayEmails.filter(e => e.status === 'forwarded').length,
-    failed: displayEmails.filter(e => e.status === 'failed').length,
-  }
-
-  const successRate = pipelineStats.received > 0 
-    ? Math.round((pipelineStats.forwarded / pipelineStats.received) * 100) 
-    : 0
-
   return (
     <div className="flex flex-1 flex-col gap-4 p-4">
       {/* Compact Header */}
       <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4">
         <div>
-          <h1 className="text-xl font-semibold mb-1">Email Pipeline Dashboard</h1>
+          <h1 className="text-xl font-semibold mb-1">Dashboard</h1>
           <div className="flex items-center gap-4 text-sm text-slate-300">
             <span className="flex items-center gap-1">
               <ActivityIcon className="h-3 w-3" />
-              {analyticsData?.stats.totalEmails || 0} processed
+              {analyticsData?.stats.totalEmails || 0} emails processed
             </span>
             <span className="flex items-center gap-1">
               <GlobeIcon className="h-3 w-3" />
@@ -143,7 +129,7 @@ export default async function Page() {
             </span>
             <span className="flex items-center gap-1">
               <ZapIcon className="h-3 w-3" />
-              {successRate}% success rate
+              {analyticsData?.stats.emailsLast24h || 0} today
             </span>
           </div>
         </div>
@@ -192,74 +178,34 @@ export default async function Page() {
         </Card>
       )}
 
-      {/* Email Flow Pipeline */}
+      {/* Email Activity Summary */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <ActivityIcon className="h-4 w-4" />
-            Email Processing Pipeline
+            Email Activity
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          <div>
-            {/* Pipeline Flow Visualization */}
-            <div className="flex items-center justify-between mb-4 p-3 bg-slate-50 rounded-lg">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  Receive
-                </div>
-                <ArrowRightIcon className="h-3 w-3 text-slate-400" />
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                  Process
-                </div>
-                <ArrowRightIcon className="h-3 w-3 text-slate-400" />
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  Forward
-                </div>
-              </div>
-              <div className="text-sm text-slate-600">
-                Avg: {analyticsData?.stats.avgProcessingTime || 0}ms
-              </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-100">
+              <div className="text-2xl font-bold text-blue-700">{analyticsData?.stats.totalEmails || 0}</div>
+              <div className="text-sm text-blue-600 mt-1">Total Emails</div>
+              <div className="text-xs text-slate-500 mt-1">All time processed</div>
             </div>
-
-            {/* Pipeline Metrics */}
-            <div className="grid grid-cols-4 gap-3">
-              <div className="text-center p-3 bg-blue-50 rounded-lg border border-blue-100">
-                <div className="text-lg font-semibold text-blue-700">{pipelineStats.received}</div>
-                <div className="text-xs text-blue-600 mt-1">Received</div>
-                <div className="text-xs text-slate-500 mt-1">
-                  {analyticsData?.stats.emailsLast24h || 0} today
-                </div>
-              </div>
-              <div className="text-center p-3 bg-amber-50 rounded-lg border border-amber-100">
-                <div className="text-lg font-semibold text-amber-700">{pipelineStats.processing}</div>
-                <div className="text-xs text-amber-600 mt-1">Processing</div>
-                <div className="text-xs text-slate-500 mt-1">Active queue</div>
-              </div>
-              <div className="text-center p-3 bg-green-50 rounded-lg border border-green-100">
-                <div className="text-lg font-semibold text-green-700">{pipelineStats.forwarded}</div>
-                <div className="text-xs text-green-600 mt-1">Forwarded</div>
-                <div className="text-xs text-slate-500 mt-1">{successRate}% rate</div>
-              </div>
-              <div className="text-center p-3 bg-red-50 rounded-lg border border-red-100">
-                <div className="text-lg font-semibold text-red-700">{pipelineStats.failed}</div>
-                <div className="text-xs text-red-600 mt-1">Failed</div>
-                <div className="text-xs text-slate-500 mt-1">Need attention</div>
-              </div>
-            </div>
-
-            {/* Success Rate Progress */}
-            <div className="mt-4 p-3 bg-slate-50 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Success Rate</span>
-                <span className="text-sm text-slate-600">{successRate}%</span>
-              </div>
-              <Progress value={successRate} className="h-2" />
+            <div className="text-center p-4 bg-green-50 rounded-lg border border-green-100">
+              <div className="text-2xl font-bold text-green-700">{analyticsData?.stats.emailsLast24h || 0}</div>
+              <div className="text-sm text-green-600 mt-1">Today</div>
+              <div className="text-xs text-slate-500 mt-1">Last 24 hours</div>
             </div>
           </div>
+          
+          {analyticsData?.stats.avgProcessingTime && (
+            <div className="mt-4 p-3 bg-slate-50 rounded-lg flex items-center justify-between">
+              <span className="text-sm font-medium">Average Processing Time</span>
+              <span className="text-sm text-slate-600 font-mono">{analyticsData.stats.avgProcessingTime}ms</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 

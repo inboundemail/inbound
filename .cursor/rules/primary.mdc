@@ -12,9 +12,3 @@ Project Rules:
 - We have depricated the `receivedEmails` and `parsedEmails` schema tables and we are wanted to replace them with `structuredEmails` which has better (cleaner) information and better typing. 
 - You should NOT create duplicate type definitions, always try to find an existing type or find/extend one from a schema.
 - All icons are using react-icons/hi
-
-
-Current Goal: 
-
-- We are going to be working on migrating from API to Next.JS Server Actions
-- When we are refactoring stuff we also need to make sure to use the react-query rule so that we can inhance the perfomance of the app using react query and such. Remember on the querys to make sure that we revalidate on the new data submission and such. 
