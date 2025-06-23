@@ -541,143 +541,77 @@ export default function DomainDetailPage() {
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            {/* Catch-all toggle and configuration */}
-                            {catchAllStatus && (
-                                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <div className="font-medium text-blue-900">Catch-all Configuration</div>
-                                            <div className="text-sm text-blue-700">
-                                                {catchAllStatus.isCatchAllEnabled 
-                                                    ? 'All emails to any address are captured'
-                                                    : 'Capture emails to any address on this domain'
-                                                }
-                                            </div>
-                                        </div>
-                                                                                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full">
-                                             {!catchAllStatus.isCatchAllEnabled && (
-                                                 <Select 
-                                                     value={catchAllEndpointId} 
-                                                     onValueChange={handleCatchAllEndpointSelection}
-                                                     disabled={isEndpointsLoading}
-                                                 >
-                                                     <SelectTrigger className="w-full sm:flex-1 h-10 min-w-0">
-                                                         <SelectValue placeholder="Select endpoint" />
-                                                     </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="none">Store only</SelectItem>
-                                                        <SelectItem value="create-new" className="text-blue-600 font-medium">
-                                                            <div className="flex items-center gap-2">
-                                                                <PlusIcon className="h-4 w-4" />
-                                                                Create Endpoint
-                                                            </div>
-                                                        </SelectItem>
-                                                        {userEndpoints.length > 0 && (
-                                                            <>
-                                                                <div className="px-2 py-1 text-xs font-medium text-muted-foreground border-t">
-                                                                    Endpoints
-                                                                </div>
-                                                                {userEndpoints.map((endpoint) => (
-                                                                    <SelectItem key={endpoint.id} value={endpoint.id}>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <CustomInboundIcon 
-                                                                                Icon={getEndpointIcon(endpoint)} 
-                                                                                size={16} 
-                                                                                backgroundColor={getEndpointIconColor(endpoint)} 
-                                                                            />
-                                                                            {endpoint.name} ({endpoint.type})
-                                                                        </div>
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </>
-                                                        )}
-                                                    </SelectContent>
-                                                </Select>
-                                            )}
-                                                                                         <Button
-                                                 variant={catchAllStatus.isCatchAllEnabled ? "destructive" : "secondary"}
-                                                 className="h-10"
-                                                 onClick={toggleCatchAll}
-                                                 disabled={!catchAllStatus.isCatchAllEnabled && catchAllEndpointId === 'none'}
-                                             >
-                                                 {catchAllStatus.isCatchAllEnabled ? 'Disable' : 'Enable'}
-                                             </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Individual email addresses - only show if catch-all is disabled */}
                             {!catchAllStatus?.isCatchAllEnabled && (
                                 <div className="space-y-4">
-                                                                                                              {/* Add Email Form */}
-                                     <div className="flex flex-col sm:flex-row gap-3 w-full">
-                                         <div className="w-full sm:flex-1">
-                                             <div className="flex items-center border rounded-md bg-white h-10 w-full">
-                                                 <Input
-                                                     type="text"
-                                                     placeholder="username"
-                                                     value={newEmailAddress}
-                                                     onChange={(e) => setNewEmailAddress(e.target.value)}
-                                                     onKeyDown={(e) => {
-                                                         if (e.key === 'Enter' && newEmailAddress.trim()) {
-                                                             addEmailAddressHandler()
-                                                         }
-                                                     }}
-                                                     className="border-0 rounded-r-none focus:ring-0 flex-1 h-full"
-                                                 />
-                                                 <div className="px-3 bg-gray-50 border-l text-sm text-gray-600 rounded-r-md flex items-center h-full whitespace-nowrap">
-                                                     @{domain.domain}
-                                                 </div>
-                                             </div>
-                                         </div>
-                                         <div className="flex gap-2 w-full sm:flex-1">
-                                             <Select 
-                                                 value={selectedEndpointId} 
-                                                 onValueChange={handleEndpointSelection}
-                                                 disabled={isEndpointsLoading}
-                                             >
-                                                 <SelectTrigger className="flex-1 h-10 min-w-0">
-                                                     <SelectValue placeholder="Endpoint (optional)" />
-                                                 </SelectTrigger>
-                                                 <SelectContent>
-                                                     <SelectItem value="none">Store only</SelectItem>
-                                                     <SelectItem value="create-new" className="text-blue-600 font-medium">
-                                                         <div className="flex items-center gap-2">
-                                                             <PlusIcon className="h-4 w-4" />
-                                                             Create Endpoint
-                                                         </div>
-                                                     </SelectItem>
-                                                     {userEndpoints.length > 0 && (
-                                                         <>
-                                                             <div className="px-2 py-1 text-xs font-medium text-muted-foreground border-t">
-                                                                 Endpoints
-                                                             </div>
-                                                             {userEndpoints.map((endpoint) => (
-                                                                 <SelectItem key={endpoint.id} value={endpoint.id}>
-                                                                     <div className="flex items-center gap-2">
-                                                                         <CustomInboundIcon 
-                                                                             Icon={getEndpointIcon(endpoint)} 
-                                                                             size={16} 
-                                                                             backgroundColor={getEndpointIconColor(endpoint)} 
-                                                                         />
-                                                                         {endpoint.name} ({endpoint.type})
-                                                                     </div>
-                                                                 </SelectItem>
-                                                             ))}
-                                                         </>
-                                                     )}
-                                                 </SelectContent>
-                                             </Select>
-                                             <Button
-                                                 onClick={addEmailAddressHandler}
-                                                 disabled={!newEmailAddress.trim()}
-                                                 className="shrink-0 h-10 w-10"
-                                             >
-                                                 <PlusIcon className="h-4 w-4" />
-                                             </Button>
-                                         </div>
-                                     </div>
+                                    {/* Add Email Form */}
+                                    <div className="flex flex-col sm:flex-row gap-3 w-full">
+                                        <div className="w-full sm:flex-1">
+                                            <div className="flex items-center border rounded-md bg-white h-10 w-full">
+                                                <Input
+                                                    type="text"
+                                                    placeholder="username"
+                                                    value={newEmailAddress}
+                                                    onChange={(e) => setNewEmailAddress(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' && newEmailAddress.trim()) {
+                                                            addEmailAddressHandler()
+                                                        }
+                                                    }}
+                                                    className="border-0 rounded-r-none focus:ring-0 flex-1 h-full"
+                                                />
+                                                <div className="px-3 bg-gray-50 border-l text-sm text-gray-600 rounded-r-md flex items-center h-full whitespace-nowrap">
+                                                    @{domain.domain}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2 w-full sm:flex-1">
+                                            <Select 
+                                                value={selectedEndpointId} 
+                                                onValueChange={handleEndpointSelection}
+                                                disabled={isEndpointsLoading}
+                                            >
+                                                <SelectTrigger className="flex-1 h-10 min-w-0">
+                                                    <SelectValue placeholder="Endpoint (optional)" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="none">Store only</SelectItem>
+                                                    <SelectItem value="create-new" className="text-blue-600 font-medium">
+                                                        <div className="flex items-center gap-2">
+                                                            <PlusIcon className="h-4 w-4" />
+                                                            Create Endpoint
+                                                        </div>
+                                                    </SelectItem>
+                                                    {userEndpoints.length > 0 && (
+                                                        <>
+                                                            <div className="px-2 py-1 text-xs font-medium text-muted-foreground border-t">
+                                                                Endpoints
+                                                            </div>
+                                                            {userEndpoints.map((endpoint) => (
+                                                                <SelectItem key={endpoint.id} value={endpoint.id}>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <CustomInboundIcon 
+                                                                            Icon={getEndpointIcon(endpoint)} 
+                                                                            size={16} 
+                                                                            backgroundColor={getEndpointIconColor(endpoint)} 
+                                                                        />
+                                                                        {endpoint.name} ({endpoint.type})
+                                                                    </div>
+                                                                </SelectItem>
+                                                            ))}
+                                                        </>
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+                                            <Button
+                                                onClick={addEmailAddressHandler}
+                                                disabled={!newEmailAddress.trim()}
+                                                className="shrink-0 h-10 w-10"
+                                            >
+                                                <PlusIcon className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
                                     {emailError && (
                                         <p className="text-sm text-red-600">{emailError}</p>
                                     )}
@@ -763,6 +697,80 @@ export default function DomainDetailPage() {
                                         </Link>
                                     </div>
                                 </div>
+                            )}
+
+                            {/* Catch-all toggle and configuration - moved below individual emails */}
+                            {catchAllStatus && (
+                                <>
+                                    {!catchAllStatus.isCatchAllEnabled && <Separator />}
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <div className="font-medium text-gray-900">Catch-all Configuration</div>
+                                                <div className="text-sm text-gray-600">
+                                                    {catchAllStatus.isCatchAllEnabled 
+                                                        ? 'All emails to any address are captured'
+                                                        : 'Capture emails to any address on this domain'
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex flex-col sm:flex-row gap-3">
+                                            {!catchAllStatus.isCatchAllEnabled && (
+                                                <div className="flex-1">
+                                                    <Select 
+                                                        value={catchAllEndpointId} 
+                                                        onValueChange={handleCatchAllEndpointSelection}
+                                                        disabled={isEndpointsLoading}
+                                                    >
+                                                        <SelectTrigger className="w-full h-10">
+                                                            <SelectValue placeholder="Select endpoint" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="none">Store only</SelectItem>
+                                                            <SelectItem value="create-new" className="text-blue-600 font-medium">
+                                                                <div className="flex items-center gap-2">
+                                                                    <PlusIcon className="h-4 w-4" />
+                                                                    Create Endpoint
+                                                                </div>
+                                                            </SelectItem>
+                                                            {userEndpoints.length > 0 && (
+                                                                <>
+                                                                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground border-t">
+                                                                        Endpoints
+                                                                    </div>
+                                                                    {userEndpoints.map((endpoint) => (
+                                                                        <SelectItem key={endpoint.id} value={endpoint.id}>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <CustomInboundIcon 
+                                                                                    Icon={getEndpointIcon(endpoint)} 
+                                                                                    size={16} 
+                                                                                    backgroundColor={getEndpointIconColor(endpoint)} 
+                                                                                />
+                                                                                {endpoint.name} ({endpoint.type})
+                                                                            </div>
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </>
+                                                            )}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            )}
+                                            <div className={catchAllStatus.isCatchAllEnabled ? "w-full" : "w-full sm:w-auto sm:min-w-[140px]"}>
+                                                <Button
+                                                    variant={catchAllStatus.isCatchAllEnabled ? "destructive" : "secondary"}
+                                                    className="h-10 w-full"
+                                                    onClick={toggleCatchAll}
+                                                    disabled={!catchAllStatus.isCatchAllEnabled && catchAllEndpointId === 'none'}
+                                                >
+                                                    {catchAllStatus.isCatchAllEnabled ? 'Disable Catch-all' : 'Enable Catch-all'}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
                             )}
                         </CardContent>
                     </Card>
