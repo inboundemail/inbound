@@ -873,18 +873,28 @@ export async function POST(request: NextRequest) {
             await createStructuredEmailRecord(emailRecord.id, sesEventId, parsedEmailData, userId)
           }
 
-          // Trigger email action using the new separated workflow
-          const webhookResult = await triggerEmailAction(emailRecord.id)
-          if (!webhookResult.success && webhookResult.error) {
-            console.warn(`⚠️ Webhook - Failed to trigger email action for ${emailRecord.id}: ${webhookResult.error}`)
+          // Route email using the new unified routing system
+          try {
+            const { routeEmail } = await import('@/lib/email-router')
+            await routeEmail(emailRecord.id)
+            console.log(`✅ Webhook - Successfully routed email ${emailRecord.id}`)
+            
+            // Update processing record with success
+            emailProcessingRecord.webhookDelivery = {
+              success: true,
+              deliveryId: undefined // Will be tracked in endpointDeliveries table
+            }
+          } catch (routingError) {
+            console.error(`❌ Webhook - Failed to route email ${emailRecord.id}:`, routingError)
+            
+            // Update processing record with failure
+            emailProcessingRecord.webhookDelivery = {
+              success: false,
+              error: routingError instanceof Error ? routingError.message : 'Unknown routing error'
+            }
           }
 
-          // Update processing record with webhook delivery result
-          emailProcessingRecord.webhookDelivery = {
-            success: webhookResult.success,
-            deliveryId: webhookResult.deliveryId,
-            error: webhookResult.error
-          }
+          // Processing record already updated above in the try/catch block
 
           processedEmails.push(emailProcessingRecord)
         }

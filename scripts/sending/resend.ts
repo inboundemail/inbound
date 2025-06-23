@@ -90,17 +90,19 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
-function parseCommandLineArgs(): { email: string; count: number } {
+function parseCommandLineArgs(): { email: string; count: number; isDev: boolean } {
   const args = process.argv.slice(2);
   
   if (args.length < 2) {
-    console.error('❌ Usage: bun run email <email-address> <number-of-emails>');
+    console.error('❌ Usage: bun run email <email-address> <number-of-emails> [--dev]');
     console.error('   Example: bun run email user@example.com 5');
+    console.error('   Example: bun run email user@example.com 5 --dev');
     process.exit(1);
   }
 
   const email = args[0];
   const count = parseInt(args[1], 10);
+  const isDev = args.includes('--dev');
 
   if (!email || !email.includes('@')) {
     console.error('❌ Invalid email address provided');
@@ -117,7 +119,7 @@ function parseCommandLineArgs(): { email: string; count: number } {
     process.exit(1);
   }
 
-  return { email, count };
+  return { email, count, isDev };
 }
 
 async function getVerifiedDomains(): Promise<Domain[]> {
@@ -152,12 +154,18 @@ async function sendEmail(
   fromEmail: string,
   toEmail: string,
   template: EmailTemplate,
-  templateProps: any
+  templateProps: any,
+  isDev: boolean = false
 ): Promise<void> {
   try {
     const EmailComponent = template.component;
     const html = await render(EmailComponent(templateProps));
-    const subject = template.subject.replace('{domain}', templateProps.domain);
+    let subject = template.subject.replace('{domain}', templateProps.domain);
+    
+    // Add dev prefix if in dev mode
+    if (isDev) {
+      subject = `[[[DEV||| ${subject}`;
+    }
 
     const response = await resend.emails.send({
       from: fromEmail,
@@ -183,14 +191,18 @@ async function main() {
     console.log('🚀 Starting email sending script...\n');
 
     // Parse command line arguments
-    const { email: recipientEmail, count: emailCount } = parseCommandLineArgs();
+    const { email: recipientEmail, count: emailCount, isDev } = parseCommandLineArgs();
 
     // Validate API key
     if (!process.env.RESEND_API_KEY) {
       throw new Error('RESEND_API_KEY environment variable is not set');
     }
 
-    console.log(`📬 Will send ${emailCount} emails to: ${recipientEmail}\n`);
+    console.log(`📬 Will send ${emailCount} emails to: ${recipientEmail}`);
+    if (isDev) {
+      console.log(`🧪 DEV MODE: All subjects will be prefixed with [[[DEV|||`);
+    }
+    console.log('');
 
     // Get verified domains
     const domains = await getVerifiedDomains();
@@ -227,7 +239,7 @@ async function main() {
       console.log(`\n📧 Sending email ${i + 1}/${emailCount} from ${domain.name}...`);
 
       try {
-        await sendEmail(fromEmail, recipientEmail, template, templateProps);
+        await sendEmail(fromEmail, recipientEmail, template, templateProps, isDev);
         emailsSent++;
         
         // Add a small delay between emails to avoid rate limiting

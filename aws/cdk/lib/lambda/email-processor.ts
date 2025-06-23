@@ -311,26 +311,26 @@ export const handler = async (event: any, context: any) => {
       }
     }
 
-    // Check if any email subject contains the test string to determine which API URL to use
-    // const hasTestSubject = processedRecords.some(record => {
-    //   const subject = record?.ses?.mail?.commonHeaders?.subject || '';
-    //   return subject.includes('ilovejesssomuch');
-    // });
+    // Check if any email subject starts with [[[DEV||| to determine which API URL to use
+    const hasDevSubject = processedRecords.some(record => {
+      const subject = record?.ses?.mail?.commonHeaders?.subject || '';
+      return subject.startsWith('[[[DEV|||');
+    });
 
-    // const targetApiUrl = hasTestSubject && serviceApiUrlDev ? serviceApiUrlDev : serviceApiUrl;
+    // Use dev URL if subject starts with [[[DEV||| and dev URL is configured
+    const targetApiUrl = hasDevSubject && serviceApiUrlDev ? serviceApiUrlDev : serviceApiUrl;
 
     // Build list of endpoints, filtering out null/undefined values
-    // const endpoints = [serviceApiUrl, serviceApiUrlDev, 'https://inbound.new'].filter(Boolean);
-    const endpoints = [serviceApiUrl].filter(Boolean);
+    const endpoints = [targetApiUrl].filter(Boolean);
     
     console.log(`🚀 Lambda - Will attempt to send to ${endpoints.length} endpoints:`, endpoints);
 
-    // if (hasTestSubject) {
-    //   console.log('🧪 Lambda - Test subject detected, using development API URL:', {
-    //     usingDevUrl: !!serviceApiUrlDev,
-    //     targetApiUrl
-    //   });
-    // }
+    if (hasDevSubject) {
+      console.log('🧪 Lambda - Dev subject detected ([[[DEV|||), using development API URL:', {
+        usingDevUrl: !!serviceApiUrlDev,
+        targetApiUrl
+      });
+    }
     
     // Send to all endpoints in parallel and collect results
     console.log(`🚀 Lambda - Sending ${processedRecords.length} processed records to ${endpoints.length} endpoints in parallel`);

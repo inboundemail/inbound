@@ -519,9 +519,16 @@ export default function DomainDetailPage() {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
-            <div className="max-w-5xl mx-auto space-y-6">
+            <div className="max-w-5xl mx-auto space-y-3">
+            {/* Back Button - Outside Header */}
+            <div className="flex items-center">
+                <Link href="/emails" className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
+                    <ArrowLeftIcon className="h-4 w-4" />
+                    Back to Domains
+                </Link>
+            </div>
             {/* Compact Header */}
-            <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4 ">
                 <div className="flex items-center gap-4">
                     <CustomInboundIcon 
                         Icon={HiGlobeAlt} 
@@ -529,10 +536,6 @@ export default function DomainDetailPage() {
                         backgroundColor="#3b82f6" 
                     />
                     <div>
-                        <Link href="/emails" className="flex items-center gap-2 text-sm text-slate-300 hover:text-white mb-1">
-                            <ArrowLeftIcon className="h-4 w-4" />
-                            Back to Domains
-                        </Link>
                         <h1 className="text-xl font-semibold mb-1">{domain.domain}</h1>
                         <div className="text-sm text-slate-300">
                             {domain.status === DOMAIN_STATUS.PENDING && "Add DNS records to complete verification"}

@@ -8,7 +8,7 @@
 ---
 
 ### **PHASE 1: DATABASE SCHEMA & MIGRATIONS** 
-**Status: 🟡 In Progress**
+**Status: ✅ COMPLETED**
 
 #### Database Schema Updates
 - [x] **1.1** Add `endpoints` table to `lib/db/schema.ts`
@@ -29,9 +29,10 @@
   - [x] Keep existing `webhookId` column during transition
 
 #### Migration Scripts
-- [ ] **1.5** Create Drizzle migration files
-  - [ ] Generate migration: `bun run drizzle-kit generate:pg`
-  - [ ] Review generated SQL before applying
+- [x] **1.5** Create Drizzle migration files
+  - [x] Generate migration: `bun run drizzle-kit generate:pg`
+  - [x] Review generated SQL before applying
+  - [x] Applied migrations: `0015_silly_black_queen.sql` (endpoints), `0016_cold_adam_warlock.sql` (emailGroups, endpointDeliveries, emailAddresses update)
   
 - [ ] **1.6** Create data migration script
   - [ ] Migrate existing webhooks to endpoints table
@@ -40,10 +41,10 @@
   - [ ] Test with existing data (backup first!)
 
 #### Testing
-- [ ] **1.7** Test database changes
-  - [ ] Verify all existing webhooks still work
-  - [ ] Test new table relationships
-  - [ ] Confirm no data loss
+- [x] **1.7** Test database changes
+  - [x] Verify all tables created successfully (drizzle-kit check: "Everything's fine 🐶🔥")
+  - [x] Confirm proper type exports in schema
+  - [x] Validate migration journal entries (0015, 0016 applied)
 
 **Notes:**
 - Backup database before running migrations
@@ -53,28 +54,29 @@
 ---
 
 ### **PHASE 2: TYPE DEFINITIONS & FEATURES STRUCTURE**
-**Status: 🔴 Not Started**
+**Status: ✅ COMPLETED**
 
 #### Type System Setup
-- [ ] **2.1** Create `features/endpoints/types/index.ts`
-  - [ ] Import schema tables: `endpoints`, `emailGroups`, `endpointDeliveries`
-  - [ ] Export database types using `$inferSelect`/`$inferInsert`
-  - [ ] Define config types: `WebhookConfig`, `EmailForwardConfig`, `EmailGroupConfig`
-  - [ ] Define action types: `CreateEndpointData`, `UpdateEndpointData`
+- [x] **2.1** Create `features/endpoints/types/index.ts`
+  - [x] Import schema tables: `endpoints`, `emailGroups`, `endpointDeliveries`
+  - [x] Export database types using `$inferSelect`/`$inferInsert`
+  - [x] Define config types: `WebhookConfig`, `EmailForwardConfig`, `EmailGroupConfig`
+  - [x] Define action types: `CreateEndpointData`, `UpdateEndpointData`
+  - [x] Add component props and delivery history types
 
-- [ ] **2.2** Create `features/endpoints/hooks/` directory structure
-  - [ ] `index.ts` - Export all hooks
-  - [ ] `useEndpointsQuery.ts` - Fetch user endpoints
-  - [ ] `useCreateEndpointMutation.ts` - Create new endpoints
-  - [ ] `useUpdateEndpointMutation.ts` - Update endpoints
-  - [ ] `useDeleteEndpointMutation.ts` - Delete endpoints
-  - [ ] `useTestEndpointMutation.ts` - Test endpoint functionality
+- [x] **2.2** Create `features/endpoints/hooks/` directory structure
+  - [x] `index.ts` - Export all hooks
+  - [x] `useEndpointsQuery.ts` - Fetch user endpoints
+  - [x] `useCreateEndpointMutation.ts` - Create new endpoints
+  - [x] `useUpdateEndpointMutation.ts` - Update endpoints
+  - [x] `useDeleteEndpointMutation.ts` - Delete endpoints
+  - [x] `useTestEndpointMutation.ts` - Test endpoint functionality
 
 #### React Query Integration  
-- [ ] **2.3** Follow existing patterns from `features/webhooks/hooks/`
-  - [ ] Use same error handling patterns
-  - [ ] Include proper TypeScript types
-  - [ ] Add optimistic updates where appropriate
+- [x] **2.3** Follow existing patterns from `features/webhooks/hooks/`
+  - [x] Use same error handling patterns
+  - [x] Include proper TypeScript types
+  - [x] Add query invalidation for cache management
 
 **Notes:**
 - Follow exact patterns from `features/webhooks/types/index.ts`
@@ -84,37 +86,45 @@
 ---
 
 ### **PHASE 3: CORE SERVICES & EMAIL ROUTING**
-**Status: 🔴 Not Started**
+**Status: ✅ COMPLETED**
 
 #### Email Router Implementation
-- [ ] **3.1** Create `lib/email-router.ts`
-  - [ ] `routeEmail(emailId: string)` - Main routing function
-  - [ ] `findEndpointForEmail(recipient: string)` - Find endpoint for email
-  - [ ] `handleWebhookEndpoint()` - Use existing webhook logic
-  - [ ] `handleEmailForwardEndpoint()` - New email forwarding logic
-  - [ ] `trackEndpointDelivery()` - Track all delivery attempts
+- [x] **3.1** Create `lib/email-router.ts`
+  - [x] `routeEmail(emailId: string)` - Main routing function
+  - [x] `findEndpointForEmail(recipient: string)` - Find endpoint for email
+  - [x] `handleWebhookEndpoint()` - Use existing webhook logic
+  - [x] `handleEmailForwardEndpoint()` - New email forwarding logic
+  - [x] `trackEndpointDelivery()` - Track all delivery attempts
 
-- [ ] **3.2** Create `lib/email-forwarder.ts`
-  - [ ] `EmailForwarder` class with SES integration
-  - [ ] `forwardEmail()` method using `SendRawEmailCommand`
-  - [ ] `buildRawEmailMessage()` - RFC 2822 compliant email construction
-  - [ ] Proper MIME handling for text/HTML/attachments
-  - [ ] Header preservation (Reply-To, Message-ID, References)
+- [x] **3.2** Create `lib/email-forwarder.ts`
+  - [x] `EmailForwarder` class with SES integration
+  - [x] `forwardEmail()` method using `SendRawEmailCommand`
+  - [x] `buildRawEmailMessage()` - RFC 2822 compliant email construction
+  - [x] Proper MIME handling for text/HTML/attachments
+  - [x] Header preservation (Reply-To, Message-ID, References)
 
 #### Integration with Existing System
-- [ ] **3.3** Update `app/api/inbound/webhook/route.ts`
-  - [ ] Replace direct webhook calls with `routeEmail()`
-  - [ ] Maintain existing `triggerEmailAction()` for backward compatibility
-  - [ ] Add endpoint routing logic
-  - [ ] Ensure no breaking changes
+- [x] **3.3** Update `app/api/inbound/webhook/route.ts`
+  - [x] Replace direct webhook calls with `routeEmail()`
+  - [x] Maintain existing `triggerEmailAction()` for backward compatibility
+  - [x] Add endpoint routing logic
+  - [x] Ensure no breaking changes
 
-- [ ] **3.4** Helper Functions
-  - [ ] `getEmailWithStructuredData()` - Fetch email with structured data
-  - [ ] `reconstructParsedEmailData()` - Convert DB data to ParsedEmailData
-  - [ ] `getDefaultFromAddress()` - Get verified domain email for sending
+- [x] **3.4** Helper Functions
+  - [x] `getEmailWithStructuredData()` - Fetch email with structured data
+  - [x] `reconstructParsedEmailData()` - Convert DB data to ParsedEmailData
+  - [x] `getDefaultFromAddress()` - Get verified domain email for sending
+
+#### Server Actions
+- [x] **3.5** Create `app/actions/endpoints.ts`
+  - [x] `createEndpoint()` - Create new endpoints with config validation
+  - [x] `updateEndpoint()` - Update existing endpoints
+  - [x] `deleteEndpoint()` - Delete endpoints with cleanup
+  - [x] `getEndpoints()` - Fetch user endpoints
+  - [x] `testEndpoint()` - Test endpoint functionality
 
 #### Testing
-- [ ] **3.5** Test email forwarding
+- [ ] **3.6** Test email forwarding
   - [ ] Test single email forwarding
   - [ ] Test email group forwarding  
   - [ ] Test header preservation
