@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 /**
  * Comprehensive API v1.1 Test Suite
@@ -7,13 +7,18 @@
  * It tests endpoints, email addresses, domains, and routing functionality.
  * 
  * Usage:
- *   bun run test-v1.1-api.ts --api-key=<your-api-key> --base-url=<api-base-url> --test-domain=<domain>
+ *   node test-v1.1-api.ts --api-key=<your-api-key> --base-url=<api-base-url> --test-domain=<domain>
  * 
  * Example:
- *   bun run test-v1.1-api.ts --api-key=pk_123abc --base-url=https://inbound.new --test-domain=example.com
+ *   node test-v1.1-api.ts --api-key=pk_123abc --base-url=https://inbound.new --test-domain=example.com
  */
 
-import { parseArgs } from 'util'
+// Simple command line argument parsing since parseArgs may not be available
+const args = process.argv.slice(2)
+const getArgValue = (key: string): string | undefined => {
+  const arg = args.find(a => a.startsWith(`--${key}=`))
+  return arg ? arg.split('=')[1] : undefined
+}
 
 interface TestConfig {
   apiKey: string
@@ -538,23 +543,16 @@ class APIv11Tester {
   }
 }
 
-// Parse command line arguments
+// Parse command line arguments  
 function parseCliArgs(): TestConfig {
-  const { values } = parseArgs({
-    args: Bun.argv,
-    options: {
-      'api-key': { type: 'string' },
-      'base-url': { type: 'string' },
-      'test-domain': { type: 'string' },
-      'test-email': { type: 'string' },
-      'no-cleanup': { type: 'boolean' },
-      'help': { type: 'boolean' }
-    },
-    strict: true,
-    allowPositionals: true
-  })
+  const apiKey = getArgValue('api-key')
+  const baseUrl = getArgValue('base-url')
+  const testDomain = getArgValue('test-domain')
+  const testEmail = getArgValue('test-email')
+  const noCleanup = args.includes('--no-cleanup')
+  const help = args.includes('--help')
 
-  if (values.help) {
+  if (help) {
     console.log(`
 Usage: bun run test-v1.1-api.ts [options]
 
@@ -573,22 +571,22 @@ Examples:
     process.exit(0)
   }
 
-  if (!values['api-key']) {
+  if (!apiKey) {
     console.error('❌ Error: --api-key is required')
-    process.exit(1)
+    return process.exit(1)
   }
 
-  if (!values['test-domain']) {
+  if (!testDomain) {
     console.error('❌ Error: --test-domain is required')
-    process.exit(1)
+    return process.exit(1)
   }
 
   return {
-    apiKey: values['api-key']!,
-    baseUrl: values['base-url'] || 'https://inbound.new',
-    testDomain: values['test-domain']!,
-    testEmail: values['test-email'],
-    cleanup: !values['no-cleanup']
+    apiKey: apiKey,
+    baseUrl: baseUrl || 'https://inbound.new',
+    testDomain: testDomain,
+    testEmail: testEmail,
+    cleanup: !noCleanup
   }
 }
 
