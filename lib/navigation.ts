@@ -16,12 +16,6 @@ export interface NavigationConfig {
 export const navigationConfig: NavigationConfig = {
   main: [
     {
-      title: "Dashboard",
-      url: "/dashboard",
-      icon: BarChart3Icon,
-      description: "Overview and analytics"
-    },
-    {
       title: "Mail",
       url: "/mail",
       icon: MailIcon,

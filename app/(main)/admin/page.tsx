@@ -76,7 +76,7 @@ export default function AdminPage() {
 
       // Check if user has admin role
       if (session.user.role !== 'admin') {
-        router.push("/dashboard")
+        router.push("/mail")
         return
       }
 

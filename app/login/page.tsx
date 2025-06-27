@@ -14,7 +14,7 @@ export default function LoginPage() {
   useEffect(() => {
     // If user is already logged in, redirect to dashboard
     if (session && !isPending) {
-      router.push("/dashboard")
+      router.push("/mail")
     }
   }, [session, isPending, router])
 

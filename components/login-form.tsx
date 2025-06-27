@@ -17,7 +17,7 @@ export function LoginForm({
     try {
       await signIn.social({
         provider: "github",
-        callbackURL: "/dashboard",
+        callbackURL: "/mail",
         errorCallbackURL: "/login?error=auth_failed"
       })
       // Don't reset loading state here as we'll be redirecting
@@ -32,7 +32,7 @@ export function LoginForm({
     try {
       await signIn.social({
         provider: "google",
-        callbackURL: "/dashboard",
+        callbackURL: "/mail",
         errorCallbackURL: "/login?error=auth_failed"
       })
       // Don't reset loading state here as we'll be redirecting

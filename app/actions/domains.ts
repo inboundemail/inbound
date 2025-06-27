@@ -233,8 +233,7 @@ export async function addDomain(domain: string) {
     console.log(`🏁 Add Domain - Completed for ${domain} - Status: ${mappedStatus}`)
 
     // Revalidate relevant paths
-    revalidatePath('/emails')
-    revalidatePath('/dashboard')
+    revalidatePath('/mail')
 
     return {
       success: true,
@@ -376,7 +375,7 @@ export async function checkDomainVerification(domain: string, domainId: string) 
     console.log(`🏁 Check Verification - Completed for ${domain} - All verified: ${allVerified}`)
 
     // Revalidate relevant paths
-    revalidatePath('/emails')
+    revalidatePath('/mail')
     revalidatePath(`/emails/${domainId}`)
 
     return {
@@ -802,8 +801,7 @@ export async function deleteDomain(domain: string, domainId: string) {
     console.log(`🏁 Delete Domain - Completed deletion for ${domain}`)
 
     // Revalidate relevant paths
-    revalidatePath('/emails')
-    revalidatePath('/dashboard')
+    revalidatePath('/mail')
 
     return {
       success: true,

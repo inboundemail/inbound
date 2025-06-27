@@ -72,8 +72,8 @@ export default async function HomePage() {
             {/* Conditionally show Sign In or Go to Dashboard based on auth state */}
             {session ? (
               <Button variant="primary" asChild>
-                <a href="/dashboard">
-                  Go to Dashboard
+                <a href="/mail">
+                  Go to Mail
                 </a>
               </Button>
             ) : (

@@ -14,7 +14,7 @@ export default async function AdminLayout({
   }
   
   if (!isAdminRole(session.user.role)) {
-    redirect("/dashboard")
+    redirect("/mail")
   }
 
   return <>{children}</>
