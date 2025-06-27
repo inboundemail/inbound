@@ -2,13 +2,14 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { HiArrowLeft, HiDocumentText, HiMail, HiDownload, HiStar } from 'react-icons/hi'
+import { HiArrowLeft, HiDocumentText, HiMail, HiDownload, HiCheckCircle } from 'react-icons/hi'
 import { format } from 'date-fns'
 import { getEmailDetailsFromParsed, markEmailAsRead } from '@/app/actions/primary'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
+import { EmailAttachments } from '@/components/email-attachments'
 
 interface PageProps {
   params: Promise<{
@@ -18,6 +19,8 @@ interface PageProps {
     read?: string
   }>
 }
+
+
 
 export default async function EmailViewPage({ params, searchParams }: PageProps) {
   const { id: emailId } = await params
@@ -174,23 +177,18 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-1">
-                    <Badge className="bg-slate-100 text-slate-700 border-slate-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-                      {emailDetails.status}
-                    </Badge>
                     {emailDetails.isRead && (
-                      <Badge className="bg-green-100 text-green-700 border-green-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
+                      <Badge className="bg-emerald-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
+                        <HiCheckCircle className="w-3 h-3 mr-1" />
                         Read
                       </Badge>
                     )}
                     {emailDetails.parsedData.hasAttachments && (
-                      <Badge className="bg-blue-100 text-blue-700 border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
+                      <Badge className="bg-blue-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
                         <HiDocumentText className="w-3 h-3 mr-1" />
                         {emailDetails.parsedData.attachmentCount}
                       </Badge>
                     )}
-                    <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-600">
-                      <HiStar className="h-4 w-4" />
-                    </Button>
                   </div>
                 </div>
               </div>
@@ -200,7 +198,7 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
             <div className="border-t border-gray-200 pt-6">
               {emailDetails.emailContent.htmlBody ? (
                 <div 
-                  className="prose prose-sm max-w-none"
+                  className="prose prose-sm max-w-none rounded-lg new-thing"
                   style={{ 
                     fontFamily: 'Inter, system-ui, sans-serif',
                     textAlign: 'left'
@@ -231,29 +229,10 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
             </div>
 
             {/* Attachments */}
-            {emailDetails.emailContent.attachments && emailDetails.emailContent.attachments.length > 0 && (
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <h3 className="text-sm font-medium text-gray-900 mb-3">
-                  {emailDetails.emailContent.attachments.length} Attachment{emailDetails.emailContent.attachments.length > 1 ? 's' : ''}
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {emailDetails.emailContent.attachments.map((attachment: any, index: number) => (
-                    <div key={index} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                      <HiDocumentText className="h-8 w-8 text-gray-400" />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm text-gray-900 truncate">{attachment.filename}</div>
-                        <div className="text-xs text-gray-500">
-                          {attachment.contentType} • {formatBytes(attachment.size || 0)}
-                        </div>
-                      </div>
-                      <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-gray-100">
-                        <HiDownload className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <EmailAttachments 
+              emailId={emailDetails.id} 
+              attachments={emailDetails.emailContent.attachments || []} 
+            />
 
             {/* Debug Info (only in development) */}
             {process.env.NODE_ENV === 'development' && (

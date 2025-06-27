@@ -25,6 +25,7 @@ import {
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { useEmailQuery, useMarkEmailAsReadMutation, type EmailDetails } from '@/features/emails/hooks'
+import { EmailAttachments } from '@/components/email-attachments'
 
 interface EmailDetailSheetProps {
   emailId: string | null
@@ -302,22 +303,10 @@ export function EmailDetailSheet({ emailId, isOpen, onClose }: EmailDetailSheetP
             {emailDetails.emailContent.attachments.length > 0 && (
               <>
                 <Separator />
-                <div>
-                  <h4 className="font-medium mb-2">Attachments ({emailDetails.emailContent.attachments.length})</h4>
-                  <div className="space-y-2">
-                    {emailDetails.emailContent.attachments.map((attachment, index) => (
-                      <div key={index} className="flex items-center gap-3 p-3 border rounded-lg">
-                        <FileIcon className="h-5 w-5 text-muted-foreground" />
-                        <div className="flex-1">
-                          <div className="font-medium">{attachment.filename}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {attachment.contentType} • {formatBytes(attachment.size || 0)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <EmailAttachments 
+                  emailId={emailDetails.id} 
+                  attachments={emailDetails.emailContent.attachments} 
+                />
               </>
             )}
 

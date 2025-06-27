@@ -1750,3 +1750,214 @@ export async function parseEmail(emailContent: string) {
     }
 }
 
+// ============================================================================
+// ATTACHMENT DOWNLOAD
+// ============================================================================
+
+// Helper function to parse email content directly from raw content
+async function parseDirectEmailContent(rawEmailContent: string) {
+    console.log(`[parseDirectEmailContent] Parsing email content of ${rawEmailContent.length} characters`)
+    
+    // Try to use mailparser directly to get attachment content
+    const { simpleParser } = await import('mailparser')
+    const parsed = await simpleParser(rawEmailContent)
+    
+    // Helper function to extract email address
+    const extractEmailAddress = (addressObj: any): string => {
+        if (!addressObj) return 'unknown'
+        if (typeof addressObj === 'string') return addressObj
+        if (Array.isArray(addressObj) && addressObj.length > 0) {
+            return addressObj[0].address || addressObj[0].name || 'unknown'
+        }
+        if (addressObj.address) return addressObj.address
+        if (addressObj.name) return addressObj.name
+        return 'unknown'
+    }
+    
+    // Format attachments to match AWS SES processor format
+    const attachments = parsed.attachments?.map(att => ({
+        filename: att.filename || 'unknown',
+        contentType: att.contentType || 'application/octet-stream',
+        size: att.size || 0,
+        content: att.content || Buffer.from(''), // This should include binary content
+    })) || []
+    
+    console.log(`[parseDirectEmailContent] Found ${attachments.length} attachments with content`)
+    
+    return {
+        attachments,
+        messageId: parsed.messageId,
+        from: extractEmailAddress(parsed.from),
+        to: extractEmailAddress(parsed.to),
+        subject: parsed.subject || 'No Subject',
+        body: {
+            text: parsed.text,
+            html: parsed.html,
+        },
+        headers: Object.fromEntries(parsed.headers || []),
+        timestamp: parsed.date || new Date(),
+    }
+}
+
+export async function downloadAttachment(emailId: string, attachmentFilename: string) {
+    try {
+        console.log(`[downloadAttachment] Starting download for emailId: ${emailId}, filename: ${attachmentFilename}`)
+        
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+
+        if (!session?.user?.id) {
+            console.log(`[downloadAttachment] Unauthorized - no session or user ID`)
+            return { error: 'Unauthorized' }
+        }
+
+        if (!emailId || !attachmentFilename) {
+            console.log(`[downloadAttachment] Missing required parameters - emailId: ${emailId}, filename: ${attachmentFilename}`)
+            return { error: 'Email ID and attachment filename are required' }
+        }
+
+        console.log(`[downloadAttachment] Looking up structured email for emailId: ${emailId}, userId: ${session.user.id}`)
+
+        // Get the structured email details to find the SES event ID
+        const structuredEmail = await db
+            .select({
+                sesEventId: structuredEmails.sesEventId,
+                userId: structuredEmails.userId,
+            })
+            .from(structuredEmails)
+            .where(
+                and(
+                    eq(structuredEmails.id, emailId),
+                    eq(structuredEmails.userId, session.user.id)
+                )
+            )
+            .limit(1)
+
+        console.log(`[downloadAttachment] Structured email query result:`, structuredEmail)
+
+        if (!structuredEmail.length) {
+            console.log(`[downloadAttachment] Email not found for emailId: ${emailId}, userId: ${session.user.id}`)
+            return { error: 'Email not found' }
+        }
+
+        const sesEventId = structuredEmail[0].sesEventId
+        console.log(`[downloadAttachment] Found structured email, sesEventId: ${sesEventId}`)
+
+        if (!sesEventId) {
+            console.log(`[downloadAttachment] No sesEventId found in structured email`)
+            return { error: 'Email SES event ID not found' }
+        }
+
+        // Get the SES event to find the S3 location or direct email content
+        console.log(`[downloadAttachment] Looking up SES event for sesEventId: ${sesEventId}`)
+        
+        const sesEvent = await db
+            .select({
+                id: sesEvents.id,
+                s3BucketName: sesEvents.s3BucketName,
+                s3ObjectKey: sesEvents.s3ObjectKey,
+                emailContent: sesEvents.emailContent,
+                messageId: sesEvents.messageId,
+            })
+            .from(sesEvents)
+            .where(eq(sesEvents.id, sesEventId))
+            .limit(1)
+
+        console.log(`[downloadAttachment] SES event query result:`, {
+            ...sesEvent[0],
+            emailContent: sesEvent[0]?.emailContent ? `${sesEvent[0].emailContent.length} characters` : 'null'
+        })
+
+        if (!sesEvent.length) {
+            console.log(`[downloadAttachment] SES event not found for sesEventId: ${sesEventId}`)
+            return { error: 'SES event not found' }
+        }
+
+        const s3BucketName = sesEvent[0].s3BucketName
+        const s3ObjectKey = sesEvent[0].s3ObjectKey
+        const emailContent = sesEvent[0].emailContent
+
+        console.log(`[downloadAttachment] S3 location - bucket: ${s3BucketName}, key: ${s3ObjectKey}`)
+        console.log(`[downloadAttachment] Direct email content available: ${!!emailContent}`)
+
+        let processedEmail: any
+
+        // Try S3 first, then fallback to direct email content
+        if (s3BucketName && s3ObjectKey) {
+            console.log(`[downloadAttachment] Fetching email content from S3: ${s3BucketName}/${s3ObjectKey}`)
+            
+            try {
+                const { getEmailFromS3 } = await import('@/lib/aws-ses')
+                processedEmail = await getEmailFromS3(s3BucketName, s3ObjectKey)
+                console.log(`[downloadAttachment] Successfully fetched from S3`)
+            } catch (s3Error) {
+                console.error(`[downloadAttachment] S3 fetch failed:`, s3Error)
+                
+                if (emailContent) {
+                    console.log(`[downloadAttachment] Falling back to direct email content`)
+                    // Fallback to parsing direct email content
+                    processedEmail = await parseDirectEmailContent(emailContent)
+                } else {
+                    throw s3Error
+                }
+            }
+        } else if (emailContent) {
+            console.log(`[downloadAttachment] Using direct email content (no S3 location)`)
+            // Parse direct email content
+            processedEmail = await parseDirectEmailContent(emailContent)
+        } else {
+            console.log(`[downloadAttachment] No S3 location and no direct email content available`)
+            return { error: 'Email content not found' }
+        }
+
+        console.log(`[downloadAttachment] Email processed, found ${processedEmail.attachments.length} attachments`)
+        console.log(`[downloadAttachment] Attachment filenames:`, processedEmail.attachments.map((att: any) => att.filename))
+
+        // Find the specific attachment by filename
+        const attachment = processedEmail.attachments.find(
+            (att: any) => att.filename === attachmentFilename
+        )
+
+        if (!attachment) {
+            console.log(`[downloadAttachment] Attachment not found with filename: ${attachmentFilename}`)
+            console.log(`[downloadAttachment] Available attachments:`, processedEmail.attachments.map((att: any) => ({
+                filename: att.filename,
+                contentType: att.contentType,
+                size: att.size
+            })))
+            return { error: 'Attachment not found' }
+        }
+
+        console.log(`[downloadAttachment] Found attachment:`, {
+            filename: attachment.filename,
+            contentType: attachment.contentType,
+            size: attachment.size,
+            hasContent: !!attachment.content,
+            contentLength: attachment.content?.length || 0
+        })
+
+        // Check if attachment has content
+        if (!attachment.content || attachment.content.length === 0) {
+            console.log(`[downloadAttachment] Attachment found but no binary content available`)
+            return { error: 'Attachment content not available - this may be due to the email being stored without full binary data' }
+        }
+
+        // Return the attachment data for download
+        return {
+            success: true,
+            data: {
+                filename: attachment.filename,
+                contentType: attachment.contentType,
+                size: attachment.size,
+                content: attachment.content.toString('base64') // Convert Buffer to base64 string for transfer
+            }
+        }
+
+    } catch (error) {
+        console.error('[downloadAttachment] Error downloading attachment:', error)
+        console.error('[downloadAttachment] Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+        return { error: 'Failed to download attachment' }
+    }
+}
+
