@@ -603,6 +603,6 @@ async function main() {
 }
 
 // Run if this is the main module
-if (import.meta.main) {
+if ((import.meta as any).main) {
   main()
 }

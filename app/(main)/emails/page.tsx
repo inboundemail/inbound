@@ -167,7 +167,7 @@ export default function EmailsPage() {
           <p className="text-gray-600 text-sm font-medium">Manage your email domains and addresses</p>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-2">
           {domains.length === 0 ? (
             <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
               <CardContent className="p-8">
@@ -322,7 +322,7 @@ function DomainCard({
             {emailAddresses.map((email: any, index: number) => (
               <div
                 key={email.id}
-                className={`group/email relative px-4 py-3 hover:bg-white/60 transition-colors duration-200 border-l-3 ${getBorderColor(email.isActive, email.isReceiptRuleConfigured)} ${
+                className={`group/email relative px-4 py-1 hover:bg-white/60 transition-colors duration-200 border-l-3 ${getBorderColor(email.isActive, email.isReceiptRuleConfigured)} ${
                   index !== emailAddresses.length - 1 ? "border-b border-gray-100/60" : ""
                 }`}
               >

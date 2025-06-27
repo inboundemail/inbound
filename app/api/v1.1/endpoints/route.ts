@@ -26,7 +26,21 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100)
     const offset = parseInt(searchParams.get('offset') || '0')
 
-    let query = db
+    // Build where conditions
+    const conditions = [eq(endpoints.userId, userId)]
+
+    if (type && ['webhook', 'email', 'email_group'].includes(type)) {
+      conditions.push(eq(endpoints.type, type))
+    }
+
+    if (active !== null) {
+      const isActive = active === 'true'
+      conditions.push(eq(endpoints.isActive, isActive))
+    }
+
+    const whereConditions = conditions.length > 1 ? and(...conditions) : conditions[0]
+
+    const query = db
       .select({
         id: endpoints.id,
         name: endpoints.name,
@@ -39,23 +53,7 @@ export async function GET(request: NextRequest) {
         updatedAt: endpoints.updatedAt,
       })
       .from(endpoints)
-      .where(eq(endpoints.userId, userId))
-
-    // Add filters
-    if (type && ['webhook', 'email', 'email_group'].includes(type)) {
-      query = query.where(and(
-        eq(endpoints.userId, userId),
-        eq(endpoints.type, type)
-      ))
-    }
-
-    if (active !== null) {
-      const isActive = active === 'true'
-      query = query.where(and(
-        eq(endpoints.userId, userId),
-        eq(endpoints.isActive, isActive)
-      ))
-    }
+      .where(whereConditions)
 
     const userEndpoints = await query
       .orderBy(desc(endpoints.createdAt))

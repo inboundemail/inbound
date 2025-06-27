@@ -275,7 +275,7 @@ export default function EndpointsPage() {
             <p className="text-gray-600 text-sm font-medium">Manage your webhook and email forwarding endpoints</p>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-2">
             {/* Migration Success Banner */}
             {showMigrationSuccess && (
               <Card className="bg-green-50 border-green-200">

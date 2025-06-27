@@ -25,8 +25,22 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100)
     const offset = parseInt(searchParams.get('offset') || '0')
 
+    // Build where conditions
+    const conditions = [eq(emailAddresses.userId, userId)]
+
+    if (domainId) {
+      conditions.push(eq(emailAddresses.domainId, domainId))
+    }
+
+    if (active !== null) {
+      const isActive = active === 'true'
+      conditions.push(eq(emailAddresses.isActive, isActive))
+    }
+
+    const whereConditions = conditions.length > 1 ? and(...conditions) : conditions[0]
+
     // Build query with joins to get domain and endpoint information
-    let query = db
+    const query = db
       .select({
         // Email address fields
         id: emailAddresses.id,
@@ -58,23 +72,7 @@ export async function GET(request: NextRequest) {
       .leftJoin(emailDomains, eq(emailAddresses.domainId, emailDomains.id))
       .leftJoin(endpoints, eq(emailAddresses.endpointId, endpoints.id))
       .leftJoin(webhooks, eq(emailAddresses.webhookId, webhooks.id))
-      .where(eq(emailAddresses.userId, userId))
-
-    // Add filters
-    if (domainId) {
-      query = query.where(and(
-        eq(emailAddresses.userId, userId),
-        eq(emailAddresses.domainId, domainId)
-      ))
-    }
-
-    if (active !== null) {
-      const isActive = active === 'true'
-      query = query.where(and(
-        eq(emailAddresses.userId, userId),
-        eq(emailAddresses.isActive, isActive)
-      ))
-    }
+      .where(whereConditions)
 
     const results = await query
       .orderBy(desc(emailAddresses.createdAt))
