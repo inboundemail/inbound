@@ -325,6 +325,12 @@ export default function WebhooksPage() {
                                   <span className="text-xs font-medium">Secured</span>
                                 </div>
                               )}
+                              {(webhook.totalDeliveries || 0) > 0 && (
+                                <div className="flex items-center space-x-1 text-gray-600">
+                                  <span className="text-xs font-medium">{getSuccessRate(webhook)}% success</span>
+                                  <span className="text-xs text-gray-500">({webhook.totalDeliveries} deliveries)</span>
+                                </div>
+                              )}
                               {webhook.description && (
                                 <span className="text-gray-500 text-xs truncate">{webhook.description}</span>
                               )}
@@ -334,52 +340,35 @@ export default function WebhooksPage() {
                             </div>
                           </div>
                         </div>
-
-                        <div className="flex items-center space-x-4 ml-4">
-                          {/* Performance Metrics */}
-                          {(webhook.totalDeliveries || 0) > 0 && (
-                            <div className="text-center">
-                              <div className="flex items-center space-x-1.5 mb-1">
-                                <div className={`w-1.5 h-1.5 rounded-full ${getStatusColor(webhook)}`} />
-                                <span className="text-lg font-bold text-gray-900">{getSuccessRate(webhook)}%</span>
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {webhook.totalDeliveries} deliveries
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Action Buttons */}
-                          <div className="flex items-center gap-1">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg"
-                              onClick={() => handleTestWebhook(webhook)}
-                              disabled={testWebhookMutation.isPending}
-                              title="Test webhook"
-                            >
-                              <HiPlay className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-8 w-8 p-0 text-slate-600 hover:text-slate-700 hover:bg-slate-50 rounded-lg"
-                              onClick={() => handleEditWebhook(webhook)}
-                              title="Configure webhook"
-                            >
-                              <HiCog className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg"
-                              onClick={() => handleDeleteWebhook(webhook)}
-                              title="Delete webhook"
-                            >
-                              <HiTrash className="h-4 w-4" />
-                            </Button>
-                          </div>
+                        <div className="flex items-center space-x-2">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                            onClick={() => handleTestWebhook(webhook)}
+                            disabled={testWebhookMutation.isPending}
+                            title="Test webhook"
+                          >
+                            <HiPlay className="w-4 h-4 text-gray-500 hover:text-gray-700" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                            onClick={() => handleEditWebhook(webhook)}
+                            title="Configure webhook"
+                          >
+                            <HiCog className="w-4 h-4 text-gray-500 hover:text-gray-700" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                            onClick={() => handleDeleteWebhook(webhook)}
+                            title="Delete webhook"
+                          >
+                            <HiTrash className="w-4 h-4 text-gray-500 hover:text-gray-700" />
+                          </Button>
                         </div>
                       </div>
                     </div>

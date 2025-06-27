@@ -321,24 +321,24 @@ export default function EndpointsPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                                                             onClick={async () => {
-                                 try {
-                                   const result = await migrationMutation.mutateAsync()
-                                   if (result.success) {
-                                     if ((result.migratedCount || 0) > 0) {
-                                       setShowMigrationSuccess(true)
-                                       toast.success(`Successfully imported ${result.migratedCount} webhooks!`)
-                                     } else {
-                                       toast.info('No webhooks found to import')
-                                     }
-                                   } else {
-                                     toast.error(result.error || 'Failed to import webhooks')
-                                   }
-                                 } catch (error) {
-                                   console.error('Migration failed:', error)
-                                   toast.error('Failed to import webhooks')
-                                 }
-                               }}
+                              onClick={async () => {
+                                try {
+                                  const result = await migrationMutation.mutateAsync()
+                                  if (result.success) {
+                                    if ((result.migratedCount || 0) > 0) {
+                                      setShowMigrationSuccess(true)
+                                      toast.success(`Successfully imported ${result.migratedCount} webhooks!`)
+                                    } else {
+                                      toast.info('No webhooks found to import')
+                                    }
+                                  } else {
+                                    toast.error(result.error || 'Failed to import webhooks')
+                                  }
+                                } catch (error) {
+                                  console.error('Migration failed:', error)
+                                  toast.error('Failed to import webhooks')
+                                }
+                              }}
                               disabled={migrationMutation.isPending}
                               className="p-0 h-auto ml-1 text-blue-600 hover:text-blue-700"
                             >
@@ -410,37 +410,34 @@ export default function EndpointsPage() {
                               </div>
                             </div>
                           </div>
-
-                          <div className="flex items-center space-x-4 ml-4">
-                            <div className="flex items-center gap-1">
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg"
-                                onClick={() => handleTestEndpoint(endpoint)}
-                                title="Test endpoint"
-                              >
-                                <HiPlay className="h-4 w-4" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="h-8 w-8 p-0 text-slate-600 hover:text-slate-700 hover:bg-slate-50 rounded-lg"
-                                onClick={() => handleEditEndpoint(endpoint)}
-                                title="Configure endpoint"
-                              >
-                                <HiCog className="h-4 w-4" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg"
-                                onClick={() => handleDeleteEndpoint(endpoint)}
-                                title="Delete endpoint"
-                              >
-                                <HiTrash className="h-4 w-4" />
-                              </Button>
-                            </div>
+                          <div className="flex items-center space-x-2">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                              onClick={() => handleTestEndpoint(endpoint)}
+                              title="Test endpoint"
+                            >
+                              <HiPlay className="w-4 h-4 text-gray-500 hover:text-gray-700" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                              onClick={() => handleEditEndpoint(endpoint)}
+                              title="Configure endpoint"
+                            >
+                              <HiCog className="w-4 h-4 text-gray-500 hover:text-gray-700" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                              onClick={() => handleDeleteEndpoint(endpoint)}
+                              title="Delete endpoint"
+                            >
+                              <HiTrash className="w-4 h-4 text-gray-500 hover:text-gray-700" />
+                            </Button>
                           </div>
                         </div>
                       </div>
