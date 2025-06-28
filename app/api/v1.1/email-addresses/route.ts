@@ -80,11 +80,11 @@ export async function GET(request: NextRequest) {
       .limit(limit)
       .offset(offset)
 
-    // Get total count for pagination
+    // Get total count for pagination (using same filters as main query)
     const totalCountResult = await db
       .select({ count: count() })
       .from(emailAddresses)
-      .where(eq(emailAddresses.userId, userId))
+      .where(whereConditions)
     
     const totalCount = totalCountResult[0]?.count || 0
 
