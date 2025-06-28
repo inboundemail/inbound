@@ -116,6 +116,7 @@ export default function AddDomainForm({
     }
   }>({})
   const [isProcessing, setIsProcessing] = useState(false)
+  const [periodicCheckEnabled, setPeriodicCheckEnabled] = useState(false)
   const router = useRouter()
 
   // Memoize the DNS records to prevent unnecessary re-renders
@@ -138,11 +139,77 @@ export default function AddDomainForm({
       const timer = setTimeout(() => {
         console.log("🔄 Auto-refreshing domain verification status for:", preloadedDomain)
         handleRefresh()
-      }, 500) // 2 second delay
+        // Enable periodic checks after initial refresh
+        setPeriodicCheckEnabled(true)
+      }, 500) // 500ms delay
 
       return () => clearTimeout(timer)
     }
   }, [preloadedDomainId, preloadedDomain, preloadedStep])
+
+  // Periodic verification check every 5 seconds
+  useEffect(() => {
+    if (!periodicCheckEnabled || !domainId || !domainName || verificationStatus === 'verified' || verificationStatus === 'failed') {
+      return
+    }
+
+    console.log("🔄 Starting periodic verification checks every 5 seconds for:", domainName)
+
+    const intervalId = setInterval(() => {
+      console.log("⏰ Periodic verification check for:", domainName)
+      handlePeriodicRefresh()
+    }, 5000) // 5 seconds
+
+    return () => {
+      console.log("🛑 Stopping periodic verification checks for:", domainName)
+      clearInterval(intervalId)
+    }
+  }, [periodicCheckEnabled, domainId, domainName, verificationStatus])
+
+  // Handle periodic refresh (silent, no loading states)
+  const handlePeriodicRefresh = async () => {
+    if (!domainId || !domainName || isRefreshing) {
+      return
+    }
+
+    try {
+      const response = await fetch('/api/domain/verifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'checkVerification',
+          domain: domainName,
+          domainId: domainId
+        })
+      })
+
+      const result: ApiResponse = await response.json()
+
+      if (result.success) {
+        // Update verification status
+        setVerificationStatus(result.status)
+
+        // Update DNS records if provided
+        if (result.dnsRecords) {
+          setDnsRecords(result.dnsRecords)
+        }
+
+        if (result.status === 'verified') {
+          console.log("✅ Domain verified! Redirecting to domain details page...")
+          toast.success("Domain verified successfully! Redirecting...")
+          setPeriodicCheckEnabled(false) // Stop periodic checks
+          
+          // Redirect to domain details page
+          setTimeout(() => {
+            router.push(`/emails/${domainId}`)
+          }, 1500) // Small delay to show the success message
+        }
+      }
+    } catch (err) {
+      console.error('Error in periodic verification check:', err)
+      // Don't show error toast for periodic checks to avoid spamming
+    }
+  }
 
   const handleNext = () => {
     if (currentStepIdx === 0 && !domainName.trim()) {
@@ -265,7 +332,7 @@ export default function AddDomainForm({
     setIsRefreshing(true)
     setError("")
 
-    console.log("domainId", domainId)
+    console.log("🔄 Manual refresh for domainId:", domainId)
 
     try {
       const response = await fetch('/api/domain/verifications', {
@@ -280,11 +347,12 @@ export default function AddDomainForm({
 
       const result: ApiResponse = await response.json()
 
-      console.log("result", result)
+      console.log("🔍 Manual refresh result:", result)
 
       if (!result.success) {
         setError(result.error || 'Failed to check verification status')
         toast.error("Failed to refresh status")
+        setPeriodicCheckEnabled(false) // Stop periodic checks on error
         return
       }
 
@@ -292,12 +360,23 @@ export default function AddDomainForm({
       setVerificationStatus(result.status)
 
       if (result.status === 'verified') {
-        toast.success("Domain verified successfully!")
-        setCurrentStepIdx(2)
+        console.log("✅ Domain verified via manual refresh! Redirecting...")
+        toast.success("Domain verified successfully! Redirecting...")
+        setPeriodicCheckEnabled(false) // Stop periodic checks
+        
+        // Redirect to domain details page
+        setTimeout(() => {
+          router.push(`/emails/${domainId}`)
+        }, 1500) // Small delay to show the success message
       } else if (result.status === 'failed') {
         toast.error("Domain verification failed")
+        setPeriodicCheckEnabled(false) // Stop periodic checks on failure
       } else {
         toast.info("Domain verification still pending")
+        // Enable periodic checks if not already enabled
+        if (!periodicCheckEnabled) {
+          setPeriodicCheckEnabled(true)
+        }
       }
 
       // Update DNS records if provided
@@ -309,6 +388,7 @@ export default function AddDomainForm({
       console.error('Error checking verification:', err)
       setError('An unexpected error occurred while checking verification status.')
       toast.error("Failed to refresh status")
+      setPeriodicCheckEnabled(false) // Stop periodic checks on error
     } finally {
       setIsRefreshing(false)
     }
@@ -339,7 +419,7 @@ export default function AddDomainForm({
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `${domainName}.zone`
+      link.download = `${domainName}.txt`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -353,7 +433,11 @@ export default function AddDomainForm({
   }
 
   const generateZoneFile = (domain: string, records: DnsRecord[]): string => {
-    let zoneContent = `$ORIGIN ${domain}.\n`
+    // Extract root domain (last two parts: domain.tld)
+    const domainParts = domain.split('.')
+    const rootDomain = domainParts.slice(-2).join('.')
+    
+    let zoneContent = `$ORIGIN ${rootDomain}.\n`
     zoneContent += `$TTL 3600\n\n`
     
     // Group records by type
@@ -641,7 +725,7 @@ export default function AddDomainForm({
   const isStepFuture = (index: number) => index > currentStepIdx
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="flex flex-col">
       <div className="w-full max-w-4xl px-2  mx-auto">
         <header className="mb-8 flex items-center space-x-4">
           {/* <div className="rounded-lg bg-iconBg">
@@ -1159,37 +1243,49 @@ export default function AddDomainForm({
                         "bg-red-50 border-red-200": verificationStatus === 'failed',
                       }
                     )}>
-                      <div className="flex items-center">
-                        {verificationStatus === 'pending' && (
-                          <>
-                            <Clock className="h-4 w-4 text-yellow-600 mr-2" />
-                            <span className="text-sm font-medium text-yellow-800">
-                              Verification Pending
-                            </span>
-                            {isRefreshing && (
-                              <LoaderIcon className="ml-2 h-4 w-4 animate-spin text-yellow-600" />
-                            )}
-                          </>
-                        )}
-                        {verificationStatus === 'verified' && (
-                          <>
-                            <CheckCircle2 className="h-4 w-4 text-green-600 mr-2" />
-                            <span className="text-sm font-medium text-green-800">
-                              Domain Verified
-                            </span>
-                          </>
-                        )}
-                        {verificationStatus === 'failed' && (
-                          <>
-                            <AlertCircle className="h-4 w-4 text-red-600 mr-2" />
-                            <span className="text-sm font-medium text-red-800">
-                              Verification Failed
-                            </span>
-                          </>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          {verificationStatus === 'pending' && (
+                            <>
+                              <Clock className="h-4 w-4 text-yellow-600 mr-2" />
+                              <span className="text-sm font-medium text-yellow-800">
+                                Verification Pending
+                              </span>
+                              {isRefreshing && (
+                                <LoaderIcon className="ml-2 h-4 w-4 animate-spin text-yellow-600" />
+                              )}
+                            </>
+                          )}
+                          {verificationStatus === 'verified' && (
+                            <>
+                              <CheckCircle2 className="h-4 w-4 text-green-600 mr-2" />
+                              <span className="text-sm font-medium text-green-800">
+                                Domain Verified
+                              </span>
+                            </>
+                          )}
+                          {verificationStatus === 'failed' && (
+                            <>
+                              <AlertCircle className="h-4 w-4 text-red-600 mr-2" />
+                              <span className="text-sm font-medium text-red-800">
+                                Verification Failed
+                              </span>
+                            </>
+                          )}
+                        </div>
+                        
+                        {/* Periodic Check Indicator */}
+                        {periodicCheckEnabled && verificationStatus === 'pending' && (
+                          <div className="flex items-center text-xs text-yellow-600">
+                            <div className="w-2 h-2 bg-yellow-500 rounded-full mr-2 animate-pulse"></div>
+                            <span>Auto-checking every 5s</span>
+                          </div>
                         )}
                       </div>
+                      
                       <p className="text-xs text-gray-600 mt-1">
-                        {verificationStatus === 'pending' && "DNS records are being verified. This may take a few hours."}
+                        {verificationStatus === 'pending' && !periodicCheckEnabled && "DNS records are being verified. This may take a few hours."}
+                        {verificationStatus === 'pending' && periodicCheckEnabled && "We're automatically checking your domain verification status. You'll be redirected once it's verified."}
                         {verificationStatus === 'verified' && "Your domain has been successfully verified and is ready to use."}
                         {verificationStatus === 'failed' && "Please check your DNS records and try again."}
                       </p>
@@ -1305,7 +1401,7 @@ export default function AddDomainForm({
                       <RefreshCw className={cn("mr-2 h-4 w-4", { "animate-spin": isRefreshing })} />
                       Refresh Status
                     </Button>
-                    {/* <Button
+                    <Button
                       onClick={downloadZoneFile}
                       variant="secondary"
                       className="w-full md:w-auto"
@@ -1313,7 +1409,7 @@ export default function AddDomainForm({
                     >
                       <Download className="mr-2 h-4 w-4" />
                       Download Zone File
-                    </Button> */}
+                    </Button>
                   </div>
                 </div>
               )}
