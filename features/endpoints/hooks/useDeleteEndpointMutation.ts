@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
-async function deleteEndpoint(id: string): Promise<void> {
+async function deleteEndpoint(id: string): Promise<{ message?: string; emailAddressesUpdated?: number }> {
   const response = await fetch(`/api/v1/endpoints/${id}`, {
     method: 'DELETE',
   })
@@ -9,6 +9,9 @@ async function deleteEndpoint(id: string): Promise<void> {
     const error = await response.json()
     throw new Error(error.error || 'Failed to delete endpoint')
   }
+  
+  const data = await response.json()
+  return data
 }
 
 export const useDeleteEndpointMutation = () => {

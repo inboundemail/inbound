@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { emailAddresses, emailDomains, endpoints, webhooks } from '@/lib/db/schema'
 import { eq, and, desc, count } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
+import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
 
 export async function GET(request: NextRequest) {
   try {
@@ -286,9 +287,68 @@ export async function POST(request: NextRequest) {
 
     const [createdEmailAddress] = await db.insert(emailAddresses).values(newEmailAddress).returning()
 
+    // Configure AWS SES receipt rule for the new email
+    let isReceiptRuleConfigured = false
+    let receiptRuleName = null
+    let awsConfigurationWarning = null
+
+    try {
+      const sesManager = new AWSSESReceiptRuleManager()
+      
+      // Get AWS configuration
+      const awsRegion = process.env.AWS_REGION || 'us-east-2'
+      const lambdaFunctionName = process.env.LAMBDA_FUNCTION_NAME || 'email-processor'
+      const s3BucketName = process.env.S3_BUCKET_NAME
+      const awsAccountId = process.env.AWS_ACCOUNT_ID
+
+      if (!s3BucketName || !awsAccountId) {
+        awsConfigurationWarning = 'AWS configuration incomplete. Missing S3_BUCKET_NAME or AWS_ACCOUNT_ID'
+        console.warn(`⚠️ POST /api/v1.1/email-addresses - ${awsConfigurationWarning}`)
+      } else {
+        console.log(`🔧 POST /api/v1.1/email-addresses - Configuring AWS SES receipt rules for ${data.address}`)
+
+        const lambdaArn = AWSSESReceiptRuleManager.getLambdaFunctionArn(
+          lambdaFunctionName,
+          awsAccountId,
+          awsRegion
+        )
+
+        const receiptResult = await sesManager.configureEmailReceiving({
+          domain: domainResult[0].domain,
+          emailAddresses: [data.address],
+          lambdaFunctionArn: lambdaArn,
+          s3BucketName
+        })
+        
+        if (receiptResult.status === 'created' || receiptResult.status === 'updated') {
+          // Update email record with receipt rule information
+          await db
+            .update(emailAddresses)
+            .set({
+              isReceiptRuleConfigured: true,
+              receiptRuleName: receiptResult.ruleName,
+              updatedAt: new Date(),
+            })
+            .where(eq(emailAddresses.id, createdEmailAddress.id))
+
+          isReceiptRuleConfigured = true
+          receiptRuleName = receiptResult.ruleName
+          console.log(`✅ POST /api/v1.1/email-addresses - AWS SES configured successfully for ${data.address}`)
+        } else {
+          awsConfigurationWarning = `SES configuration failed: ${receiptResult.error}`
+          console.warn(`⚠️ POST /api/v1.1/email-addresses - ${awsConfigurationWarning}`)
+        }
+      }
+    } catch (error) {
+      awsConfigurationWarning = `SES configuration error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      console.error(`❌ POST /api/v1.1/email-addresses - AWS SES configuration failed:`, error)
+    }
+
     // Get enhanced response with domain and routing information
     const enhancedResponse = {
       ...createdEmailAddress,
+      isReceiptRuleConfigured,
+      receiptRuleName,
       domain: {
         id: domainResult[0].id,
         name: domainResult[0].domain,
@@ -311,7 +371,8 @@ export async function POST(request: NextRequest) {
         id: null,
         name: null,
         isActive: false
-      }
+      },
+      ...(awsConfigurationWarning && { warning: awsConfigurationWarning })
     }
 
     console.log(`✅ POST /api/v1.1/email-addresses - Successfully created email address ${createdEmailAddress.id}`)
@@ -319,7 +380,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: enhancedResponse,
-      message: 'Email address created successfully'
+      message: isReceiptRuleConfigured 
+        ? 'Email address created and AWS SES configured successfully'
+        : 'Email address created successfully (AWS SES configuration pending)'
     }, { status: 201 })
 
   } catch (error) {

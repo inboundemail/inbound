@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { db } from '@/lib/db'
-import { endpoints, emailGroups, endpointDeliveries } from '@/lib/db/schema'
+import { endpoints, emailGroups, endpointDeliveries, emailAddresses, emailDomains } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import type { UpdateEndpointData } from '@/features/endpoints/types'
@@ -223,23 +223,29 @@ export async function DELETE(
       )
     }
 
-    // Check if endpoint is being used by any email addresses
-    const { emailAddresses } = await import('@/lib/db/schema')
-    const usedByEmails = await db
-      .select({ address: emailAddresses.address })
-      .from(emailAddresses)
+    // Update email addresses to "store only" (clear endpointId) before deleting the endpoint
+    const updatedEmailAddresses = await db
+      .update(emailAddresses)
+      .set({ 
+        endpointId: null,
+        updatedAt: new Date()
+      })
       .where(eq(emailAddresses.endpointId, params.id))
-      .limit(5) // Just get a few examples
+      .returning({ address: emailAddresses.address })
 
-    if (usedByEmails.length > 0) {
-      return NextResponse.json(
-        { 
-          error: 'Cannot delete endpoint that is in use',
-          details: `This endpoint is used by ${usedByEmails.length} email address(es): ${usedByEmails.map(e => e.address).join(', ')}${usedByEmails.length >= 5 ? '...' : ''}`
-        },
-        { status: 400 }
-      )
+    if (updatedEmailAddresses.length > 0) {
+      console.log(`📧 DELETE /api/v1/endpoints/${params.id} - Updated ${updatedEmailAddresses.length} email addresses to store-only mode:`, 
+        updatedEmailAddresses.map(e => e.address).join(', '))
     }
+
+    // Update domain catch-all configurations to remove this endpoint
+    await db
+      .update(emailDomains)
+      .set({ 
+        catchAllEndpointId: null,
+        updatedAt: new Date()
+      })
+      .where(eq(emailDomains.catchAllEndpointId, params.id))
 
     // Delete email group entries if it's an email group
     if (existingEndpoint[0].type === 'email_group') {
@@ -258,7 +264,10 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      message: 'Endpoint deleted successfully'
+      message: updatedEmailAddresses.length > 0 
+        ? `Endpoint deleted successfully. ${updatedEmailAddresses.length} email address(es) switched to store-only mode.`
+        : 'Endpoint deleted successfully',
+      emailAddressesUpdated: updatedEmailAddresses.length
     })
 
   } catch (error) {

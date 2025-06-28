@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { HiCheckCircle, HiClock, HiSearch, HiTrendingUp, HiX, HiDocumentText } from 'react-icons/hi'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { MarkAllReadButton } from '@/components/mark-all-read-button'
+import { DomainFilterSelect } from '@/components/domain-filter-select'
 
 interface MailPageProps {
     searchParams: Promise<{
@@ -116,33 +117,29 @@ export default async function MailPage({ searchParams }: MailPageProps) {
 
                 {/* Search and Filters Form */}
                 <div className="mb-6">
-                    <form method="GET" className="flex items-center gap-3">
-                        <div className="relative flex-1">
+                    <div className="flex items-center gap-3">
+                        <form method="GET" className="relative flex-1">
                             <HiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                             <Input
                                 name="search"
                                 placeholder="Search emails..."
                                 defaultValue={searchQuery}
-                                className="pl-10 h-10 bg-white border-gray-200 focus:border-blue-500 focus:ring-blue-500 rounded-lg"
+                                className="pl-10 h-10 bg-white border-gray-200 focus:border-blue-500 focus:ring-blue-500 rounded-xl"
                             />
-                        </div>
+                            {/* Hidden inputs to preserve other filter states */}
+                            {domainFilter !== 'all' && (
+                                <input type="hidden" name="domain" value={domainFilter} />
+                            )}
+                            <Button type="submit" className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 px-2">
+                                <HiSearch className="h-3 w-3" />
+                            </Button>
+                        </form>
                         
-                        <select 
-                            name="domain" 
-                            defaultValue={domainFilter}
-                            className="h-10 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                            <option value="all">All Domains</option>
-                            {filters.uniqueDomains.map((domain: string) => (
-                                <option key={domain} value={domain}>{domain}</option>
-                            ))}
-                        </select>
-
-                        <Button type="submit">
-                            <HiSearch className="h-4 w-4" />
-                            Filter
-                        </Button>
-                    </form>
+                        <DomainFilterSelect 
+                            domains={filters.uniqueDomains}
+                            currentDomain={domainFilter}
+                        />
+                    </div>
                 </div>
 
                 {/* Email List */}
@@ -280,7 +277,7 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                                             }
                                         }}
                                     >
-                                        <Button variant="secondary" size="sm" className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg">
+                                        <Button variant="secondary" size="sm" className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl">
                                             Previous
                                         </Button>
                                     </Link>
@@ -297,7 +294,7 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                                             }
                                         }}
                                     >
-                                        <Button variant="secondary" size="sm" className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg">
+                                        <Button variant="secondary" size="sm" className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl">
                                             Next
                                         </Button>
                                     </Link>

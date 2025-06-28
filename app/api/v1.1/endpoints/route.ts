@@ -99,7 +99,6 @@ export async function GET(request: NextRequest) {
           .select({
             total: count(),
             status: endpointDeliveries.status,
-            lastDelivery: endpointDeliveries.lastAttemptAt
           })
           .from(endpointDeliveries)
           .where(eq(endpointDeliveries.endpointId, endpoint.id))
@@ -108,16 +107,22 @@ export async function GET(request: NextRequest) {
         let totalDeliveries = 0
         let successfulDeliveries = 0
         let failedDeliveries = 0
-        let lastDeliveryDate: string | null = null
 
         for (const stat of deliveryStats) {
           totalDeliveries += stat.total
           if (stat.status === 'success') successfulDeliveries += stat.total
           if (stat.status === 'failed') failedDeliveries += stat.total
-          if (stat.lastDelivery && (!lastDeliveryDate || stat.lastDelivery > new Date(lastDeliveryDate))) {
-            lastDeliveryDate = stat.lastDelivery.toISOString()
-          }
         }
+
+        // Get the most recent delivery date separately
+        const lastDeliveryResult = await db
+          .select({ lastDelivery: endpointDeliveries.lastAttemptAt })
+          .from(endpointDeliveries)
+          .where(eq(endpointDeliveries.endpointId, endpoint.id))
+          .orderBy(desc(endpointDeliveries.lastAttemptAt))
+          .limit(1)
+
+        const lastDeliveryDate = lastDeliveryResult[0]?.lastDelivery?.toISOString() || null
 
         enhancedEndpoint.deliveryStats = {
           total: totalDeliveries,

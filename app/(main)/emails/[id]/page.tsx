@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
     Table,
     TableBody,
@@ -109,6 +110,10 @@ export default function DomainDetailPage() {
     const [selectedEndpointId, setSelectedEndpointId] = useState<string>('none')
     const [emailError, setEmailError] = useState<string | null>(null)
 
+    // Multi-select state for email addresses
+    const [selectedEmailIds, setSelectedEmailIds] = useState<Set<string>>(new Set())
+    const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
+
     // Domain deletion state
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
     const [deleteConfirmText, setDeleteConfirmText] = useState('')
@@ -129,6 +134,31 @@ export default function DomainDetailPage() {
             setCatchAllEndpointId('legacy-webhook')
         }
     })
+
+    // Multi-select helper functions
+    const toggleEmailSelection = (emailId: string) => {
+        const newSelected = new Set(selectedEmailIds)
+        if (newSelected.has(emailId)) {
+            newSelected.delete(emailId)
+        } else {
+            newSelected.add(emailId)
+        }
+        setSelectedEmailIds(newSelected)
+    }
+
+    const toggleSelectAll = () => {
+        if (!domainDetailsData?.emailAddresses) return
+        
+        if (selectedEmailIds.size === domainDetailsData.emailAddresses.length) {
+            setSelectedEmailIds(new Set())
+        } else {
+            setSelectedEmailIds(new Set(domainDetailsData.emailAddresses.map(email => email.id)))
+        }
+    }
+
+    const clearSelection = () => {
+        setSelectedEmailIds(new Set())
+    }
 
     const refreshVerification = async () => {
         if (!domainDetailsData?.domain) return
@@ -194,6 +224,28 @@ export default function DomainDetailPage() {
             toast.success('Email address deleted successfully')
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to delete email address')
+        }
+    }
+
+    const bulkDeleteEmailAddresses = async () => {
+        if (!domainDetailsData?.domain || selectedEmailIds.size === 0) return
+
+        try {
+            // Delete all selected emails
+            const deletePromises = Array.from(selectedEmailIds).map(emailId => 
+                deleteEmailMutation.mutateAsync({
+                    domainId,
+                    emailAddressId: emailId
+                })
+            )
+
+            await Promise.all(deletePromises)
+            
+            toast.success(`Successfully deleted ${selectedEmailIds.size} email address${selectedEmailIds.size > 1 ? 'es' : ''}`)
+            setSelectedEmailIds(new Set())
+            setIsBulkDeleteDialogOpen(false)
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to delete some email addresses')
         }
     }
 
@@ -380,8 +432,11 @@ export default function DomainDetailPage() {
     // Determine what to show based on domain status
     const showEmailSection = domain.status === DOMAIN_STATUS.VERIFIED
 
+    // Get selected emails for display
+    const selectedEmails = emailAddresses.filter(email => selectedEmailIds.has(email.id))
+
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+        <div className="h-full bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
             <div className="max-w-4xl mx-auto space-y-4">
                 {/* Back Button */}
                 <div className="flex items-center">
@@ -517,11 +572,6 @@ export default function DomainDetailPage() {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <CardTitle className="flex items-center gap-2 text-gray-900 text-lg">
-                                        <CustomInboundIcon 
-                                            Icon={HiMail} 
-                                            size={24} 
-                                            backgroundColor="#10b981" 
-                                        />
                                         Email Management
                                     </CardTitle>
                                     <CardDescription className="text-gray-600">
@@ -575,7 +625,7 @@ export default function DomainDetailPage() {
                                                     <SelectValue placeholder="Endpoint (optional)" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="none">Store only</SelectItem>
+                                                    <SelectItem value="none">Store in Inbound</SelectItem>
                                                     <SelectItem value="create-new" className="text-blue-600 font-medium">
                                                         <div className="flex items-center gap-2">
                                                             <PlusIcon className="h-4 w-4" />
@@ -626,9 +676,62 @@ export default function DomainDetailPage() {
                                         </div>
                                     ) : (
                                         <div className="space-y-2">
+                                            {/* Select All Checkbox with Bulk Actions */}
+                                            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                                <div className="flex items-center gap-3">
+                                                    <Checkbox
+                                                        checked={emailAddresses.length > 0 && selectedEmailIds.size === emailAddresses.length}
+                                                        onCheckedChange={toggleSelectAll}
+                                                        className="h-4 w-4"
+                                                    />
+                                                    <span className="text-sm font-medium text-gray-700">
+                                                        Select all ({emailAddresses.length})
+                                                        {selectedEmailIds.size > 0 && (
+                                                            <span className="text-blue-600 ml-2">
+                                                                • {selectedEmailIds.size} selected
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {selectedEmailIds.size > 0 && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={clearSelection}
+                                                            className="text-gray-600 hover:text-gray-800 h-8 px-3"
+                                                        >
+                                                            Clear
+                                                        </Button>
+                                                    )}
+                                                    <Button
+                                                        variant="destructive"
+                                                        size="sm"
+                                                        onClick={() => setIsBulkDeleteDialogOpen(true)}
+                                                        disabled={selectedEmailIds.size === 0}
+                                                        className="h-8"
+                                                    >
+                                                        <TrashIcon className="h-4 w-4 mr-2" />
+                                                        Delete Selected
+                                                    </Button>
+                                                </div>
+                                            </div>
+
                                             {emailAddresses.map((email) => (
-                                                <div key={email.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                                                <div 
+                                                    key={email.id} 
+                                                    className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                                                        selectedEmailIds.has(email.id) 
+                                                            ? 'bg-blue-50 border-blue-200' 
+                                                            : 'bg-gray-50 border-gray-200'
+                                                    }`}
+                                                >
                                                     <div className="flex items-center gap-3">
+                                                        <Checkbox
+                                                            checked={selectedEmailIds.has(email.id)}
+                                                            onCheckedChange={() => toggleEmailSelection(email.id)}
+                                                            className="h-4 w-4"
+                                                        />
                                                         <div className="font-mono text-sm">{email.address}</div>
                                                         <Button
                                                             variant="ghost"
@@ -641,25 +744,47 @@ export default function DomainDetailPage() {
                                                         >
                                                             <CopyIcon className="h-3 w-3" />
                                                         </Button>
-                                                        {email.isReceiptRuleConfigured ? (
-                                                            <Badge variant="secondary" className="text-xs">
-                                                                <CheckCircleIcon className="h-3 w-3 mr-1" />
-                                                                Active
-                                                            </Badge>
-                                                        ) : (
-                                                            <Badge variant="outline" className="text-xs">
-                                                                <ClockIcon className="h-3 w-3 mr-1" />
-                                                                Pending
-                                                            </Badge>
-                                                        )}
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <div className="text-sm text-gray-600">
-                                                            {email.endpointId || email.webhookId ? (
-                                                                <span className="text-green-600">Endpoint configured</span>
-                                                            ) : (
-                                                                <span className="text-gray-500">Store only</span>
-                                                            )}
+                                                            {(() => {
+                                                                // Find the configured endpoint
+                                                                const configuredEndpoint = email.endpointId 
+                                                                    ? userEndpoints.find(endpoint => endpoint.id === email.endpointId)
+                                                                    : null
+
+                                                                if (configuredEndpoint) {
+                                                                    const EndpointIcon = getEndpointIcon(configuredEndpoint)
+                                                                    return (
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <CustomInboundIcon 
+                                                                                Icon={EndpointIcon} 
+                                                                                size={25} 
+                                                                                backgroundColor={getEndpointIconColor(configuredEndpoint)} 
+                                                                            />
+                                                                            <span className={`font-medium ${getEndpointIconColor(configuredEndpoint)}`}>
+                                                                                {configuredEndpoint.name}
+                                                                            </span>
+                                                                        </div>
+                                                                    )
+                                                                } else if (email.webhookId) {
+                                                                    // Legacy webhook configuration
+                                                                    return (
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <CustomInboundIcon 
+                                                                                Icon={HiLightningBolt} 
+                                                                                size={14} 
+                                                                                backgroundColor="#8b5cf6" 
+                                                                            />
+                                                                            <span className="text-amber-600 font-medium">
+                                                                                Legacy Webhook
+                                                                            </span>
+                                                                        </div>
+                                                                    )
+                                                                } else {
+                                                                    return <span className="text-gray-500">Store in Inbound</span>
+                                                                }
+                                                            })()}
                                                         </div>
                                                         <div className="text-sm text-gray-500">
                                                             {email.emailsLast24h} emails
@@ -728,7 +853,7 @@ export default function DomainDetailPage() {
                                                             <SelectValue placeholder="Select endpoint" />
                                                         </SelectTrigger>
                                                         <SelectContent>
-                                                            <SelectItem value="none">Store only</SelectItem>
+                                                            <SelectItem value="none">Store in Inbound</SelectItem>
                                                             <SelectItem value="create-new" className="text-blue-600 font-medium">
                                                                 <div className="flex items-center gap-2">
                                                                     <PlusIcon className="h-4 w-4" />
@@ -794,10 +919,10 @@ export default function DomainDetailPage() {
                                     disabled={isEndpointsLoading}
                                 >
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Store only" />
+                                        <SelectValue placeholder="Store in Inbound" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="none">Store only</SelectItem>
+                                        <SelectItem value="none">Store in Inbound</SelectItem>
                                         <SelectItem value="create-new" className="text-blue-600 font-medium">
                                             <div className="flex items-center gap-2">
                                                 <PlusIcon className="h-4 w-4" />
@@ -840,6 +965,46 @@ export default function DomainDetailPage() {
                             </Button>
                             <Button onClick={updateEmailEndpointHandler}>
                                 Update Endpoint
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Bulk Delete Confirmation Dialog */}
+                <Dialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
+                    <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                            <DialogTitle>Delete Email Addresses</DialogTitle>
+                            <DialogDescription>
+                                Are you sure you want to delete {selectedEmailIds.size} email address{selectedEmailIds.size > 1 ? 'es' : ''}? 
+                                This action cannot be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="py-4">
+                            <div className="space-y-2">
+                                <p className="text-sm font-medium text-gray-900">Email addresses to be deleted:</p>
+                                <div className="max-h-32 overflow-y-auto space-y-1">
+                                    {selectedEmails.map((email) => (
+                                        <div key={email.id} className="text-sm text-gray-600 font-mono bg-gray-50 px-2 py-1 rounded">
+                                            {email.address}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                variant="secondary"
+                                onClick={() => setIsBulkDeleteDialogOpen(false)}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                onClick={bulkDeleteEmailAddresses}
+                                disabled={deleteEmailMutation.isPending}
+                            >
+                                {deleteEmailMutation.isPending ? 'Deleting...' : `Delete ${selectedEmailIds.size} Address${selectedEmailIds.size > 1 ? 'es' : ''}`}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

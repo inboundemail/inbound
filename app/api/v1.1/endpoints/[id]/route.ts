@@ -307,37 +307,39 @@ export async function DELETE(
       }, { status: 404 })
     }
 
-    // Check for dependencies
-    const associatedEmails = await db
-      .select({ count: count() })
-      .from(emailAddresses)
+    // Update email addresses to "store only" (clear endpointId) before deleting the endpoint
+    const updatedEmailAddresses = await db
+      .update(emailAddresses)
+      .set({ 
+        endpointId: null,
+        updatedAt: new Date()
+      })
       .where(eq(emailAddresses.endpointId, params.id))
+      .returning({ address: emailAddresses.address })
 
-    const catchAllDomains = await db
-      .select({ count: count() })
-      .from(emailDomains)
-      .where(eq(emailDomains.catchAllEndpointId, params.id))
-
-    const emailCount = associatedEmails[0]?.count || 0
-    const domainCount = catchAllDomains[0]?.count || 0
-
-    if (emailCount > 0 || domainCount > 0) {
-      return NextResponse.json({
-        success: false,
-        error: 'Cannot delete endpoint with active dependencies',
-        dependencies: {
-          emailAddresses: emailCount,
-          catchAllDomains: domainCount
-        },
-        message: 'Please remove all email addresses and catch-all domain configurations using this endpoint before deleting.'
-      }, { status: 409 })
+    if (updatedEmailAddresses.length > 0) {
+      console.log(`📧 DELETE /api/v1.1/endpoints/${params.id} - Updated ${updatedEmailAddresses.length} email addresses to store-only mode:`, 
+        updatedEmailAddresses.map(e => e.address).join(', '))
     }
+
+    // Update domain catch-all configurations to remove this endpoint
+    await db
+      .update(emailDomains)
+      .set({ 
+        catchAllEndpointId: null,
+        updatedAt: new Date()
+      })
+      .where(eq(emailDomains.catchAllEndpointId, params.id))
 
     // Delete email group entries if it's an email group
     if (existingEndpoint[0].type === 'email_group') {
       await db.delete(emailGroups).where(eq(emailGroups.endpointId, params.id))
       console.log(`📮 DELETE /api/v1.1/endpoints/${params.id} - Deleted email group entries`)
     }
+
+    // Delete endpoint delivery history
+    await db.delete(endpointDeliveries).where(eq(endpointDeliveries.endpointId, params.id))
+    console.log(`📊 DELETE /api/v1.1/endpoints/${params.id} - Deleted delivery history`)
 
     // Delete the endpoint
     await db.delete(endpoints).where(eq(endpoints.id, params.id))
@@ -346,7 +348,11 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      message: 'Endpoint deleted successfully'
+      message: updatedEmailAddresses.length > 0 
+        ? `Endpoint deleted successfully. ${updatedEmailAddresses.length} email address(es) switched to store-only mode.`
+        : 'Endpoint deleted successfully',
+      emailAddressesUpdated: updatedEmailAddresses.length,
+      updatedEmailAddresses: updatedEmailAddresses.map(e => e.address)
     })
 
   } catch (error) {
