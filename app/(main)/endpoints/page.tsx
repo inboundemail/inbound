@@ -1,30 +1,45 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useEndpointsQuery, useMigrationMutation } from '@/features/endpoints/hooks'
-import { CreateEndpointDialog, EditEndpointDialog, DeleteEndpointDialog, TestEndpointDialog } from '@/components/endpoints'
+import { CreateEndpointDialog, EditEndpointDialog, DeleteEndpointDialog, DeleteMultipleEndpointsDialog, TestEndpointDialog } from '@/components/endpoints'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { HiCheckCircle, HiX, HiPlus, HiRefresh, HiLightningBolt, HiMail, HiUserGroup, HiGlobeAlt, HiPlay, HiCog, HiTrash, HiClipboard, HiDownload } from 'react-icons/hi'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
+import { HiCheckCircle, HiX, HiPlus, HiRefresh, HiLightningBolt, HiMail, HiUserGroup, HiGlobeAlt, HiPlay, HiCog, HiTrash, HiClipboard, HiDownload, HiSearch, HiFilter } from 'react-icons/hi'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { Endpoint } from '@/features/endpoints/types'
+
+type FilterType = 'all' | 'webhook' | 'email' | 'email_group'
+type FilterStatus = 'all' | 'active' | 'disabled'
 
 export default function EndpointsPage() {
   const { data: endpoints = [], isLoading, error, refetch, migrationInProgress, migrationChecked } = useEndpointsQuery()
   const migrationMutation = useMigrationMutation()
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
   const [showMigrationSuccess, setShowMigrationSuccess] = useState(false)
-  
+
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterType, setFilterType] = useState<FilterType>('all')
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
+
+  // Selection state
+  const [selectedEndpoints, setSelectedEndpoints] = useState<Set<string>>(new Set())
+  const [selectAll, setSelectAll] = useState(false)
+
   const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | null>(null)
 
   // Show migration success when automatic migration completes
   useEffect(() => {
     if (migrationChecked && !migrationInProgress && endpoints.length > 0) {
       // Check if any endpoints have the migration description
-      const hasMigratedEndpoints = endpoints.some(endpoint => 
+      const hasMigratedEndpoints = endpoints.some(endpoint =>
         endpoint.description?.includes('Migrated from webhook:')
       )
       if (hasMigratedEndpoints) {
@@ -34,10 +49,76 @@ export default function EndpointsPage() {
       }
     }
   }, [migrationChecked, migrationInProgress, endpoints])
+
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleteMultipleDialogOpen, setDeleteMultipleDialogOpen] = useState(false)
   const [testDialogOpen, setTestDialogOpen] = useState(false)
+
+  // Memoize getConfigSummary to prevent recreations
+  const getConfigSummary = useMemo(() => {
+    return (endpoint: Endpoint) => {
+      if (!endpoint.config) return null
+
+      try {
+        const config = JSON.parse(endpoint.config)
+
+        switch (endpoint.type) {
+          case 'webhook':
+            return new URL(config.url).hostname
+          case 'email':
+            return config.forwardTo
+          case 'email_group':
+            return `${config.emails?.length || 0} recipients`
+          default:
+            return null
+        }
+      } catch {
+        return null
+      }
+    }
+  }, [])
+
+  // Filter and search endpoints
+  const filteredEndpoints = useMemo(() => {
+    return endpoints.filter(endpoint => {
+      // Search filter
+      const configSummary = getConfigSummary(endpoint)
+      const searchMatch = searchQuery === '' ||
+        endpoint.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        endpoint.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        configSummary?.toLowerCase().includes(searchQuery.toLowerCase())
+
+      // Type filter
+      const typeMatch = filterType === 'all' || endpoint.type === filterType
+
+      // Status filter
+      const statusMatch = filterStatus === 'all' ||
+        (filterStatus === 'active' && endpoint.isActive) ||
+        (filterStatus === 'disabled' && !endpoint.isActive)
+
+      return searchMatch && typeMatch && statusMatch
+    })
+  }, [endpoints, searchQuery, filterType, filterStatus, getConfigSummary])
+
+  // Handle select all - simplified to prevent infinite loops
+  useEffect(() => {
+    if (filteredEndpoints.length === 0 && selectedEndpoints.size > 0) {
+      setSelectedEndpoints(new Set())
+      setSelectAll(false)
+    }
+  }, [filteredEndpoints.length, selectedEndpoints.size])
+
+  // Update select all state when selection changes
+  const allSelected = useMemo(() => {
+    if (filteredEndpoints.length === 0) return false
+    return filteredEndpoints.every(endpoint => selectedEndpoints.has(endpoint.id))
+  }, [filteredEndpoints, selectedEndpoints])
+
+  useEffect(() => {
+    setSelectAll(allSelected)
+  }, [allSelected])
 
   const copyUrl = async (url: string) => {
     try {
@@ -64,19 +145,54 @@ export default function EndpointsPage() {
     setDeleteDialogOpen(true)
   }
 
+  const handleSelectEndpoint = (endpointId: string, checked: boolean) => {
+    const newSelected = new Set(selectedEndpoints)
+    if (checked) {
+      newSelected.add(endpointId)
+    } else {
+      newSelected.delete(endpointId)
+    }
+    setSelectedEndpoints(newSelected)
+  }
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedEndpoints(new Set(filteredEndpoints.map(e => e.id)))
+    } else {
+      setSelectedEndpoints(new Set())
+    }
+  }
+
+  const handleDeleteMultiple = () => {
+    if (selectedEndpoints.size === 0) {
+      toast.error('No endpoints selected')
+      return
+    }
+    setDeleteMultipleDialogOpen(true)
+  }
+
+  const clearSelection = () => {
+    setSelectedEndpoints(new Set())
+    setSelectAll(false)
+  }
+
   const getStatusBadge = (endpoint: Endpoint) => {
     if (endpoint.isActive) {
       return (
-        <Badge className="bg-emerald-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-          <HiCheckCircle className="w-3 h-3 mr-1" />
-          Active
+        <Badge 
+          className="bg-emerald-500 text-white rounded-full px-0.5 py-0.5 text-xs font-medium shadow-sm"
+          title="Active"
+        >
+          <HiCheckCircle className="w-3 h-3" />
         </Badge>
       )
     } else {
       return (
-        <Badge className="bg-gray-400 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-          <HiX className="w-3 h-3 mr-1" />
-          Disabled
+        <Badge 
+          className="bg-gray-400 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm"
+          title="Not Active"
+        >
+          <HiX className="w-3 h-3" />
         </Badge>
       )
     }
@@ -139,7 +255,7 @@ export default function EndpointsPage() {
 
   const getEndpointIconColor = (endpoint: Endpoint) => {
     if (!endpoint.isActive) return '#64748b'
-    
+
     switch (endpoint.type) {
       case 'webhook':
         return '#8b5cf6'
@@ -152,32 +268,15 @@ export default function EndpointsPage() {
     }
   }
 
-  const getConfigSummary = (endpoint: Endpoint) => {
-    if (!endpoint.config) return null
 
-    try {
-      const config = JSON.parse(endpoint.config)
-      
-      switch (endpoint.type) {
-        case 'webhook':
-          return new URL(config.url).hostname
-        case 'email':
-          return config.forwardTo
-        case 'email_group':
-          return `${config.emails?.length || 0} recipients`
-        default:
-          return null
-      }
-    } catch {
-      return null
-    }
-  }
 
   const totalEndpoints = endpoints.length
   const activeEndpoints = endpoints.filter(e => e.isActive).length
   const webhookCount = endpoints.filter(e => e.type === 'webhook').length
   const emailCount = endpoints.filter(e => e.type === 'email').length
   const emailGroupCount = endpoints.filter(e => e.type === 'email_group').length
+
+  const selectedEndpointsArray = endpoints.filter(e => selectedEndpoints.has(e.id))
 
   if (isLoading || migrationInProgress) {
     return (
@@ -268,14 +367,106 @@ export default function EndpointsPage() {
             </div>
           </div>
 
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-1 tracking-tight">
-              Active Endpoints ({totalEndpoints})
-            </h2>
-            <p className="text-gray-600 text-sm font-medium">Manage your webhook and email forwarding endpoints</p>
+                      <div className="mb-2">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-2xl font-semibold text-gray-900 mb-1 tracking-tight">
+                    Active Endpoints ({filteredEndpoints.length})
+                  </h2>
+                  <p className="text-gray-600 text-sm font-medium">Manage your webhook and email forwarding endpoints</p>
+                </div>
+              </div>
+
+                        {/* Search and Filter Controls */}
+            <div className="flex flex-col sm:flex-row gap-1 mb-2">
+              <div className="flex-1">
+                <div className="relative">
+                  <HiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search endpoints by name, description, or configuration..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 bg-white rounded-xl"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex gap-1">
+                <Select value={filterType} onValueChange={(value: FilterType) => setFilterType(value)}>
+                  <SelectTrigger className="w-40 bg-white rounded-xl">
+                    <SelectValue placeholder="Type" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white rounded-xl">
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="webhook">Webhooks</SelectItem>
+                    <SelectItem value="email">Email Forwards</SelectItem>
+                    <SelectItem value="email_group">Email Groups</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={filterStatus} onValueChange={(value: FilterStatus) => setFilterStatus(value)}>
+                  <SelectTrigger className="w-32 bg-white rounded-xl">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white rounded-xl">
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="disabled">Disabled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Bulk Selection Controls */}
+            {filteredEndpoints.length > 0 && (
+              <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl mb-2">
+                <CardContent className="py-2 px-4">
+                  <div className="flex items-center justify-between min-h-[32px]">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={selectAll}
+                        onCheckedChange={handleSelectAll}
+                        id="select-all"
+                      />
+                      <label htmlFor="select-all" className="text-sm font-medium text-gray-700 cursor-pointer">
+                        {selectedEndpoints.size > 0 
+                          ? `${selectedEndpoints.size} of ${filteredEndpoints.length} endpoints selected`
+                          : `Select all (${filteredEndpoints.length}) endpoints`
+                        }
+                      </label>
+                    </div>
+                    
+                    <div className={`flex items-center gap-2 transition-opacity duration-200 ${
+                      selectedEndpoints.size > 0 ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                    }`}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={clearSelection}
+                        disabled={selectedEndpoints.size === 0}
+                      >
+                        Clear
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleDeleteMultiple}
+                        className="bg-red-600 hover:bg-red-700"
+                        disabled={selectedEndpoints.size === 0}
+                      >
+                        <HiTrash className="h-3 w-3 mr-1" />
+                        Delete ({selectedEndpoints.size})
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
-          <div className="space-y-4">
+          <hr className="my-4 border-gray-200" />
+
+          <div className="space-y-2">
             {/* Migration Success Banner */}
             {showMigrationSuccess && (
               <Card className="bg-green-50 border-green-200">
@@ -299,84 +490,110 @@ export default function EndpointsPage() {
               </Card>
             )}
 
-            {endpoints.length === 0 ? (
+            {filteredEndpoints.length === 0 ? (
               <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
                 <CardContent className="p-8">
                   <div className="text-center">
-                    <CustomInboundIcon 
-                      Icon={HiGlobeAlt} 
-                      size={48} 
-                      backgroundColor="#6b7280" 
-                      className="mx-auto mb-4" 
+                    <CustomInboundIcon
+                      Icon={searchQuery || filterType !== 'all' || filterStatus !== 'all' ? HiSearch : HiGlobeAlt}
+                      size={48}
+                      backgroundColor="#6b7280"
+                      className="mx-auto mb-4"
                     />
-                    <p className="text-sm text-slate-500 mb-4">No endpoints configured</p>
+                    <p className="text-sm text-slate-500 mb-4">
+                      {searchQuery || filterType !== 'all' || filterStatus !== 'all'
+                        ? 'No endpoints match your search criteria'
+                        : 'No endpoints configured'
+                      }
+                    </p>
                     <div className="space-y-2">
-                      <Button variant="secondary" onClick={() => setCreateDialogOpen(true)}>
-                        <HiPlus className="h-4 w-4 mr-2" />
-                        Add Your First Endpoint
-                      </Button>
-                      {migrationChecked && !migrationInProgress && (
-                        <div className="text-xs text-gray-500">
-                          <p>Have existing webhooks? 
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={async () => {
-                                try {
-                                  const result = await migrationMutation.mutateAsync()
-                                  if (result.success) {
-                                    if ((result.migratedCount || 0) > 0) {
-                                      setShowMigrationSuccess(true)
-                                      toast.success(`Successfully imported ${result.migratedCount} webhooks!`)
-                                    } else {
-                                      toast.info('No webhooks found to import')
+                      {searchQuery || filterType !== 'all' || filterStatus !== 'all' ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setSearchQuery('')
+                            setFilterType('all')
+                            setFilterStatus('all')
+                          }}
+                        >
+                          Clear Filters
+                        </Button>
+                      ) : (
+                        <>
+                          <Button variant="secondary" onClick={() => setCreateDialogOpen(true)}>
+                            <HiPlus className="h-4 w-4 mr-2" />
+                            Add Your First Endpoint
+                          </Button>
+                          {migrationChecked && !migrationInProgress && (
+                            <div className="text-xs text-gray-500">
+                              <p>Have existing webhooks?
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={async () => {
+                                    try {
+                                      const result = await migrationMutation.mutateAsync()
+                                      if (result.success) {
+                                        if ((result.migratedCount || 0) > 0) {
+                                          setShowMigrationSuccess(true)
+                                          toast.success(`Successfully imported ${result.migratedCount} webhooks!`)
+                                        } else {
+                                          toast.info('No webhooks found to import')
+                                        }
+                                      } else {
+                                        toast.error(result.error || 'Failed to import webhooks')
+                                      }
+                                    } catch (error) {
+                                      console.error('Migration failed:', error)
+                                      toast.error('Failed to import webhooks')
                                     }
-                                  } else {
-                                    toast.error(result.error || 'Failed to import webhooks')
-                                  }
-                                } catch (error) {
-                                  console.error('Migration failed:', error)
-                                  toast.error('Failed to import webhooks')
-                                }
-                              }}
-                              disabled={migrationMutation.isPending}
-                              className="p-0 h-auto ml-1 text-blue-600 hover:text-blue-700"
-                            >
-                              {migrationMutation.isPending ? 'Importing...' : 'Import them now'}
-                            </Button>
-                          </p>
-                        </div>
+                                  }}
+                                  disabled={migrationMutation.isPending}
+                                  className="p-0 h-auto ml-1 text-blue-600 hover:text-blue-700"
+                                >
+                                  {migrationMutation.isPending ? 'Importing...' : 'Import them now'}
+                                </Button>
+                              </p>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
                 </CardContent>
               </Card>
             ) : (
-              endpoints.map((endpoint: Endpoint) => {
+              filteredEndpoints.map((endpoint: Endpoint) => {
                 const EndpointIcon = getEndpointIcon(endpoint)
                 const configSummary = getConfigSummary(endpoint)
-                
+                const isSelected = selectedEndpoints.has(endpoint.id)
+
                 return (
                   <Card
                     key={endpoint.id}
-                    className="bg-white/95 backdrop-blur-sm shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-200/60 rounded-xl group"
+                    className={`bg-white/95 backdrop-blur-sm shadow-sm hover:shadow-lg transition-all duration-300 border rounded-xl group ${isSelected ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200/60'
+                      }`}
                   >
                     <CardContent className="p-0">
                       <div className="p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-3 flex-1 min-w-0">
-                            <CustomInboundIcon 
-                              Icon={EndpointIcon} 
-                              size={36} 
-                              backgroundColor={getEndpointIconColor(endpoint)} 
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={(checked) => handleSelectEndpoint(endpoint.id, checked as boolean)}
+                              className="flex-shrink-0"
+                            />
+                            <CustomInboundIcon
+                              Icon={EndpointIcon}
+                              size={36}
+                              backgroundColor={getEndpointIconColor(endpoint)}
                             />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center space-x-2 mb-1">
                                 <h3 className="text-base font-semibold text-gray-900 tracking-tight truncate">{endpoint.name}</h3>
-                                {getEndpointTypeBadge(endpoint)}
-                                {getStatusBadge(endpoint)}
+                                {/* {getEndpointTypeBadge(endpoint)} */}
                               </div>
-                              <div className="flex items-center space-x-3 text-sm">
+                              {/* <div className="flex items-center space-x-3 text-sm">
                                 <div className="flex items-center space-x-2 text-gray-600">
                                   <span className="font-mono truncate">
                                     {configSummary}
@@ -407,31 +624,32 @@ export default function EndpointsPage() {
                                 <span className="text-gray-400 text-xs">
                                   Added {endpoint.createdAt ? formatDistanceToNow(new Date(endpoint.createdAt), { addSuffix: true }) : 'recently'}
                                 </span>
-                              </div>
+                              </div> */}
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
+                            {getStatusBadge(endpoint)}
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
                               onClick={() => handleTestEndpoint(endpoint)}
                               title="Test endpoint"
                             >
                               <HiPlay className="w-4 h-4 text-gray-500 hover:text-gray-700" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
                               onClick={() => handleEditEndpoint(endpoint)}
                               title="Configure endpoint"
                             >
                               <HiCog className="w-4 h-4 text-gray-500 hover:text-gray-700" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
                               onClick={() => handleDeleteEndpoint(endpoint)}
                               title="Delete endpoint"
@@ -454,19 +672,26 @@ export default function EndpointsPage() {
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
       />
-      
+
       <EditEndpointDialog
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         endpoint={selectedEndpoint}
       />
-      
+
       <DeleteEndpointDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         endpoint={selectedEndpoint}
       />
-      
+
+      <DeleteMultipleEndpointsDialog
+        open={deleteMultipleDialogOpen}
+        onOpenChange={setDeleteMultipleDialogOpen}
+        endpoints={selectedEndpointsArray}
+        onSuccess={clearSelection}
+      />
+
       <TestEndpointDialog
         open={testDialogOpen}
         onOpenChange={setTestDialogOpen}

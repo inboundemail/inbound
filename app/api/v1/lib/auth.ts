@@ -35,6 +35,8 @@ export async function validateApiKey(request: NextRequest): Promise<ApiKeyValida
       apiKey = authHeader
     }
 
+    console.log("API KEY: " + apiKey)
+
     if (!apiKey) {
       return {
         valid: false,
@@ -48,6 +50,10 @@ export async function validateApiKey(request: NextRequest): Promise<ApiKeyValida
         key: apiKey
       }
     })
+
+    console.log("VALID: " + valid)
+    console.log("ERROR: " + error)
+    console.log("KEY: " + key?.userId)
 
     if (!valid || error || !key) {
       return {
@@ -72,26 +78,13 @@ export async function validateApiKey(request: NextRequest): Promise<ApiKeyValida
       }
     }
 
-    // Get user information from the API key
-    const session = await auth.api.getSession({
-      headers: new Headers({
-        'Authorization': `Bearer ${apiKey}`
-      })
-    })
-
-    if (!session?.user) {
-      return {
-        valid: false,
-        error: 'Unable to retrieve user information'
-      }
-    }
-
+    // Use the userId from the API key directly
     return {
       valid: true,
       user: {
-        id: session.user.id,
-        email: session.user.email,
-        name: session.user.name
+        id: key.userId,
+        email: key.userId, // We don't have email from API key, use userId as fallback
+        name: null // We don't have name from API key
       }
     }
   } catch (error) {

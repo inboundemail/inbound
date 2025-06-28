@@ -215,7 +215,7 @@ export default async function AnalyticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="space-y-4">
+            <div className="space-y-2">
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
                   <div className="text-lg font-semibold text-blue-700">{avgProcessingTime}ms</div>
@@ -264,7 +264,7 @@ export default async function AnalyticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="space-y-4">
+            <div className="space-y-2">
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 bg-red-50 rounded-lg border border-red-100">
                   <div className="text-lg font-semibold text-red-700">{errorAnalysis.totalErrors}</div>

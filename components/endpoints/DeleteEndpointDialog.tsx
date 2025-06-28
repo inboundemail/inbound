@@ -40,8 +40,15 @@ export function DeleteEndpointDialog({ open, onOpenChange, endpoint }: DeleteEnd
     if (!endpoint) return
 
     try {
-      await deleteEndpointMutation.mutateAsync(endpoint.id)
-      toast.success('Endpoint deleted successfully!')
+      const result = await deleteEndpointMutation.mutateAsync(endpoint.id)
+      
+      // Show success message with cleanup info if available
+      if (result?.message) {
+        toast.success(result.message)
+      } else {
+        toast.success('Endpoint deleted successfully!')
+      }
+      
       onOpenChange(false)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to delete endpoint')
@@ -150,7 +157,7 @@ export function DeleteEndpointDialog({ open, onOpenChange, endpoint }: DeleteEnd
 
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
             <p className="text-sm text-amber-800">
-              <strong>Note:</strong> Make sure you have updated any email addresses that use this endpoint before deleting it.
+              <strong>Note:</strong> Any email addresses using this endpoint will be automatically switched to "store-only" mode (emails will be received and stored but not forwarded).
             </p>
           </div>
         </div>

@@ -3,7 +3,7 @@
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { db } from '@/lib/db'
-import { endpoints, emailGroups } from '@/lib/db/schema'
+import { endpoints, emailGroups, emailAddresses, emailDomains, endpointDeliveries } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import type { CreateEndpointData, UpdateEndpointData } from '@/features/endpoints/types'
@@ -153,23 +153,168 @@ export async function deleteEndpoint(id: string) {
       return { success: false, error: 'Endpoint not found or access denied' }
     }
 
+    // Update email addresses to "store only" (clear endpointId) before deleting the endpoint
+    const updatedEmailAddresses = await db
+      .update(emailAddresses)
+      .set({ 
+        endpointId: null,
+        updatedAt: new Date()
+      })
+      .where(eq(emailAddresses.endpointId, id))
+      .returning({ address: emailAddresses.address })
+
+    if (updatedEmailAddresses.length > 0) {
+      console.log(`📧 deleteEndpoint - Updated ${updatedEmailAddresses.length} email addresses to store-only mode:`, 
+        updatedEmailAddresses.map(e => e.address).join(', '))
+    }
+
+    // Update domain catch-all configurations to remove this endpoint
+    await db
+      .update(emailDomains)
+      .set({ 
+        catchAllEndpointId: null,
+        updatedAt: new Date()
+      })
+      .where(eq(emailDomains.catchAllEndpointId, id))
+
     // Delete email group entries if it's an email group
     if (existingEndpoint[0].type === 'email_group') {
       await db.delete(emailGroups).where(eq(emailGroups.endpointId, id))
       console.log(`📮 deleteEndpoint - Deleted email group entries for endpoint ${id}`)
     }
 
+    // Delete endpoint delivery history
+    await db.delete(endpointDeliveries).where(eq(endpointDeliveries.endpointId, id))
+    console.log(`📊 deleteEndpoint - Deleted delivery history for endpoint ${id}`)
+
     // Delete the endpoint
     await db.delete(endpoints).where(eq(endpoints.id, id))
 
     console.log(`✅ deleteEndpoint - Successfully deleted endpoint ${id}`)
-    return { success: true }
+    return { 
+      success: true, 
+      emailAddressesUpdated: updatedEmailAddresses.length,
+      message: updatedEmailAddresses.length > 0 
+        ? `Endpoint deleted. ${updatedEmailAddresses.length} email address(es) switched to store-only mode.`
+        : 'Endpoint deleted successfully.'
+    }
 
   } catch (error) {
     console.error('❌ deleteEndpoint - Error deleting endpoint:', error)
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Failed to delete endpoint' 
+    }
+  }
+}
+
+export async function deleteMultipleEndpoints(ids: string[]) {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user?.id) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  if (!ids.length) {
+    return { success: false, error: 'No endpoints selected for deletion' }
+  }
+
+  try {
+    console.log(`🗑️ deleteMultipleEndpoints - Deleting ${ids.length} endpoints`)
+
+    // Check if all endpoints exist and belong to user
+    const existingEndpoints = await db
+      .select()
+      .from(endpoints)
+      .where(and(
+        eq(endpoints.userId, session.user.id)
+      ))
+
+    const validIds = existingEndpoints
+      .filter(endpoint => ids.includes(endpoint.id))
+      .map(endpoint => endpoint.id)
+
+    if (validIds.length !== ids.length) {
+      return { success: false, error: 'Some endpoints not found or access denied' }
+    }
+
+    let deletedCount = 0
+    const errors: string[] = []
+
+    let totalEmailAddressesUpdated = 0
+
+    // Delete each endpoint (we need to handle cleanup individually)
+    for (const id of validIds) {
+      try {
+        const endpoint = existingEndpoints.find(e => e.id === id)
+        
+        // Update email addresses to "store only" (clear endpointId) before deleting the endpoint
+        const updatedEmailAddresses = await db
+          .update(emailAddresses)
+          .set({ 
+            endpointId: null,
+            updatedAt: new Date()
+          })
+          .where(eq(emailAddresses.endpointId, id))
+          .returning({ address: emailAddresses.address })
+
+        totalEmailAddressesUpdated += updatedEmailAddresses.length
+
+        if (updatedEmailAddresses.length > 0) {
+          console.log(`📧 deleteMultipleEndpoints - Updated ${updatedEmailAddresses.length} email addresses to store-only mode for endpoint ${id}`)
+        }
+
+        // Update domain catch-all configurations to remove this endpoint
+        await db
+          .update(emailDomains)
+          .set({ 
+            catchAllEndpointId: null,
+            updatedAt: new Date()
+          })
+          .where(eq(emailDomains.catchAllEndpointId, id))
+
+        // Delete email group entries if it's an email group
+        if (endpoint?.type === 'email_group') {
+          await db.delete(emailGroups).where(eq(emailGroups.endpointId, id))
+        }
+
+        // Delete endpoint delivery history
+        await db.delete(endpointDeliveries).where(eq(endpointDeliveries.endpointId, id))
+
+        // Delete the endpoint
+        await db.delete(endpoints).where(eq(endpoints.id, id))
+        deletedCount++
+        
+      } catch (error) {
+        console.error(`❌ Error deleting endpoint ${id}:`, error)
+        errors.push(`Failed to delete endpoint ${id}`)
+      }
+    }
+
+    console.log(`✅ deleteMultipleEndpoints - Successfully deleted ${deletedCount}/${ids.length} endpoints`)
+    
+    if (errors.length > 0) {
+      return { 
+        success: false, 
+        error: `Partially completed: ${deletedCount} deleted, ${errors.length} failed. ${errors.join(', ')}`,
+        deletedCount,
+        emailAddressesUpdated: totalEmailAddressesUpdated
+      }
+    }
+
+    return { 
+      success: true, 
+      deletedCount,
+      emailAddressesUpdated: totalEmailAddressesUpdated,
+      message: totalEmailAddressesUpdated > 0 
+        ? `${deletedCount} endpoint(s) deleted. ${totalEmailAddressesUpdated} email address(es) switched to store-only mode.`
+        : `${deletedCount} endpoint(s) deleted successfully.`
+    }
+
+  } catch (error) {
+    console.error('❌ deleteMultipleEndpoints - Error deleting endpoints:', error)
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to delete endpoints' 
     }
   }
 }
