@@ -289,7 +289,7 @@ export class EmailForwarder {
     const senderEmail = params.originalEmail.from.addresses[0].address
     const recipientEmail = params.recipientEmail
     
-    // Generate the banner HTML
+    // Generate the banner HTML (recipientEmail is what we want to block, senderEmail is just for context)
     const bannerHtml = generateEmailBannerHTML(recipientEmail, senderEmail)
     
     // Try to insert banner before closing body tag, or append if no body tag found
@@ -312,13 +312,13 @@ export class EmailForwarder {
       return textContent
     }
 
-    const senderEmail = params.originalEmail.from.addresses[0].address
+    const recipientEmail = params.recipientEmail
     
     // Create a simple plain text version
     const bannerText = `
 
 ---
-sent via inbound.new, block ${senderEmail}: https://inbound.new/addtoblocklist?email=${encodeURIComponent(senderEmail)}
+sent via inbound.new, block ${recipientEmail}: https://inbound.new/addtoblocklist?email=${encodeURIComponent(recipientEmail)}
 `
     
     return `${textContent}${bannerText}`
