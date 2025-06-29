@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { blockEmailAction } from '@/app/actions/blocking'
 import { HiShieldCheck, HiMail, HiCheck, HiX } from 'react-icons/hi'
 
-export default function AddToBlocklistPage() {
+function AddToBlocklistForm() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -160,5 +160,27 @@ export default function AddToBlocklistPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function AddToBlocklistPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md mx-auto">
+          <div className="text-center mb-8">
+            <div className="flex justify-center mb-4">
+              <div className="bg-blue-100 p-3 rounded-full">
+                <HiShieldCheck className="h-8 w-8 text-blue-600" />
+              </div>
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Block Email Address</h1>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <AddToBlocklistForm />
+    </Suspense>
   )
 } 
