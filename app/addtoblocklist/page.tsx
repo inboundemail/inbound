@@ -132,7 +132,7 @@ function AddToBlocklistForm() {
                 <Button
                   type="submit"
                   disabled={isLoading || !email.trim()}
-                  className="flex-1"
+                  className="flex-1 bg-purple-500 hover:bg-purple-600 text-white"
                 >
                   {isLoading ? 'Blocking...' : 'Block Email Address'}
                 </Button>

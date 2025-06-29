@@ -11,13 +11,13 @@ export function EmailBanner({ recipientEmail, senderEmail, className = '' }: Ema
   const blockUrl = `https://inbound.new/addtoblocklist?email=${encodeURIComponent(senderEmail)}`
 
   return (
-    <div className={`w-full bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between ${className}`}>
+    <div className={`max-w-2xl mx-auto mt-5 bg-white border border-gray-200 rounded-lg px-5 py-4 flex items-center justify-between shadow-sm ${className}`}>
       {/* Left side - Logo and recipient info */}
       <div className="flex items-center space-x-3">
         <img 
           src="/inbound-wordmark.png" 
           alt="Inbound" 
-          className="h-6 w-auto"
+          className="h-8 w-auto"
         />
         <div className="text-sm text-gray-600">
           <span className="text-gray-500">sent to</span>{' '}
@@ -31,7 +31,7 @@ export function EmailBanner({ recipientEmail, senderEmail, className = '' }: Ema
           asChild
           variant="primary"
           size="sm"
-          className="bg-blue-600 hover:bg-blue-700 text-white border-blue-600 hover:border-blue-700"
+          className="bg-purple-500 hover:bg-purple-600 text-white border-purple-500 hover:border-purple-600 rounded-lg px-4 py-2.5"
         >
           <a 
             href={blockUrl}
@@ -53,22 +53,24 @@ export function generateEmailBannerHTML(recipientEmail: string, senderEmail: str
   
   return `
     <div style="
-      width: 100%;
-      background-color: #f9fafb;
-      border-top: 1px solid #e5e7eb;
-      padding: 16px 24px;
+      max-width: 600px;
+      margin: 20px auto 0 auto;
+      background-color: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px 20px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      margin-top: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     ">
       <!-- Left side - Logo and recipient info -->
       <div style="display: flex; align-items: center; gap: 12px;">
         <img 
           src="https://inbound.new/inbound-wordmark.png" 
           alt="Inbound" 
-          style="height: 24px; width: auto;"
+          style="height: 32px; width: auto;"
         />
         <div style="font-size: 14px; color: #4b5563;">
           <span style="color: #6b7280;">sent to</span>
@@ -84,18 +86,18 @@ export function generateEmailBannerHTML(recipientEmail: string, senderEmail: str
           rel="noopener noreferrer"
           style="
             display: inline-block;
-            background-color: #2563eb;
+            background-color: #8b5cf6;
             color: white;
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 6px;
+            padding: 10px 16px;
+            border-radius: 8px;
             font-size: 14px;
             font-weight: 500;
-            border: 1px solid #2563eb;
+            border: 1px solid #8b5cf6;
             transition: background-color 0.2s;
           "
-          onmouseover="this.style.backgroundColor='#1d4ed8'"
-          onmouseout="this.style.backgroundColor='#2563eb'"
+          onmouseover="this.style.backgroundColor='#7c3aed'"
+          onmouseout="this.style.backgroundColor='#8b5cf6'"
         >
           block this address
         </a>
