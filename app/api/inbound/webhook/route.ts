@@ -9,6 +9,7 @@ import { Autumn as autumn } from 'autumn-js'
 import { createHmac } from 'crypto'
 import { parseEmail, parseEmailContent, sanitizeHtml, type ParsedEmailData } from '@/lib/email-parser'
 import { type SESEvent, type SESRecord } from '@/lib/aws-ses'
+import { isEmailBlocked } from '@/lib/email-blocking'
 
 interface ProcessedSESRecord extends SESRecord {
   emailContent?: string | null
@@ -767,6 +768,15 @@ export async function POST(request: NextRequest) {
             continue // Skip processing this recipient
           }
 
+          // Check if the sender email is blocked
+          const senderBlocked = await isEmailBlocked(mail.source)
+          let emailStatus: 'received' | 'blocked' = 'received'
+          
+          if (senderBlocked) {
+            console.warn(`🚫 Webhook - Email from blocked sender ${mail.source} to ${recipient}`)
+            emailStatus = 'blocked'
+          }
+
           // Parse the email content using the new parseEmail function
           let parsedEmailData: ParsedEmailData | null = null
           console.log('Email content:', record.emailContent)
@@ -816,7 +826,7 @@ export async function POST(request: NextRequest) {
             processedAt: new Date(),
             
             // Status and tracking
-            status: 'received' as const,
+            status: emailStatus,
             isRead: false,
             readAt: null,
             
@@ -847,6 +857,8 @@ export async function POST(request: NextRequest) {
               },
               inboundTriggerTracked: true, // Flag to indicate this email was tracked for inbound triggers
               parsedSuccessfully: !!parsedEmailData, // Flag to indicate if email was successfully parsed
+              senderBlocked: senderBlocked, // Flag to indicate if the sender was blocked
+              blockedReason: senderBlocked ? 'Sender email address is on the blocklist' : null
             }),
             userId: userId,
             updatedAt: new Date(),
@@ -873,24 +885,34 @@ export async function POST(request: NextRequest) {
             await createStructuredEmailRecord(emailRecord.id, sesEventId, parsedEmailData, userId)
           }
 
-          // Route email using the new unified routing system
-          try {
-            const { routeEmail } = await import('@/lib/email-router')
-            await routeEmail(emailRecord.id)
-            console.log(`✅ Webhook - Successfully routed email ${emailRecord.id}`)
+          // Route email using the new unified routing system (skip routing for blocked emails)
+          if (emailStatus === 'blocked') {
+            console.log(`🚫 Webhook - Skipping routing for blocked email ${emailRecord.id} from ${mail.source}`)
             
-            // Update processing record with success
-            emailProcessingRecord.webhookDelivery = {
-              success: true,
-              deliveryId: undefined // Will be tracked in endpointDeliveries table
-            }
-          } catch (routingError) {
-            console.error(`❌ Webhook - Failed to route email ${emailRecord.id}:`, routingError)
-            
-            // Update processing record with failure
+            // Update processing record to indicate blocked
             emailProcessingRecord.webhookDelivery = {
               success: false,
-              error: routingError instanceof Error ? routingError.message : 'Unknown routing error'
+              error: 'Email blocked - sender is on the blocklist'
+            }
+          } else {
+            try {
+              const { routeEmail } = await import('@/lib/email-router')
+              await routeEmail(emailRecord.id)
+              console.log(`✅ Webhook - Successfully routed email ${emailRecord.id}`)
+              
+              // Update processing record with success
+              emailProcessingRecord.webhookDelivery = {
+                success: true,
+                deliveryId: undefined // Will be tracked in endpointDeliveries table
+              }
+            } catch (routingError) {
+              console.error(`❌ Webhook - Failed to route email ${emailRecord.id}:`, routingError)
+              
+              // Update processing record with failure
+              emailProcessingRecord.webhookDelivery = {
+                success: false,
+                error: routingError instanceof Error ? routingError.message : 'Unknown routing error'
+              }
             }
           }
 

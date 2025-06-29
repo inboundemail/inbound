@@ -302,7 +302,8 @@ async function handleEmailForwardEndpoint(
       toAddresses,
       {
         subjectPrefix: config.subjectPrefix,
-        includeAttachments: config.includeAttachments
+        includeAttachments: config.includeAttachments,
+        recipientEmail: emailData.recipient
       }
     )
     

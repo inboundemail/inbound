@@ -325,8 +325,16 @@ export const endpointDeliveries = pgTable('endpoint_deliveries', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-// Structured Emails table - matches ParsedEmailData type exactly
-
+// Blocked Emails table - stores email addresses that should be blocked from processing
+export const blockedEmails = pgTable('blocked_emails', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  emailAddress: varchar('email_address', { length: 255 }).notNull().unique(),
+  domainId: varchar('domain_id', { length: 255 }).notNull(), // Reference to emailDomains table
+  reason: text('reason'), // Optional reason for blocking
+  blockedBy: varchar('blocked_by', { length: 255 }).notNull(), // User who blocked this email
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
 
 // Export types for Better Auth tables (using the imported tables)
 export { user, session, account, verification, apikey };
@@ -369,6 +377,8 @@ export type EmailGroup = typeof emailGroups.$inferSelect;
 export type NewEmailGroup = typeof emailGroups.$inferInsert;
 export type EndpointDelivery = typeof endpointDeliveries.$inferSelect;
 export type NewEndpointDelivery = typeof endpointDeliveries.$inferInsert;
+export type BlockedEmail = typeof blockedEmails.$inferSelect;
+export type NewBlockedEmail = typeof blockedEmails.$inferInsert;
 
 // Domain status enums
 export const DOMAIN_STATUS = {
@@ -393,7 +403,8 @@ export const EMAIL_STATUS = {
   RECEIVED: 'received',
   PROCESSING: 'processing',
   FORWARDED: 'forwarded',
-  FAILED: 'failed'
+  FAILED: 'failed',
+  BLOCKED: 'blocked'
 } as const;
 
 export const WEBHOOK_STATUS = {

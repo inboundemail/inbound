@@ -1,5 +1,6 @@
 import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses'
 import type { ParsedEmailData } from './email-parser'
+import { generateEmailBannerHTML } from '@/components/email-banner'
 
 export class EmailForwarder {
   private sesClient: SESClient
@@ -17,6 +18,7 @@ export class EmailForwarder {
     options?: {
       subjectPrefix?: string
       includeAttachments?: boolean
+      recipientEmail?: string // The original recipient email (e.g., user@domain.com)
     }
   ): Promise<void> {
     console.log(`📨 EmailForwarder - Forwarding email from ${fromAddress} to ${toAddresses.length} recipients`)
@@ -33,7 +35,8 @@ export class EmailForwarder {
       replyTo: originalEmail.from?.addresses?.[0]?.address || fromAddress,
       subject,
       originalEmail,
-      includeAttachments: options?.includeAttachments ?? true
+      includeAttachments: options?.includeAttachments ?? true,
+      recipientEmail: options?.recipientEmail
     })
 
     console.log(`📤 EmailForwarder - Sending email message (${rawMessage.length} bytes) with ${originalEmail.htmlBody ? 'HTML' : 'text'} content and ${originalEmail.attachments?.length || 0} attachments`)
@@ -66,6 +69,7 @@ export class EmailForwarder {
     subject: string
     originalEmail: ParsedEmailData
     includeAttachments: boolean
+    recipientEmail?: string
   }): Promise<string> {
     // Generate a boundary for multipart messages
     const boundary = `----=_NextPart_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
@@ -99,11 +103,13 @@ export class EmailForwarder {
       if (hasHtml) {
         headers.push('Content-Type: text/html; charset=UTF-8')
         headers.push('Content-Transfer-Encoding: 8bit')
-        return [...headers, '', params.originalEmail.htmlBody || ''].join('\r\n')
+        const htmlWithBanner = this.addBannerToHtml(params.originalEmail.htmlBody || '', params)
+        return [...headers, '', htmlWithBanner].join('\r\n')
       } else if (hasText) {
         headers.push('Content-Type: text/plain; charset=UTF-8')
         headers.push('Content-Transfer-Encoding: 8bit')
-        return [...headers, '', params.originalEmail.textBody || ''].join('\r\n')
+        const textWithBanner = this.addBannerToText(params.originalEmail.textBody || '', params)
+        return [...headers, '', textWithBanner].join('\r\n')
       } else {
         headers.push('Content-Type: text/plain; charset=UTF-8')
         headers.push('Content-Transfer-Encoding: 8bit')
@@ -134,13 +140,13 @@ export class EmailForwarder {
         'Content-Type: text/plain; charset=UTF-8',
         'Content-Transfer-Encoding: 8bit',
         '',
-        params.originalEmail.textBody || '',
+        this.addBannerToText(params.originalEmail.textBody || '', params),
         '',
         `--${altBoundary}`,
         'Content-Type: text/html; charset=UTF-8',
         'Content-Transfer-Encoding: 8bit',
         '',
-        params.originalEmail.htmlBody || '',
+        this.addBannerToHtml(params.originalEmail.htmlBody || '', params),
         '',
         `--${altBoundary}--`,
         ''
@@ -151,7 +157,7 @@ export class EmailForwarder {
         'Content-Type: text/html; charset=UTF-8',
         'Content-Transfer-Encoding: 8bit',
         '',
-        params.originalEmail.htmlBody || '',
+        this.addBannerToHtml(params.originalEmail.htmlBody || '', params),
         ''
       )
     } else if (hasText) {
@@ -160,7 +166,7 @@ export class EmailForwarder {
         'Content-Type: text/plain; charset=UTF-8',
         'Content-Transfer-Encoding: 8bit',
         '',
-        params.originalEmail.textBody || '',
+        this.addBannerToText(params.originalEmail.textBody || '', params),
         ''
       )
     } else {
@@ -269,5 +275,55 @@ export class EmailForwarder {
       .replace(/&gt;/g, '>')
       .replace(/&amp;/g, '&')
       .trim()
+  }
+
+  /**
+   * Add the Inbound banner to HTML content
+   */
+  private addBannerToHtml(htmlContent: string, params: { originalEmail: ParsedEmailData; recipientEmail?: string }): string {
+    // Only add banner if we have the necessary information
+    if (!params.recipientEmail || !params.originalEmail.from?.addresses?.[0]?.address) {
+      return htmlContent
+    }
+
+    const senderEmail = params.originalEmail.from.addresses[0].address
+    const recipientEmail = params.recipientEmail
+    
+    // Generate the banner HTML
+    const bannerHtml = generateEmailBannerHTML(recipientEmail, senderEmail)
+    
+    // Try to insert banner before closing body tag, or append if no body tag found
+    if (htmlContent.includes('</body>')) {
+      return htmlContent.replace('</body>', `${bannerHtml}</body>`)
+    } else if (htmlContent.includes('</html>')) {
+      return htmlContent.replace('</html>', `${bannerHtml}</html>`)
+    } else {
+      // No proper HTML structure, just append
+      return `${htmlContent}${bannerHtml}`
+    }
+  }
+
+  /**
+   * Add the Inbound banner to plain text content
+   */
+  private addBannerToText(textContent: string, params: { originalEmail: ParsedEmailData; recipientEmail?: string }): string {
+    // Only add banner if we have the necessary information
+    if (!params.recipientEmail || !params.originalEmail.from?.addresses?.[0]?.address) {
+      return textContent
+    }
+
+    const senderEmail = params.originalEmail.from.addresses[0].address
+    const recipientEmail = params.recipientEmail
+    
+    // Create a plain text version of the banner
+    const bannerText = `
+
+---
+This email was sent to ${recipientEmail}
+To block emails from ${senderEmail}, visit: https://inbound.new/addtoblocklist?email=${encodeURIComponent(senderEmail)}
+Powered by Inbound - inbound.new
+`
+    
+    return `${textContent}${bannerText}`
   }
 } 
