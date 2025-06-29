@@ -8,12 +8,18 @@ import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
 import { HistoricalStatusCard } from "@/components/historical-status-card"
+import { FeedbackDialog } from "@/components/feedback-dialog"
+import { HiCalendar } from "react-icons/hi"
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
   SidebarMenu,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenuItem,
+  SidebarMenuButton,
 } from "@/components/ui/sidebar"
 import { TeamSwitcher } from "./ui/team-switcher"
 import { useSession } from "@/lib/auth-client"
@@ -74,6 +80,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         {/* <div className={`mb-2 px-3 ${data.navSecondary.length > 0 ? 'mt-4' : 'mt-auto'}`}>
           <HistoricalStatusCard />
         </div> */}
+        <SidebarGroup className={`${data.navSecondary.length > 0 ? 'mt-4' : 'mt-auto'}`}>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <FeedbackDialog />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Book a Call" asChild>
+                  <a href="https://cal.inbound.new" target="_blank" rel="noopener noreferrer">
+                    <HiCalendar className="h-4 w-4" />
+                    <span>Book a Call</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={data.user} />
