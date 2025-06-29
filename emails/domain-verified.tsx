@@ -33,13 +33,12 @@ export const DomainVerifiedEmail = ({
         <Section style={headerSection}>
           <div style={logoContainer}>
             <Img
-              src="https://inbound.new/inbound-logo-3.png"
-              alt="inbound Logo"
-              width="60"
+              src="https://inbound.new/inbound-wordmark.png"
+              alt="inbound"
+              width="200"
               height="60"
-              style={logoStyle}
+              style={wordmarkStyle}
             />
-            <Text style={brandText}>inbound</Text>
           </div>
         </Section>
         
@@ -76,8 +75,7 @@ export const DomainVerifiedEmail = ({
 
         <Section style={footerSection}>
           <Text style={footerText}>
-            <Link href="https://inbound.new/docs" style={link}>docs</Link>
-            <Link href="https://inbound.new/support" style={link}>support</Link>
+            <Link href="https://inbound.new/docs" style={link}>docs</Link> • <Link href="https://inbound.new/support" style={link}>support</Link>
           </Text>
         </Section>
       </Container>
@@ -110,23 +108,13 @@ const headerSection = {
 };
 
 const logoContainer = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '12px',
+  textAlign: 'center' as const,
+  marginBottom: '0',
 };
 
-const logoStyle = {
-  borderRadius: '12px',
-};
-
-const brandText = {
-  fontSize: '36px',
-  fontWeight: '600',
-  color: '#000000',
-  margin: '0',
-  letterSpacing: '-0.025em',
-  fontFamily: 'Outfit, Arial, sans-serif',
+const wordmarkStyle = {
+  maxWidth: '100%',
+  height: 'auto',
 };
 
 const detailsSection = {
@@ -186,9 +174,6 @@ const footerText = {
   margin: '0',
   fontFamily: 'Outfit, Arial, sans-serif',
   textAlign: 'center' as const,
-  display: 'flex',
-  justifyContent: 'center',
-  gap: '12px',
 };
 
 const link = {

@@ -1,6 +1,6 @@
 import { Resend } from 'resend';
 import { render } from '@react-email/render';
-import DomainVerifiedEmail from '@/scripts/sending/emails/domain-verified';
+import DomainVerifiedEmail from '@/emails/domain-verified';
 
 // Initialize Resend client
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -50,12 +50,15 @@ export async function sendDomainVerificationNotification(
     // Determine the from address
     // Use a verified domain if available, otherwise use the default
     const fromEmail = process.env.RESEND_FROM_EMAIL || 'notifications@inbound.new';
+    
+    // Format sender with name - Resend accepts "Name <email@domain.com>" format
+    const fromWithName = `inbound support <${fromEmail}>`;
 
     // Send the email
     const response = await resend.emails.send({
-      from: fromEmail,
+      from: fromWithName,
       to: data.userEmail,
-      subject: `🎉 ${data.domain} has been successfully verified - Inbound`,
+      subject: `🎉 ${data.domain} has been successfully verified - inbound`,
       html: html,
       tags: [
         { name: 'type', value: 'domain-verification' },
