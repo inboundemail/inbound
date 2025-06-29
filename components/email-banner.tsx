@@ -12,26 +12,22 @@ export function EmailBanner({ recipientEmail, senderEmail, className = '' }: Ema
 
   return (
     <div className={`max-w-2xl mx-auto mt-5 bg-white border border-gray-200 rounded-lg px-5 py-4 flex items-center justify-between shadow-sm ${className}`}>
-      {/* Left side - Logo and recipient info */}
-      <div className="flex items-center space-x-3">
+      {/* Left side - Logo only */}
+      <div className="flex items-center">
         <img 
           src="/inbound-wordmark.png" 
           alt="Inbound" 
-          className="h-8 w-auto"
+          className="h-10 w-auto"
         />
-        <div className="text-sm text-gray-600">
-          <span className="text-gray-500">sent to</span>{' '}
-          <span className="font-medium text-gray-700">{recipientEmail}</span>
-        </div>
       </div>
 
-      {/* Right side - Block button */}
+      {/* Right side - Block button with sender info */}
       <div className="flex items-center">
         <Button
           asChild
           variant="primary"
           size="sm"
-          className="bg-purple-500 hover:bg-purple-600 text-white border-purple-500 hover:border-purple-600 rounded-lg px-4 py-2.5"
+          className="bg-purple-500 hover:bg-purple-600 text-white border-purple-500 hover:border-purple-600 rounded-lg px-4 py-3 whitespace-nowrap"
         >
           <a 
             href={blockUrl}
@@ -39,7 +35,7 @@ export function EmailBanner({ recipientEmail, senderEmail, className = '' }: Ema
             rel="noopener noreferrer"
             className="text-sm font-medium"
           >
-            block this address
+            Block {senderEmail}
           </a>
         </Button>
       </div>
@@ -65,20 +61,16 @@ export function generateEmailBannerHTML(recipientEmail: string, senderEmail: str
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     ">
-      <!-- Left side - Logo and recipient info -->
-      <div style="display: flex; align-items: center; gap: 12px;">
+      <!-- Left side - Logo only -->
+      <div style="display: flex; align-items: center;">
         <img 
           src="https://inbound.new/inbound-wordmark.png" 
           alt="Inbound" 
-          style="height: 32px; width: auto;"
+          style="height: 40px; width: auto;"
         />
-        <div style="font-size: 14px; color: #4b5563;">
-          <span style="color: #6b7280;">sent to</span>
-          <span style="font-weight: 500; color: #374151; margin-left: 4px;">${recipientEmail}</span>
-        </div>
       </div>
 
-      <!-- Right side - Block button -->
+      <!-- Right side - Block button with recipient info -->
       <div>
         <a 
           href="${blockUrl}"
@@ -89,17 +81,18 @@ export function generateEmailBannerHTML(recipientEmail: string, senderEmail: str
             background-color: #8b5cf6;
             color: white;
             text-decoration: none;
-            padding: 10px 16px;
+            padding: 12px 18px;
             border-radius: 8px;
             font-size: 14px;
             font-weight: 500;
             border: 1px solid #8b5cf6;
             transition: background-color 0.2s;
+            white-space: nowrap;
           "
           onmouseover="this.style.backgroundColor='#7c3aed'"
           onmouseout="this.style.backgroundColor='#8b5cf6'"
         >
-          block this address
+          Block ${senderEmail}
         </a>
       </div>
     </div>
