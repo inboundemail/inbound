@@ -27,7 +27,7 @@ export class EmailForwarder {
       : originalEmail.subject || 'No Subject'
 
     // Create raw email message maintaining original structure
-    const rawMessage = this.buildRawEmailMessage({
+    const rawMessage = await this.buildRawEmailMessage({
       from: fromAddress,
       to: toAddresses,
       replyTo: originalEmail.from?.addresses?.[0]?.address || fromAddress,
@@ -36,7 +36,7 @@ export class EmailForwarder {
       includeAttachments: options?.includeAttachments ?? true
     })
 
-    console.log(`📤 EmailForwarder - Sending simplified email message (${rawMessage.length} bytes) with ${originalEmail.htmlBody ? 'HTML' : 'text'} content`)
+    console.log(`📤 EmailForwarder - Sending email message (${rawMessage.length} bytes) with ${originalEmail.htmlBody ? 'HTML' : 'text'} content and ${originalEmail.attachments?.length || 0} attachments`)
 
     const command = new SendRawEmailCommand({
       RawMessage: {
@@ -50,7 +50,8 @@ export class EmailForwarder {
       const result = await this.sesClient.send(command)
       console.log(`✅ EmailForwarder - Successfully forwarded email to ${toAddresses.length} recipients`, {
         messageId: result.MessageId,
-        toAddresses
+        toAddresses,
+        attachmentCount: originalEmail.attachments?.length || 0
       })
     } catch (error) {
       console.error(`❌ EmailForwarder - Failed to forward email:`, error)
@@ -58,14 +59,17 @@ export class EmailForwarder {
     }
   }
 
-  private buildRawEmailMessage(params: {
+  private async buildRawEmailMessage(params: {
     from: string
     to: string[]
     replyTo: string
     subject: string
     originalEmail: ParsedEmailData
     includeAttachments: boolean
-  }): string {
+  }): Promise<string> {
+    // Generate a boundary for multipart messages
+    const boundary = `----=_NextPart_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    
     // Build RFC 2822 compliant email headers
     const headers = [
       `From: ${params.from}`,
@@ -84,35 +88,156 @@ export class EmailForwarder {
       headers.push(`References: ${params.originalEmail.references.join(' ')}`)
     }
 
-    let message: string[]
-    let bodyContent: string
+    // Check if we need multipart (attachments or both HTML and text)
+    const hasAttachments = params.includeAttachments && params.originalEmail.attachments && params.originalEmail.attachments.length > 0
+    const hasHtml = !!params.originalEmail.htmlBody
+    const hasText = !!params.originalEmail.textBody
+    const needsMultipart = hasAttachments || (hasHtml && hasText)
 
-    // Determine content type and body based on what's available
-    if (params.originalEmail.htmlBody) {
-      // Send HTML body as the main content
-      headers.push('Content-Type: text/html; charset=UTF-8')
-      headers.push('Content-Transfer-Encoding: 8bit')
-      bodyContent = params.originalEmail.htmlBody
-    } else if (params.originalEmail.textBody) {
-      // Fall back to text body
-      headers.push('Content-Type: text/plain; charset=UTF-8')
-      headers.push('Content-Transfer-Encoding: 8bit')
-      bodyContent = params.originalEmail.textBody
-    } else {
-      // No content available
-      headers.push('Content-Type: text/plain; charset=UTF-8')
-      headers.push('Content-Transfer-Encoding: 8bit')
-      bodyContent = '[This email has no content]'
+    if (!needsMultipart) {
+      // Simple single-part message
+      if (hasHtml) {
+        headers.push('Content-Type: text/html; charset=UTF-8')
+        headers.push('Content-Transfer-Encoding: 8bit')
+        return [...headers, '', params.originalEmail.htmlBody || ''].join('\r\n')
+      } else if (hasText) {
+        headers.push('Content-Type: text/plain; charset=UTF-8')
+        headers.push('Content-Transfer-Encoding: 8bit')
+        return [...headers, '', params.originalEmail.textBody || ''].join('\r\n')
+      } else {
+        headers.push('Content-Type: text/plain; charset=UTF-8')
+        headers.push('Content-Transfer-Encoding: 8bit')
+        return [...headers, '', '[This email has no content]'].join('\r\n')
+      }
     }
 
-    // Build the complete message
-    message = [
+    // Multipart message
+    headers.push(`Content-Type: multipart/mixed; boundary="${boundary}"`)
+
+    const messageParts = [
       ...headers,
-      '', // Empty line to separate headers from body
-      bodyContent
+      '',
+      'This is a multi-part message in MIME format.',
+      ''
     ]
 
-    return message.join('\r\n')
+    // Add text/HTML content part(s)
+    if (hasHtml && hasText) {
+      // Both HTML and text - create multipart/alternative for the body
+      const altBoundary = `----=_NextPart_Alt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      
+      messageParts.push(
+        `--${boundary}`,
+        `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+        '',
+        `--${altBoundary}`,
+        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: 8bit',
+        '',
+        params.originalEmail.textBody || '',
+        '',
+        `--${altBoundary}`,
+        'Content-Type: text/html; charset=UTF-8',
+        'Content-Transfer-Encoding: 8bit',
+        '',
+        params.originalEmail.htmlBody || '',
+        '',
+        `--${altBoundary}--`,
+        ''
+      )
+    } else if (hasHtml) {
+      messageParts.push(
+        `--${boundary}`,
+        'Content-Type: text/html; charset=UTF-8',
+        'Content-Transfer-Encoding: 8bit',
+        '',
+        params.originalEmail.htmlBody || '',
+        ''
+      )
+    } else if (hasText) {
+      messageParts.push(
+        `--${boundary}`,
+        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: 8bit',
+        '',
+        params.originalEmail.textBody || '',
+        ''
+      )
+    } else {
+      messageParts.push(
+        `--${boundary}`,
+        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: 8bit',
+        '',
+        '[This email has no content]',
+        ''
+      )
+    }
+
+    // Add attachments if requested
+    if (hasAttachments) {
+      console.log(`📎 EmailForwarder - Including ${params.originalEmail.attachments!.length} attachments in forwarded email`)
+      
+      for (const attachment of params.originalEmail.attachments!) {
+        if (!attachment.filename) {
+          console.warn(`⚠️ EmailForwarder - Skipping attachment without filename`)
+          continue
+        }
+
+        // Get attachment content from the structured email data
+        const attachmentContent = await this.getAttachmentContent(params.originalEmail, attachment.filename)
+        
+        if (!attachmentContent) {
+          console.warn(`⚠️ EmailForwarder - Could not retrieve content for attachment: ${attachment.filename}`)
+          continue
+        }
+
+        messageParts.push(
+          `--${boundary}`,
+          `Content-Type: ${attachment.contentType || 'application/octet-stream'}`,
+          `Content-Transfer-Encoding: base64`,
+          `Content-Disposition: attachment; filename="${this.encodeFilename(attachment.filename)}"`,
+          ''
+        )
+
+        // Split base64 content into 76-character lines (RFC 2045)
+        const base64Content = Buffer.from(attachmentContent).toString('base64')
+        const lines = base64Content.match(/.{1,76}/g) || []
+        messageParts.push(...lines, '')
+      }
+    }
+
+    // Close the multipart message
+    messageParts.push(`--${boundary}--`)
+
+    return messageParts.join('\r\n')
+  }
+
+  /**
+   * Get attachment content from the original email
+   * This is a simplified version - in a real implementation you might need to
+   * fetch from S3 or parse the raw email content again
+   */
+  private async getAttachmentContent(originalEmail: ParsedEmailData, filename: string): Promise<Buffer | null> {
+    try {
+      // If we have the raw email content, parse it to get attachment content
+      if (originalEmail.raw) {
+        const { simpleParser } = await import('mailparser')
+        const parsed = await simpleParser(originalEmail.raw)
+        
+        const attachment = parsed.attachments?.find(att => att.filename === filename)
+        if (attachment && attachment.content) {
+          return attachment.content
+        }
+      }
+
+      // If no raw content available, we can't include the attachment
+      console.warn(`⚠️ EmailForwarder - No raw email content available to extract attachment: ${filename}`)
+      return null
+    } catch (error) {
+      console.error(`❌ EmailForwarder - Error extracting attachment ${filename}:`, error)
+      return null
+    }
   }
 
   /**
@@ -121,6 +246,14 @@ export class EmailForwarder {
   private encodeSubject(subject: string): string {
     // Basic implementation - in production you might want to use proper RFC 2047 encoding
     return subject.replace(/[\r\n]/g, ' ').trim()
+  }
+
+  /**
+   * Encode filename for Content-Disposition header
+   */
+  private encodeFilename(filename: string): string {
+    // Basic filename encoding - escape quotes and handle special characters
+    return filename.replace(/"/g, '\\"')
   }
 
   /**
