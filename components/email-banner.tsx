@@ -11,34 +11,23 @@ export function EmailBanner({ recipientEmail, senderEmail, className = '' }: Ema
   const blockUrl = `https://inbound.new/addtoblocklist?email=${encodeURIComponent(senderEmail)}`
 
   return (
-    <div className={`max-w-2xl mx-auto mt-5 bg-white border border-gray-200 rounded-lg px-5 py-4 flex items-center justify-between shadow-sm ${className}`}>
-      {/* Left side - Logo only */}
-      <div className="flex items-center">
-        <img 
-          src="/inbound-wordmark.png" 
-          alt="Inbound" 
-          className="h-10 w-auto"
-        />
-      </div>
-
-      {/* Right side - Block button with sender info */}
-      <div className="flex items-center">
-        <Button
-          asChild
-          variant="primary"
-          size="sm"
-          className="bg-purple-500 hover:bg-purple-600 text-white border-purple-500 hover:border-purple-600 rounded-lg px-4 py-3 whitespace-nowrap"
-        >
-          <a 
-            href={blockUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium"
-          >
-            Block {senderEmail}
-          </a>
-        </Button>
-      </div>
+    <div className={`text-center my-5 px-2.5 py-2 text-xs text-gray-500 border-t border-gray-200 ${className}`}>
+      sent via{' '}
+      <a 
+        href="https://inbound.new" 
+        className="text-purple-500 hover:text-purple-600 no-underline"
+      >
+        inbound.new
+      </a>
+      ,{' '}
+      <a 
+        href={blockUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-purple-500 hover:text-purple-600 no-underline"
+      >
+        block {senderEmail}
+      </a>
     </div>
   )
 }
@@ -49,52 +38,15 @@ export function generateEmailBannerHTML(recipientEmail: string, senderEmail: str
   
   return `
     <div style="
-      max-width: 600px;
-      margin: 20px auto 0 auto;
-      background-color: #ffffff;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 16px 20px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      text-align: center;
+      margin: 20px 0;
+      padding: 10px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      font-size: 12px;
+      color: #6b7280;
+      border-top: 1px solid #e5e7eb;
     ">
-      <!-- Left side - Logo only -->
-      <div style="display: flex; align-items: center;">
-        <img 
-          src="https://inbound.new/inbound-wordmark.png" 
-          alt="Inbound" 
-          style="height: 40px; width: auto;"
-        />
-      </div>
-
-      <!-- Right side - Block button with recipient info -->
-      <div>
-        <a 
-          href="${blockUrl}"
-          target="_blank"
-          rel="noopener noreferrer"
-          style="
-            display: inline-block;
-            background-color: #8b5cf6;
-            color: white;
-            text-decoration: none;
-            padding: 12px 18px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            border: 1px solid #8b5cf6;
-            transition: background-color 0.2s;
-            white-space: nowrap;
-          "
-          onmouseover="this.style.backgroundColor='#7c3aed'"
-          onmouseout="this.style.backgroundColor='#8b5cf6'"
-        >
-          Block ${senderEmail}
-        </a>
-      </div>
+      sent via <a href="https://inbound.new" style="color: #8b5cf6; text-decoration: none;">inbound.new</a>, <a href="${blockUrl}" target="_blank" rel="noopener noreferrer" style="color: #8b5cf6; text-decoration: none;">block ${senderEmail}</a>
     </div>
   `
 } 

@@ -313,15 +313,12 @@ export class EmailForwarder {
     }
 
     const senderEmail = params.originalEmail.from.addresses[0].address
-    const recipientEmail = params.recipientEmail
     
-    // Create a plain text version of the banner
+    // Create a simple plain text version
     const bannerText = `
 
 ---
-This email was sent to ${recipientEmail}
-To block emails from ${senderEmail}, visit: https://inbound.new/addtoblocklist?email=${encodeURIComponent(senderEmail)}
-Powered by Inbound - inbound.new
+sent via inbound.new, block ${senderEmail}: https://inbound.new/addtoblocklist?email=${encodeURIComponent(senderEmail)}
 `
     
     return `${textContent}${bannerText}`
