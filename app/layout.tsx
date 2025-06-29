@@ -33,7 +33,7 @@ export default function RootLayout({
         className={`${outfit.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
-        {process.env.NODE_ENV === "development" && (
+        {process.env.NODE_ENV === "test" && (
         <script
           crossOrigin="anonymous"
             src="//unpkg.com/react-scan/dist/auto.global.js"

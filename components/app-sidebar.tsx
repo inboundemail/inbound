@@ -47,7 +47,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <SidebarMenu className="mb-4">
+        <SidebarMenu className="mb-4 mt-2">
           <Link href="/">
             <TeamSwitcher
               enabled={false}

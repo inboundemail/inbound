@@ -357,4 +357,63 @@ export async function isDomainCatchAllEnabled(domainId: string): Promise<boolean
     .limit(1)
 
   return domain?.isCatchAllEnabled || false
+}
+
+/**
+ * Get domain owner information by domain name
+ * Returns the user details for the domain owner to send notifications
+ */
+export async function getDomainOwnerByDomain(domain: string): Promise<{ userId: string; userEmail: string; userName: string | null } | null> {
+  try {
+    // Import user table from auth schema
+    const { user } = await import('./auth-schema')
+    
+    const result = await db
+      .select({
+        userId: emailDomains.userId,
+        userEmail: user.email,
+        userName: user.name,
+      })
+      .from(emailDomains)
+      .innerJoin(user, eq(emailDomains.userId, user.id))
+      .where(eq(emailDomains.domain, domain))
+      .limit(1)
+
+    if (!result[0]) {
+      console.log(`❌ getDomainOwnerByDomain - No owner found for domain: ${domain}`)
+      return null
+    }
+
+    console.log(`✅ getDomainOwnerByDomain - Found owner for domain ${domain}: ${result[0].userEmail}`)
+    return result[0]
+  } catch (error) {
+    console.error('❌ getDomainOwnerByDomain - Error looking up domain owner:', error)
+    return null
+  }
+}
+
+/**
+ * Update domain status to verified
+ */
+export async function markDomainAsVerified(domain: string): Promise<EmailDomain | null> {
+  try {
+    const [updated] = await db
+      .update(emailDomains)
+      .set({
+        status: 'verified',
+        lastSesCheck: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(emailDomains.domain, domain))
+      .returning()
+
+    if (updated) {
+      console.log(`✅ markDomainAsVerified - Domain ${domain} marked as verified`)
+    }
+
+    return updated || null
+  } catch (error) {
+    console.error('❌ markDomainAsVerified - Error updating domain status:', error)
+    return null
+  }
 } 

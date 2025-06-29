@@ -39,7 +39,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <ViewTransitions>
       <NavigationProvider>
         <SidebarProvider>
-          <AppSidebar variant="inset" />
+          <AppSidebar variant="sidebar" />
           <SidebarInset>
             <SiteHeader />
             <EnhancedPageTransition direction="horizontal" className="h-full">
