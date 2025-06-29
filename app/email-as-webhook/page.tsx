@@ -236,7 +236,7 @@ export default async function EmailAsWebhookPage() {
                   <div>to: {`[{ address: "support@yourapp.com" }]`},</div>
                   <div>subject: "Need help with integration",</div>
                   <div>textBody: "Hi team, I'm having trouble...",</div>
-                  <div>htmlBody: "&lt;p&gt;Hi team...&lt;/p&gt;",</div>
+                  <div>htmlBody: "{'<p>'}Hi team...{'</p>'}",</div>
                   <div>attachments: [],</div>
                   <div>headers: {`{ ... }`}</div>
                 </div>
@@ -466,7 +466,7 @@ export default async function EmailAsWebhookPage() {
                 </div>
                 <div className="bg-gray-900 rounded-lg p-4 font-mono text-sm">
                   <div className="text-gray-400">// Your webhook endpoint</div>
-                  <div><span className="text-blue-400">app</span>.<span className="text-yellow-300">post</span>(<span className="text-green-300">'/webhooks/email'</span>, <span className="text-blue-400">async</span> (<span className="text-white">req, res</span>) => {`{`}</div>
+                  <div><span className="text-blue-400">app</span>.<span className="text-yellow-300">post</span>(<span className="text-green-300">'/webhooks/email'</span>, <span className="text-blue-400">async</span> (<span className="text-white">req, res</span>) {'=>'} {`{`}</div>
                   <div className="ml-4">
                     <div><span className="text-blue-400">const</span> {`{ `}<span className="text-white">email</span> {`} = `}<span className="text-white">req</span>.<span className="text-white">body</span></div>
                     <div className="mt-2 text-gray-400">// Full type safety with structured data</div>
