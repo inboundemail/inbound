@@ -2,11 +2,59 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import InboundIcon from "@/components/InboundIcon"
 import { PricingTable } from "@/components/autumn/pricing-table"
-import { HiArrowRight, HiMail, HiGlobeAlt, HiLockClosed, HiCheckCircle, HiLightningBolt, HiArrowDown, HiX, HiStar, HiMailOpen, HiChip, HiCog, HiLightBulb, HiSparkles } from "react-icons/hi"
+import { ServicesDropdown } from "@/components/ServicesDropdown"
+import { HiArrowRight, HiMail, HiGlobeAlt, HiLockClosed, HiCheckCircle, HiLightningBolt, HiArrowDown, HiX, HiStar, HiMailOpen, HiChip, HiCog, HiLightBulb, HiSparkles, HiShieldCheck, HiDatabase, HiUserGroup, HiCode, HiRefresh, HiClock } from "react-icons/hi"
 import Image from "next/image"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import CustomInboundIcon from "@/components/icons/customInbound"
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Email Infrastructure for AI Agents & Developers | Turn Emails into Webhooks',
+  description: 'Complete email infrastructure with TypeScript SDK, REST API, and AI-ready webhooks. Get 1 free domain, unlimited aliases, and enterprise-grade security. Perfect for AI agents and developers.',
+  keywords: [
+    'email infrastructure',
+    'email to webhook',
+    'TypeScript SDK',
+    'REST API',
+    'AI agents',
+    'email forwarding',
+    'unlimited aliases',
+    'developer tools',
+    'webhook integration',
+    'email processing',
+    'inbound email',
+    'email automation',
+    'catch-all email',
+    'enterprise email security'
+  ],
+  openGraph: {
+    title: 'Email Infrastructure for AI Agents & Developers',
+    description: 'Complete email infrastructure with TypeScript SDK, REST API, and AI-ready webhooks. Get 1 free domain, unlimited aliases, and enterprise-grade security.',
+    url: 'https://inbound.new',
+    siteName: 'Inbound',
+    images: [
+      {
+        url: '/opengraph-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Inbound - Email Infrastructure for AI Agents & Developers'
+      }
+    ],
+    locale: 'en_US',
+    type: 'website'
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Email Infrastructure for AI Agents & Developers',
+    description: 'Complete email infrastructure with TypeScript SDK, REST API, and AI-ready webhooks. Get 1 free domain, unlimited aliases, and enterprise-grade security.',
+    images: ['/twitter-image.png']
+  },
+  alternates: {
+    canonical: 'https://inbound.new'
+  }
+}
 
 // Function to fetch GitHub stars
 async function getGitHubStars() {
@@ -48,7 +96,10 @@ export default async function HomePage() {
             </div>
 
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
+            {/* Services Dropdown */}
+            <ServicesDropdown />
+            
             {/* GitHub Star Button */}
             <Button variant="secondary" asChild>
               <a href="https://github.com/R44VC0RP/inbound" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
@@ -91,48 +142,80 @@ export default async function HomePage() {
       <main className="px-6 py-20">
         <div className="max-w-4xl mx-auto text-center">
           {/* Hero Section */}
-          <div className="mb-16">
+          <div className="mb-20">
+            <div className="inline-flex items-center gap-2 bg-purple-50 text-purple-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
+              <HiSparkles className="w-4 h-4" />
+              #1 Email Infrastructure for AI Agents & Developers
+            </div>
+            
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
-              email
+              turn
               <CustomInboundIcon
                 className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_0.5s_forwards]"
                 backgroundColor="#1C2894"
-                Icon={HiGlobeAlt}
+                Icon={HiMail}
                 size={48}
               />
-              <span className="text-[#1C2894]">infrastructure</span>
+              <span className="text-[#1C2894]">emails</span>
               <br />
-              for
+              into
               <CustomInboundIcon
-                className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_0.5s_forwards]"
+                className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_1s_forwards]"
                 backgroundColor="#6C47FF"
-                Icon={HiSparkles}
+                Icon={HiLightningBolt}
                 size={48}
               />
-              <span className="text-[#6C47FF]">ai agents</span>
+              <span className="text-[#6C47FF]">webhooks</span>
             </h1>
-            <p className="text-xl text-gray-600 mb-4 max-w-2xl mx-auto leading-relaxed">
-              connect ai agents directly to email addresses. full programmatic control,
-              webhook integration, and intelligent email processing out of the box.
+            <p className="text-xl text-gray-600 mb-6 max-w-3xl mx-auto leading-relaxed">
+              Complete email infrastructure with <strong>TypeScript SDK</strong>, <strong>REST API</strong>, and <strong>AI-ready webhooks</strong>. 
+              Get 1 free domain, unlimited aliases, and enterprise-grade security out of the box.
             </p>
 
-            <div className="flex items-center gap-4 max-w-md mx-auto mt-4"  >
-              <Input type="email" placeholder="user@inbound.new" />
+            {/* Feature highlights */}
+            <div className="flex flex-wrap items-center justify-center gap-4 mb-8 text-sm text-gray-600">
+              <div className="flex items-center gap-2">
+                <HiCheckCircle className="w-4 h-4 text-green-500" />
+                <span>1 Free Domain</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <HiCheckCircle className="w-4 h-4 text-green-500" />
+                <span>Unlimited Aliases</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <HiCheckCircle className="w-4 h-4 text-green-500" />
+                <span>TypeScript SDK</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <HiCheckCircle className="w-4 h-4 text-green-500" />
+                <span>AI Agent Ready</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <HiCheckCircle className="w-4 h-4 text-green-500" />
+                <span>Enterprise Security</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 max-w-md mx-auto">
+              <Input type="email" placeholder="hello@yourdomain.com" />
               <Button variant="primary" asChild>
                 {session ? (
                   <a href="/add">
-                    Get Started (its free)
+                    Start Free
                     <HiArrowRight className="ml-2 w-3 h-3" />
                   </a>
                 ) : (
                   <a href="/login">
-                    Get Started (its free)
+                    Start Free
                     <HiArrowRight className="ml-2 w-3 h-3" />
                   </a>
                 )}
-
               </Button>
             </div>
+            
+            <p className="text-sm text-gray-500 mt-3">
+              No credit card required • Set up in 2 minutes • Forever free tier
+            </p>
           </div>
 
           {/* Interactive Demo Section */}
@@ -312,35 +395,190 @@ export default async function HomePage() {
           </div>
 
 
-          {/* Docs and Developer Support */}
+          {/* Comprehensive Features Section */}
           <div className="mb-32">
-            <h2 className="text-3xl font-bold text-gray-900 mb-6 text-center">built for ai builders</h2>
-            <p className="text-lg text-gray-600 mb-12 text-center max-w-2xl mx-auto">
-              deploy ai agents to email addresses with our typescript sdk and rest api. full programmatic control over your agent mail infrastructure.
+            <h2 className="text-3xl font-bold text-gray-900 mb-6 text-center">Everything You Need for Email Processing</h2>
+            <p className="text-lg text-gray-600 mb-16 text-center max-w-3xl mx-auto">
+              Complete email infrastructure with powerful features for developers, AI agents, and businesses. 
+              From simple forwarding to complex automation workflows.
             </p>
 
-            <div className="space-y-8 max-w-4xl mx-auto">
+            <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto mb-16">
+              {/* Core Email Features */}
+              <div className="bg-white p-6 rounded-xl border border-gray-200 hover:border-purple-300 hover:shadow-lg transition-all duration-300">
+                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
+                  <HiGlobeAlt className="w-6 h-6 text-purple-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">1 Free Domain</h3>
+                <p className="text-gray-600 mb-4">
+                  Connect one custom domain completely free. Verify ownership with simple DNS configuration and start receiving emails instantly.
+                </p>
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>DNS verification & validation</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Automatic MX record configuration</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>SPF, DKIM, DMARC support</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all duration-300">
+                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
+                  <HiMail className="w-6 h-6 text-blue-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">Unlimited Email Aliases</h3>
+                <p className="text-gray-600 mb-4">
+                  Create unlimited individual aliases like hello@, support@, sales@ or set up a catch-all to receive emails sent to any address.
+                </p>
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Individual email addresses</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Domain-wide catch-all support</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Instant activation & deactivation</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl border border-gray-200 hover:border-red-300 hover:shadow-lg transition-all duration-300">
+                <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center mb-4">
+                  <HiShieldCheck className="w-6 h-6 text-red-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">Granular Email Blocking</h3>
+                <p className="text-gray-600 mb-4">
+                  Advanced blocking controls let you stop spam from specific addresses, domains, or patterns while keeping your catch-all active.
+                </p>
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Block specific email addresses</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Domain-level blocking rules</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Pattern-based spam filtering</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Advanced Features */}
+              <div className="bg-white p-6 rounded-xl border border-gray-200 hover:border-green-300 hover:shadow-lg transition-all duration-300">
+                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
+                  <HiLightningBolt className="w-6 h-6 text-green-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">Multi-Type Endpoints</h3>
+                <p className="text-gray-600 mb-4">
+                  Flexible endpoint system supporting webhooks, email forwarding, and email groups for any automation workflow.
+                </p>
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>HTTP webhooks with retries</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Email forwarding to individuals</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Email groups for team notifications</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl border border-gray-200 hover:border-indigo-300 hover:shadow-lg transition-all duration-300">
+                <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center mb-4">
+                  <HiCode className="w-6 h-6 text-indigo-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">Developer Tools</h3>
+                <p className="text-gray-600 mb-4">
+                  Complete TypeScript SDK and REST API with full type safety, comprehensive documentation, and real-time testing tools.
+                </p>
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>TypeScript SDK with full types</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>REST API for any language</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Interactive API documentation</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl border border-gray-200 hover:border-yellow-300 hover:shadow-lg transition-all duration-300">
+                <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center mb-4">
+                  <HiDatabase className="w-6 h-6 text-yellow-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">Analytics & Monitoring</h3>
+                <p className="text-gray-600 mb-4">
+                  Comprehensive analytics dashboard with delivery tracking, performance metrics, and real-time monitoring of all email processing.
+                </p>
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Real-time delivery tracking</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Performance metrics & insights</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Error logging & debugging</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            {/* SDK and API Showcase */}
+            <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
               {/* SDK Card */}
-              <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-8 border border-purple-200 text-left">
+              <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-8 border border-purple-200">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2L2 7v10c0 5.55 3.84 9.739 9 11 5.16-1.261 9-5.45 9-11V7l-10-5z" />
-                    </svg>
+                    <HiCode className="w-6 h-6 text-white" />
                   </div>
                   <h3 className="text-xl font-bold text-gray-900">TypeScript SDK</h3>
                 </div>
                 <p className="text-gray-600 mb-6">
-                  Install our npm package and start creating email addresses and webhooks with full type safety.
+                  Install our npm package and start creating email addresses and webhooks with full type safety and auto-completion.
                 </p>
-                <div className="bg-gray-900 rounded-lg p-4 mb-6 font-mono text-sm text-left">
+                <div className="bg-gray-900 rounded-lg p-4 mb-6 font-mono text-sm">
                   <div className="text-green-400 mb-2">$ npm install exon-inbound</div>
                   <div className="text-gray-300">
                     <span className="text-blue-400">import</span> {`{ createInboundClient }`} <span className="text-blue-400">from</span> <span className="text-yellow-300">'exon-inbound'</span>
                   </div>
+                  <div className="text-gray-300 mt-2">
+                    <span className="text-blue-400">const</span> <span className="text-white">client</span> = <span className="text-yellow-300">createInboundClient</span>({`{ `}
+                  </div>
+                  <div className="text-gray-300 ml-4">
+                    <span className="text-red-400">apiKey</span>: <span className="text-green-300">process.env.INBOUND_API_KEY</span>
+                  </div>
+                  <div className="text-gray-300">{`})`}</div>
                 </div>
-                <Button variant="secondary" asChild className="w-full">
-                  <a href="/docs" className="flex items-center justify-center gap-2">
+                <Button variant="secondary" asChild>
+                  <a href="/docs" className="flex items-center gap-2">
                     View SDK Docs
                     <HiArrowRight className="w-3 h-3" />
                   </a>
@@ -348,19 +586,17 @@ export default async function HomePage() {
               </div>
 
               {/* API Card */}
-              <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-8 border border-blue-200 text-left">
+              <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-8 border border-blue-200">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
+                    <HiGlobeAlt className="w-6 h-6 text-white" />
                   </div>
                   <h3 className="text-xl font-bold text-gray-900">REST API</h3>
                 </div>
                 <p className="text-gray-600 mb-6">
-                  Use our REST API directly from any language or platform to integrate email receiving into your workflow.
+                  Use our REST API directly from any language or platform. Complete with authentication, rate limiting, and comprehensive error handling.
                 </p>
-                <div className="bg-gray-900 rounded-lg p-4 mb-6 font-mono text-sm text-left">
+                <div className="bg-gray-900 rounded-lg p-4 mb-6 font-mono text-sm">
                   <div className="text-green-400 mb-2">POST /api/v1/domains</div>
                   <div className="text-gray-300">
                     {`{`}
@@ -372,37 +608,196 @@ export default async function HomePage() {
                     {`}`}
                   </div>
                 </div>
-                <Button variant="secondary" asChild className="w-full">
-                  <a href="/docs" className="flex items-center justify-center gap-2">
+                <Button variant="secondary" asChild>
+                  <a href="/docs" className="flex items-center gap-2">
                     View API Docs
                     <HiArrowRight className="w-3 h-3" />
                   </a>
                 </Button>
               </div>
             </div>
+          </div>
 
-            {/* Features List */}
-            <div className="mt-12 grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-              <div className="text-center">
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                  <HiCheckCircle className="w-6 h-6 text-green-600" />
+          {/* AI Agents Section */}
+          <div className="mb-32">
+            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-12 border border-indigo-200">
+              <div className="max-w-4xl mx-auto text-center">
+                <div className="inline-flex items-center gap-2 bg-indigo-100 text-indigo-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
+                  <HiSparkles className="w-4 h-4" />
+                  Perfect for AI Agents & Automation
                 </div>
-                <h4 className="font-semibold text-gray-900 mb-2">Domain Management</h4>
-                <p className="text-sm text-gray-600">List, verify, and manage your email domains programmatically</p>
+                
+                <h2 className="text-3xl font-bold text-gray-900 mb-6">Give Your AI Agents Email Superpowers</h2>
+                <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
+                  Connect AI agents directly to email addresses for customer support, lead processing, 
+                  content analysis, and automated workflows. Real-time structured data delivery.
+                </p>
+
+                <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto text-left mb-8">
+                  <div className="bg-white p-6 rounded-xl border border-indigo-200">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                        <HiLightningBolt className="w-6 h-6 text-indigo-600" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900">Real-time Processing</h3>
+                    </div>
+                    <p className="text-gray-600 mb-4">
+                      Emails delivered to your AI agent within seconds with structured, parsed content including 
+                      attachments, headers, and metadata.
+                    </p>
+                    <ul className="space-y-2 text-sm text-gray-600">
+                      <li className="flex items-center gap-2">
+                        <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                        <span>Sub-2 second delivery latency</span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                        <span>Structured JSON payload</span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                        <span>Automatic retry & error handling</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-xl border border-indigo-200">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <HiShieldCheck className="w-6 h-6 text-purple-600" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900">Enterprise Security</h3>
+                    </div>
+                    <p className="text-gray-600 mb-4">
+                      Built-in spam filtering, virus scanning, and email authentication (SPF, DKIM, DMARC) 
+                      ensure only legitimate emails reach your AI systems.
+                    </p>
+                    <ul className="space-y-2 text-sm text-gray-600">
+                      <li className="flex items-center gap-2">
+                        <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                        <span>99.9% spam detection accuracy</span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                        <span>Virus & malware protection</span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <HiCheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                        <span>HMAC webhook signatures</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="bg-gray-900 rounded-xl p-6 text-left mb-8">
+                  <div className="text-sm text-gray-400 mb-2">Example: AI Customer Support Agent</div>
+                  <div className="font-mono text-sm text-green-400">
+                    <div className="text-blue-400">POST</div> <span className="text-gray-300">https://api.yourapp.com/ai/support-agent</span>
+                    <div className="mt-2 text-gray-300">
+                      {`{`}
+                      <br />
+                      &nbsp;&nbsp;<span className="text-yellow-300">"from"</span>: <span className="text-green-300">"customer@example.com"</span>,
+                      <br />
+                      &nbsp;&nbsp;<span className="text-yellow-300">"subject"</span>: <span className="text-green-300">"Need help with billing"</span>,
+                      <br />
+                      &nbsp;&nbsp;<span className="text-yellow-300">"textBody"</span>: <span className="text-green-300">"Hi, I have a question about..."</span>,
+                      <br />
+                      &nbsp;&nbsp;<span className="text-yellow-300">"sentiment"</span>: <span className="text-green-300">"neutral"</span>,
+                      <br />
+                      &nbsp;&nbsp;<span className="text-yellow-300">"priority"</span>: <span className="text-green-300">"medium"</span>
+                      <br />
+                      {`}`}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <Button variant="primary" asChild>
+                    {session ? (
+                      <a href="/add" className="flex items-center gap-2">
+                        Start Building with AI
+                        <HiArrowRight className="w-4 h-4" />
+                      </a>
+                    ) : (
+                      <a href="/login" className="flex items-center gap-2">
+                        Start Building with AI
+                        <HiArrowRight className="w-4 h-4" />
+                      </a>
+                    )}
+                  </Button>
+                  <Button variant="secondary" asChild>
+                    <a href="/docs" className="flex items-center gap-2">
+                      View AI Integration Docs
+                      <HiArrowRight className="w-4 h-4" />
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Social Proof Section */}
+          <div className="mb-32">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">Trusted by Developers & AI Builders</h2>
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                Join thousands of developers using Inbound for their email infrastructure needs
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-[#6C47FF] mb-2">{githubStars > 0 ? githubStars.toLocaleString() : '1000+'}+</div>
+                <div className="text-gray-600">GitHub Stars</div>
               </div>
               <div className="text-center">
-                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                  <HiMail className="w-6 h-6 text-purple-600" />
-                </div>
-                <h4 className="font-semibold text-gray-900 mb-2">Email Addresses</h4>
-                <p className="text-sm text-gray-600">Create and delete email addresses on your verified domains</p>
+                <div className="text-3xl font-bold text-[#6C47FF] mb-2">99.9%</div>
+                <div className="text-gray-600">Uptime SLA</div>
               </div>
               <div className="text-center">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                  <HiLightningBolt className="w-6 h-6 text-blue-600" />
+                <div className="text-3xl font-bold text-[#6C47FF] mb-2">{'<2s'}</div>
+                <div className="text-gray-600">Average Latency</div>
+              </div>
+            </div>
+
+            <div className="mt-12 bg-gray-50 rounded-xl p-8">
+              <div className="text-center mb-8">
+                <h3 className="text-xl font-bold text-gray-900 mb-4">Use Cases</h3>
+                <p className="text-gray-600">See how teams are using Inbound for their email automation</p>
+              </div>
+              
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                    <HiSparkles className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <h4 className="font-semibold text-gray-900 mb-2">AI Customer Support</h4>
+                  <p className="text-sm text-gray-600">Automated email responses and ticket routing</p>
                 </div>
-                <h4 className="font-semibold text-gray-900 mb-2">Webhook Setup</h4>
-                <p className="text-sm text-gray-600">Configure webhook endpoints to receive email notifications</p>
+                
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                    <HiDatabase className="w-6 h-6 text-green-600" />
+                  </div>
+                  <h4 className="font-semibold text-gray-900 mb-2">Lead Processing</h4>
+                  <p className="text-sm text-gray-600">Automatic lead qualification and CRM integration</p>
+                </div>
+                
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                    <HiUserGroup className="w-6 h-6 text-purple-600" />
+                  </div>
+                  <h4 className="font-semibold text-gray-900 mb-2">Team Notifications</h4>
+                  <p className="text-sm text-gray-600">Smart routing to team channels and tools</p>
+                </div>
+                
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                    <HiCog className="w-6 h-6 text-orange-600" />
+                  </div>
+                  <h4 className="font-semibold text-gray-900 mb-2">Workflow Automation</h4>
+                  <p className="text-sm text-gray-600">Email-triggered workflows and integrations</p>
+                </div>
               </div>
             </div>
           </div>
