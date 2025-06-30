@@ -1,8 +1,0 @@
-- blur out the dashboard cards when there are no domains and prompt to add a domain
-- add google account provider
-- remove the signup button on /login
-- refresh button should not turn everything into skeletons it should do a backload / backfill
-- switch the add a domain dialog to a page that when a new user signs up they are redirected to it
-- move the DNS record copy button closer to the copyable content
-- remove the second add to provider banner on the bottom of the page
-- 

@@ -117,6 +117,8 @@ export default function AddDomainForm({
   }>({})
   const [isProcessing, setIsProcessing] = useState(false)
   const [periodicCheckEnabled, setPeriodicCheckEnabled] = useState(false)
+  const [domainSuggestions, setDomainSuggestions] = useState<string[]>([])
+  const [isCheckingSuggestions, setIsCheckingSuggestions] = useState(false)
   const router = useRouter()
 
   // Memoize the DNS records to prevent unnecessary re-renders
@@ -228,6 +230,48 @@ export default function AddDomainForm({
     }
   }
 
+  const generateSubdomainSuggestions = async (domain: string): Promise<string[]> => {
+    const subdomainPrefixes = ['e', 'i', 'inbound', 'mail', 'receive']
+    const suggestions: string[] = []
+    
+    setIsCheckingSuggestions(true)
+    
+    for (const prefix of subdomainPrefixes) {
+      if (suggestions.length >= 3) break // Limit to 3 suggestions
+      
+      const subdomain = `${prefix}.${domain}`
+      
+      try {
+        const checkResponse = await fetch('/api/domain/verifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'canDomainBeUsed',
+            domain: subdomain
+          })
+        })
+
+        const checkResult = await checkResponse.json()
+        
+        if (checkResult.success && checkResult.canBeUsed) {
+          suggestions.push(subdomain)
+        }
+      } catch (error) {
+        console.error(`Error checking subdomain ${subdomain}:`, error)
+        // Continue to next suggestion
+      }
+    }
+    
+    setIsCheckingSuggestions(false)
+    return suggestions
+  }
+
+  const handleSuggestionClick = (suggestion: string) => {
+    setDomainName(suggestion)
+    setDomainSuggestions([])
+    setError("")
+  }
+
   const handleSubmitDomain = async (e: FormEvent) => {
     e.preventDefault()
     if (!domainName.trim()) {
@@ -262,7 +306,15 @@ export default function AddDomainForm({
       }
 
       if (!checkResult.canBeUsed) {
-        setError('This domain cannot be used. It may have conflicting DNS records.')
+        // Generate subdomain suggestions
+        const suggestions = await generateSubdomainSuggestions(domainName)
+        setDomainSuggestions(suggestions)
+        
+        if (suggestions.length > 0) {
+          setError(`This domain cannot be used. It may have conflicting DNS records. Try one of these available alternatives:`)
+        } else {
+          setError('This domain cannot be used. It may have conflicting DNS records.')
+        }
         return
       }
 
@@ -290,6 +342,7 @@ export default function AddDomainForm({
       setDomainId(addResult.domainId)
       setVerificationStatus(addResult.status)
       setCurrentStepIdx(1)
+      setDomainSuggestions([]) // Clear any suggestions
 
       // Call success callback if provided
       if (onSuccess) {
@@ -1123,6 +1176,7 @@ export default function AddDomainForm({
                       onChange={(e) => {
                         setDomainName(e.target.value)
                         if (error) setError("")
+                        if (domainSuggestions.length > 0) setDomainSuggestions([])
                       }}
                       placeholder="0.email"
                       className="mb-2 w-full font-mono text-sm"
@@ -1130,6 +1184,33 @@ export default function AddDomainForm({
                       disabled={isLoading || !!preloadedDomain} // Disable if preloaded
                     />
                     {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+                    
+                    {/* Domain Suggestions */}
+                    {domainSuggestions.length > 0 && (
+                      <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <h4 className="text-sm font-medium text-blue-900 mb-2">Available alternatives:</h4>
+                        <div className="space-y-2">
+                          {domainSuggestions.map((suggestion, index) => (
+                            <button
+                              key={suggestion}
+                              type="button"
+                              onClick={() => handleSuggestionClick(suggestion)}
+                              className="flex items-center justify-between w-full p-2 text-sm bg-white border border-blue-300 rounded hover:bg-blue-50 transition-colors"
+                            >
+                              <span className="font-mono text-blue-800">{suggestion}</span>
+                              <span className="text-xs text-blue-600">Click to use</span>
+                            </button>
+                          ))}
+                        </div>
+                        {isCheckingSuggestions && (
+                          <div className="flex items-center mt-2 text-sm text-blue-600">
+                            <LoaderIcon className="mr-2 h-4 w-4 animate-spin" />
+                            Checking more alternatives...
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
                     <Button type="submit" variant="primary" className="mt-4 w-full md:w-auto" disabled={isLoading}>
                       {isLoading ? (
                         <>
@@ -1436,6 +1517,7 @@ export default function AddDomainForm({
                         setDnsRecords([])
                         setDomainId("")
                         setError("")
+                        setDomainSuggestions([])
                       }}
                       variant="secondary"
                     >

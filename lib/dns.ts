@@ -213,45 +213,74 @@ export async function checkDomainCanReceiveEmails(domain: string): Promise<DnsCh
     timestamp: new Date(),
   };
 
-  try {
-    // Validate domain format
-    if (!isValidDomain(domain)) {
-      result.error = 'Invalid domain format';
-      return result;
-    }
+  // Validate domain format
+  if (!isValidDomain(domain)) {
+    result.error = 'Invalid domain format';
+    return result;
+  }
 
-    // Detect domain provider
+  // Detect domain provider
+  try {
     const provider = await detectDomainProvider(domain);
     if (provider) {
       result.provider = provider;
     }
+  } catch (error) {
+    // Provider detection failure is not critical, continue
+  }
 
-    // Try to resolve MX records
-    const mxRecords = await dns.resolveMx(domain);
-    const cnameRecords = await dns.resolveCname(domain);
-    
-    if (mxRecords && mxRecords.length > 0 || cnameRecords && cnameRecords.length > 0) {
-      // Domain HAS MX records - cannot safely receive emails
-      result.hasMxRecords = true;
-      result.mxRecords = mxRecords;
-      result.canReceiveEmails = false;
-    } else {
-      // Domain has no MX records - can receive emails
-      result.hasMxRecords = false;
-      result.canReceiveEmails = true;
-    }
+  // Check MX records separately
+  let mxRecords: MxRecord[] = [];
+  let mxError: string | null = null;
+  
+  try {
+    mxRecords = await dns.resolveMx(domain);
+    console.log('🏁 CANDOMAINRECEIVE 🏁 \n MX Records:', mxRecords);
   } catch (error) {
     const dnsError = error as DnsError;
+    if (dnsError.code !== 'ENOTFOUND' && dnsError.code !== 'ENODATA') {
+      mxError = dnsError.message;
+    }
+    // ENOTFOUND/ENODATA for MX is expected for domains without email
+  }
+
+  // Check CNAME records separately
+  let cnameRecords: string[] = [];
+  let cnameError: string | null = null;
+  
+  try {
+    cnameRecords = await dns.resolveCname(domain);
+  } catch (error) {
+    const dnsError = error as DnsError;
+    if (dnsError.code !== 'ENOTFOUND' && dnsError.code !== 'ENODATA') {
+      cnameError = dnsError.message;
+    }
+    // ENOTFOUND/ENODATA for CNAME is normal for most domains
+  }
+
+  // Determine if domain can receive emails
+  const hasMxRecords = mxRecords.length > 0;
+  const hasCnameRecords = cnameRecords.length > 0;
+
+  if (hasMxRecords || hasCnameRecords) {
+    // Domain HAS MX or CNAME records - cannot safely receive emails
+    result.hasMxRecords = hasMxRecords;
+    result.mxRecords = mxRecords;
+    result.canReceiveEmails = false;
     
-    // If domain not found or no MX records, it's safe to receive emails
-    if (dnsError.code === 'ENOTFOUND' || dnsError.code === 'ENODATA') {
-      result.hasMxRecords = false;
-      result.canReceiveEmails = true;
-      result.error = `Domain check: ${dnsError.message} (safe for email receiving)`;
-    } else {
-      // Other DNS errors
-      result.error = dnsError.message || 'Unknown DNS error';
-      result.canReceiveEmails = false;
+    if (hasMxRecords) {
+      result.error = `Domain has ${mxRecords.length} MX record(s) - email already configured`;
+    } else if (hasCnameRecords) {
+      result.error = `Domain has CNAME record(s) - conflicts with MX records`;
+    }
+  } else {
+    // Domain has no MX or CNAME records - can receive emails
+    result.hasMxRecords = false;
+    result.canReceiveEmails = true;
+    
+    if (mxError || cnameError) {
+      const errors = [mxError, cnameError].filter(Boolean);
+      result.error = `Domain check: ${errors.join(', ')} (safe for email receiving)`;
     }
   }
 
