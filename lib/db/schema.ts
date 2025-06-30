@@ -19,6 +19,17 @@ export const subscriptions = pgTable('subscriptions', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+// User onboarding tracking table
+export const userOnboarding = pgTable('user_onboarding', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull().unique(),
+  isCompleted: boolean('is_completed').default(false).notNull(),
+  defaultEndpointCreated: boolean('default_endpoint_created').default(false).notNull(),
+  completedAt: timestamp('completed_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // You can add more app-specific tables here
 export const emailDomains = pgTable('email_domains', {
   id: varchar('id', { length: 255 }).primaryKey(),
@@ -353,6 +364,8 @@ export type NewApiKey = typeof apikey.$inferInsert;
 // Export types for app-specific tables
 export type Subscription = typeof subscriptions.$inferSelect;
 export type NewSubscription = typeof subscriptions.$inferInsert;
+export type UserOnboarding = typeof userOnboarding.$inferSelect;
+export type NewUserOnboarding = typeof userOnboarding.$inferInsert;
 export type EmailDomain = typeof emailDomains.$inferSelect;
 export type NewEmailDomain = typeof emailDomains.$inferInsert;
 export type EmailAddress = typeof emailAddresses.$inferSelect;

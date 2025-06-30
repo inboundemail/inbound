@@ -6,4 +6,5 @@ export {
   useUpdateApiKeyMutation, 
   useDeleteApiKeyMutation 
 } from './useApiKeyMutations'
-export { useBillingPortalMutation } from './useBillingMutation' 
+export { useBillingPortalMutation } from './useBillingMutation'
+export { useOnboardingStatusQuery } from './useOnboardingStatusQuery' 

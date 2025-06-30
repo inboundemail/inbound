@@ -153,11 +153,23 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                                 className="mx-auto mb-4" 
                             />
                             <h3 className="text-lg font-semibold mb-2 text-gray-900">No emails found</h3>
-                            <p className="text-sm text-slate-500">
+                            <p className="text-sm text-slate-500 mb-4">
                                 {searchQuery || statusFilter !== 'all' || domainFilter !== 'all'
                                     ? 'No emails match your search criteria.'
-                                    : 'No emails have been received yet.'}
+                                    : 'Hey! Looks like you don\'t have any emails yet.'}
                             </p>
+                            {!(searchQuery || statusFilter !== 'all' || domainFilter !== 'all') && (
+                                <div className="space-y-3">
+                                    <p className="text-sm text-gray-600">
+                                        Ready to start receiving emails? Let's get you set up!
+                                    </p>
+                                    <Button asChild className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white">
+                                        <Link href="/onboarding">
+                                            Start Onboarding
+                                        </Link>
+                                    </Button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 ) : (

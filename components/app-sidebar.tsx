@@ -94,6 +94,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Show Onboarding" asChild>
+                  <Link href="/onboarding">
+                    <MailIcon className="h-4 w-4" />
+                    <span>Show Onboarding</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

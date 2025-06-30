@@ -12,7 +12,7 @@ export default function LoginPage() {
   const router = useRouter()
 
   useEffect(() => {
-    // If user is already logged in, redirect to dashboard
+    // If user is already logged in, redirect to main app (layout will handle onboarding check)
     if (session && !isPending) {
       router.push("/mail")
     }
