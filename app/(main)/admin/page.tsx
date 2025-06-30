@@ -33,7 +33,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { HiBan, HiCalendar, HiCog, HiExclamationCircle, HiLockOpen, HiPlus, HiRefresh, HiSearch, HiShieldCheck, HiTrash, HiUser, HiUserGroup } from "react-icons/hi"
+import { HiBan, HiCalendar, HiCog, HiExclamationCircle, HiGlobe, HiLockOpen, HiMail, HiPlus, HiRefresh, HiSearch, HiShieldCheck, HiTrash, HiUser, HiUserGroup } from "react-icons/hi"
+import { getAllDomainsForAdmin, getDomainEmailAddressesForAdmin } from "@/app/actions/primary"
 
 
 // Auth client with admin functions is imported above
@@ -49,6 +50,41 @@ interface User {
   banExpires?: Date | null
 }
 
+interface Domain {
+  id: string
+  domain: string
+  status: string
+  canReceiveEmails: boolean
+  hasMxRecords: boolean
+  domainProvider: string | null
+  providerConfidence: string | null
+  lastDnsCheck: Date | null
+  lastSesCheck: Date | null
+  isCatchAllEnabled: boolean
+  createdAt: Date
+  updatedAt: Date
+  userId: string
+  userName: string
+  userEmail: string
+  emailAddressCount: number
+  activeEmailAddressCount: number
+}
+
+interface EmailAddress {
+  id: string
+  address: string
+  isActive: boolean
+  isReceiptRuleConfigured: boolean
+  receiptRuleName: string | null
+  webhookId: string | null
+  webhookName: string | null
+  endpointId: string | null
+  endpointName: string | null
+  endpointType: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
 export default function AdminPage() {
   const { data: session, isPending, error } = useSession()
   const router = useRouter()
@@ -61,6 +97,15 @@ export default function AdminPage() {
   const [isLoadingUsers, setIsLoadingUsers] = useState(false)
   const [isCreateUserOpen, setIsCreateUserOpen] = useState(false)
   const [newUser, setNewUser] = useState({ name: "", email: "", password: "", role: "user" })
+
+  // Domain management state
+  const [domains, setDomains] = useState<Domain[]>([])
+  const [isLoadingDomains, setIsLoadingDomains] = useState(false)
+  const [domainSearchQuery, setDomainSearchQuery] = useState("")
+  const [selectedDomain, setSelectedDomain] = useState<Domain | null>(null)
+  const [domainEmailAddresses, setDomainEmailAddresses] = useState<EmailAddress[]>([])
+  const [isLoadingEmailAddresses, setIsLoadingEmailAddresses] = useState(false)
+  const [isEmailAddressesDialogOpen, setIsEmailAddressesDialogOpen] = useState(false)
 
   const pageSize = 10
 
@@ -82,6 +127,7 @@ export default function AdminPage() {
 
       // Load initial data
       loadUsers()
+      loadDomains()
     }
   }, [session, isPending, router])
 
@@ -192,6 +238,58 @@ export default function AdminPage() {
     }
   }
 
+  // Domain management functions
+  const loadDomains = async () => {
+    setIsLoadingDomains(true)
+    try {
+      const response = await getAllDomainsForAdmin()
+      
+      if ('error' in response) {
+        console.error("Failed to load domains:", response.error)
+      } else {
+        setDomains(response.domains)
+      }
+    } catch (error) {
+      console.error("Failed to load domains:", error)
+    } finally {
+      setIsLoadingDomains(false)
+    }
+  }
+
+  const handleDomainSearch = () => {
+    // Filter domains based on search query
+    // This is client-side filtering since we're loading all domains
+  }
+
+  const handleViewDomainEmailAddresses = async (domain: Domain) => {
+    setSelectedDomain(domain)
+    setIsLoadingEmailAddresses(true)
+    setIsEmailAddressesDialogOpen(true)
+    
+    try {
+      const response = await getDomainEmailAddressesForAdmin(domain.id)
+      
+      if ('error' in response) {
+        console.error("Failed to load email addresses:", response.error)
+        setDomainEmailAddresses([])
+      } else {
+        setDomainEmailAddresses(response.emailAddresses)
+      }
+    } catch (error) {
+      console.error("Failed to load email addresses:", error)
+      setDomainEmailAddresses([])
+    } finally {
+      setIsLoadingEmailAddresses(false)
+    }
+  }
+
+  // Filter domains based on search query
+  const filteredDomains = domains.filter(domain => 
+    domain.domain.toLowerCase().includes(domainSearchQuery.toLowerCase()) ||
+    domain.userName.toLowerCase().includes(domainSearchQuery.toLowerCase()) ||
+    domain.userEmail.toLowerCase().includes(domainSearchQuery.toLowerCase())
+  )
+
   // Show loading state
   if (isPending || isLoading) {
     return (
@@ -250,10 +348,14 @@ export default function AdminPage() {
 
       {/* Admin Tabs */}
       <Tabs defaultValue="users" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="users" className="flex items-center gap-2">
             <HiUserGroup className="h-4 w-4" />
             User Management
+          </TabsTrigger>
+          <TabsTrigger value="domains" className="flex items-center gap-2">
+            <HiGlobe className="h-4 w-4" />
+            Domain Management
           </TabsTrigger>
           <TabsTrigger value="development" className="flex items-center gap-2">
             <HiCog className="h-4 w-4" />
@@ -530,6 +632,284 @@ export default function AdminPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Domain Management Tab */}
+        <TabsContent value="domains" className="space-y-6">
+          {/* Domain Stats */}
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Total Domains</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{domains.length}</div>
+                <p className="text-xs text-muted-foreground">
+                  All domains
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Verified Domains</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{domains.filter(d => d.status === 'verified').length}</div>
+                <p className="text-xs text-muted-foreground">
+                  Ready to receive emails
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Email Addresses</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{domains.reduce((sum, d) => sum + d.emailAddressCount, 0)}</div>
+                <p className="text-xs text-muted-foreground">
+                  Total email addresses
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Active Addresses</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{domains.reduce((sum, d) => sum + d.activeEmailAddressCount, 0)}</div>
+                <p className="text-xs text-muted-foreground">
+                  Active email addresses
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Domain Management Controls */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Domain Management</CardTitle>
+                  <CardDescription>
+                    View and manage all domains across all users
+                  </CardDescription>
+                </div>
+                <Button onClick={loadDomains} variant="secondary" className="flex items-center gap-2">
+                  <HiRefresh className="h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Search */}
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Input
+                    placeholder="Search domains, users, or email addresses..."
+                    value={domainSearchQuery}
+                    onChange={(e) => setDomainSearchQuery(e.target.value)}
+                  />
+                </div>
+                <Button onClick={handleDomainSearch} variant="secondary">
+                  <HiSearch className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Domains Table */}
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Domain</TableHead>
+                      <TableHead>Owner</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Email Addresses</TableHead>
+                      <TableHead>Provider</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingDomains ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          <HiRefresh className="h-6 w-6 animate-spin mx-auto" />
+                        </TableCell>
+                      </TableRow>
+                    ) : filteredDomains.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          No domains found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredDomains.map((domain) => (
+                        <TableRow key={domain.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <HiGlobe className="h-4 w-4" />
+                              <div>
+                                <div className="font-medium">{domain.domain}</div>
+                                {domain.isCatchAllEnabled && (
+                                  <div className="text-xs text-blue-600">Catch-all enabled</div>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{domain.userName}</div>
+                              <div className="text-sm text-muted-foreground">{domain.userEmail}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant={
+                                domain.status === 'verified' ? 'default' : 
+                                domain.status === 'pending' ? 'secondary' : 
+                                'destructive'
+                              }
+                            >
+                              {domain.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <div>{domain.emailAddressCount} total</div>
+                              <div className="text-muted-foreground">{domain.activeEmailAddressCount} active</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {domain.domainProvider || 'Unknown'}
+                              {domain.providerConfidence && (
+                                <div className="text-xs text-muted-foreground">
+                                  {domain.providerConfidence} confidence
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                              <HiCalendar className="h-3 w-3" />
+                              {new Date(domain.createdAt).toLocaleDateString()}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => handleViewDomainEmailAddresses(domain)}
+                                title="View email addresses"
+                              >
+                                <HiMail className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Email Addresses Dialog */}
+          <Dialog open={isEmailAddressesDialogOpen} onOpenChange={setIsEmailAddressesDialogOpen}>
+            <DialogContent className="max-w-4xl">
+              <DialogHeader>
+                <DialogTitle>Email Addresses for {selectedDomain?.domain}</DialogTitle>
+                <DialogDescription>
+                  Owned by {selectedDomain?.userName} ({selectedDomain?.userEmail})
+                </DialogDescription>
+              </DialogHeader>
+              <div className="max-h-96 overflow-y-auto">
+                {isLoadingEmailAddresses ? (
+                  <div className="flex items-center justify-center py-8">
+                    <HiRefresh className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : domainEmailAddresses.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No email addresses found for this domain
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Email Address</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Configuration</TableHead>
+                        <TableHead>Endpoint/Webhook</TableHead>
+                        <TableHead>Created</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {domainEmailAddresses.map((email) => (
+                        <TableRow key={email.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <HiMail className="h-4 w-4" />
+                              <span className="font-medium">{email.address}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={email.isActive ? 'default' : 'secondary'}>
+                              {email.isActive ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {email.isReceiptRuleConfigured ? (
+                                <div>
+                                  <div className="text-green-600">✓ Configured</div>
+                                  {email.receiptRuleName && (
+                                    <div className="text-xs text-muted-foreground">
+                                      Rule: {email.receiptRuleName}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="text-yellow-600">⚠ Not configured</div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {email.endpointId ? (
+                                <div>
+                                  <div className="font-medium">{email.endpointName || 'Unnamed Endpoint'}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Type: {email.endpointType}
+                                  </div>
+                                </div>
+                              ) : email.webhookId ? (
+                                <div>
+                                  <div className="font-medium">{email.webhookName || 'Unnamed Webhook'}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Legacy webhook
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-muted-foreground">No endpoint assigned</div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                              <HiCalendar className="h-3 w-3" />
+                              {new Date(email.createdAt).toLocaleDateString()}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* Development Tab */}

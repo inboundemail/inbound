@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { Autumn as autumn, Customer } from "autumn-js"
 import { db } from '@/lib/db'
-import { emailDomains, emailAddresses, webhooks, sesEvents, structuredEmails, DOMAIN_STATUS } from '@/lib/db/schema'
+import { emailDomains, emailAddresses, webhooks, sesEvents, structuredEmails, endpoints, user, DOMAIN_STATUS } from '@/lib/db/schema'
 import { eq, and, sql, desc } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
@@ -1958,6 +1958,174 @@ export async function downloadAttachment(emailId: string, attachmentFilename: st
         console.error('[downloadAttachment] Error downloading attachment:', error)
         console.error('[downloadAttachment] Error stack:', error instanceof Error ? error.stack : 'No stack trace')
         return { error: 'Failed to download attachment' }
+    }
+}
+
+export async function getAllDomainsForAdmin() {
+    try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+
+        if (!session?.user?.id) {
+            return { error: 'Unauthorized' }
+        }
+
+        // Check if user has admin role
+        if (session.user.role !== 'admin') {
+            return { error: 'Admin access required' }
+        }
+
+        // Get all domains across all users with their email address counts
+        const domainsWithStats = await db
+            .select({
+                id: emailDomains.id,
+                domain: emailDomains.domain,
+                status: emailDomains.status,
+                canReceiveEmails: emailDomains.canReceiveEmails,
+                hasMxRecords: emailDomains.hasMxRecords,
+                domainProvider: emailDomains.domainProvider,
+                providerConfidence: emailDomains.providerConfidence,
+                lastDnsCheck: emailDomains.lastDnsCheck,
+                lastSesCheck: emailDomains.lastSesCheck,
+                isCatchAllEnabled: emailDomains.isCatchAllEnabled,
+                createdAt: emailDomains.createdAt,
+                updatedAt: emailDomains.updatedAt,
+                userId: emailDomains.userId,
+                userName: user.name,
+                userEmail: user.email,
+                emailAddressCount: sql<number>`(
+                    SELECT COUNT(*)::int 
+                    FROM ${emailAddresses} 
+                    WHERE ${emailAddresses.domainId} = ${emailDomains.id}
+                )`.as('email_address_count'),
+                activeEmailAddressCount: sql<number>`(
+                    SELECT COUNT(*)::int 
+                    FROM ${emailAddresses} 
+                    WHERE ${emailAddresses.domainId} = ${emailDomains.id} 
+                    AND ${emailAddresses.isActive} = true
+                )`.as('active_email_address_count'),
+            })
+            .from(emailDomains)
+            .leftJoin(user, eq(emailDomains.userId, user.id))
+            .orderBy(emailDomains.createdAt)
+
+        return {
+            success: true,
+            domains: domainsWithStats.map(domain => ({
+                id: domain.id,
+                domain: domain.domain,
+                status: domain.status,
+                canReceiveEmails: domain.canReceiveEmails || false,
+                hasMxRecords: domain.hasMxRecords || false,
+                domainProvider: domain.domainProvider || null,
+                providerConfidence: domain.providerConfidence || null,
+                lastDnsCheck: domain.lastDnsCheck || null,
+                lastSesCheck: domain.lastSesCheck || null,
+                isCatchAllEnabled: domain.isCatchAllEnabled || false,
+                createdAt: domain.createdAt || new Date(),
+                updatedAt: domain.updatedAt || new Date(),
+                userId: domain.userId,
+                userName: domain.userName || 'Unknown User',
+                userEmail: domain.userEmail || 'Unknown Email',
+                emailAddressCount: domain.emailAddressCount || 0,
+                activeEmailAddressCount: domain.activeEmailAddressCount || 0,
+            }))
+        }
+
+    } catch (error) {
+        console.error('Error fetching all domains for admin:', error)
+        return { error: 'Failed to fetch domains' }
+    }
+}
+
+export async function getDomainEmailAddressesForAdmin(domainId: string) {
+    try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+
+        if (!session?.user?.id) {
+            return { error: 'Unauthorized' }
+        }
+
+        // Check if user has admin role
+        if (session.user.role !== 'admin') {
+            return { error: 'Admin access required' }
+        }
+
+        if (!domainId) {
+            return { error: 'Domain ID is required' }
+        }
+
+        // Get domain info first
+        const domainInfo = await db
+            .select({
+                id: emailDomains.id,
+                domain: emailDomains.domain,
+                userId: emailDomains.userId,
+                userName: user.name,
+                userEmail: user.email,
+            })
+            .from(emailDomains)
+            .leftJoin(user, eq(emailDomains.userId, user.id))
+            .where(eq(emailDomains.id, domainId))
+            .limit(1)
+
+        if (!domainInfo[0]) {
+            return { error: 'Domain not found' }
+        }
+
+        // Get all email addresses for this domain
+        const emailAddressList = await db
+            .select({
+                id: emailAddresses.id,
+                address: emailAddresses.address,
+                isActive: emailAddresses.isActive,
+                isReceiptRuleConfigured: emailAddresses.isReceiptRuleConfigured,
+                receiptRuleName: emailAddresses.receiptRuleName,
+                webhookId: emailAddresses.webhookId,
+                endpointId: emailAddresses.endpointId,
+                createdAt: emailAddresses.createdAt,
+                updatedAt: emailAddresses.updatedAt,
+                webhookName: webhooks.name,
+                endpointName: endpoints.name,
+                endpointType: endpoints.type,
+            })
+            .from(emailAddresses)
+            .leftJoin(webhooks, eq(emailAddresses.webhookId, webhooks.id))
+            .leftJoin(endpoints, eq(emailAddresses.endpointId, endpoints.id))
+            .where(eq(emailAddresses.domainId, domainId))
+            .orderBy(emailAddresses.createdAt)
+
+        return {
+            success: true,
+            domain: {
+                id: domainInfo[0].id,
+                domain: domainInfo[0].domain,
+                userId: domainInfo[0].userId,
+                userName: domainInfo[0].userName || 'Unknown User',
+                userEmail: domainInfo[0].userEmail || 'Unknown Email',
+            },
+            emailAddresses: emailAddressList.map(email => ({
+                id: email.id,
+                address: email.address,
+                isActive: email.isActive || false,
+                isReceiptRuleConfigured: email.isReceiptRuleConfigured || false,
+                receiptRuleName: email.receiptRuleName || null,
+                webhookId: email.webhookId || null,
+                webhookName: email.webhookName || null,
+                endpointId: email.endpointId || null,
+                endpointName: email.endpointName || null,
+                endpointType: email.endpointType || null,
+                createdAt: email.createdAt || new Date(),
+                updatedAt: email.updatedAt || new Date(),
+            }))
+        }
+
+    } catch (error) {
+        console.error('Error fetching domain email addresses for admin:', error)
+        return { error: 'Failed to fetch email addresses' }
     }
 }
 

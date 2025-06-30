@@ -30,9 +30,6 @@ export const CustomInboundIcon: React.FC<CustomInboundIconProps> = ({
   const iconSize = size * iconScale;
   const borderRadius = size * 0.3; // Maintains the rounded rectangle proportion
   
-  // Create unique gradient ID for each instance
-  const gradientId = `icon-gradient-${Math.random().toString(36).substr(2, 9)}`;
-  
   // Calculate font size based on container size
   const fontSize = size * 0.4; // Adjust this ratio as needed
 
@@ -51,35 +48,14 @@ export const CustomInboundIcon: React.FC<CustomInboundIconProps> = ({
       }}
     >
       {Icon ? (
-        // Render icon
-        <svg width={iconSize} height={iconSize} style={{ 
-          filter: 'drop-shadow(0px 174.83px 349.66px rgba(23, 7, 11, 0.5))'
-        }}>
-          <defs>
-            <linearGradient id={gradientId} x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#F5F3FF" stopOpacity="1" />
-              <stop offset="100%" stopColor="#F5F3FF" stopOpacity="0.7" />
-            </linearGradient>
-          </defs>
-          <foreignObject width={iconSize} height={iconSize}>
-            <div style={{ 
-              width: iconSize, 
-              height: iconSize, 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              color: `url(#${gradientId})`
-            }}>
-              <Icon
-                size={iconSize}
-                style={{ 
-                  fill: `url(#${gradientId})`,
-                  color: `url(#${gradientId})`
-                }}
-              />
-            </div>
-          </foreignObject>
-        </svg>
+        // Render icon directly without SVG wrapper
+        <Icon
+          size={iconSize}
+          style={{ 
+            color: iconColor,
+            filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.1))'
+          }}
+        />
       ) : text ? (
         // Render text
         <span
