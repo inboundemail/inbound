@@ -1,5 +1,3 @@
-"use client"
-
 import { Button } from "@/components/ui/button"
 import { HiChevronDown, HiLightningBolt, HiMail, HiShieldCheck, HiCode } from "react-icons/hi"
 import {
@@ -30,7 +28,7 @@ async function getGitHubStars() {
   }
 }
 
-export default async function SiteHeader() {
+export default async function MarketingHeader() {
   const session = await auth.api.getSession({
     headers: await headers()
   })
@@ -42,11 +40,13 @@ export default async function SiteHeader() {
     <header className="px-4 sm:px-6 py-4 sm:py-6 border-b border-gray-100">
       <div className="flex items-center justify-between max-w-6xl mx-auto">
         <div className="flex items-center gap-2 min-w-0">
-          <img src="/inbound-logo-3.png" alt="Email" width={32} height={32} className="inline-block align-bottom flex-shrink-0" />
-          <div className="flex flex-col items-start gap-0 min-w-0">
-            <span className="text-xl sm:text-2xl font-bold text-black truncate">inbound</span>
-            <span className="text-xs text-gray-500 -mt-2 hidden sm:block">by exon</span>
-          </div>
+          <a href="/" className="flex items-center gap-2 min-w-0">
+            <img src="/inbound-logo-3.png" alt="Email" width={32} height={32} className="inline-block align-bottom flex-shrink-0" />
+            <div className="flex flex-col items-start gap-0 min-w-0">
+              <span className="text-xl sm:text-2xl font-bold text-black truncate">inbound</span>
+              <span className="text-xs text-gray-500 -mt-2 hidden sm:block">by exon</span>
+            </div>
+          </a>
         </div>
         
         {/* Features Dropdown */}
@@ -144,4 +144,4 @@ export default async function SiteHeader() {
 }
 
 // Export the GitHub stars function for use in other components if needed
-export { getGitHubStars }
+export { getGitHubStars } 
