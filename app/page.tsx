@@ -2,11 +2,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import InboundIcon from "@/components/InboundIcon"
 import { PricingTable } from "@/components/autumn/pricing-table"
-import { HiArrowRight, HiMail, HiGlobeAlt, HiLockClosed, HiCheckCircle, HiLightningBolt, HiArrowDown, HiX, HiStar, HiMailOpen, HiChip, HiCog, HiLightBulb, HiSparkles, HiShieldCheck, HiCode, HiCube, HiCollection } from "react-icons/hi"
+import { HiArrowRight, HiMail, HiGlobeAlt, HiLockClosed, HiCheckCircle, HiLightningBolt, HiArrowDown, HiX, HiStar, HiMailOpen, HiChip, HiCog, HiLightBulb, HiSparkles, HiShieldCheck, HiCode, HiCube, HiCollection, HiCalendar, HiUser } from "react-icons/hi"
 import Image from "next/image"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import CustomInboundIcon from "@/components/icons/customInbound"
+import { fetchZenBlogPosts, formatBlogDate, extractTextFromHtml } from "@/lib/zenblog"
+import Link from "next/link"
 
 // Function to fetch GitHub stars
 async function getGitHubStars() {
@@ -32,8 +34,11 @@ export default async function HomePage() {
     headers: await headers()
   })
 
-  // Fetch GitHub stars server-side
-  const githubStars = await getGitHubStars()
+  // Fetch GitHub stars and blog posts server-side
+  const [githubStars, blogPosts] = await Promise.all([
+    getGitHubStars(),
+    fetchZenBlogPosts({ limit: 3 }) // Fetch latest 3 blog posts
+  ])
 
   return (
     <div className="min-h-screen bg-white overflow-x-hidden">
@@ -66,6 +71,13 @@ export default async function HomePage() {
                 </svg>
                 Discord
               </a>
+            </Button>
+            
+            {/* Blog Button */}
+            <Button variant="secondary" asChild>
+              <Link href="/blog">
+                Blog
+              </Link>
             </Button>
             
             {/* Conditionally show Sign In or Go to Dashboard based on auth state */}
@@ -488,6 +500,79 @@ export default async function HomePage() {
               </div>
             </div>
           </div>
+
+          {/* Blog Section */}
+          {blogPosts.data.length > 0 && (
+            <div className="mb-16 sm:mb-24">
+              <div className="text-center mb-8 sm:mb-12">
+                <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">Latest from our blog</h2>
+                <p className="text-base sm:text-lg text-gray-600 max-w-2xl mx-auto px-4">
+                  Stay up to date with the latest insights, tutorials, and product updates from the inbound team.
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 max-w-5xl mx-auto mb-8">
+                {blogPosts.data.map((post) => (
+                  <article key={post.slug} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden text-left">
+                    <div className="p-6">
+                      {/* Category */}
+                      {post.category && (
+                        <div className="mb-3">
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-[#1C2894]/10 text-[#1C2894]">
+                            {post.category.name}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* Title */}
+                      <h3 className="text-lg font-bold text-gray-900 mb-3 leading-tight">
+                        <Link href={`/blog/${post.slug}`} className="hover:text-[#1C2894] transition-colors">
+                          {post.title}
+                        </Link>
+                      </h3>
+                      
+                      {/* Excerpt */}
+                      <p className="text-gray-600 text-sm mb-4 leading-relaxed">
+                        {post.excerpt || extractTextFromHtml(post.html_content, 120)}
+                      </p>
+                      
+                      {/* Meta Info */}
+                      <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mb-4">
+                        <div className="flex items-center gap-1">
+                          <HiCalendar className="w-3 h-3" />
+                          <span>{formatBlogDate(post.published_at)}</span>
+                        </div>
+                        
+                        {post.authors && post.authors.length > 0 && (
+                          <div className="flex items-center gap-1">
+                            <HiUser className="w-3 h-3" />
+                            <span>{post.authors[0].name}</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Read More Link */}
+                      <Link 
+                        href={`/blog/${post.slug}`}
+                        className="inline-flex items-center gap-2 text-sm font-medium text-[#1C2894] hover:text-[#1C2894]/80 transition-colors"
+                      >
+                        Read more
+                        <HiArrowRight className="w-3 h-3" />
+                      </Link>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              
+              <div className="text-center">
+                <Button variant="secondary" asChild>
+                  <Link href="/blog">
+                    View all posts
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Pricing */}
           <div className="">
