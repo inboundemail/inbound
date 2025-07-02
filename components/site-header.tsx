@@ -1,15 +1,17 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { HiChevronDown, HiLightningBolt, HiMail, HiShieldCheck, HiCode } from "react-icons/hi"
+import { HiChevronDown, HiLightningBolt, HiMail, HiShieldCheck, HiCode, HiCube, HiDocumentText } from "react-icons/hi"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { auth } from "@/lib/auth"
-import { headers } from "next/headers"
+import { useSession } from "@/lib/auth-client"
+import { useEffect, useState } from "react"
 
 // Function to fetch GitHub stars
 async function getGitHubStars() {
@@ -17,11 +19,11 @@ async function getGitHubStars() {
     const response = await fetch('https://api.github.com/repos/R44VC0RP/inbound', {
       next: { revalidate: 3600 } // Cache for 1 hour
     })
-    
+
     if (!response.ok) {
       throw new Error('Failed to fetch GitHub stars')
     }
-    
+
     const data = await response.json()
     return data.stargazers_count + 876 || 0
   } catch (error) {
@@ -30,13 +32,14 @@ async function getGitHubStars() {
   }
 }
 
-export default async function SiteHeader() {
-  const session = await auth.api.getSession({
-    headers: await headers()
-  })
+export default function SiteHeader() {
+  const { data: session } = useSession()
+  const [githubStars, setGithubStars] = useState(0)
 
-  // Fetch GitHub stars server-side
-  const githubStars = await getGitHubStars()
+  // Fetch GitHub stars client-side
+  useEffect(() => {
+    getGitHubStars().then(setGithubStars)
+  }, [])
 
   return (
     <header className="px-4 sm:px-6 py-4 sm:py-6 border-b border-gray-100">
@@ -48,7 +51,7 @@ export default async function SiteHeader() {
             <span className="text-xs text-gray-500 -mt-2 hidden sm:block">by exon</span>
           </div>
         </div>
-        
+
         {/* Features Dropdown */}
         <div className="hidden md:flex">
           <DropdownMenu>
@@ -58,68 +61,71 @@ export default async function SiteHeader() {
                 <HiChevronDown className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="center" className="w-80 p-2">
-              <DropdownMenuItem asChild className="p-0">
-                <a href="/email-as-webhook" className="w-full cursor-pointer p-4 rounded-lg hover:bg-blue-50 hover:border-blue-200 border border-transparent transition-all duration-200 group">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-blue-200 transition-colors">
-                      <HiLightningBolt className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
+            <DropdownMenuContent align="center" className="w-[450px]">
+              {/* Card-style items */}
+              <div className="p-2 grid grid-cols-3 gap-2">
+                {/* Primary Menu Options */}
+                <div className="flex flex-col gap-1">
+                  <div>
+                    <a href="/api" className="flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-gray-100 rounded-md transition-colors">
+                      <HiCode className="w-4 h-4" />
+                      API
+                    </a>
+                  </div>
+                  <div>
+                    <a href="/sdk" className="flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-gray-100 rounded-md transition-colors">
+                      <HiCube className="w-4 h-4" />
+                      SDK
+                    </a>
+                  </div>
+                  <div>
+                    <a href="/mail" className="flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-gray-100 rounded-md transition-colors">
+                      <HiMail className="w-4 h-4" />
+                      Routing
+                    </a>
+                  </div>
+                  <div>
+                    <a href="/docs" className="flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-gray-100 rounded-md transition-colors">
+                      <HiDocumentText className="w-4 h-4" />
+                      Docs
+                    </a>
+                  </div>
+                </div>
+                
+                {/* Emails as Webhook Card */}
+                <a href="/webhooks" className="block p-4 rounded-xl bg-gradient-to-br from-blue-100 via-blue-50 to-indigo-100 border border-blue-200/50 hover:from-blue-200 hover:via-blue-100 hover:to-indigo-200 transition-all duration-300 relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(120,119,198,0.1),rgba(255,255,255,0))] pointer-events-none"></div>
+                  <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_40%,rgba(255,255,255,0.2)_50%,transparent_60%)] pointer-events-none"></div>
+                  <div className="relative flex flex-col items-start gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <HiLightningBolt className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 text-sm group-hover:text-blue-900">Email as Webhook</div>
-                      <div className="text-xs text-gray-500 mt-1 group-hover:text-blue-600">Convert emails into HTTP POST requests to your endpoints</div>
+                      <div className="font-semibold text-gray-900 text-sm mb-1">Email Webhooks</div>
+                      <div className="text-xs text-gray-700 leading-relaxed">Set up HTTP endpoints to receive email data</div>
                     </div>
                   </div>
                 </a>
-              </DropdownMenuItem>
-              
-              <DropdownMenuItem asChild className="p-0">
-                <a href="/improvmx-alternative" className="w-full cursor-pointer p-4 rounded-lg hover:bg-green-50 hover:border-green-200 border border-transparent transition-all duration-200 group">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-green-200 transition-colors">
-                      <HiMail className="w-4 h-4 text-green-600 group-hover:text-green-700" />
+
+                {/* Email Routing Card */}
+                <a href="/mail" className="block p-4 rounded-xl bg-gradient-to-br from-green-100 via-emerald-50 to-teal-100 border border-green-200/50 hover:from-green-200 hover:via-emerald-100 hover:to-teal-200 transition-all duration-300 relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(16,185,129,0.1),rgba(255,255,255,0))] pointer-events-none"></div>
+                  <div className="absolute inset-0 bg-[linear-gradient(135deg,transparent_40%,rgba(255,255,255,0.3)_50%,transparent_60%)] pointer-events-none"></div>
+                  <div className="relative flex flex-col items-start gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <HiMail className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 text-sm group-hover:text-green-900">ImprovMX Alternative</div>
-                      <div className="text-xs text-gray-500 mt-1 group-hover:text-green-600">Better email forwarding with more control and reliability</div>
+                      <div className="font-semibold text-gray-900 text-sm mb-1">Email Routing</div>
+                      <div className="text-xs text-gray-700 leading-relaxed">Route emails to different endpoints based on rules</div>
                     </div>
                   </div>
                 </a>
-              </DropdownMenuItem>
-              
-              <DropdownMenuItem asChild className="p-0">
-                <a href="/addtoblocklist" className="w-full cursor-pointer p-4 rounded-lg hover:bg-red-50 hover:border-red-200 border border-transparent transition-all duration-200 group">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-red-200 transition-colors">
-                      <HiShieldCheck className="w-4 h-4 text-red-600 group-hover:text-red-700" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 text-sm group-hover:text-red-900">Add to Blocklist</div>
-                      <div className="text-xs text-gray-500 mt-1 group-hover:text-red-600">Block unwanted senders with one-click protection</div>
-                    </div>
-                  </div>
-                </a>
-              </DropdownMenuItem>
-              
-              <div className="border-t border-gray-100 my-2"></div>
-              
-              <DropdownMenuItem asChild className="p-0">
-                <a href="/docs" className="w-full cursor-pointer p-4 rounded-lg hover:bg-purple-50 hover:border-purple-200 border border-transparent transition-all duration-200 group">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-purple-200 transition-colors">
-                      <HiCode className="w-4 h-4 text-purple-600 group-hover:text-purple-700" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 text-sm group-hover:text-purple-900">Documentation</div>
-                      <div className="text-xs text-gray-500 mt-1 group-hover:text-purple-600">API references, guides, and integration examples</div>
-                    </div>
-                  </div>
-                </a>
-              </DropdownMenuItem>
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        
+
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Conditionally show Sign In or Go to Dashboard based on auth state */}
           {session ? (

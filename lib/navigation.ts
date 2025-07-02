@@ -1,4 +1,4 @@
-import { LucideIcon, BarChart3Icon, InboxIcon, WebhookIcon, ActivityIcon, CreditCardIcon, SettingsIcon, HelpCircleIcon, ShieldCheckIcon, PlusIcon, GlobeIcon, MailIcon } from "lucide-react"
+import { LucideIcon, BarChart3Icon, InboxIcon, WebhookIcon, ActivityIcon, CreditCardIcon, SettingsIcon, HelpCircleIcon, ShieldCheckIcon, PlusIcon, GlobeIcon, MailIcon, CloudIcon, CodeIcon } from "lucide-react"
 
 export interface NavigationItem {
   title: string
@@ -53,6 +53,18 @@ export const navigationConfig: NavigationConfig = {
       url: "/admin",
       icon: ShieldCheckIcon,
       description: "Administrative controls and user management"
+    },
+    {
+      title: "SES Dashboard",
+      url: "/admin/ses",
+      icon: CloudIcon,
+      description: "AWS SES monitoring and metrics"
+    },
+    {
+      title: "Lambda Logs",
+      url: "/admin/lambda",
+      icon: CodeIcon,
+      description: "Lambda function monitoring and logs"
     },
   ],
 }
