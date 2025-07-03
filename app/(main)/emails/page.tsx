@@ -12,6 +12,7 @@ import { DOMAIN_STATUS } from '@/lib/db/schema'
 import Link from 'next/link'
 import { useDomainStatsQuery } from '@/features/settings/hooks/useDomainStatsQuery'
 import { useDomainDetailsQuery } from '@/features/domains/hooks/useDomainDetailsQuery'
+import { type DomainStats } from '@/features/domains/api/domainsApi'
 
 export default function EmailsPage() {
   const [expandedDomains, setExpandedDomains] = useState<Record<string, boolean>>({})
@@ -43,9 +44,9 @@ export default function EmailsPage() {
     }
   }
 
-  const getDomainIconColor = (domain: any) => {
+  const getDomainIconColor = (domain: DomainStats) => {
     if (domain.isVerified) return '#059669' // green-600 - verified
-    
+
     switch (domain.status) {
       case DOMAIN_STATUS.PENDING: return '#eab308' // yellow-500 - pending DNS check
       case DOMAIN_STATUS.VERIFIED: return '#2563eb' // blue-600 - SES setup
@@ -73,7 +74,7 @@ export default function EmailsPage() {
 
   const getBorderColor = (isActive: boolean, isConfigured: boolean) => {
     if (isActive && isConfigured) return "border-l-emerald-500"
-    if (isActive) return "border-l-amber-500" 
+    if (isActive) return "border-l-amber-500"
     return "border-l-red-500"
   }
 
@@ -87,6 +88,38 @@ export default function EmailsPage() {
     if (email.isReceiptRuleConfigured) return "ready"
     if (email.isActive) return "processing"
     return "error"
+  }
+
+  const getConnectionStatus = (email: any) => {
+    // If email has an endpoint or webhook, show connection status
+    if (email.endpointId || email.webhookId) {
+      if (email.endpointName && email.endpointType) {
+        return `Connected to ${email.endpointName} (${email.endpointType})`
+      } else if (email.webhookName) {
+        return `Connected to ${email.webhookName}`
+      } else {
+        return "Connected to endpoint"
+      }
+    }
+    // If email is configured but no endpoint/webhook, it's just storing
+    if (email.isReceiptRuleConfigured) {
+      return "Ready to receive"
+    }
+    // Otherwise it's not configured yet
+    return "Not configured"
+  }
+
+  const getConnectionStatusColor = (email: any) => {
+    // If email has an endpoint or webhook, show as connected (green)
+    if (email.endpointId || email.webhookId) {
+      return "bg-emerald-500"
+    }
+    // If email is configured but no endpoint/webhook, show as ready (blue)
+    if (email.isReceiptRuleConfigured) {
+      return "bg-blue-500"
+    }
+    // Otherwise it's not configured yet (red)
+    return "bg-red-500"
   }
 
   // Loading state
@@ -126,57 +159,47 @@ export default function EmailsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
       <div className="max-w-5xl mx-auto">
-        {/* Compact Header */}
-        <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4 mb-6">
-          <div>
-            <h1 className="text-xl font-semibold mb-1">Email Management</h1>
-            <div className="flex items-center gap-4 text-sm text-slate-300">
-              <span>{domainStats.verifiedDomains}/{domainStats.totalDomains} domains verified</span>
-              <span>0 active addresses</span>
-              <span className="flex items-center gap-1">
-                <HiLightningBolt className="h-3 w-3" />
-                0 configured
-              </span>
-            </div>
-          </div>
+
+        {/* Domain and Email Management */}
+        <div className="mb-6 flex items-center justify-between mt-8">
+          <div className="">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-1 tracking-tight">
+              Domains & Email Addresses ({domainStats.totalDomains})
+            </h2>
+            <p className="text-gray-600 text-sm font-medium">Manage your email domains and addresses</p></div>
+
           <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => refetchDomainStats()}
-              disabled={isDomainStatsLoading}
-              className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
-            >
-              <HiRefresh className="h-3 w-3 mr-1" />
-              Refresh
-            </Button>
             <Button size="sm" asChild>
               <Link href="/add">
                 <HiPlus className="h-3 w-3 mr-1" />
                 Add Domain
               </Link>
             </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => refetchDomainStats()}
+              disabled={isDomainStatsLoading}
+            >
+              <HiRefresh className="h-3 w-3 mr-1" />
+              Refresh
+            </Button>
+
           </div>
+
         </div>
 
-        {/* Domain and Email Management */}
-        <div className="mb-6">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-1 tracking-tight">
-            Domains & Email Addresses ({domainStats.totalDomains})
-          </h2>
-          <p className="text-gray-600 text-sm font-medium">Manage your email domains and addresses</p>
-        </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 mb-6">
           {domains.length === 0 ? (
             <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
               <CardContent className="p-8">
                 <div className="text-center">
-                  <CustomInboundIcon 
-                    Icon={HiGlobeAlt} 
-                    size={48} 
-                    backgroundColor="#8b5cf6" 
-                    className="mx-auto mb-4" 
+                  <CustomInboundIcon
+                    Icon={HiGlobeAlt}
+                    size={48}
+                    backgroundColor="#8b5cf6"
+                    className="mx-auto mb-4"
                   />
                   <p className="text-sm text-slate-500 mb-4">No domains configured</p>
                   <Button variant="secondary" asChild>
@@ -202,6 +225,8 @@ export default function EmailsPage() {
                 getBorderColor={getBorderColor}
                 getEmailStatus={getEmailStatus}
                 getReadyStatus={getReadyStatus}
+                getConnectionStatus={getConnectionStatus}
+                getConnectionStatusColor={getConnectionStatusColor}
               />
             ))
           )}
@@ -223,21 +248,26 @@ function DomainCard({
   getBorderColor,
   getEmailStatus,
   getReadyStatus,
+  getConnectionStatus,
+  getConnectionStatusColor,
 }: {
-  domain: any
+  domain: DomainStats
   isExpanded: boolean
   onToggle: () => void
   onCopyEmail: (email: string) => void
   copiedEmail: string | null
-  getDomainIconColor: (domain: any) => string
+  getDomainIconColor: (domain: DomainStats) => string
   getStatusColor: (status: string) => string
   getBorderColor: (isActive: boolean, isConfigured: boolean) => string
   getEmailStatus: (email: any) => string
   getReadyStatus: (email: any) => string
+  getConnectionStatus: (email: any) => string
+  getConnectionStatusColor: (email: any) => string
 }) {
   // Only fetch details if domain has email addresses and we need to show them
-  const shouldFetchDetails = domain.isVerified && domain.emailAddressCount > 0
-  const { data: domainDetails } = useDomainDetailsQuery(domain.id, domain.domain)
+  // Don't fetch details for catch-all domains as they don't show individual addresses
+  const shouldFetchDetails = domain.isVerified && domain.emailAddressCount > 0 && !domain.isCatchAllEnabled
+  const { data: domainDetails } = useDomainDetailsQuery(shouldFetchDetails ? domain.id : '', shouldFetchDetails ? domain.domain : '')
 
   const emailAddresses = (shouldFetchDetails && domainDetails?.success) ? domainDetails.emailAddresses || [] : []
 
@@ -251,68 +281,59 @@ function DomainCard({
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <CustomInboundIcon 
-                Icon={HiGlobeAlt} 
-                size={36} 
-                backgroundColor={getDomainIconColor(domain)} 
+              <CustomInboundIcon
+                Icon={HiGlobeAlt}
+                size={36}
+                backgroundColor={getDomainIconColor(domain)}
               />
               <div>
                 <h3 className="text-base font-semibold text-gray-900 tracking-tight">{domain.domain}</h3>
-                <div className="flex items-center space-x-3 mt-0.5">
-                  <span className="text-xs text-gray-600 font-medium">
-                    {domain.emailAddressCount} address{domain.emailAddressCount !== 1 ? "es" : ""}
-                  </span>
-                  <span className="text-xs text-gray-600 font-medium">
-                    {domain.emailsLast24h || 0} emails today
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    Added {formatDistanceToNow(new Date(domain.createdAt), { addSuffix: true })}
-                  </span>
+                <div className="flex items-center space-x-2 mt-0.5">
+                  <div className="flex items-center space-x-1">
+                    <div className={`w-2 h-2 rounded-full ${domain.isVerified ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <span className="text-xs text-gray-600 font-medium">
+                      {domain.isVerified ? "Verified" : "Pending DNS"}
+                    </span>
+                  </div>
+                  {domain.isCatchAllEnabled && (
+                    <>
+                      <span className="text-xs text-gray-600 font-medium">•</span>
+                      <div className="flex items-center space-x-1">
+                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <span className="text-xs text-gray-600 font-medium">Catch-all</span>
+                      </div>
+                    </>
+                  )}
+                  {!domain.isCatchAllEnabled && (
+                    <>
+                      <span className="text-xs text-gray-600 font-medium">•</span>
+                      <span className="text-xs text-gray-600 font-medium">
+                        {domain.emailAddressCount} address{domain.emailAddressCount !== 1 ? "es" : ""}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              {domain.isVerified && (
-                <Badge className="bg-emerald-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-                  <HiCheckCircle className="w-3 h-3 mr-1" />
-                  Verified
-                </Badge>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                onClick={(e) => e.stopPropagation()}
-                asChild
-              >
-                <Link href={`/emails/${domain.id}`}>
-                  <HiCog className="w-4 h-4 text-gray-500 hover:text-gray-700" />
-                </Link>
+
+              {!domain.isCatchAllEnabled && 
+              <Button size="sm" >
+                <HiPlus className="w-3 h-3 mr-1" />
+                Add Address
               </Button>
-              {emailAddresses.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onToggle()
-                  }}
-                >
-                  <HiChevronDown 
-                    className={`w-4 h-4 text-gray-500 transition-transform duration-300 ease-in-out ${
-                      isExpanded ? 'rotate-0' : '-rotate-90'
-                    }`}
-                  />
-                </Button>
-              )}
+              }
+              <Button variant="secondary" size="sm">
+                <HiCog className="w-3 h-3 mr-1" />
+                Config
+              </Button>
             </div>
           </div>
         </div>
 
         {/* Email Addresses - Smooth expansion */}
-        {emailAddresses.length > 0 && (
-          <div 
+        {emailAddresses.length > 0 && !domain.isCatchAllEnabled && (
+          <div
             className="bg-gray-50/30 overflow-hidden transition-all duration-300 ease-in-out"
             style={{
               maxHeight: isExpanded ? `${emailAddresses.length * 80 + 16}px` : '0px',
@@ -322,16 +343,15 @@ function DomainCard({
             {emailAddresses.map((email: any, index: number) => (
               <div
                 key={email.id}
-                className={`group/email relative px-4 py-1 hover:bg-white/60 transition-colors duration-200 border-l-3 ${getBorderColor(email.isActive, email.isReceiptRuleConfigured)} ${
-                  index !== emailAddresses.length - 1 ? "border-b border-gray-100/60" : ""
-                }`}
+                className={`group/email relative px-4 py-2 hover:bg-white/60 transition-colors duration-200 border-l-3 ${getBorderColor(email.isActive, email.isReceiptRuleConfigured)} ${index !== emailAddresses.length - 1 ? "border-b border-gray-100/60" : ""
+                  }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3 flex-1">
-                    <CustomInboundIcon 
-                      Icon={HiMail} 
-                      size={28} 
-                      backgroundColor="#10b981" 
+                    <CustomInboundIcon
+                      Icon={HiMail}
+                      size={28}
+                      backgroundColor="#10b981"
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2 mb-1">
@@ -349,29 +369,10 @@ function DomainCard({
                           )}
                         </Button>
                       </div>
-                      <div className="flex items-center space-x-3 text-xs">
-                        <div className="flex items-center space-x-1.5">
-                          <div className={`w-1.5 h-1.5 rounded-full ${getStatusColor(getEmailStatus(email))}`} />
-                          <span className="text-gray-600 font-medium capitalize">{getEmailStatus(email)}</span>
-                        </div>
-                        <span className="text-gray-500">{email.emailsLast24h || 0} emails today</span>
-                        {email.webhookName && (
-                          <div className="flex items-center space-x-1">
-                            <HiLightningBolt className="w-3 h-3 text-amber-500" />
-                            <span className="text-gray-500">{email.webhookName}</span>
-                          </div>
-                        )}
-                        <span className="text-gray-400">
-                          Added {formatDistanceToNow(new Date(email.createdAt), { addSuffix: true })}
-                        </span>
-                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="flex items-center space-x-1.5">
-                      <div className={`w-1.5 h-1.5 rounded-full ${getStatusColor(getReadyStatus(email))}`} />
-                      <span className="text-xs text-gray-600 font-medium capitalize">{getReadyStatus(email)}</span>
-                    </div>
+                  <div className="flex items-center space-x-2 text-right text-sm ">
+                    <span className="text-gray-500">{email.emailsLast24h || 0} emails today</span>
                   </div>
                 </div>
               </div>

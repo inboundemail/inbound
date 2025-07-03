@@ -6,6 +6,9 @@ export interface DomainStats {
   domain: string
   status: string
   isVerified: boolean
+  isCatchAllEnabled: boolean
+  catchAllWebhookId: string | null
+  catchAllEndpointId: string | null
   emailAddressCount: number
   emailsLast24h: number
   createdAt: string

@@ -11,7 +11,7 @@ import { SESClient, GetIdentityVerificationAttributesCommand } from '@aws-sdk/cl
 import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
 import { Autumn as autumn } from 'autumn-js'
 import { db } from '@/lib/db'
-import { emailDomains, domainDnsRecords, emailAddresses, webhooks, sesEvents, DOMAIN_STATUS } from '@/lib/db/schema'
+import { emailDomains, domainDnsRecords, emailAddresses, webhooks, endpoints, sesEvents, DOMAIN_STATUS } from '@/lib/db/schema'
 import { eq, count, and, sql } from 'drizzle-orm'
 
 // AWS SES Client setup
@@ -589,6 +589,8 @@ export async function getDomainDetails(domain: string, domainId: string, refresh
         webhookId: emailAddresses.webhookId,
         webhookName: webhooks.name,
         endpointId: emailAddresses.endpointId,
+        endpointName: endpoints.name,
+        endpointType: endpoints.type,
         isActive: emailAddresses.isActive,
         isReceiptRuleConfigured: emailAddresses.isReceiptRuleConfigured,
         receiptRuleName: emailAddresses.receiptRuleName,
@@ -607,6 +609,7 @@ export async function getDomainDetails(domain: string, domainId: string, refresh
       })
       .from(emailAddresses)
       .leftJoin(webhooks, eq(emailAddresses.webhookId, webhooks.id))
+      .leftJoin(endpoints, eq(emailAddresses.endpointId, endpoints.id))
       .where(eq(emailAddresses.domainId, domainId))
       .orderBy(emailAddresses.createdAt)
 
@@ -654,6 +657,8 @@ export async function getDomainDetails(domain: string, domainId: string, refresh
         webhookId: email.webhookId || undefined,
         webhookName: email.webhookName || undefined,
         endpointId: email.endpointId || undefined,
+        endpointName: email.endpointName || undefined,
+        endpointType: email.endpointType || undefined,
         isActive: email.isActive ?? false,
         isReceiptRuleConfigured: email.isReceiptRuleConfigured ?? false,
         receiptRuleName: email.receiptRuleName || undefined,
