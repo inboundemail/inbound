@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { HiCode, HiRefresh, HiPause, HiPlay, HiDownload, HiSearch, HiViewList, HiViewGrid, HiChevronDown, HiChevronRight } from 'react-icons/hi'
+import { toast } from 'sonner'
 import { 
   getLambdaFunctionInfo, 
   getLambdaRecentLogs, 
@@ -250,6 +251,9 @@ export default function LambdaPage() {
     if (message.includes('REPORT RequestId')) {
       return '📊 Request metrics'
     }
+    if (message.match(/^REPORT\s+RequestId:/)) {
+      return '📊 Request metrics'
+    }
     
     // Fallback to first 80 characters
     return message.length > 80 ? message.substring(0, 80) + '...' : message
@@ -270,50 +274,75 @@ export default function LambdaPage() {
   }
 
   const parseRequestInfo = (message: string) => {
+    // CloudWatch logs come in tab-separated format:
+    // TIMESTAMP\tREQUEST_ID\tLEVEL\tMESSAGE
+    // Example: 2025-07-02T21:49:47.556Z\t1404d664-c507-4ead-95b2-e24672038331\tINFO\t✅ REQUEST_COMPLETE|1404d664-c507-4ead-95b2-e24672038331|SUCCESS|Request completed successfully
+    
+    // First, check if this is a tab-separated CloudWatch log
+    const tabParts = message.split('\t')
+    let actualMessage = message
+    let embeddedRequestId: string | null = null
+    
+    if (tabParts.length >= 4) {
+      // This is a CloudWatch log with tabs
+      // Format: TIMESTAMP\tREQUEST_ID\tLEVEL\tMESSAGE
+      embeddedRequestId = tabParts[1]
+      actualMessage = tabParts.slice(3).join('\t') // Join the rest in case message has tabs
+    } else if (tabParts.length === 2) {
+      // Some logs like REPORT might only have TIMESTAMP\tMESSAGE format
+      actualMessage = tabParts[1]
+    }
+
     // Parse REQUEST_START logs (with optional emoji prefix)
-    const requestStartMatch = message.match(/(?:🆔\s+)?REQUEST_START\|([^|]+)\|(.+)/)
+    const requestStartMatch = actualMessage.match(/(?:🆔\s+)?REQUEST_START\|([^|]+)\|(.+)/)
     if (requestStartMatch) {
       return { type: 'REQUEST_START', requestId: requestStartMatch[1], message: requestStartMatch[2] }
     }
 
     // Parse EMAIL_TARGET logs (with optional emoji prefix)
-    const emailTargetMatch = message.match(/(?:📧\s+)?EMAIL_TARGET\|([^|]+)\|([^|]+)\|(.+)/)
+    const emailTargetMatch = actualMessage.match(/(?:📧\s+)?EMAIL_TARGET\|([^|]+)\|([^|]+)\|(.+)/)
     if (emailTargetMatch) {
       return { type: 'EMAIL_TARGET', requestId: emailTargetMatch[1], email: emailTargetMatch[2], message: emailTargetMatch[3] }
     }
 
     // Parse REQUEST_COMPLETE logs (with optional emoji prefix)
-    const requestCompleteMatch = message.match(/(?:✅\s+)?REQUEST_COMPLETE\|([^|]+)\|([^|]+)\|(.+)/)
+    const requestCompleteMatch = actualMessage.match(/(?:✅\s+)?REQUEST_COMPLETE\|([^|]+)\|([^|]+)\|(.+)/)
     if (requestCompleteMatch) {
       return { type: 'REQUEST_COMPLETE', requestId: requestCompleteMatch[1], status: requestCompleteMatch[2], message: requestCompleteMatch[3] }
     }
 
     // Parse logs with emoji prefix and request ID (format: 📧 requestId|Lambda - message)
-    const emojiPrefixedMatch = message.match(/^(?:[📧📥🔍🚀💥⚠️❌✅📨📭📍🧪📊]\s+)?([a-f0-9-]+)\|(.+)/)
+    const emojiPrefixedMatch = actualMessage.match(/^(?:[📧📥🔍🚀💥⚠️❌✅📨📭📍🧪📊]\s+)?([a-f0-9-]+)\|(.+)/)
     if (emojiPrefixedMatch) {
       return { type: 'LAMBDA_LOG', requestId: emojiPrefixedMatch[1], message: emojiPrefixedMatch[2] }
     }
 
+    // If we found an embedded request ID from tab format, use it
+    if (embeddedRequestId) {
+      return { type: 'LAMBDA_LOG', requestId: embeddedRequestId, message: actualMessage }
+    }
+
     // Parse logs with emoji prefix but no request ID (format: 📥 Lambda - message or ❌ Lambda - message)
     // These are logs where requestId was null/undefined
-    const emojiOnlyMatch = message.match(/^([📧📥🔍🚀💥⚠️❌✅📨📭📍🧪📊])\s+(Lambda\s+-\s+.+|Error\s+details:|.+error.+)/)
+    const emojiOnlyMatch = actualMessage.match(/^([📧📥🔍🚀💥⚠️❌✅📨📭📍🧪📊])\s+(Lambda\s+-\s+.+|Error\s+details:|.+error.+)/)
     if (emojiOnlyMatch) {
-      return { type: 'LAMBDA_LOG_NO_ID', requestId: null, message: message }
+      return { type: 'LAMBDA_LOG_NO_ID', requestId: null, message: actualMessage }
     }
 
     // Parse logs with request ID at the beginning (format: requestId|Lambda - message)
-    const prefixedRequestIdMatch = message.match(/^([a-f0-9-]+)\|(.+)/)
+    const prefixedRequestIdMatch = actualMessage.match(/^([a-f0-9-]+)\|(.+)/)
     if (prefixedRequestIdMatch) {
       return { type: 'LAMBDA_LOG', requestId: prefixedRequestIdMatch[1], message: prefixedRequestIdMatch[2] }
     }
 
     // Extract request ID from standard Lambda logs (RequestId: xxx)
-    const requestIdMatch = message.match(/RequestId: ([a-f0-9-]+)/)
+    // This handles START, END, and REPORT logs
+    const requestIdMatch = actualMessage.match(/RequestId:\s*([a-f0-9-]+)/)
     if (requestIdMatch) {
-      return { type: 'LAMBDA_LOG', requestId: requestIdMatch[1], message }
+      return { type: 'LAMBDA_LOG', requestId: requestIdMatch[1], message: actualMessage }
     }
 
-    return { type: 'OTHER', requestId: null, message }
+    return { type: 'OTHER', requestId: null, message: actualMessage }
   }
 
   const groupLogsByRequest = (logs: LogEvent[]) => {
@@ -645,36 +674,31 @@ export default function LambdaPage() {
                             <div key={`group-${group.requestId}`} className="border rounded-md bg-white">
                               {/* Request Group Header */}
                               <div 
-                                className={`px-3 py-2 transition-colors border-l-4 flex items-center ${
+                                className={`px-3 py-2 transition-colors border-l-4 flex items-center gap-2 ${
                                   group.status === 'SUCCESS' ? 'bg-green-50/50 hover:bg-green-50 text-green-800 border-l-green-400' :
                                   group.status === 'FAILED' ? 'bg-red-50/50 hover:bg-red-50 text-red-800 border-l-red-400' :
                                   'bg-blue-50/50 hover:bg-blue-50 text-blue-800 border-l-blue-400'
                                 }`}
                               >
                                 <div 
-                                  className="flex items-center gap-2 mr-2 cursor-pointer"
+                                  className="flex items-center gap-1 cursor-pointer"
                                   onClick={() => toggleRequestExpansion(group.requestId)}
                                 >
                                   {expandedRequests.has(group.requestId) ? 
                                     <HiChevronDown className="h-3 w-3" /> : 
                                     <HiChevronRight className="h-3 w-3" />
                                   }
+                                  <span className="text-[9px] text-muted-foreground whitespace-nowrap font-mono opacity-60">
+                                    {new Date(group.startTime).toLocaleTimeString()}
+                                  </span>
                                 </div>
-                                <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0 font-mono opacity-60">
-                                  {new Date(group.startTime).toLocaleTimeString('en-US', { 
-                                    hour12: false, 
-                                    hour: '2-digit', 
-                                    minute: '2-digit', 
-                                    second: '2-digit' 
-                                  })}
-                                </span>
                                 <div 
-                                  className="font-medium text-xs truncate flex-1 mx-2 cursor-pointer"
+                                  className="font-medium text-xs flex-1 cursor-pointer"
                                   onClick={() => toggleRequestExpansion(group.requestId)}
                                 >
                                   {group.emailTarget ? `Request for ${group.emailTarget}` : group.summary}
                                 </div>
-                                <div className="flex items-center gap-2 flex-shrink-0">
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
                                   {group.emailTarget && (
                                     <Button
                                       variant="secondary"
@@ -697,12 +721,25 @@ export default function LambdaPage() {
                                     }}
                                     className="h-5 px-2 text-[10px] bg-purple-100 hover:bg-purple-200 text-purple-700"
                                   >
-                                    🔍 Request
+                                    🔍 Filter
                                   </Button>
-                                  <span className="text-[10px] text-muted-foreground opacity-60 font-mono">
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      navigator.clipboard.writeText(group.requestId)
+                                      toast.success('Request ID copied to clipboard')
+                                    }}
+                                    className="h-5 px-2 text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-700"
+                                    title={`Copy request ID: ${group.requestId}`}
+                                  >
+                                    📋 Copy ID
+                                  </Button>
+                                  <span className="text-[9px] text-muted-foreground opacity-60 font-mono">
                                     {group.logs.length} logs
                                   </span>
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded font-mono">
+                                  <span className="text-[10px] px-1 py-0.5 rounded font-mono">
                                     {group.status === 'SUCCESS' ? '✅' : group.status === 'FAILED' ? '❌' : '⏳'}
                                   </span>
                                 </div>
@@ -712,15 +749,36 @@ export default function LambdaPage() {
                               {expandedRequests.has(group.requestId) && (
                                 <div className="border-t bg-gray-50/30 space-y-0.5 p-2">
                                   {group.logs.map((log, logIndex) => {
-                                    const formatted = formatLogMessage(log.message)
-                                    const summary = getLogSummary(log.message)
+                                    // Parse the log to extract the actual message content
+                                    const parsed = parseRequestInfo(log.message)
+                                    let displayMessage = log.message
+                                    
+                                    // If it's a CloudWatch format log, extract just the message part
+                                    const tabParts = log.message.split('\t')
+                                    if (tabParts.length >= 4) {
+                                      // Skip timestamp, request ID, and log level to get the actual message
+                                      displayMessage = tabParts.slice(3).join('\t')
+                                    }
+                                    
+                                    // Remove all occurrences of the request ID from the message
+                                    if (group.requestId) {
+                                      displayMessage = displayMessage.replace(new RegExp(group.requestId, 'g'), '').trim()
+                                      // Clean up any leftover pipes or double spaces
+                                      displayMessage = displayMessage.replace(/\|\s*\|/g, '|').replace(/\s+/g, ' ').replace(/^\|/, '').trim()
+                                      // Replace |Lambda - with just Lambda -
+                                      displayMessage = displayMessage.replace(/\|Lambda\s+-\s+/g, 'Lambda - ')
+                                    }
+                                    
+                                    const formatted = formatLogMessage(displayMessage)
+                                    const summary = getLogSummary(displayMessage)
+                                    
                                     return (
                                       <div 
                                         key={logIndex}
                                         onClick={() => handleLogClick(log)}
                                         className="px-2 py-1 hover:bg-white rounded cursor-pointer transition-colors text-xs"
                                       >
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-start gap-2">
                                           <span className="text-[9px] text-muted-foreground whitespace-nowrap flex-shrink-0 font-mono opacity-50">
                                             {new Date(log.timestamp).toLocaleTimeString('en-US', { 
                                               hour12: false, 
@@ -729,7 +787,7 @@ export default function LambdaPage() {
                                               second: '2-digit' 
                                             })}
                                           </span>
-                                          <div className="truncate flex-1">
+                                          <div className="flex-1 break-words">
                                             {summary}
                                           </div>
                                         </div>
@@ -742,8 +800,26 @@ export default function LambdaPage() {
                           )
                         } else if (item.type === 'log' && item.log) {
                           const log = item.log
-                          const formatted = formatLogMessage(log.message)
-                          const summary = getLogSummary(log.message)
+                          
+                          // Extract the actual message content
+                          let displayMessage = log.message
+                          const tabParts = log.message.split('\t')
+                          if (tabParts.length >= 4) {
+                            displayMessage = tabParts.slice(3).join('\t')
+                          }
+                          
+                          // Remove all occurrences of the request ID from the message
+                          const parsed = parseRequestInfo(log.message)
+                          if (parsed.requestId) {
+                            displayMessage = displayMessage.replace(new RegExp(parsed.requestId, 'g'), '').trim()
+                            // Clean up any leftover pipes or double spaces
+                            displayMessage = displayMessage.replace(/\|\s*\|/g, '|').replace(/\s+/g, ' ').replace(/^\|/, '').trim()
+                            // Replace |Lambda - with just Lambda -
+                            displayMessage = displayMessage.replace(/\|Lambda\s+-\s+/g, 'Lambda - ')
+                          }
+                          
+                          const formatted = formatLogMessage(displayMessage)
+                          const summary = getLogSummary(displayMessage)
                           return (
                             <div 
                               key={`log-${item.originalIndex}`}
@@ -763,7 +839,7 @@ export default function LambdaPage() {
                                   second: '2-digit' 
                                 })}
                               </span>
-                              <div className="font-medium text-xs truncate flex-1 mx-2">
+                              <div className="font-medium text-xs flex-1 mx-2 break-words">
                                 {summary}
                               </div>
                               <div className="flex items-center gap-1 flex-shrink-0">
@@ -784,8 +860,25 @@ export default function LambdaPage() {
                 } else {
                   // Individual log view (original)
                   return filteredLogs.map((log, index) => {
-                    const formatted = formatLogMessage(log.message)
-                    const summary = getLogSummary(log.message)
+                    // Extract the actual message content
+                    let displayMessage = log.message
+                    const tabParts = log.message.split('\t')
+                    if (tabParts.length >= 4) {
+                      displayMessage = tabParts.slice(3).join('\t')
+                    }
+                    
+                    // Remove all occurrences of the request ID from the message
+                    const parsed = parseRequestInfo(log.message)
+                    if (parsed.requestId) {
+                      displayMessage = displayMessage.replace(new RegExp(parsed.requestId, 'g'), '').trim()
+                      // Clean up any leftover pipes or double spaces
+                      displayMessage = displayMessage.replace(/\|\s*\|/g, '|').replace(/\s+/g, ' ').replace(/^\|/, '').trim()
+                      // Replace |Lambda - with just Lambda -
+                      displayMessage = displayMessage.replace(/\|Lambda\s+-\s+/g, 'Lambda - ')
+                    }
+                    
+                    const formatted = formatLogMessage(displayMessage)
+                    const summary = getLogSummary(displayMessage)
                     return (
                       <div 
                         key={index} 
