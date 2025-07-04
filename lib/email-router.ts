@@ -254,32 +254,160 @@ async function findEndpointForEmail(recipient: string, userId: string): Promise<
 }
 
 /**
- * Handle webhook endpoint routing (uses existing webhook logic)
+ * Handle webhook endpoint routing (direct implementation for unified endpoints)
  */
 async function handleWebhookEndpoint(emailId: string, endpoint: Endpoint): Promise<void> {
   try {
     console.log(`📡 handleWebhookEndpoint - Processing webhook endpoint: ${endpoint.name}`)
-    
-    // Use existing webhook logic but track as endpoint delivery
-    const result = await triggerEmailAction(emailId)
-    
+
+    // Get email with structured data
+    const emailData = await getEmailWithStructuredData(emailId)
+    if (!emailData) {
+      throw new Error('Email not found or missing structured data')
+    }
+
+    // Parse endpoint configuration
+    const config = JSON.parse(endpoint.config)
+    const webhookUrl = config.url
+    const timeout = config.timeout || 30
+    const retryAttempts = config.retryAttempts || 3
+    const customHeaders = config.headers || {}
+
+    if (!webhookUrl) {
+      throw new Error('Webhook URL not configured')
+    }
+
+    console.log(`📤 handleWebhookEndpoint - Sending email ${emailData.messageId} to webhook: ${endpoint.name} (${webhookUrl})`)
+
+    // Reconstruct ParsedEmailData from structured data
+    const parsedEmailData = reconstructParsedEmailData(emailData)
+
+    // Create webhook payload with the exact structure expected
+    const webhookPayload = {
+      event: 'email.received',
+      timestamp: new Date().toISOString(),
+      email: {
+        id: emailData.emailId,
+        messageId: emailData.messageId,
+        from: emailData.fromData ? JSON.parse(emailData.fromData) : null,
+        to: emailData.toData ? JSON.parse(emailData.toData) : null,
+        recipient: emailData.recipient,
+        subject: emailData.subject,
+        receivedAt: emailData.date,
+        
+        // Full ParsedEmailData structure
+        parsedData: parsedEmailData,
+        
+        // Cleaned content for backward compatibility
+        cleanedContent: {
+          html: parsedEmailData.htmlBody ? sanitizeHtml(parsedEmailData.htmlBody) : null,
+          text: parsedEmailData.textBody || null,
+          hasHtml: !!parsedEmailData.htmlBody,
+          hasText: !!parsedEmailData.textBody,
+          attachments: parsedEmailData.attachments || [],
+          headers: parsedEmailData.headers || {}
+        }
+      },
+      endpoint: {
+        id: endpoint.id,
+        name: endpoint.name,
+        type: endpoint.type
+      }
+    }
+
+    const payloadString = JSON.stringify(webhookPayload)
+
+    // Prepare headers
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'InboundEmail-Webhook/1.0',
+      'X-Webhook-Event': 'email.received',
+      'X-Endpoint-ID': endpoint.id,
+      'X-Webhook-Timestamp': webhookPayload.timestamp,
+      'X-Email-ID': emailData.emailId,
+      'X-Message-ID': emailData.messageId || '',
+      ...customHeaders
+    }
+
+    // Send the webhook
+    const startTime = Date.now()
+    let deliverySuccess = false
+    let responseCode = 0
+    let responseBody = ''
+    let errorMessage = ''
+    let deliveryTime = 0
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers,
+        body: payloadString,
+        signal: AbortSignal.timeout(timeout * 1000)
+      })
+
+      deliveryTime = Date.now() - startTime
+      responseCode = response.status
+      responseBody = await response.text().catch(() => 'Unable to read response body')
+      deliverySuccess = response.ok
+
+      console.log(`${deliverySuccess ? '✅' : '❌'} handleWebhookEndpoint - Delivery ${deliverySuccess ? 'succeeded' : 'failed'} for ${emailData.recipient}: ${responseCode} in ${deliveryTime}ms`)
+
+    } catch (error) {
+      deliveryTime = Date.now() - startTime
+      deliverySuccess = false
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = `Request timeout after ${timeout}s`
+        } else {
+          errorMessage = error.message
+        }
+      } else {
+        errorMessage = 'Unknown error'
+      }
+
+      console.error(`❌ handleWebhookEndpoint - Delivery failed for ${emailData.recipient}:`, errorMessage)
+    }
+
     // Track delivery in new endpoint deliveries table
     await trackEndpointDelivery(
       emailId, 
       endpoint.id, 
       'webhook', 
-      result.success ? 'success' : 'failed',
-      result.error ? { error: result.error, deliveryId: result.deliveryId } : { deliveryId: result.deliveryId }
+      deliverySuccess ? 'success' : 'failed',
+      { 
+        responseCode,
+        responseBody: responseBody ? responseBody.substring(0, 2000) : null, // Limit response body size
+        deliveryTime,
+        error: errorMessage || null,
+        url: webhookUrl,
+        deliveredAt: new Date().toISOString()
+      }
     )
 
-    if (!result.success) {
-      throw new Error(result.error || 'Webhook delivery failed')
+    if (!deliverySuccess) {
+      throw new Error(errorMessage || 'Webhook delivery failed')
     }
+
+    console.log(`✅ handleWebhookEndpoint - Successfully delivered email ${emailId} to webhook ${endpoint.name}`)
 
   } catch (error) {
     console.error(`❌ handleWebhookEndpoint - Error processing webhook endpoint:`, error)
     throw error
   }
+}
+
+/**
+ * Simple HTML sanitization (basic implementation)
+ */
+function sanitizeHtml(html: string): string {
+  // Basic sanitization - remove script tags and dangerous attributes
+  // For production, consider using a proper HTML sanitization library
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/on\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/on\w+\s*=\s*'[^']*'/gi, '')
+    .replace(/javascript:/gi, '')
 }
 
 /**
