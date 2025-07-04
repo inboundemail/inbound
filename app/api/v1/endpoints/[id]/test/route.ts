@@ -7,14 +7,15 @@ import { eq, and } from 'drizzle-orm'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    console.log(`🧪 POST /api/v1/endpoints/${params.id}/test - Testing endpoint`)
+    const { id } = await params
+    console.log(`🧪 POST /api/v1/endpoints/${id}/test - Testing endpoint`)
     
     const session = await auth.api.getSession({ headers: await headers() })
     if (!session?.user?.id) {
-      console.warn(`❌ POST /api/v1/endpoints/${params.id}/test - Unauthorized request`)
+      console.warn(`❌ POST /api/v1/endpoints/${id}/test - Unauthorized request`)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -23,7 +24,7 @@ export async function POST(
       .select()
       .from(endpoints)
       .where(and(
-        eq(endpoints.id, params.id),
+        eq(endpoints.id, id),
         eq(endpoints.userId, session.user.id)
       ))
       .limit(1)
@@ -62,14 +63,40 @@ export async function POST(
           console.log(`🔗 Testing webhook: ${config.url}`)
           
           const testPayload = {
-            event: 'test',
+            event: 'email_received',
+            type: 'test',
             timestamp: new Date().toISOString(),
-            message: 'This is a test request from the Inbound Email service',
+            messageId: `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            source: 'test@example.com',
+            destination: ['test@yourdomain.com'],
+            subject: 'Test Email - Inbound Email Service',
+            body: {
+              text: 'This is a test email from the Inbound Email service to verify webhook functionality.',
+              html: '<p>This is a test email from the <strong>Inbound Email service</strong> to verify webhook functionality.</p>'
+            },
+            attachments: [],
+            headers: {
+              'From': 'test@example.com',
+              'To': 'test@yourdomain.com',
+              'Subject': 'Test Email - Inbound Email Service',
+              'Date': new Date().toISOString()
+            },
             endpoint: {
               id: endpoint[0].id,
               name: endpoint[0].name
             },
             test: true
+          }
+
+          // Parse custom headers safely
+          let customHeaders = {}
+          if (config.headers) {
+            try {
+              customHeaders = typeof config.headers === 'string' ? JSON.parse(config.headers) : config.headers
+            } catch (headerError) {
+              console.warn(`⚠️ Invalid custom headers for endpoint ${id}:`, headerError)
+              customHeaders = {}
+            }
           }
 
           const response = await fetch(config.url, {
@@ -79,7 +106,7 @@ export async function POST(
               'User-Agent': 'InboundEmail-Test/1.0',
               'X-Test-Request': 'true',
               'X-Endpoint-ID': endpoint[0].id,
-              ...(config.headers ? JSON.parse(config.headers) : {})
+              ...customHeaders
             },
             body: JSON.stringify(testPayload),
             signal: AbortSignal.timeout((config.timeout || 30) * 1000)
@@ -223,12 +250,12 @@ export async function POST(
         }
     }
 
-    console.log(`${testResult.success ? '✅' : '❌'} Test ${testResult.success ? 'passed' : 'failed'} for endpoint ${params.id} (${endpoint[0].type})`)
+    console.log(`${testResult.success ? '✅' : '❌'} Test ${testResult.success ? 'passed' : 'failed'} for endpoint ${id} (${endpoint[0].type})`)
 
     return NextResponse.json(testResult)
 
   } catch (error) {
-    console.error(`❌ POST /api/v1/endpoints/${params.id}/test - Error:`, error)
+    console.error(`❌ POST /api/v1/endpoints/test - Error:`, error)
     return NextResponse.json(
       {
         success: false,

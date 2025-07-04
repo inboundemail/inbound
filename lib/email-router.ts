@@ -25,7 +25,8 @@ export async function routeEmail(emailId: string): Promise<void> {
       throw new Error('Email recipient not found')
     }
     
-    const endpoint = await findEndpointForEmail(emailData.recipient)
+    // Pass userId to findEndpointForEmail to ensure proper filtering
+    const endpoint = await findEndpointForEmail(emailData.recipient, emailData.userId)
     if (!endpoint) {
       console.warn(`⚠️ routeEmail - No endpoint configured for ${emailData.recipient}, falling back to legacy webhook lookup`)
       // Fallback to existing webhook logic for backward compatibility
@@ -137,8 +138,10 @@ async function getEmailWithStructuredData(emailId: string) {
  * Find endpoint configuration for an email recipient
  * Priority: endpointId → webhookId → catch-all endpoint → catch-all webhook
  */
-async function findEndpointForEmail(recipient: string): Promise<Endpoint | null> {
+async function findEndpointForEmail(recipient: string, userId: string): Promise<Endpoint | null> {
   try {
+    console.log(`🔍 findEndpointForEmail - Looking for endpoint for ${recipient} (userId: ${userId})`)
+    
     // Step 1: Look up the email address to find the configured endpoint
     const emailAddressRecord = await db
       .select({
@@ -151,7 +154,8 @@ async function findEndpointForEmail(recipient: string): Promise<Endpoint | null>
       .from(emailAddresses)
       .where(and(
         eq(emailAddresses.address, recipient),
-        eq(emailAddresses.isActive, true)
+        eq(emailAddresses.isActive, true),
+        eq(emailAddresses.userId, userId)
       ))
       .limit(1)
 
@@ -165,7 +169,8 @@ async function findEndpointForEmail(recipient: string): Promise<Endpoint | null>
           .from(endpoints)
           .where(and(
             eq(endpoints.id, endpointId),
-            eq(endpoints.isActive, true)
+            eq(endpoints.isActive, true),
+            eq(endpoints.userId, userId)
           ))
           .limit(1)
 
@@ -189,6 +194,8 @@ async function findEndpointForEmail(recipient: string): Promise<Endpoint | null>
       return null
     }
 
+    console.log(`🌐 findEndpointForEmail - Checking catch-all configuration for domain: ${domain}`)
+
     const domainRecord = await db
       .select({
         isCatchAllEnabled: emailDomains.isCatchAllEnabled,
@@ -199,12 +206,14 @@ async function findEndpointForEmail(recipient: string): Promise<Endpoint | null>
       .from(emailDomains)
       .where(and(
         eq(emailDomains.domain, domain),
-        eq(emailDomains.isCatchAllEnabled, true)
+        eq(emailDomains.isCatchAllEnabled, true),
+        eq(emailDomains.userId, userId)
       ))
       .limit(1)
 
     if (domainRecord[0]) {
       const { catchAllEndpointId, catchAllWebhookId } = domainRecord[0]
+      console.log(`🌐 findEndpointForEmail - Found catch-all domain: ${domain}, endpointId: ${catchAllEndpointId}, webhookId: ${catchAllWebhookId}`)
 
       // Priority 3: Use catch-all endpoint
       if (catchAllEndpointId) {
@@ -213,13 +222,16 @@ async function findEndpointForEmail(recipient: string): Promise<Endpoint | null>
           .from(endpoints)
           .where(and(
             eq(endpoints.id, catchAllEndpointId),
-            eq(endpoints.isActive, true)
+            eq(endpoints.isActive, true),
+            eq(endpoints.userId, userId)
           ))
           .limit(1)
 
         if (catchAllEndpointRecord[0]) {
           console.log(`🌐 findEndpointForEmail - Found catch-all endpoint: ${catchAllEndpointRecord[0].name} for ${recipient}`)
           return catchAllEndpointRecord[0]
+        } else {
+          console.warn(`⚠️ findEndpointForEmail - Catch-all endpoint ${catchAllEndpointId} not found or inactive`)
         }
       }
 
@@ -228,6 +240,8 @@ async function findEndpointForEmail(recipient: string): Promise<Endpoint | null>
         console.log(`🔄 findEndpointForEmail - Using catch-all legacy webhook ${catchAllWebhookId} for ${recipient}`)
         return null // Return null to trigger legacy webhook processing
       }
+    } else {
+      console.warn(`⚠️ findEndpointForEmail - No catch-all domain configuration found for ${domain} (userId: ${userId})`)
     }
 
     console.warn(`⚠️ findEndpointForEmail - No endpoint, webhook, or catch-all configuration found for ${recipient}`)

@@ -267,7 +267,7 @@ function DomainCard({
   // Only fetch details if domain has email addresses and we need to show them
   // Don't fetch details for catch-all domains as they don't show individual addresses
   const shouldFetchDetails = domain.isVerified && domain.emailAddressCount > 0 && !domain.isCatchAllEnabled
-  const { data: domainDetails } = useDomainDetailsQuery(shouldFetchDetails ? domain.id : '', shouldFetchDetails ? domain.domain : '')
+  const { data: domainDetails } = useDomainDetailsQuery(shouldFetchDetails ? domain.id : '', shouldFetchDetails ? domain.domain : '', false)
 
   const emailAddresses = (shouldFetchDetails && domainDetails?.success) ? domainDetails.emailAddresses || [] : []
 
@@ -315,17 +315,30 @@ function DomainCard({
                 </div>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-2">
 
-              {!domain.isCatchAllEnabled && 
-              <Button size="sm" >
-                <HiPlus className="w-3 h-3 mr-1" />
-                Add Address
-              </Button>
-              }
-              <Button variant="secondary" size="sm">
-                <HiCog className="w-3 h-3 mr-1" />
-                Config
+              {/* {!domain.isCatchAllEnabled && 
+                // <Button 
+                //   size="sm" 
+                //   onClick={(e) => {
+                //     e.stopPropagation()
+                //     // TODO: Navigate to add email address page/dialog
+                //   }}
+                // >
+                //   <HiPlus className="w-3 h-3 mr-1" />
+                //   Add Address
+                // </Button>
+              } */}
+              <Button 
+                variant="secondary" 
+                size="sm"
+                onClick={(e) => e.stopPropagation()}
+                asChild
+              >
+                <Link href={`/emails/${domain.id}`}>
+                  <HiCog className="w-3 h-3 mr-1" />
+                  Config
+                </Link>
               </Button>
             </div>
           </div>

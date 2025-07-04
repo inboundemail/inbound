@@ -12,16 +12,16 @@ import {
 // Query keys for domain details
 export const domainDetailsKeys = {
   all: ['domainDetails'] as const,
-  detail: (domainId: string) => [...domainDetailsKeys.all, domainId] as const,
+  detail: (domainId: string, refreshProvider?: boolean) => [...domainDetailsKeys.all, domainId, { refreshProvider: refreshProvider || false }] as const,
   catchAll: (domainId: string) => [...domainDetailsKeys.all, domainId, 'catchAll'] as const,
 }
 
 // Hook for domain details query
-export const useDomainDetailsQuery = (domainId: string, domainName?: string) => {
+export const useDomainDetailsQuery = (domainId: string, domainName?: string, refreshProvider: boolean = false) => {
   return useQuery({
-    queryKey: domainDetailsKeys.detail(domainId),
+    queryKey: domainDetailsKeys.detail(domainId, refreshProvider),
     queryFn: async () => {
-      const result = await getDomainDetails(domainName || domainId, domainId, true)
+      const result = await getDomainDetails(domainName || domainId, domainId, refreshProvider)
       if (!result.success) {
         throw new Error(result.error || 'Failed to fetch domain details')
       }
@@ -64,7 +64,7 @@ export const useDomainVerificationMutation = () => {
     },
     onSuccess: (data, { domainId }) => {
       // Simple invalidation - let react-query handle the rest
-      queryClient.invalidateQueries({ queryKey: domainDetailsKeys.detail(domainId) })
+      queryClient.invalidateQueries({ queryKey: domainDetailsKeys.all })
     },
   })
 }
@@ -83,7 +83,7 @@ export const useDomainDeletionMutation = () => {
     },
     onSuccess: (data, { domainId }) => {
       // Remove domain from cache and invalidate related queries
-      queryClient.removeQueries({ queryKey: domainDetailsKeys.detail(domainId) })
+      queryClient.removeQueries({ queryKey: domainDetailsKeys.all })
       queryClient.removeQueries({ queryKey: domainDetailsKeys.catchAll(domainId) })
       queryClient.invalidateQueries({ queryKey: ['domains'] })
       queryClient.invalidateQueries({ queryKey: ['domainStats'] })
@@ -115,7 +115,7 @@ export const useAddEmailAddressMutation = () => {
     },
     onSuccess: (data, { domainId }) => {
       // Simple invalidation
-      queryClient.invalidateQueries({ queryKey: domainDetailsKeys.detail(domainId) })
+      queryClient.invalidateQueries({ queryKey: domainDetailsKeys.all })
     },
   })
 }
@@ -140,7 +140,7 @@ export const useDeleteEmailAddressMutation = () => {
     },
     onSuccess: (data, { domainId }) => {
       // Simple invalidation
-      queryClient.invalidateQueries({ queryKey: domainDetailsKeys.detail(domainId) })
+      queryClient.invalidateQueries({ queryKey: domainDetailsKeys.all })
     },
   })
 }
@@ -170,7 +170,7 @@ export const useUpdateEmailWebhookMutation = () => {
     },
     onSuccess: (data, { domainId }) => {
       // Simple invalidation
-      queryClient.invalidateQueries({ queryKey: domainDetailsKeys.detail(domainId) })
+      queryClient.invalidateQueries({ queryKey: domainDetailsKeys.all })
     },
   })
 }
@@ -197,7 +197,7 @@ export const useEnableCatchAllMutation = () => {
     },
     onSuccess: (data, { domainId }) => {
       // Invalidate both domain details and catch-all status
-      queryClient.invalidateQueries({ queryKey: domainDetailsKeys.detail(domainId) })
+      queryClient.invalidateQueries({ queryKey: domainDetailsKeys.all })
       queryClient.invalidateQueries({ queryKey: domainDetailsKeys.catchAll(domainId) })
     },
   })
@@ -217,7 +217,7 @@ export const useDisableCatchAllMutation = () => {
     },
     onSuccess: (data, { domainId }) => {
       // Invalidate both domain details and catch-all status
-      queryClient.invalidateQueries({ queryKey: domainDetailsKeys.detail(domainId) })
+      queryClient.invalidateQueries({ queryKey: domainDetailsKeys.all })
       queryClient.invalidateQueries({ queryKey: domainDetailsKeys.catchAll(domainId) })
     },
   })
