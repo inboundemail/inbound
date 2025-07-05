@@ -39,7 +39,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-[#F7F8FA] relative overflow-hidden flex items-center justify-center">
       <BackgroundSvg />
       {/* Main content */}
-      <div className="w-full max-w-sm z-10">
+      <div className="w-full max-w-sm z-10 px-4 sm:px-0">
         {/* Logo section */}
         <Link href="/">
           <div className="flex flex-col items-center gap-6 mb-8">
