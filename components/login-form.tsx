@@ -1,149 +1,170 @@
-"use client"
+"use client";
 
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { authClient } from "@/lib/auth-client"
-import { useState } from "react"
-import { toast } from "sonner"
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { authClient } from "@/lib/auth-client";
+import { useState } from "react";
+import { toast } from "sonner";
+import { MailIcon } from "lucide-react";
 
 export function LoginForm({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"form">) {
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
-  const [isGitHubLoading, setIsGitHubLoading] = useState(false)
-  const [isMagicLinkLoading, setIsMagicLinkLoading] = useState(false)
-  const [email, setEmail] = useState("")
-  const [magicLinkSent, setMagicLinkSent] = useState(false)
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isGitHubLoading, setIsGitHubLoading] = useState(false);
+  const [isMagicLinkLoading, setIsMagicLinkLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
 
   const handleGitHubSignIn = async () => {
-    setIsGitHubLoading(true)
+    setIsGitHubLoading(true);
     try {
       await authClient.signIn.social({
         provider: "github",
         callbackURL: "/mail", // Main layout will handle onboarding redirect
-        errorCallbackURL: "/login?error=auth_failed"
-      })
+        errorCallbackURL: "/login?error=auth_failed",
+      });
       // Don't reset loading state here as we'll be redirecting
     } catch (error) {
-      console.error("GitHub sign in error:", error)
-      setIsGitHubLoading(false) // Only reset on error
+      console.error("GitHub sign in error:", error);
+      setIsGitHubLoading(false); // Only reset on error
     }
-  }
+  };
 
   const handleGoogleSignIn = async () => {
-    setIsGoogleLoading(true)
+    setIsGoogleLoading(true);
     try {
       await authClient.signIn.social({
         provider: "google",
         callbackURL: "/mail", // Main layout will handle onboarding redirect
-        errorCallbackURL: "/login?error=auth_failed"
-      })
+        errorCallbackURL: "/login?error=auth_failed",
+      });
       // Don't reset loading state here as we'll be redirecting
     } catch (error) {
-      console.error("Google sign in error:", error)
-      setIsGoogleLoading(false) // Only reset on error
+      console.error("Google sign in error:", error);
+      setIsGoogleLoading(false); // Only reset on error
     }
-  }
+  };
 
   const handleMagicLinkSignIn = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
+    e.preventDefault();
+
     if (!email.trim()) {
-      toast.error("Please enter your email address")
-      return
+      toast.error("Please enter your email address");
+      return;
     }
 
     if (!email.includes("@")) {
-      toast.error("Please enter a valid email address")
-      return
+      toast.error("Please enter a valid email address");
+      return;
     }
 
-    setIsMagicLinkLoading(true)
+    setIsMagicLinkLoading(true);
     try {
       const { data, error } = await authClient.signIn.magicLink({
         email: email.trim(),
-        callbackURL: "/mail" // Main layout will handle onboarding redirect
-      })
+        callbackURL: "/mail", // Main layout will handle onboarding redirect
+      });
 
       if (error) {
-        throw new Error(error.message || "Failed to send magic link")
+        throw new Error(error.message || "Failed to send magic link");
       }
 
-      setMagicLinkSent(true)
-      toast.success(`Magic link sent to ${email}! Check your email to sign in.`)
-      
+      setMagicLinkSent(true);
+      toast.success(
+        `Magic link sent to ${email}! Check your email to sign in.`
+      );
     } catch (error) {
-      console.error("Magic link error:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to send magic link")
+      console.error("Magic link error:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to send magic link"
+      );
     } finally {
-      setIsMagicLinkLoading(false)
+      setIsMagicLinkLoading(false);
     }
-  }
+  };
 
   // Disable buttons if any login is in progress
-  const isAnyLoading = isGoogleLoading || isGitHubLoading || isMagicLinkLoading
+  const isAnyLoading = isGoogleLoading || isGitHubLoading || isMagicLinkLoading;
 
   if (magicLinkSent) {
     return (
       <div className={cn("flex flex-col gap-6", className)}>
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-8 w-8 text-green-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+              />
             </svg>
           </div>
           <h1 className="text-2xl font-bold">check your email</h1>
           <p className="text-balance text-sm text-muted-foreground">
-            We've sent a magic link to <strong>{email}</strong>. Click the link in your email to sign in.
+            We've sent a magic link to <strong>{email}</strong>. Click the link
+            in your email to sign in.
           </p>
-          {process.env.NODE_ENV === 'development' && (
+          {process.env.NODE_ENV === "development" && (
             <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
-              <strong>Dev mode:</strong> Check your console for the magic link URL
+              <strong>Dev mode:</strong> Check your console for the magic link
+              URL
             </p>
           )}
         </div>
-        <Button 
-          variant="secondary" 
+        <Button
+          variant="secondary"
           className="w-full"
           onClick={() => {
-            setMagicLinkSent(false)
-            setEmail("")
+            setMagicLinkSent(false);
+            setEmail("");
           }}
         >
           Try a different email
         </Button>
       </div>
-    )
+    );
   }
 
   return (
-    <form className={cn("flex flex-col gap-6", className)} onSubmit={handleMagicLinkSignIn} {...props}>
-      <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-2xl font-bold">login to your account</h1>
-        <p className="text-balance text-sm text-muted-foreground">
-          choose your preferred login method
-        </p>
-      </div>
-
+    <form
+      className={cn("flex flex-col gap-4", className)}
+      onSubmit={handleMagicLinkSignIn}
+      {...props}
+    >
       {/* Magic Link Section */}
-      <div className="grid gap-3">
+      <div className="grid gap-1">
         <Label htmlFor="email" className="text-sm font-medium">
-          Email address
+          Email Address
         </Label>
-        <div className="grid gap-3">
-          <Input
-            id="email"
-            type="email"
-            placeholder="Enter your email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={isAnyLoading}
-            autoComplete="email"
-          />
-          <Button 
+        <div className="grid gap-2">
+          <div className="relative">
+            <MailIcon
+              size="15"
+              className="text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2"
+            />
+            <Input
+              className="pl-9"
+              id="email"
+              type="email"
+              placeholder="Enter your email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={isAnyLoading}
+              autoComplete="email"
+            />
+          </div>
+          <Button
             type="submit"
             className="w-full"
             disabled={isAnyLoading || !email.trim()}
@@ -154,38 +175,36 @@ export function LoginForm({
                 Sending magic link...
               </>
             ) : (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-                Send magic link
-              </>
+              <>Send magic link</>
             )}
           </Button>
         </div>
       </div>
 
       {/* Divider */}
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-white px-2 text-muted-foreground">or continue with</span>
-        </div>
+      <div className="relative flex items-center justify-center text-xs uppercase">
+        <div className="w-full h-px bg-gradient-to-r from-transparent to-gray-300" />
+        <span className="bg-white px-2 text-muted-foreground whitespace-nowrap">
+          or continue with
+        </span>
+        <div className="w-full h-px bg-gradient-to-l from-transparent to-gray-300" />
       </div>
-      
-      <div className="grid gap-4">
+
+      <div className="grid gap-2">
         {/* Google OAuth */}
-        <Button 
+        <Button
           type="button"
-          variant="secondary" 
+          variant="secondary"
           className="w-full"
           onClick={handleGoogleSignIn}
           disabled={isAnyLoading}
         >
           {!isGoogleLoading && (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-5 h-5 mr-2">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              className="w-5 h-5 mr-2"
+            >
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                 fill="#4285F4"
@@ -204,27 +223,35 @@ export function LoginForm({
               />
             </svg>
           )}
-          {isGoogleLoading ? "Redirecting to Google..." : "Continue with Google"}
+          {isGoogleLoading
+            ? "Redirecting to Google..."
+            : "Continue with Google"}
         </Button>
-        
-        <Button 
+
+        <Button
           type="button"
-          variant="secondary" 
-          className="w-full" 
+          variant="secondary"
+          className="w-full"
           onClick={handleGitHubSignIn}
           disabled={isAnyLoading}
         >
           {!isGitHubLoading && (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-5 h-5 mr-2">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              className="w-5 h-5 mr-2"
+            >
               <path
                 d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
                 fill="currentColor"
               />
             </svg>
           )}
-          {isGitHubLoading ? "Redirecting to GitHub..." : "Continue with GitHub"}
+          {isGitHubLoading
+            ? "Redirecting to GitHub..."
+            : "Continue with GitHub"}
         </Button>
       </div>
     </form>
-  )
+  );
 }
