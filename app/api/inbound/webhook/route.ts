@@ -7,7 +7,7 @@ import { nanoid } from 'nanoid'
 import { eq, and } from 'drizzle-orm'
 import { Autumn as autumn } from 'autumn-js'
 import { createHmac } from 'crypto'
-import { parseEmail, parseEmailContent, sanitizeHtml, type ParsedEmailData } from '@/lib/email-parser'
+import { parseEmail, sanitizeHtml, type ParsedEmailData } from '@/lib/email-parser'
 import { type SESEvent, type SESRecord } from '@/lib/aws-ses'
 import { isEmailBlocked } from '@/lib/email-blocking'
 

@@ -1,5 +1,14 @@
 "use server"
 
+/**
+ * Webhook to Endpoints Migration System
+ * 
+ * This module handles the automatic migration of legacy webhook configurations to the new endpoints system.
+ * It provides functions to check if migration is needed and perform the migration, ensuring users can seamlessly
+ * transition from the old webhooks table to the new endpoints table without losing their configurations.
+ * The migration runs automatically when users load their endpoints page if they have webhooks but no endpoints.
+ */
+
 import { db } from '@/lib/db'
 import { webhooks, endpoints, emailGroups } from '@/lib/db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
@@ -142,44 +151,5 @@ export async function migrateUserWebhooksToEndpoints(userId: string): Promise<Mi
     console.error(`❌ ${errorMessage}`)
     result.errors.push(errorMessage)
     return result
-  }
-}
-
-/**
- * Get migration status for a user
- */
-export async function getMigrationStatus(userId: string): Promise<{
-  hasWebhooks: boolean
-  hasEndpoints: boolean
-  migrationNeeded: boolean
-  webhookCount: number
-  endpointCount: number
-}> {
-  try {
-    const [webhookCount, endpointCount] = await Promise.all([
-      db.select({ count: webhooks.id }).from(webhooks).where(eq(webhooks.userId, userId)),
-      db.select({ count: endpoints.id }).from(endpoints).where(eq(endpoints.userId, userId))
-    ])
-
-    const hasWebhooks = webhookCount.length > 0
-    const hasEndpoints = endpointCount.length > 0
-    const migrationNeeded = hasWebhooks && !hasEndpoints
-
-    return {
-      hasWebhooks,
-      hasEndpoints,
-      migrationNeeded,
-      webhookCount: webhookCount.length,
-      endpointCount: endpointCount.length
-    }
-  } catch (error) {
-    console.error('Error getting migration status:', error)
-    return {
-      hasWebhooks: false,
-      hasEndpoints: false,
-      migrationNeeded: false,
-      webhookCount: 0,
-      endpointCount: 0
-    }
   }
 } 

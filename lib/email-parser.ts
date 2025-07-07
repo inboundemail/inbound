@@ -1,3 +1,9 @@
+/**
+ * Core email parsing utilities using mailparser for processing raw email content.
+ * Provides the main parseEmail function for converting raw email strings into structured ParsedEmailData objects.
+ * Used extensively throughout the application for webhook processing, email routing, and data storage.
+ * Includes HTML sanitization and type definitions for consistent email data handling.
+ */
 import { simpleParser, ParsedMail, Attachment } from 'mailparser'
 
 // Types for the parsed email data structure
@@ -175,81 +181,6 @@ interface ParsedEmail {
   }>
 }
 
-export async function parseEmailContent(rawEmail: string): Promise<ParsedEmail> {
-  if (!rawEmail) {
-    return {
-      headers: {},
-      htmlBody: null,
-      textBody: null,
-      attachments: []
-    }
-  }
-
-  try {
-    // Use mailparser to properly parse the email
-    const parsed: ParsedMail = await simpleParser(rawEmail)
-    
-    // Extract headers
-    const headers: Record<string, string> = {}
-    if (parsed.headers) {
-      // Convert headers to a simple key-value object
-      for (const [key, value] of parsed.headers) {
-        if (typeof value === 'string') {
-          headers[key.toLowerCase()] = value
-        } else if (Array.isArray(value)) {
-          headers[key.toLowerCase()] = value.join(', ')
-        } else if (value && typeof value === 'object' && 'value' in value) {
-          headers[key.toLowerCase()] = String(value.value)
-        } else {
-          headers[key.toLowerCase()] = String(value)
-        }
-      }
-    }
-
-    // Extract text and HTML bodies
-    const textBody = parsed.text || null
-    let htmlBody = parsed.html || null
-
-    // Process inline images if HTML body exists
-    if (htmlBody && parsed.attachments) {
-      htmlBody = processInlineImages(htmlBody, parsed.attachments)
-    }
-
-    // Extract attachments
-    const attachments: Array<{ 
-      filename: string; 
-      contentType: string; 
-      size: number;
-      contentId?: string;
-      isInline?: boolean;
-    }> = []
-    
-    if (parsed.attachments && parsed.attachments.length > 0) {
-      for (const attachment of parsed.attachments) {
-        attachments.push({
-          filename: attachment.filename || 'unknown',
-          contentType: attachment.contentType || 'application/octet-stream',
-          size: attachment.size || 0,
-          contentId: attachment.contentId || undefined,
-          isInline: attachment.contentDisposition === 'inline' || !!attachment.contentId
-        })
-      }
-    }
-
-    return {
-      headers,
-      htmlBody,
-      textBody,
-      attachments
-    }
-  } catch (error) {
-    console.error('Error parsing email with mailparser:', error)
-    
-    // Fallback to basic parsing if mailparser fails
-    return fallbackParseEmailContent(rawEmail)
-  }
-}
-
 // Process inline images by converting Content-ID references to data URLs
 function processInlineImages(html: string, attachments: Attachment[]): string {
   if (!html || !attachments) return html
@@ -289,51 +220,6 @@ function processInlineImages(html: string, attachments: Attachment[]): string {
   return processedHtml
 }
 
-// Fallback parser for cases where mailparser fails
-function fallbackParseEmailContent(rawEmail: string): ParsedEmail {
-  const lines = rawEmail.split('\r\n')
-  const headers: Record<string, string> = {}
-  let bodyStartIndex = 0
-  
-  // Parse headers
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    
-    // Empty line indicates end of headers
-    if (line === '') {
-      bodyStartIndex = i + 1
-      break
-    }
-    
-    // Handle header continuation (lines starting with whitespace)
-    if (line.startsWith(' ') || line.startsWith('\t')) {
-      const lastHeaderKey = Object.keys(headers).pop()
-      if (lastHeaderKey) {
-        headers[lastHeaderKey] += ' ' + line.trim()
-      }
-      continue
-    }
-    
-    // Parse header line
-    const colonIndex = line.indexOf(':')
-    if (colonIndex > 0) {
-      const key = line.substring(0, colonIndex).trim().toLowerCase()
-      const value = line.substring(colonIndex + 1).trim()
-      headers[key] = value
-    }
-  }
-  
-  // Get the body content
-  const bodyContent = lines.slice(bodyStartIndex).join('\r\n')
-  
-  return {
-    headers,
-    htmlBody: bodyContent.includes('<html') ? bodyContent : null,
-    textBody: !bodyContent.includes('<html') ? bodyContent : null,
-    attachments: []
-  }
-}
-
 export function sanitizeHtml(html: string): string {
   if (!html) return ''
   
@@ -368,6 +254,37 @@ export function formatEmailAddress(email: string): { name: string; address: stri
     name: '',
     address: email.trim()
   }
+}
+
+/**
+ * Extract a single email address from various address object formats (mailparser AddressObject)
+ * Handles string, AddressObject, and array formats commonly returned by mailparser
+ */
+export function extractEmailAddress(addressObj: any): string {
+  if (!addressObj) return 'unknown'
+  if (typeof addressObj === 'string') return addressObj
+  if (addressObj.text) return addressObj.text
+  if (Array.isArray(addressObj) && addressObj.length > 0) {
+    return addressObj[0].text || addressObj[0].address || 'unknown'
+  }
+  if (addressObj.address) return addressObj.address
+  if (addressObj.name) return addressObj.name
+  return 'unknown'
+}
+
+/**
+ * Extract multiple email addresses from various address object formats (mailparser AddressObject)
+ * Returns an array of email address strings
+ */
+export function extractEmailAddresses(addressObj: any): string[] {
+  if (!addressObj) return []
+  if (typeof addressObj === 'string') return [addressObj]
+  if (Array.isArray(addressObj)) {
+    return addressObj.map(addr => addr.text || addr.address || 'unknown')
+  }
+  if (addressObj.text) return [addressObj.text]
+  if (addressObj.address) return [addressObj.address]
+  return []
 }
 
 // Export the ParsedEmailData type for use in other files

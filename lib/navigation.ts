@@ -1,4 +1,16 @@
-import { LucideIcon, BarChart3Icon, InboxIcon, WebhookIcon, ActivityIcon, CreditCardIcon, SettingsIcon, HelpCircleIcon, ShieldCheckIcon, PlusIcon, GlobeIcon, MailIcon, CloudIcon, CodeIcon } from "lucide-react"
+/**
+ * Navigation Configuration
+ * 
+ * Centralized navigation system for the application that provides:
+ * - Main, secondary, and admin navigation menu items
+ * - Dynamic page title generation based on URL paths
+ * - Active navigation state management
+ * - Role-based access control for admin features
+ * 
+ * Used by components like AppSidebar, NavMain, NavSecondary, and the NavigationContext
+ * to provide consistent navigation experience across the application.
+ */
+import { LucideIcon, WebhookIcon, ActivityIcon, SettingsIcon, ShieldCheckIcon, GlobeIcon, MailIcon, CloudIcon, CodeIcon } from "lucide-react"
 
 export interface NavigationItem {
   title: string

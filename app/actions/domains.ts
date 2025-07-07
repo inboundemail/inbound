@@ -3,8 +3,7 @@
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { revalidatePath } from 'next/cache'
-import { checkDomainCanReceiveEmails } from '@/lib/dns'
-import { verifyDnsRecords } from '@/lib/dns-verification'
+import { checkDomainCanReceiveEmails, verifyDnsRecords } from '@/lib/dns'
 import { initiateDomainVerification, deleteDomainFromSES } from '@/lib/domain-verification'
 import { getDomainWithRecords, updateDomainStatus, createDomainVerification, deleteDomainFromDatabase } from '@/lib/db/domains'
 import { SESClient, GetIdentityVerificationAttributesCommand } from '@aws-sdk/client-ses'

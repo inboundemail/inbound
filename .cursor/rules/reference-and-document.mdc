@@ -1,0 +1,12 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+You need to search the project and find the references for each function/export in this file. 
+
+Once you do that I need you to establish if this file is needed or not needed. 
+
+If the file is needed then in 3-4 lines at the top of the file provide what it is used for and what it does. 
+
+If it is not needed then tell me why it should be deleted. 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDomainWithRecords, updateDnsRecordVerification, updateDomainStatus } from '@/lib/db/domains'
-import { verifyDnsRecords } from '@/lib/dns-verification'
+import { verifyDnsRecords } from '@/lib/dns'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 

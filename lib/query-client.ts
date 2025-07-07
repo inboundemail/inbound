@@ -1,3 +1,8 @@
+/**
+ * Centralized React Query client configuration for the entire application.
+ * Provides consistent defaults for caching, retries, and refetch behavior.
+ * Used by QueryProvider to enable react-query functionality app-wide.
+ */
 import { QueryClient } from '@tanstack/react-query'
 
 export const queryClient = new QueryClient({

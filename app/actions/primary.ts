@@ -1760,48 +1760,48 @@ export async function parseEmail(emailContent: string) {
 // ATTACHMENT DOWNLOAD
 // ============================================================================
 
-// Helper function to parse email content directly from raw content
-async function parseDirectEmailContent(rawEmailContent: string) {
-    console.log(`[parseDirectEmailContent] Parsing email content of ${rawEmailContent.length} characters`)
+// Helper function to parse email content and extract attachment data for downloads
+async function parseEmailForAttachments(rawEmailContent: string) {
+    console.log(`[parseEmailForAttachments] Parsing email content of ${rawEmailContent.length} characters`)
     
-    // Try to use mailparser directly to get attachment content
+    // Use the centralized parseEmail function for consistent parsing
+    const emailData = await libParseEmail(rawEmailContent)
+    
+    // For attachment downloads, we also need the binary content which isn't included in ParsedEmailData
+    // So we do a minimal additional parse just for attachment content
     const { simpleParser } = await import('mailparser')
     const parsed = await simpleParser(rawEmailContent)
     
-    // Helper function to extract email address
-    const extractEmailAddress = (addressObj: any): string => {
-        if (!addressObj) return 'unknown'
-        if (typeof addressObj === 'string') return addressObj
-        if (Array.isArray(addressObj) && addressObj.length > 0) {
-            return addressObj[0].address || addressObj[0].name || 'unknown'
+    // Merge attachment metadata from ParsedEmailData with content from direct parsing
+    const attachments = emailData.attachments?.map(att => {
+        // Find the corresponding attachment with content
+        const contentAttachment = parsed.attachments?.find(
+            parsedAtt => parsedAtt.filename === att.filename && parsedAtt.contentType === att.contentType
+        )
+        
+        return {
+            filename: att.filename || 'unknown',
+            contentType: att.contentType || 'application/octet-stream',
+            size: att.size || 0,
+            content: contentAttachment?.content || Buffer.from(''), // Include binary content for downloads
         }
-        if (addressObj.address) return addressObj.address
-        if (addressObj.name) return addressObj.name
-        return 'unknown'
-    }
+    }) || []
     
-    // Format attachments to match AWS SES processor format
-    const attachments = parsed.attachments?.map(att => ({
-        filename: att.filename || 'unknown',
-        contentType: att.contentType || 'application/octet-stream',
-        size: att.size || 0,
-        content: att.content || Buffer.from(''), // This should include binary content
-    })) || []
+    console.log(`[parseEmailForAttachments] Found ${attachments.length} attachments with content`)
     
-    console.log(`[parseDirectEmailContent] Found ${attachments.length} attachments with content`)
-    
+    // Return format expected by downloadAttachment function
     return {
         attachments,
-        messageId: parsed.messageId,
-        from: extractEmailAddress(parsed.from),
-        to: extractEmailAddress(parsed.to),
-        subject: parsed.subject || 'No Subject',
+        messageId: emailData.messageId,
+        from: emailData.from?.addresses[0]?.address || 'unknown',
+        to: emailData.to?.addresses[0]?.address || 'unknown',
+        subject: emailData.subject || 'No Subject',
         body: {
-            text: parsed.text,
-            html: parsed.html,
+            text: emailData.textBody,
+            html: emailData.htmlBody,
         },
-        headers: Object.fromEntries(parsed.headers || []),
-        timestamp: parsed.date || new Date(),
+        headers: emailData.headers || {},
+        timestamp: emailData.date || new Date(),
     }
 }
 
@@ -1902,16 +1902,16 @@ export async function downloadAttachment(emailId: string, attachmentFilename: st
                 
                 if (emailContent) {
                     console.log(`[downloadAttachment] Falling back to direct email content`)
-                    // Fallback to parsing direct email content
-                    processedEmail = await parseDirectEmailContent(emailContent)
+                    // Fallback to parsing email content for attachments
+                    processedEmail = await parseEmailForAttachments(emailContent)
                 } else {
                     throw s3Error
                 }
             }
         } else if (emailContent) {
             console.log(`[downloadAttachment] Using direct email content (no S3 location)`)
-            // Parse direct email content
-            processedEmail = await parseDirectEmailContent(emailContent)
+            // Parse email content for attachments
+            processedEmail = await parseEmailForAttachments(emailContent)
         } else {
             console.log(`[downloadAttachment] No S3 location and no direct email content available`)
             return { error: 'Email content not found' }

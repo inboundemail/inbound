@@ -1,6 +1,7 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { SESClient, SendBounceCommand, SendBounceCommandInput } from '@aws-sdk/client-ses';
 import { simpleParser, ParsedMail, Attachment } from 'mailparser';
+import { extractEmailAddress, extractEmailAddresses } from './email-parser';
 
 // Types for SES email receiving
 export interface SESEvent {
@@ -229,28 +230,7 @@ export class AWSSESEmailProcessor {
       // Extract metadata from the object key or use defaults
       const messageId = objectKey.split('/').pop() || 'unknown';
       
-      // Helper function to extract email address from AddressObject
-      const extractEmailAddress = (addressObj: any): string => {
-        if (!addressObj) return 'unknown';
-        if (typeof addressObj === 'string') return addressObj;
-        if (addressObj.text) return addressObj.text;
-        if (Array.isArray(addressObj) && addressObj.length > 0) {
-          return addressObj[0].text || addressObj[0].address || 'unknown';
-        }
-        if (addressObj.address) return addressObj.address;
-        return 'unknown';
-      };
-
-      const extractEmailAddresses = (addressObj: any): string[] => {
-        if (!addressObj) return [];
-        if (typeof addressObj === 'string') return [addressObj];
-        if (Array.isArray(addressObj)) {
-          return addressObj.map(addr => addr.text || addr.address || 'unknown');
-        }
-        if (addressObj.text) return [addressObj.text];
-        if (addressObj.address) return [addressObj.address];
-        return [];
-      };
+      // Use shared email address extraction utilities
 
       // Create processed email object
       const processedEmail: ProcessedEmail = {

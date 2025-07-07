@@ -1,3 +1,10 @@
+/**
+ * Email Router - Core email routing system for inbound emails
+ * Routes incoming emails to configured endpoints (webhooks, email forwarding, email groups) based on recipient configuration.
+ * Handles both legacy webhook systems and new unified endpoint architecture with fallback logic.
+ * Used by the webhook API route after email ingestion to deliver emails to their configured destinations.
+ */
+
 import { db } from '@/lib/db'
 import { structuredEmails, emailAddresses, endpoints, endpointDeliveries, emailDomains } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
@@ -5,6 +12,7 @@ import { triggerEmailAction } from '@/app/api/inbound/webhook/route'
 import { EmailForwarder } from './email-forwarder'
 import { nanoid } from 'nanoid'
 import type { ParsedEmailData } from './email-parser'
+import { sanitizeHtml } from './email-parser'
 import type { Endpoint } from '@/features/endpoints/types'
 
 /**
@@ -397,18 +405,7 @@ async function handleWebhookEndpoint(emailId: string, endpoint: Endpoint): Promi
   }
 }
 
-/**
- * Simple HTML sanitization (basic implementation)
- */
-function sanitizeHtml(html: string): string {
-  // Basic sanitization - remove script tags and dangerous attributes
-  // For production, consider using a proper HTML sanitization library
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/on\w+\s*=\s*"[^"]*"/gi, '')
-    .replace(/on\w+\s*=\s*'[^']*'/gi, '')
-    .replace(/javascript:/gi, '')
-}
+
 
 /**
  * Handle email forwarding endpoints (email and email_group types)
