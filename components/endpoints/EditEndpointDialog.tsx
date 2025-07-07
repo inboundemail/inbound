@@ -350,6 +350,21 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
                   rows={3}
                 />
               </div>
+
+              {endpoint.type === 'webhook' && (
+                <div className="space-y-2">
+                  <Label htmlFor="url">URL *</Label>
+                  <Input
+                    id="url"
+                    type="url"
+                    value={webhookConfig.url}
+                    onChange={(e) => setWebhookConfig(prev => ({ ...prev, url: e.target.value }))}
+                    placeholder="https://your-app.com/webhooks/inbound"
+                    className={errors.url ? 'border-red-500' : ''}
+                  />
+                  {errors.url && <p className="text-sm text-red-500">{errors.url}</p>}
+                </div>
+              )}
             </div>
 
             {/* Right Column - Configuration */}
@@ -358,19 +373,6 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
 
               {endpoint.type === 'webhook' && (
                 <>
-                  <div className="space-y-2">
-                    <Label htmlFor="url">URL *</Label>
-                    <Input
-                      id="url"
-                      type="url"
-                      value={webhookConfig.url}
-                      onChange={(e) => setWebhookConfig(prev => ({ ...prev, url: e.target.value }))}
-                      placeholder="https://your-app.com/webhooks/inbound"
-                      className={errors.url ? 'border-red-500' : ''}
-                    />
-                    {errors.url && <p className="text-sm text-red-500">{errors.url}</p>}
-                  </div>
-
                   <div className="space-y-3">
                     <Label>Webhook Format</Label>
                     <div className="grid gap-3">
@@ -402,17 +404,6 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
                             </div>
                             <div className="flex-1 min-w-0">
                               <h4 className="font-medium text-gray-900">{config.name}</h4>
-                              <p className="text-sm text-gray-600 mt-1">{config.description}</p>
-                              {format === 'discord' && (
-                                <div className="mt-2 text-xs text-gray-500">
-                                  Perfect for Discord channels with rich embeds
-                                </div>
-                              )}
-                              {format === 'slack' && (
-                                <div className="mt-2 text-xs text-gray-500">
-                                  Coming soon - Slack-compatible format
-                                </div>
-                              )}
                             </div>
                           </div>
                         </div>
