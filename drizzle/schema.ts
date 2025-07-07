@@ -15,10 +15,10 @@ export const session = pgTable("session", {
 	impersonatedBy: text("impersonated_by"),
 }, (table) => [
 	foreignKey({
-			columns: [table.userId],
-			foreignColumns: [user.id],
-			name: "session_user_id_user_id_fk"
-		}).onDelete("cascade"),
+		columns: [table.userId],
+		foreignColumns: [user.id],
+		name: "session_user_id_user_id_fk"
+	}).onDelete("cascade"),
 	unique("session_token_unique").on(table.token),
 ]);
 
@@ -168,10 +168,10 @@ export const account = pgTable("account", {
 	updatedAt: timestamp("updated_at", { mode: 'string' }).notNull(),
 }, (table) => [
 	foreignKey({
-			columns: [table.userId],
-			foreignColumns: [user.id],
-			name: "account_user_id_user_id_fk"
-		}).onDelete("cascade"),
+		columns: [table.userId],
+		foreignColumns: [user.id],
+		name: "account_user_id_user_id_fk"
+	}).onDelete("cascade"),
 ]);
 
 export const domainDnsRecords = pgTable("domain_dns_records", {
@@ -261,10 +261,10 @@ export const apikey = pgTable("apikey", {
 	metadata: text(),
 }, (table) => [
 	foreignKey({
-			columns: [table.userId],
-			foreignColumns: [user.id],
-			name: "apikey_user_id_user_id_fk"
-		}).onDelete("cascade"),
+		columns: [table.userId],
+		foreignColumns: [user.id],
+		name: "apikey_user_id_user_id_fk"
+	}).onDelete("cascade"),
 ]);
 
 export const parsedEmails = pgTable("parsed_emails", {
