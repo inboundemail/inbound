@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useCreateEndpointMutation } from '@/features/endpoints/hooks'
 import { useDomainsStatsQuery } from '@/features/domains/hooks/useDomainsQuery'
 import { CreateEndpointData, WebhookConfig, EmailForwardConfig, EmailGroupConfig } from '@/features/endpoints/types'
+import { WEBHOOK_FORMAT_CONFIGS, getWebhookFormatConfig } from '@/lib/webhook-formats'
+import type { WebhookFormat } from '@/lib/db/schema'
 import {
   Dialog,
   DialogContent,
@@ -38,6 +40,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
   })
   
   // Webhook-specific state
+  const [webhookFormat, setWebhookFormat] = useState<WebhookFormat>('inbound')
   const [webhookConfig, setWebhookConfig] = useState<WebhookConfig>({
     url: '',
     timeout: 30,
@@ -197,6 +200,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
     const createData: CreateEndpointData = {
       name: formData.name,
       type: selectedType,
+      webhookFormat: selectedType === 'webhook' ? webhookFormat : undefined,
       description: formData.description || undefined,
       config
     }
@@ -214,6 +218,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
     setCurrentStep('type')
     setSelectedType(null)
     setFormData({ name: '', description: '' })
+    setWebhookFormat('inbound')
     setWebhookConfig({
       url: '',
       timeout: 30,
@@ -414,6 +419,56 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                       autoFocus
                     />
                     {errors.url && <p className="text-sm text-red-500">{errors.url}</p>}
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label>Webhook Format</Label>
+                    <div className="grid gap-3">
+                      {Object.entries(WEBHOOK_FORMAT_CONFIGS).map(([format, config]) => {
+                        const isDisabled = format === 'slack'
+                        return (
+                        <div
+                          key={format}
+                          className={`relative rounded-lg border p-4 transition-all ${
+                            isDisabled 
+                              ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
+                              : webhookFormat === format
+                                ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500 cursor-pointer'
+                                : 'border-gray-200 hover:border-gray-300 cursor-pointer'
+                          }`}
+                          onClick={() => !isDisabled && setWebhookFormat(format as WebhookFormat)}
+                        >
+                          <div className="flex items-start gap-3">
+                                                         <div className={`mt-0.5 h-4 w-4 rounded-full border-2 transition-colors ${
+                               isDisabled
+                                 ? 'border-gray-300 bg-gray-200'
+                                 : webhookFormat === format
+                                   ? 'border-blue-500 bg-blue-500'
+                                   : 'border-gray-300'
+                             }`}>
+                                                             {webhookFormat === format && !isDisabled && (
+                                 <div className="h-full w-full rounded-full bg-white scale-50" />
+                               )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-medium text-gray-900">{config.name}</h4>
+                              <p className="text-sm text-gray-600 mt-1">{config.description}</p>
+                              {format === 'discord' && (
+                                <div className="mt-2 text-xs text-gray-500">
+                                  Perfect for Discord channels with rich embeds
+                                </div>
+                              )}
+                              {format === 'slack' && (
+                                <div className="mt-2 text-xs text-gray-500">
+                                  Coming soon - Slack-compatible format
+                                </div>
+                              )}
+                            </div>
+                                                     </div>
+                         </div>
+                       )
+                       })}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">

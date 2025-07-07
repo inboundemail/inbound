@@ -22,4 +22,22 @@ export type UpdateWebhookData = {
   headers?: Record<string, string>
   timeout?: number
   retryAttempts?: number
+}
+
+// Test result types
+export type WebhookTestResult = {
+  success: boolean
+  statusCode?: number
+  message?: string
+  error?: string
+  responseTime?: number
+  responseBody?: string
+  responseHeaders?: Record<string, string>
+  details?: {
+    url?: string
+    timeout?: number
+    statusText?: string
+    errorType?: string
+    originalError?: string
+  }
 } 

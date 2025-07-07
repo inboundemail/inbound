@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
       id: nanoid(),
       name: data.name,
       type: data.type,
+      webhookFormat: data.type === 'webhook' ? (data.webhookFormat || 'inbound') : null,
       config: JSON.stringify(data.config),
       description: data.description || null,
       userId: session.user.id,

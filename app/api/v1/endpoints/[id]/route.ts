@@ -145,6 +145,7 @@ export async function PUT(
     if (data.name !== undefined) updateData.name = data.name
     if (data.description !== undefined) updateData.description = data.description
     if (data.isActive !== undefined) updateData.isActive = data.isActive
+    if (data.webhookFormat !== undefined && existingEndpoint[0].type === 'webhook') updateData.webhookFormat = data.webhookFormat
     if (data.config !== undefined) updateData.config = JSON.stringify(data.config)
 
     // Update the endpoint

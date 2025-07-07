@@ -1,0 +1,1 @@
+ALTER TABLE "endpoints" ADD COLUMN "webhook_format" varchar(50) DEFAULT 'inbound';

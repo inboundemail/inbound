@@ -4,6 +4,8 @@ import { headers } from 'next/headers'
 import { db } from '@/lib/db'
 import { endpoints } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
+import { generateTestPayload } from '@/lib/webhook-formats'
+import type { WebhookFormat } from '@/lib/db/schema'
 
 export async function POST(
   request: NextRequest,
@@ -62,30 +64,25 @@ export async function POST(
         try {
           console.log(`🔗 Testing webhook: ${config.url}`)
           
-          const testPayload = {
-            event: 'email_received',
-            type: 'test',
-            timestamp: new Date().toISOString(),
+          // Get webhook format from endpoint (default to 'inbound' for backward compatibility)
+          const webhookFormat = (endpoint[0].webhookFormat as WebhookFormat) || 'inbound'
+          console.log(`📋 Using webhook format: ${webhookFormat}`)
+          
+          // Generate test payload based on format
+          const testPayload = generateTestPayload(webhookFormat, {
             messageId: `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            source: 'test@example.com',
-            destination: ['test@yourdomain.com'],
+            from: 'test@example.com',
+            to: ['test@yourdomain.com'],
             subject: 'Test Email - Inbound Email Service',
-            body: {
-              text: 'This is a test email from the Inbound Email service to verify webhook functionality.',
-              html: '<p>This is a test email from the <strong>Inbound Email service</strong> to verify webhook functionality.</p>'
-            },
-            attachments: [],
-            headers: {
-              'From': 'test@example.com',
-              'To': 'test@yourdomain.com',
-              'Subject': 'Test Email - Inbound Email Service',
-              'Date': new Date().toISOString()
-            },
-            endpoint: {
+            recipient: 'test@yourdomain.com'
+          })
+          
+          // Add endpoint info for inbound format
+          if (webhookFormat === 'inbound' && typeof testPayload === 'object') {
+            testPayload.endpoint = {
               id: endpoint[0].id,
               name: endpoint[0].name
-            },
-            test: true
+            }
           }
 
           // Parse custom headers safely
@@ -99,15 +96,20 @@ export async function POST(
             }
           }
 
+          const requestHeaders = {
+            'Content-Type': 'application/json',
+            'User-Agent': 'InboundEmail-Test/1.0',
+            'X-Test-Request': 'true',
+            'X-Endpoint-ID': endpoint[0].id,
+            ...customHeaders
+          }
+
+          console.log(`📤 Test payload:`, JSON.stringify(testPayload, null, 2))
+          console.log(`📋 Request headers:`, JSON.stringify(requestHeaders, null, 2))
+
           const response = await fetch(config.url, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'User-Agent': 'InboundEmail-Test/1.0',
-              'X-Test-Request': 'true',
-              'X-Endpoint-ID': endpoint[0].id,
-              ...customHeaders
-            },
+            headers: requestHeaders,
             body: JSON.stringify(testPayload),
             signal: AbortSignal.timeout((config.timeout || 30) * 1000)
           })
@@ -132,6 +134,7 @@ export async function POST(
           }
 
           console.log(`${response.ok ? '✅' : '❌'} Webhook test ${response.ok ? 'passed' : 'failed'}: ${response.status} in ${responseTime}ms`)
+          console.log(`📄 Response body:`, responseBody)
 
         } catch (error) {
           const responseTime = Date.now() - startTime

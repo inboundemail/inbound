@@ -335,13 +335,40 @@ export async function testWebhook(id: string) {
     }
 
     // Make the webhook request
+    const startTime = Date.now()
+    let responseBody = ''
+    let responseHeaders: Record<string, string> = {}
+    
     try {
+      console.log(`🔗 Testing webhook: ${webhook.name} (${webhook.url})`)
+      console.log(`📤 Test payload:`, JSON.stringify(testPayload, null, 2))
+      console.log(`📋 Request headers:`, JSON.stringify(requestHeaders, null, 2))
+      
       const response = await fetch(webhook.url, {
         method: 'POST',
         headers: requestHeaders,
         body: JSON.stringify(testPayload),
         signal: AbortSignal.timeout((webhook.timeout || 30) * 1000)
       })
+
+      const responseTime = Date.now() - startTime
+      
+      // Capture response headers
+      response.headers.forEach((value, key) => {
+        responseHeaders[key] = value
+      })
+      
+      // Capture response body
+      try {
+        responseBody = await response.text()
+      } catch (bodyError) {
+        responseBody = 'Unable to read response body'
+        console.error(`❌ Error reading response body:`, bodyError)
+      }
+
+      console.log(`${response.ok ? '✅' : '❌'} Webhook test ${response.ok ? 'succeeded' : 'failed'}: ${response.status} in ${responseTime}ms`)
+      console.log(`📨 Response headers:`, JSON.stringify(responseHeaders, null, 2))
+      console.log(`📄 Response body:`, responseBody)
 
       // Update webhook stats (you might want to add these fields to your schema)
       await db
@@ -362,16 +389,49 @@ export async function testWebhook(id: string) {
         return {
           success: true,
           statusCode: response.status,
-          message: `Webhook test successful! Response: ${response.status}`
+          message: `Webhook test successful! Response: ${response.status}`,
+          responseTime,
+          responseBody: responseBody.substring(0, 1000), // Limit response body for client
+          responseHeaders
         }
       } else {
+        const errorDetails = `Status: ${response.status} ${response.statusText}`
+        console.error(`❌ Webhook test failed - ${errorDetails}`)
+        console.error(`❌ Response body:`, responseBody)
+        
         return {
           success: false,
           statusCode: response.status,
-          error: `Webhook test failed with status: ${response.status}`
+          error: `Webhook test failed with status: ${response.status} ${response.statusText}`,
+          responseTime,
+          responseBody: responseBody.substring(0, 1000), // Limit response body for client
+          responseHeaders,
+          details: {
+            url: webhook.url,
+            timeout: webhook.timeout || 30,
+            statusText: response.statusText
+          }
         }
       }
     } catch (fetchError: any) {
+      const responseTime = Date.now() - startTime
+      let errorMessage = 'Unknown error'
+      let errorType = 'network'
+      
+      if (fetchError.name === 'TimeoutError' || fetchError.name === 'AbortError') {
+        errorMessage = `Request timeout after ${webhook.timeout || 30} seconds`
+        errorType = 'timeout'
+      } else if (fetchError.name === 'TypeError' && fetchError.message.includes('fetch')) {
+        errorMessage = `Network error: ${fetchError.message}`
+        errorType = 'network'
+      } else {
+        errorMessage = fetchError.message || 'Unknown error'
+        errorType = 'unknown'
+      }
+
+      console.error(`❌ Webhook test failed with ${errorType} error:`, errorMessage)
+      console.error(`❌ Full error details:`, fetchError)
+      
       // Update failed delivery count
       await db
         .update(webhooks)
@@ -385,16 +445,16 @@ export async function testWebhook(id: string) {
       // Revalidate relevant paths
       revalidatePath('/webhooks')
 
-      if (fetchError.name === 'TimeoutError') {
-        return {
-          success: false,
-          error: `Webhook test timed out after ${webhook.timeout} seconds`
-        }
-      }
-
       return {
         success: false,
-        error: `Webhook test failed: ${fetchError.message}`
+        error: `Webhook test failed: ${errorMessage}`,
+        responseTime,
+        details: {
+          url: webhook.url,
+          timeout: webhook.timeout || 30,
+          errorType,
+          originalError: fetchError.message
+        }
       }
     }
   } catch (error) {

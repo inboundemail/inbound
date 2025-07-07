@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useUpdateEndpointMutation } from '@/features/endpoints/hooks'
 import { useDomainsStatsQuery } from '@/features/domains/hooks/useDomainsQuery'
 import { Endpoint, UpdateEndpointData, WebhookConfig, EmailForwardConfig, EmailGroupConfig } from '@/features/endpoints/types'
+import { WEBHOOK_FORMAT_CONFIGS, getWebhookFormatConfig } from '@/lib/webhook-formats'
+import type { WebhookFormat } from '@/lib/db/schema'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,6 +29,8 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
     description: '',
     isActive: true
   })
+  
+  const [webhookFormat, setWebhookFormat] = useState<WebhookFormat>('inbound')
   
   const [webhookConfig, setWebhookConfig] = useState<WebhookConfig>({
     url: '',
@@ -85,6 +89,11 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
         description: endpoint.description || '',
         isActive: endpoint.isActive ?? true
       })
+
+      // Set webhook format from endpoint
+      if (endpoint.type === 'webhook') {
+        setWebhookFormat((endpoint.webhookFormat as WebhookFormat) || 'inbound')
+      }
 
       let parsedConfig = {}
       if (endpoint.config) {
@@ -195,6 +204,7 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
 
     const updateData: UpdateEndpointData = {
       ...formData,
+      webhookFormat: endpoint.type === 'webhook' ? webhookFormat : undefined,
       config
     }
 
@@ -281,7 +291,7 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
@@ -301,7 +311,7 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div>
               <Label className="text-sm font-medium">Status</Label>
@@ -313,243 +323,321 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="name">Name *</Label>
-            <Input
-              id="name"
-              value={formData.name || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              placeholder={`${endpoint.type === 'webhook' ? 'Production Webhook' : endpoint.type === 'email' ? 'Support Email Forward' : 'Team Email Group'}`}
-              className={errors.name ? 'border-red-500' : ''}
-            />
-            {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              value={formData.description || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Optional description of this endpoint's purpose"
-              rows={2}
-            />
-          </div>
-
-          {endpoint.type === 'webhook' && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="url">URL *</Label>
-                <Input
-                  id="url"
-                  type="url"
-                  value={webhookConfig.url}
-                  onChange={(e) => setWebhookConfig(prev => ({ ...prev, url: e.target.value }))}
-                  placeholder="https://your-app.com/webhooks/inbound"
-                  className={errors.url ? 'border-red-500' : ''}
-                />
-                {errors.url && <p className="text-sm text-red-500">{errors.url}</p>}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="timeout">Timeout (seconds)</Label>
-                  <Input
-                    id="timeout"
-                    type="number"
-                    min="1"
-                    max="300"
-                    value={webhookConfig.timeout || ''}
-                    onChange={(e) => setWebhookConfig(prev => ({ ...prev, timeout: parseInt(e.target.value) || 30 }))}
-                    className={errors.timeout ? 'border-red-500' : ''}
-                  />
-                  {errors.timeout && <p className="text-sm text-red-500">{errors.timeout}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="retryAttempts">Retry Attempts</Label>
-                  <Input
-                    id="retryAttempts"
-                    type="number"
-                    min="0"
-                    max="10"
-                    value={webhookConfig.retryAttempts || ''}
-                    onChange={(e) => setWebhookConfig(prev => ({ ...prev, retryAttempts: parseInt(e.target.value) || 3 }))}
-                    className={errors.retryAttempts ? 'border-red-500' : ''}
-                  />
-                  {errors.retryAttempts && <p className="text-sm text-red-500">{errors.retryAttempts}</p>}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Custom Headers</Label>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Header name"
-                    value={headerKey}
-                    onChange={(e) => setHeaderKey(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addHeader())}
-                  />
-                  <Input
-                    placeholder="Header value"
-                    value={headerValue}
-                    onChange={(e) => setHeaderValue(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addHeader())}
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={addHeader}
-                    disabled={!headerKey.trim() || !headerValue.trim()}
-                  >
-                    <HiPlus className="h-4 w-4" />
-                  </Button>
-                </div>
-                
-                {Object.entries(webhookConfig.headers || {}).length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {Object.entries(webhookConfig.headers || {}).map(([key, value]) => (
-                      <Badge key={key} variant="secondary" className="text-xs">
-                        {key}: {value}
-                        <button
-                          type="button"
-                          onClick={() => removeHeader(key)}
-                          className="ml-1 hover:text-red-500"
-                        >
-                          <HiX className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {(endpoint.type === 'email' || endpoint.type === 'email_group') && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="fromAddress">From Address</Label>
-                <Select
-                  value={endpoint.type === 'email' ? emailConfig.fromAddress : emailGroupConfig.fromAddress}
-                  onValueChange={(value) => {
-                    if (endpoint.type === 'email') {
-                      setEmailConfig(prev => ({ ...prev, fromAddress: value }))
-                    } else {
-                      setEmailGroupConfig(prev => ({ ...prev, fromAddress: value }))
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select verified domain (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {verifiedDomains.map((domain) => (
-                      <SelectItem key={domain.id} value={`noreply@${domain.domain}`}>
-                        noreply@{domain.domain}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-gray-500">
-                  If not selected, will use the default verified domain
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="subjectPrefix">Subject Prefix</Label>
-                <Input
-                  id="subjectPrefix"
-                  value={endpoint.type === 'email' ? emailConfig.subjectPrefix : emailGroupConfig.subjectPrefix}
-                  onChange={(e) => {
-                    if (endpoint.type === 'email') {
-                      setEmailConfig(prev => ({ ...prev, subjectPrefix: e.target.value }))
-                    } else {
-                      setEmailGroupConfig(prev => ({ ...prev, subjectPrefix: e.target.value }))
-                    }
-                  }}
-                  placeholder="[Forwarded] "
-                />
-                <p className="text-xs text-gray-500">
-                  Optional prefix to add to forwarded email subjects
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <Label className="text-sm font-medium">Include Attachments</Label>
-                  <p className="text-xs text-gray-600">Forward email attachments</p>
-                </div>
-                <Switch
-                  checked={endpoint.type === 'email' ? emailConfig.includeAttachments : emailGroupConfig.includeAttachments}
-                  onCheckedChange={(checked) => {
-                    if (endpoint.type === 'email') {
-                      setEmailConfig(prev => ({ ...prev, includeAttachments: checked }))
-                    } else {
-                      setEmailGroupConfig(prev => ({ ...prev, includeAttachments: checked }))
-                    }
-                  }}
-                />
-              </div>
-            </>
-          )}
-
-          {endpoint.type === 'email' && (
-            <div className="space-y-2">
-              <Label htmlFor="forwardTo">Forward To *</Label>
-              <Input
-                id="forwardTo"
-                type="email"
-                value={emailConfig.forwardTo}
-                onChange={(e) => setEmailConfig(prev => ({ ...prev, forwardTo: e.target.value }))}
-                placeholder="recipient@example.com"
-                className={errors.forwardTo ? 'border-red-500' : ''}
-              />
-              {errors.forwardTo && <p className="text-sm text-red-500">{errors.forwardTo}</p>}
-            </div>
-          )}
-
-          {endpoint.type === 'email_group' && (
-            <div className="space-y-2">
-              <Label>Email Recipients *</Label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="recipient@example.com"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addEmail())}
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={addEmail}
-                  disabled={!newEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())}
-                >
-                  <HiPlus className="h-4 w-4" />
-                </Button>
-              </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left Column - Basic Info */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-gray-900 border-b pb-2">Basic Information</h3>
               
-              {emailGroupConfig.emails.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {emailGroupConfig.emails.map((email) => (
-                    <Badge key={email} variant="secondary" className="text-xs">
-                      {email}
-                      <button
-                        type="button"
-                        onClick={() => removeEmail(email)}
-                        className="ml-1 hover:text-red-500"
-                      >
-                        <HiX className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              {errors.emails && <p className="text-sm text-red-500">{errors.emails}</p>}
+              <div className="space-y-2">
+                <Label htmlFor="name">Name *</Label>
+                <Input
+                  id="name"
+                  value={formData.name || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder={`${endpoint.type === 'webhook' ? 'Production Webhook' : endpoint.type === 'email' ? 'Support Email Forward' : 'Team Email Group'}`}
+                  className={errors.name ? 'border-red-500' : ''}
+                />
+                {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  value={formData.description || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Optional description of this endpoint's purpose"
+                  rows={3}
+                />
+              </div>
             </div>
-          )}
+
+            {/* Right Column - Configuration */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-gray-900 border-b pb-2">Configuration</h3>
+
+              {endpoint.type === 'webhook' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="url">URL *</Label>
+                    <Input
+                      id="url"
+                      type="url"
+                      value={webhookConfig.url}
+                      onChange={(e) => setWebhookConfig(prev => ({ ...prev, url: e.target.value }))}
+                      placeholder="https://your-app.com/webhooks/inbound"
+                      className={errors.url ? 'border-red-500' : ''}
+                    />
+                    {errors.url && <p className="text-sm text-red-500">{errors.url}</p>}
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label>Webhook Format</Label>
+                    <div className="grid gap-3">
+                      {Object.entries(WEBHOOK_FORMAT_CONFIGS).map(([format, config]) => {
+                        const isDisabled = format === 'slack'
+                        return (
+                        <div
+                          key={format}
+                          className={`relative rounded-lg border p-4 transition-all ${
+                            isDisabled 
+                              ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
+                              : webhookFormat === format
+                                ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500 cursor-pointer'
+                                : 'border-gray-200 hover:border-gray-300 cursor-pointer'
+                          }`}
+                          onClick={() => !isDisabled && setWebhookFormat(format as WebhookFormat)}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`mt-0.5 h-4 w-4 rounded-full border-2 transition-colors ${
+                              isDisabled
+                                ? 'border-gray-300 bg-gray-200'
+                                : webhookFormat === format
+                                  ? 'border-blue-500 bg-blue-500'
+                                  : 'border-gray-300'
+                            }`}>
+                              {webhookFormat === format && !isDisabled && (
+                                <div className="h-full w-full rounded-full bg-white scale-50" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-medium text-gray-900">{config.name}</h4>
+                              <p className="text-sm text-gray-600 mt-1">{config.description}</p>
+                              {format === 'discord' && (
+                                <div className="mt-2 text-xs text-gray-500">
+                                  Perfect for Discord channels with rich embeds
+                                </div>
+                              )}
+                              {format === 'slack' && (
+                                <div className="mt-2 text-xs text-gray-500">
+                                  Coming soon - Slack-compatible format
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                       )
+                       })}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="timeout">Timeout (seconds)</Label>
+                      <Input
+                        id="timeout"
+                        type="number"
+                        min="1"
+                        max="300"
+                        value={webhookConfig.timeout || ''}
+                        onChange={(e) => setWebhookConfig(prev => ({ ...prev, timeout: parseInt(e.target.value) || 30 }))}
+                        className={errors.timeout ? 'border-red-500' : ''}
+                      />
+                      {errors.timeout && <p className="text-sm text-red-500">{errors.timeout}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="retryAttempts">Retry Attempts</Label>
+                      <Input
+                        id="retryAttempts"
+                        type="number"
+                        min="0"
+                        max="10"
+                        value={webhookConfig.retryAttempts || ''}
+                        onChange={(e) => setWebhookConfig(prev => ({ ...prev, retryAttempts: parseInt(e.target.value) || 3 }))}
+                        className={errors.retryAttempts ? 'border-red-500' : ''}
+                      />
+                      {errors.retryAttempts && <p className="text-sm text-red-500">{errors.retryAttempts}</p>}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Custom Headers</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Header name"
+                        value={headerKey}
+                        onChange={(e) => setHeaderKey(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addHeader())}
+                      />
+                      <Input
+                        placeholder="Header value"
+                        value={headerValue}
+                        onChange={(e) => setHeaderValue(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addHeader())}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={addHeader}
+                        disabled={!headerKey.trim() || !headerValue.trim()}
+                      >
+                        <HiPlus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    
+                    {Object.entries(webhookConfig.headers || {}).length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {Object.entries(webhookConfig.headers || {}).map(([key, value]) => (
+                          <Badge key={key} variant="secondary" className="text-xs">
+                            {key}: {value}
+                            <button
+                              type="button"
+                              onClick={() => removeHeader(key)}
+                              className="ml-1 hover:text-red-500"
+                            >
+                              <HiX className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {endpoint.type === 'email' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="forwardTo">Forward To Email *</Label>
+                    <Input
+                      id="forwardTo"
+                      type="email"
+                      value={emailConfig.forwardTo}
+                      onChange={(e) => setEmailConfig(prev => ({ ...prev, forwardTo: e.target.value }))}
+                      placeholder="support@yourcompany.com"
+                      className={errors.forwardTo ? 'border-red-500' : ''}
+                    />
+                    {errors.forwardTo && <p className="text-sm text-red-500">{errors.forwardTo}</p>}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="fromAddress">From Address</Label>
+                    <Select
+                      value={emailConfig.fromAddress || ''}
+                      onValueChange={(value) => setEmailConfig(prev => ({ ...prev, fromAddress: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Auto-detect from domain" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Auto-detect from domain</SelectItem>
+                        {verifiedDomains.map((domain) => (
+                          <SelectItem key={domain.id} value={`noreply@${domain.domain}`}>
+                            noreply@{domain.domain}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="subjectPrefix">Subject Prefix</Label>
+                    <Input
+                      id="subjectPrefix"
+                      value={emailConfig.subjectPrefix || ''}
+                      onChange={(e) => setEmailConfig(prev => ({ ...prev, subjectPrefix: e.target.value }))}
+                      placeholder="[Support]"
+                    />
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="includeAttachments"
+                      checked={emailConfig.includeAttachments}
+                      onCheckedChange={(checked) => setEmailConfig(prev => ({ ...prev, includeAttachments: checked }))}
+                    />
+                    <Label htmlFor="includeAttachments">Include attachments</Label>
+                  </div>
+                </>
+              )}
+
+              {endpoint.type === 'email_group' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="emails">Email Addresses *</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="emails"
+                        type="email"
+                        placeholder="team@yourcompany.com"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addEmail())}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={addEmail}
+                        disabled={!newEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())}
+                      >
+                        <HiPlus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    
+                    {emailGroupConfig.emails.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {emailGroupConfig.emails.map((email) => (
+                          <Badge key={email} variant="secondary" className="text-xs">
+                            {email}
+                            <button
+                              type="button"
+                              onClick={() => removeEmail(email)}
+                              className="ml-1 hover:text-red-500"
+                            >
+                              <HiX className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {errors.emails && <p className="text-sm text-red-500">{errors.emails}</p>}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="fromAddressGroup">From Address</Label>
+                    <Select
+                      value={emailGroupConfig.fromAddress || ''}
+                      onValueChange={(value) => setEmailGroupConfig(prev => ({ ...prev, fromAddress: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Auto-detect from domain" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Auto-detect from domain</SelectItem>
+                        {verifiedDomains.map((domain) => (
+                          <SelectItem key={domain.id} value={`noreply@${domain.domain}`}>
+                            noreply@{domain.domain}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="subjectPrefixGroup">Subject Prefix</Label>
+                    <Input
+                      id="subjectPrefixGroup"
+                      value={emailGroupConfig.subjectPrefix || ''}
+                      onChange={(e) => setEmailGroupConfig(prev => ({ ...prev, subjectPrefix: e.target.value }))}
+                      placeholder="[Team]"
+                    />
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="includeAttachmentsGroup"
+                      checked={emailGroupConfig.includeAttachments}
+                      onCheckedChange={(checked) => setEmailGroupConfig(prev => ({ ...prev, includeAttachments: checked }))}
+                    />
+                    <Label htmlFor="includeAttachmentsGroup">Include attachments</Label>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </form>
 
         <DialogFooter className="flex items-center justify-between">

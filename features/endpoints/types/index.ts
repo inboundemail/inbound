@@ -1,4 +1,5 @@
-import { endpoints, emailGroups, endpointDeliveries } from '@/lib/db/schema'
+import { endpoints, emailGroups, endpointDeliveries, WEBHOOK_FORMATS } from '@/lib/db/schema'
+import type { WebhookFormat } from '@/lib/db/schema'
 
 // Database types using Drizzle inference (following project patterns)
 export type Endpoint = typeof endpoints.$inferSelect
@@ -38,6 +39,7 @@ export type EndpointConfig = WebhookConfig | EmailForwardConfig | EmailGroupConf
 export type CreateEndpointData = {
   name: string
   type: 'webhook' | 'email' | 'email_group'
+  webhookFormat?: WebhookFormat // Only relevant for webhook type
   description?: string
   config: EndpointConfig
 }
@@ -46,6 +48,7 @@ export type UpdateEndpointData = {
   name?: string
   description?: string
   isActive?: boolean
+  webhookFormat?: WebhookFormat // Only relevant for webhook type
   config?: EndpointConfig
 }
 

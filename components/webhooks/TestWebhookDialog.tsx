@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useTestWebhookMutation } from '@/features/webhooks/hooks'
-import { Webhook } from '@/features/webhooks/types'
+import { Webhook, WebhookTestResult } from '@/features/webhooks/types'
 import {
   Dialog,
   DialogContent,
@@ -15,11 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { HiPlay, HiCheckCircle, HiX, HiClock, HiExclamationCircle } from 'react-icons/hi'
 import { toast } from 'sonner'
 
-interface TestResult {
-  success: boolean
-  statusCode?: number
-  message?: string
-  error?: string
+interface TestResult extends WebhookTestResult {
   timestamp: Date
 }
 
@@ -61,9 +57,7 @@ export function TestWebhookDialog({ open, onOpenChange, webhook }: TestWebhookDi
     try {
       const result = await testWebhookMutation.mutateAsync(webhook.id)
       const testResult: TestResult = {
-        success: result.success,
-        statusCode: result.statusCode,
-        message: result.message,
+        ...result,
         timestamp: new Date()
       }
       
@@ -177,6 +171,13 @@ export function TestWebhookDialog({ open, onOpenChange, webhook }: TestWebhookDi
                   </div>
                 )}
                 
+                {testResult.responseTime && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Response Time:</span>
+                    <span className="text-gray-900">{testResult.responseTime}ms</span>
+                  </div>
+                )}
+                
                 {testResult.message && (
                   <div>
                     <span className="text-gray-600">Message:</span>
@@ -192,6 +193,47 @@ export function TestWebhookDialog({ open, onOpenChange, webhook }: TestWebhookDi
                     <p className="text-red-600 mt-1 p-2 bg-red-50 rounded text-xs">
                       {testResult.error}
                     </p>
+                  </div>
+                )}
+                
+                {testResult.responseBody && (
+                  <div>
+                    <span className="text-gray-600">Response Body:</span>
+                    <pre className="text-gray-900 mt-1 p-2 bg-gray-50 rounded text-xs font-mono overflow-x-auto whitespace-pre-wrap">
+                      {testResult.responseBody}
+                    </pre>
+                  </div>
+                )}
+                
+                {testResult.responseHeaders && Object.keys(testResult.responseHeaders).length > 0 && (
+                  <div>
+                    <span className="text-gray-600">Response Headers:</span>
+                    <pre className="text-gray-900 mt-1 p-2 bg-gray-50 rounded text-xs font-mono overflow-x-auto">
+                      {JSON.stringify(testResult.responseHeaders, null, 2)}
+                    </pre>
+                  </div>
+                )}
+                
+                {testResult.details && (
+                  <div>
+                    <span className="text-gray-600">Additional Details:</span>
+                    <div className="mt-1 p-2 bg-gray-50 rounded text-xs">
+                      {testResult.details.url && (
+                        <div><strong>URL:</strong> {testResult.details.url}</div>
+                      )}
+                      {testResult.details.timeout && (
+                        <div><strong>Timeout:</strong> {testResult.details.timeout}s</div>
+                      )}
+                      {testResult.details.errorType && (
+                        <div><strong>Error Type:</strong> {testResult.details.errorType}</div>
+                      )}
+                      {testResult.details.statusText && (
+                        <div><strong>Status Text:</strong> {testResult.details.statusText}</div>
+                      )}
+                      {testResult.details.originalError && (
+                        <div><strong>Original Error:</strong> {testResult.details.originalError}</div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

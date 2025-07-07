@@ -306,6 +306,7 @@ export const endpoints = pgTable('endpoints', {
   id: varchar('id', { length: 255 }).primaryKey(),
   name: varchar('name', { length: 255 }).notNull(), // User-friendly name
   type: varchar('type', { length: 50 }).notNull(), // 'webhook', 'email', 'email_group'
+  webhookFormat: varchar('webhook_format', { length: 50 }).default('inbound'), // 'inbound', 'discord', 'slack', etc.
   config: text('config').notNull(), // JSON configuration based on type
   isActive: boolean('is_active').default(true),
   description: text('description'), // Optional description
@@ -432,6 +433,12 @@ export const ENDPOINT_TYPES = {
   EMAIL_GROUP: 'email_group'
 } as const;
 
+export const WEBHOOK_FORMATS = {
+  INBOUND: 'inbound',
+  DISCORD: 'discord',
+  SLACK: 'slack'
+} as const;
+
 export const DELIVERY_TYPES = {
   WEBHOOK: 'webhook',
   EMAIL_FORWARD: 'email_forward'
@@ -450,5 +457,6 @@ export type ProviderConfidence = typeof PROVIDER_CONFIDENCE[keyof typeof PROVIDE
 export type EmailStatus = typeof EMAIL_STATUS[keyof typeof EMAIL_STATUS];
 export type WebhookStatus = typeof WEBHOOK_STATUS[keyof typeof WEBHOOK_STATUS];
 export type EndpointType = typeof ENDPOINT_TYPES[keyof typeof ENDPOINT_TYPES];
+export type WebhookFormat = typeof WEBHOOK_FORMATS[keyof typeof WEBHOOK_FORMATS];
 export type DeliveryType = typeof DELIVERY_TYPES[keyof typeof DELIVERY_TYPES];
 export type DeliveryStatus = typeof DELIVERY_STATUS[keyof typeof DELIVERY_STATUS];
