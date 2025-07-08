@@ -7,6 +7,14 @@ const nextConfig: NextConfig = {
   turbopack: {
     // Empty configuration to acknowledge Turbopack usage
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'inbound.new',
+      },
+    ],
+  },
 };
 
 export default withSentryConfig(nextConfig, {

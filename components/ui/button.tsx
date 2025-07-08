@@ -10,13 +10,15 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-gradient-to-b from-[#8466ff] to-[#6C47FF] text-white disabled:cursor-default shadow-[0_4px_12px_rgba(0,0,0,0.3),inset_0_-1px_0.5px_1px_rgba(40,27,93,0.15),inset_0_1px_0.5px_1px_rgba(255,255,255,0.2)] border-none disabled:opacity-60",
+          "bg-gradient-to-b from-[#8466ff] to-[#6C47FF] text-white disabled:cursor-default shadow-[0_4px_12px_rgba(0,0,0,0.3),inset_0_-1px_0.5px_1px_rgba(40,27,93,0.15),inset_0_1px_0.5px_1px_rgba(255,255,255,0.2)] border-none disabled:opacity-60 hover:from-[#7557ff] hover:to-[#5d3eff] active:from-[#6647ff] active:to-[#4e35ff] active:shadow-[0_2px_8px_rgba(0,0,0,0.4),inset_0_1px_2px_rgba(40,27,93,0.3)]",
         secondary:
-          "bg-white border-gray-200 text-gray-700 hover:bg-gray-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700 font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-200 active:bg-gray-100 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-default",
-        destructive:
-          "bg-[#dc2626] text-white border-[rgba(27,31,35,0.15)] shadow-[rgba(27,31,35,0.1)_0_1px_0] font-semibold hover:bg-[#c82222] focus:shadow-[rgba(220,38,38,0.4)_0_0_0_3px] focus:outline-none active:bg-[#b41e1e] active:shadow-[rgba(20,70,32,0.2)_0_1px_0_inset] disabled:bg-[#f88383] disabled:border-[rgba(27,31,35,0.1)] disabled:text-[rgba(255,255,255,0.8)] disabled:cursor-default",
+          "bg-gradient-to-b from-slate-100 to-slate-200 text-slate-700 disabled:cursor-default shadow-[0_2px_8px_rgba(0,0,0,0.1),inset_0_-1px_0.5px_1px_rgba(0,0,0,0.05),inset_0_1px_0.5px_1px_rgba(255,255,255,0.8)] border-none disabled:opacity-60 hover:from-slate-200 hover:to-slate-300 active:from-slate-300 active:to-slate-400 active:shadow-[0_1px_4px_rgba(0,0,0,0.15),inset_0_1px_2px_rgba(0,0,0,0.1)]",
+        outline:
+          "bg-gradient-to-b from-white to-gray-50 text-slate-700 disabled:cursor-default shadow-[0_2px_8px_rgba(0,0,0,0.08),inset_0_-1px_0.5px_1px_rgba(0,0,0,0.03),inset_0_1px_0.5px_1px_rgba(255,255,255,0.9)] border-none disabled:opacity-60 hover:from-gray-50 hover:to-gray-100 hover:text-slate-800 active:from-gray-100 active:to-gray-200 active:shadow-[0_1px_4px_rgba(0,0,0,0.12),inset_0_1px_2px_rgba(0,0,0,0.08)]",
         ghost:
-          "bg-transparent text-[#24292E] border-none shadow-none font-medium hover:bg-[#F3F4F6] hover:text-[#586069] hover:transition-duration-100 active:bg-[#EDEFF2] active:shadow-[rgba(225,228,232,0.2)_0_1px_0_inset] active:transition-none disabled:bg-[#FAFBFC] disabled:border-[rgba(27,31,35,0.15)] disabled:text-[#959DA5] disabled:cursor-default",
+          "bg-transparent text-slate-600 disabled:cursor-default shadow-none border-none disabled:opacity-60 hover:bg-gradient-to-b hover:from-slate-100 hover:to-slate-150 hover:text-slate-700 hover:shadow-[0_1px_4px_rgba(0,0,0,0.05)] active:bg-gradient-to-b active:from-slate-200 active:to-slate-250 active:shadow-[inset_0_1px_2px_rgba(0,0,0,0.1)]",
+        destructive:
+          "bg-gradient-to-b from-red-500 to-red-600 text-white disabled:cursor-default shadow-[0_4px_12px_rgba(220,38,38,0.3),inset_0_-1px_0.5px_1px_rgba(153,27,27,0.15),inset_0_1px_0.5px_1px_rgba(255,255,255,0.2)] border-none disabled:opacity-60 hover:from-red-600 hover:to-red-700 active:from-red-700 active:to-red-800 active:shadow-[0_2px_8px_rgba(220,38,38,0.4),inset_0_1px_2px_rgba(153,27,27,0.3)]",
       },
       size: {
         default: "text-sm leading-5 px-4 py-2",
