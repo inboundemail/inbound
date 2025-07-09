@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100;200;300;400;500;600;700;800;900&display=swap');
+
 @layer theme, base, frosted_ui, components, utilities;
 
 @import "tailwindcss/theme.css" layer(theme);
@@ -10,5 +12,5 @@
 body {
 	background: var(--background);
 	color: var(--foreground);
-	font-family: Arial, Helvetica, sans-serif;
+	font-family: 'Outfit', Arial, Helvetica, sans-serif;
 }

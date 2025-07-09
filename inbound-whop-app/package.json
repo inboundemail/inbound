@@ -9,12 +9,17 @@
 		"lint": "next lint"
 	},
 	"dependencies": {
+		"@neondatabase/serverless": "^1.0.1",
+		"@radix-ui/react-slot": "^1.2.3",
 		"@vercel/functions": "^2.0.3",
 		"@whop/api": "^0.0.29",
 		"@whop/react": "0.2.14",
+		"class-variance-authority": "^0.7.1",
+		"clsx": "^2.1.1",
 		"next": "15.3.2",
 		"react": "^19.0.0",
-		"react-dom": "^19.0.0"
+		"react-dom": "^19.0.0",
+		"tailwind-merge": "^3.3.1"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.4",
