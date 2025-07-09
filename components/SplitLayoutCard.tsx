@@ -90,7 +90,7 @@ export default function SplitLayoutCard() {
             </svg>
           </div>
 
-          {/* App Cards Grid */}
+          App Cards Grid
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 mt-8 lg:mt-24">
             {apps.map((app, index) => (
               <AnimatedCard

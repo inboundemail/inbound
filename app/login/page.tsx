@@ -36,7 +36,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F8FA] relative overflow-hidden flex items-center justify-center">
+    <div className="min-h-screen bg-[#F7F8FA] relative overflow-hidden flex items-center justify-center" style={{ overscrollBehaviorY: "none" }}>
       <BackgroundSvg />
       {/* Main content */}
       <div className="w-full max-w-sm z-10 px-4 sm:px-0">
