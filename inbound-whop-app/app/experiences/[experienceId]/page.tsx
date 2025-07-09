@@ -4,6 +4,7 @@ import { getApiKey, saveApiKey } from "@/app/actions/apiManagement";
 import { redirect } from "next/navigation";
 import { Button } from "../../components/button";
 import Image from "next/image";
+import Link from "next/link";
 
 const mockEmails = [
 	{
@@ -301,8 +302,9 @@ export default async function ExperiencePage({
 						const avatarColor = getAvatarColor(email.senderName);
 
 						return (
-							<div
+							<Link
 								key={email.id}
+								href={`/experiences/${experienceId}/emails/${email.id}`}
 								className={`flex items-center gap-4 p-4 bg-gray-2 hover:bg-gray-3 transition-all duration-200 border border-gray-5 rounded-xl cursor-pointer group shadow-sm hover:shadow-md ${!email.isRead ? 'border-l-4 border-l-accent-9' : ''
 									}`}
 							>
@@ -351,7 +353,7 @@ export default async function ExperiencePage({
 										</div>
 									</div>
 								</div>
-							</div>
+							</Link>
 						);
 					})}
 				</div>
