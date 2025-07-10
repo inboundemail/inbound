@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { auth } from '@/lib/auth/auth'
 import { headers } from 'next/headers'
-import { checkDomainCanReceiveEmails, verifyDnsRecords } from '@/lib/dns'
-import { initiateDomainVerification, deleteDomainFromSES } from '@/lib/domain-verification'
+import { checkDomainCanReceiveEmails, verifyDnsRecords } from '@/lib/domains-and-dns/dns'
+import { initiateDomainVerification, deleteDomainFromSES } from '@/lib/domains-and-dns/domain-verification'
 import { getDomainWithRecords, updateDomainStatus, createDomainVerification, deleteDomainFromDatabase } from '@/lib/db/domains'
 import { SESClient, GetIdentityVerificationAttributesCommand } from '@aws-sdk/client-ses'
-import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
+import { AWSSESReceiptRuleManager } from '@/lib/aws-ses/aws-ses-rules'
 import { Autumn as autumn } from 'autumn-js'
 import { db } from '@/lib/db'
 import { emailDomains } from '@/lib/db/schema'
@@ -989,7 +989,7 @@ async function handleGetDomain(
         console.log(`🔍 Get Domain - Refreshing domain provider for: ${domainData.domain}`)
         
         // Import detectDomainProvider function
-        const { detectDomainProvider } = await import('@/lib/dns')
+        const { detectDomainProvider } = await import('@/lib/domains-and-dns/dns')
         const providerInfo = await detectDomainProvider(domainData.domain)
         
         if (providerInfo) {

@@ -1,4 +1,4 @@
-import { checkDomainCanReceiveEmails } from '@/lib/dns'
+import { checkDomainCanReceiveEmails } from '@/lib/domains-and-dns/dns'
 
 // Array of domains to test
 const testDomains = [

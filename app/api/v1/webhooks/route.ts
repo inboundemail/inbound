@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { auth } from '@/lib/auth/auth'
 import { headers } from 'next/headers'
 import { db } from '@/lib/db'
 import { endpoints, webhooks } from '@/lib/db/schema'

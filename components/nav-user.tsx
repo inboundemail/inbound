@@ -32,7 +32,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
-import { signOut, useSession } from "@/lib/auth-client"
+import { signOut, useSession } from "@/lib/auth/auth-client"
 import { useRouter } from "next/navigation"
 import { isUserAdmin } from "@/lib/navigation"
 import { useEffect, useState } from "react"

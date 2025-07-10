@@ -1,13 +1,13 @@
 "use server"
 
-import { auth } from "@/lib/auth"
+import { auth } from "@/lib/auth/auth"
 import { headers } from "next/headers"
 import { db } from '@/lib/db'
 import { endpoints, emailGroups, emailAddresses, emailDomains, endpointDeliveries } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import type { CreateEndpointData, UpdateEndpointData } from '@/features/endpoints/types'
-import { migrateUserWebhooksToEndpoints, checkWebhookMigrationNeeded } from '@/lib/webhook-migration'
+import { migrateUserWebhooksToEndpoints, checkWebhookMigrationNeeded } from '@/lib/webhooks/webhook-migration'
 
 export async function createEndpoint(data: CreateEndpointData) {
   const session = await auth.api.getSession({ headers: await headers() })

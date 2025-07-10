@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input"
 import { PricingTable } from "@/components/autumn/pricing-table" 
 import { HiArrowRight, HiMail, HiGlobeAlt, HiLockClosed, HiCheckCircle, HiLightningBolt, HiX, HiStar, HiMailOpen, HiChip, HiCog, HiLightBulb, HiSparkles, HiCheck } from "react-icons/hi"
 import Image from "next/image"
-import { auth } from "@/lib/auth"
+import { auth } from "@/lib/auth/auth"
 import { headers } from "next/headers"
 import CustomInboundIcon from "@/components/icons/customInbound"
 import type { Metadata } from 'next'

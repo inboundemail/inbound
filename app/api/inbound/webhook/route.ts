@@ -8,7 +8,7 @@ import { eq, and } from 'drizzle-orm'
 import { Autumn as autumn } from 'autumn-js'
 import { createHmac } from 'crypto'
 import { parseEmail, sanitizeHtml, type ParsedEmailData } from '@/lib/email-parser'
-import { type SESEvent, type SESRecord } from '@/lib/aws-ses'
+import { type SESEvent, type SESRecord } from '@/lib/aws-ses/aws-ses'
 import { isEmailBlocked } from '@/lib/email-blocking'
 
 interface ProcessedSESRecord extends SESRecord {

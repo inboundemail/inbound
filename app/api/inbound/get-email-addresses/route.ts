@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDomainWithRecordsAndEmails } from '@/lib/db/domains'
-import { auth } from '@/lib/auth'
+import { auth } from '@/lib/auth/auth'
 import { headers } from 'next/headers'
 
 export async function POST(request: NextRequest) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDomainWithRecordsAndEmails, createEmailAddress, updateEmailAddressReceiptRule } from '@/lib/db/domains'
-import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
-import { auth } from '@/lib/auth'
+import { AWSSESReceiptRuleManager } from '@/lib/aws-ses/aws-ses-rules'
+import { auth } from '@/lib/auth/auth'
 import { headers } from 'next/headers'
 
 export async function POST(request: NextRequest) {

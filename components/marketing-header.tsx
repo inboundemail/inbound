@@ -6,7 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { auth } from "@/lib/auth"
+import { auth } from "@/lib/auth/auth"
 import { headers } from "next/headers"
 
 // Function to fetch GitHub stars

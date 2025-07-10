@@ -179,7 +179,7 @@ export default function EndpointsPage() {
   const getStatusBadge = (endpoint: Endpoint) => {
     if (endpoint.isActive) {
       return (
-        <Badge 
+        <Badge
           className="bg-emerald-500 text-white rounded-full px-0.5 py-0.5 text-xs font-medium shadow-sm"
           title="Active"
         >
@@ -188,7 +188,7 @@ export default function EndpointsPage() {
       )
     } else {
       return (
-        <Badge 
+        <Badge
           className="bg-gray-400 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm"
           title="Not Active"
         >
@@ -323,10 +323,10 @@ export default function EndpointsPage() {
     <>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
         <div className="max-w-5xl mx-auto">
-          <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-between rounded-lg mb-6 mt-4">
             <div>
-              <h1 className="text-xl font-semibold mb-1">Endpoint Management</h1>
-              <div className="flex items-center gap-4 text-sm text-slate-300">
+              <h1 className="text-2xl font-semibold mb-1">Endpoint Management</h1>
+              <div className="flex items-center gap-4 text-sm">
                 <span>{totalEndpoints} endpoints</span>
                 <span>{activeEndpoints} active</span>
                 {webhookCount > 0 && (
@@ -367,17 +367,8 @@ export default function EndpointsPage() {
             </div>
           </div>
 
-                      <div className="mb-2">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-2xl font-semibold text-gray-900 mb-1 tracking-tight">
-                    Active Endpoints ({filteredEndpoints.length})
-                  </h2>
-                  <p className="text-gray-600 text-sm font-medium">Manage your webhook and email forwarding endpoints</p>
-                </div>
-              </div>
-
-                        {/* Search and Filter Controls */}
+          <div className="mb-2">
+            {/* Search and Filter Controls */}
             <div className="flex flex-col sm:flex-row gap-1 mb-2">
               <div className="flex-1">
                 <div className="relative">
@@ -390,7 +381,7 @@ export default function EndpointsPage() {
                   />
                 </div>
               </div>
-              
+
               <div className="flex gap-1">
                 <Select value={filterType} onValueChange={(value: FilterType) => setFilterType(value)}>
                   <SelectTrigger className="w-40 bg-white rounded-xl">
@@ -429,16 +420,15 @@ export default function EndpointsPage() {
                         id="select-all"
                       />
                       <label htmlFor="select-all" className="text-sm font-medium text-gray-700 cursor-pointer">
-                        {selectedEndpoints.size > 0 
+                        {selectedEndpoints.size > 0
                           ? `${selectedEndpoints.size} of ${filteredEndpoints.length} endpoints selected`
                           : `Select all (${filteredEndpoints.length}) endpoints`
                         }
                       </label>
                     </div>
-                    
-                    <div className={`flex items-center gap-2 transition-opacity duration-200 ${
-                      selectedEndpoints.size > 0 ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                    }`}>
+
+                    <div className={`flex items-center gap-2 transition-opacity duration-200 ${selectedEndpoints.size > 0 ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                      }`}>
                       <Button
                         variant="secondary"
                         size="sm"

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { authClient } from '@/lib/auth-client'
+import { authClient } from '@/lib/auth/auth-client'
 
 export const useApiKeysQuery = () => {
   return useQuery({

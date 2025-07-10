@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { LoginForm } from "@/components/login-form";
 import InboundIcon from "@/components/InboundIcon";
-import { useSession } from "@/lib/auth-client";
+import { useSession } from "@/lib/auth/auth-client";
 
 export default function LoginPage() {
   const { data: session, isPending } = useSession();

@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useSession } from "@/lib/auth-client"
+import { useSession } from "@/lib/auth/auth-client"
 import { useEffect, useState } from "react"
 
 // Function to fetch GitHub stars

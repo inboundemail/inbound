@@ -1,7 +1,7 @@
 // app/api/autumn/[...all]/route.ts
 
 import { autumnHandler } from "autumn-js/next";
-import { auth } from "@/lib/auth";
+import { auth } from "@/lib/auth/auth";
 
 export const { GET, POST } = autumnHandler({
   identify: async (request) => {

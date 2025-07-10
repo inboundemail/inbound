@@ -1,0 +1,85 @@
+---
+alwaysApply: false
+---
+
+When working on an API route it must have a 3-4 line description of what the API does on the top. 
+
+For every API function like /api/(version)/domains there will be a:
+
+- GET (retrieving information)
+- POST (creating information)
+- DELETE (deleting information)
+- PUT (updating information)
+
+## Authentication Pattern
+
+Remember every API function must try to either auth via session or via API key.
+
+Check if a session is valid first, then if there is no session check the request headers for an Authorization header.
+
+If there is an Authorization header, check if it is a valid API key.
+
+## Error Handling Standards
+
+### Response Format
+All API responses should follow a consistent format:
+- Success: `{ success: true, data: {...} }`
+- Error: `{ success: false, error: "message", details?: "additional info" }`
+
+### Error Status Codes
+- 400: Bad Request (validation errors, missing fields)
+- 401: Unauthorized (invalid auth)
+- 403: Forbidden (valid auth but insufficient permissions)
+- 404: Not Found (resource doesn't exist)
+- 409: Conflict (resource already exists)
+- 500: Internal Server Error (unexpected errors)
+
+### Error Logging
+- Use console.log with emoji prefixes for better visibility
+- Include operation context: `console.log('📋 GET /api/v1/endpoints - Fetching user endpoints')`
+- Log errors with full context: `console.error('❌ POST /api/v1/endpoints - Error:', error)`
+
+## Validation Requirements
+
+### Input Validation
+- Always validate required fields before processing
+- Use type-safe validation (current: manual checks, future: Effect Schema)
+- Validate data types and formats (URLs, emails, etc.)
+- Return specific error messages for validation failures
+
+### Database Operations
+- Use transactions for multi-step operations
+- Always handle database errors gracefully
+- Use proper SQL injection prevention (parameterized queries)
+
+## Data Handling
+
+### Request Processing
+- Parse JSON with try-catch blocks
+- Validate request body structure
+- Handle malformed requests gracefully
+
+### Response Construction
+- Always return consistent response formats
+- Include relevant metadata (timestamps, IDs)
+- Use appropriate HTTP status codes
+
+## Security Considerations
+
+### Input Sanitization
+- Validate all user inputs
+- Sanitize data before database operations
+- Use parameterized queries to prevent SQL injection
+
+### Rate Limiting
+- Implement rate limiting for public endpoints
+- Use different limits for authenticated vs unauthenticated requests
+
+
+## Monitoring and Observability
+
+### Logging
+- Log all API calls with timing information
+- Use Emojis to make logs more readable
+- Include user context in logs
+- Use structured logging for better searchability

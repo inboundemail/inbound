@@ -1,5 +1,5 @@
 import { betterAuth } from "better-auth";
-import { db } from "./db/index";
+import { db } from "../db/index";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { stripe } from "@better-auth/stripe";
 import { admin, apiKey, oAuthProxy } from "better-auth/plugins";
@@ -7,7 +7,7 @@ import { magicLink } from "better-auth/plugins";
 import { createAuthMiddleware } from "better-auth/api";
 import { eq, and } from "drizzle-orm";
 import Stripe from "stripe";
-import * as schema from "./db/schema";
+import * as schema from "../db/schema";
 import { nanoid } from "nanoid";
 import { Resend } from "resend";
 

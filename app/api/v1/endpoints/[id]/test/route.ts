@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { auth } from '@/lib/auth/auth'
 import { headers } from 'next/headers'
 import { db } from '@/lib/db'
 import { endpoints } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
-import { generateTestPayload } from '@/lib/webhook-formats'
+import { generateTestPayload } from '@/lib/webhooks/webhook-formats'
 import type { WebhookFormat } from '@/lib/db/schema'
 
 export async function POST(

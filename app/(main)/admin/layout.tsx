@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { getCurrentSession, isAdminRole } from "@/lib/auth-utils"
+import { getCurrentSession, isAdminRole } from "@/lib/auth/auth-utils"
 
 export default async function AdminLayout({
   children,

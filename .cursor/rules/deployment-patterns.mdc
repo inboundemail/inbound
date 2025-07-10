@@ -1,6 +1,4 @@
 ---
-description: AWS Deployment Patterns and Configuration Guide
-globs: 
 alwaysApply: false
 ---
 # Deployment Patterns and Configuration Guide

@@ -1,14 +1,14 @@
 "use server"
 
-import { auth } from "@/lib/auth"
+import { auth } from "@/lib/auth/auth"
 import { headers } from "next/headers"
 import { Autumn as autumn, Customer } from "autumn-js"
 import { db } from '@/lib/db'
 import { emailDomains, emailAddresses, webhooks, sesEvents, structuredEmails, endpoints, user, DOMAIN_STATUS } from '@/lib/db/schema'
 import { eq, and, sql, desc } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
-import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
-import { parseEmail as libParseEmail } from '@/lib/email-parser'
+import { AWSSESReceiptRuleManager } from '@/lib/aws-ses/aws-ses-rules'
+import { parseEmail as libParseEmail, sanitizeHtml } from '@/lib/email-management/email-parser'
 
 // ============================================================================
 // PAYMENTS AND BILLING VIA AUTUMN
@@ -1229,7 +1229,6 @@ export async function getEmailDetails(emailId: string) {
         }
 
         // Sanitize HTML content
-        const { sanitizeHtml } = await import('@/lib/email-parser')
         const sanitizedHtmlBody = email.htmlBody ? sanitizeHtml(email.htmlBody) : null
 
         // Extract recipient from toData for backward compatibility
@@ -1405,7 +1404,6 @@ export async function getEmailDetailsFromParsed(emailId: string) {
         }
 
         // Sanitize HTML content
-        const { sanitizeHtml } = await import('@/lib/email-parser')
         const sanitizedHtmlBody = email.htmlBody ? sanitizeHtml(email.htmlBody) : null
 
         // Extract recipient and from address for backward compatibility
@@ -1894,7 +1892,7 @@ export async function downloadAttachment(emailId: string, attachmentFilename: st
             console.log(`[downloadAttachment] Fetching email content from S3: ${s3BucketName}/${s3ObjectKey}`)
             
             try {
-                const { getEmailFromS3 } = await import('@/lib/aws-ses')
+                const { getEmailFromS3 } = await import('@/lib/aws-ses/aws-ses')
                 processedEmail = await getEmailFromS3(s3BucketName, s3ObjectKey)
                 console.log(`[downloadAttachment] Successfully fetched from S3`)
             } catch (s3Error) {

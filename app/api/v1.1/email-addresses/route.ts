@@ -4,7 +4,7 @@ import { db } from '@/lib/db'
 import { emailAddresses, emailDomains, endpoints, webhooks } from '@/lib/db/schema'
 import { eq, and, desc, count } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
-import { AWSSESReceiptRuleManager } from '@/lib/aws-ses-rules'
+import { AWSSESReceiptRuleManager } from '@/lib/aws-ses/aws-ses-rules'
 
 export async function GET(request: NextRequest) {
   try {

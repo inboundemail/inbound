@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useCreateEndpointMutation } from '@/features/endpoints/hooks'
 import { useDomainsStatsQuery } from '@/features/domains/hooks/useDomainsQuery'
 import { CreateEndpointData, WebhookConfig, EmailForwardConfig, EmailGroupConfig } from '@/features/endpoints/types'
-import { WEBHOOK_FORMAT_CONFIGS, getWebhookFormatConfig } from '@/lib/webhook-formats'
+import { WEBHOOK_FORMAT_CONFIGS, getWebhookFormatConfig } from '@/lib/webhooks/webhook-formats'
 import type { WebhookFormat } from '@/lib/db/schema'
 import {
   Dialog,

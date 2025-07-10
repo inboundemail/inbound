@@ -22,7 +22,7 @@ import {
   SidebarMenuButton,
 } from "@/components/ui/sidebar"
 import { TeamSwitcher } from "./ui/team-switcher"
-import { useSession } from "@/lib/auth-client"
+import { useSession } from "@/lib/auth/auth-client"
 import { navigationConfig, isUserAdmin } from "@/lib/navigation"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {

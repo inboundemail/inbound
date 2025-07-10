@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDomainWithRecords, updateDnsRecordVerification, updateDomainStatus } from '@/lib/db/domains'
-import { verifyDnsRecords } from '@/lib/dns'
-import { auth } from '@/lib/auth'
+import { verifyDnsRecords } from '@/lib/domains-and-dns/dns'
+import { auth } from '@/lib/auth/auth'
 import { headers } from 'next/headers'
 
 export async function POST(request: NextRequest) {

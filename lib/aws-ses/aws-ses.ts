@@ -1,7 +1,7 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { SESClient, SendBounceCommand, SendBounceCommandInput } from '@aws-sdk/client-ses';
 import { simpleParser, ParsedMail, Attachment } from 'mailparser';
-import { extractEmailAddress, extractEmailAddresses } from './email-parser';
+import { extractEmailAddress, extractEmailAddresses } from '@/lib/email-management/email-parser';
 
 // Types for SES email receiving
 export interface SESEvent {
