@@ -29,10 +29,10 @@ export function DomainFilterSelect({ domains, currentDomain }: DomainFilterSelec
 
   return (
     <Select value={currentDomain} onValueChange={handleDomainChange}>
-      <SelectTrigger className="w-40 bg-white rounded-xl">
+      <SelectTrigger className="w-40 rounded-xl">
         <SelectValue placeholder="All Domains" />
       </SelectTrigger>
-      <SelectContent className="bg-white rounded-xl">
+      <SelectContent className="rounded-xl">
         <SelectItem value="all">All Domains</SelectItem>
         {domains.map((domain) => (
           <SelectItem key={domain} value={domain}>

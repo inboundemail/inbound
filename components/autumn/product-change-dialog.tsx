@@ -10,7 +10,7 @@ import {
   PricingDialogFooter,
   TotalPrice,
   PricingDialogButton,
-} from "@/components/pricing/pricing-dialog";
+} from "@/components/autumn/pricing-dialog";
 
 import { getProductChangeTexts } from "@/lib/autumn/get-product-change-texts";
 import { type CheckProductFormattedPreview } from "autumn-js";

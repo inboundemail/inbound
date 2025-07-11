@@ -2,14 +2,14 @@
 
 import {
   BellIcon,
-  CreditCardIcon,
-  LogOutIcon,
   MoreVerticalIcon,
   UserCircleIcon,
   SettingsIcon,
   KeyIcon,
-  ShieldCheckIcon,
 } from "lucide-react"
+import CreditCard2 from "@/components/icons/credit-card-2"
+import CircleLogout from "@/components/icons/circle-logout"
+import Shield2 from "@/components/icons/shield-2"
 
 import {
   Avatar,
@@ -131,7 +131,7 @@ export function NavUser({
                   <span className="truncate font-medium">{user.name}</span>
                   {userIsAdmin && (
                     <Badge variant="secondary" className="text-xs px-1.5 py-0.5 h-5 flex items-center gap-1 bg-[#151516] text-white">
-                      <ShieldCheckIcon className="h-3 w-3" />
+                      <Shield2 className="h-3 w-3" />
                       Admin
                     </Badge>
                   )}
@@ -175,12 +175,12 @@ export function NavUser({
               onClick={() => router.push("/settings")} 
               className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 focus:ring-0 focus:outline-none"
             >
-              <CreditCardIcon className="h-4 w-4" />
+              <CreditCard2 className="h-4 w-4" />
               Manage Subscription
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-[#2c2c2e]" />
             <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 focus:ring-0 focus:outline-none">
-              <LogOutIcon className="h-4 w-4" />
+              <CircleLogout className="h-4 w-4" />
               Log out
             </DropdownMenuItem>
           </DropdownMenuContent>

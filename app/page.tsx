@@ -10,7 +10,7 @@ import { AnimatedCard } from "@/components/AnimatedCard"
 import { AnimatedSection } from "@/components/AnimatedSection"
 import SplitLayoutCard from "@/components/SplitLayoutCard"
 import Image from "next/image"
-import { PricingTable } from "@/components/autumn/pricing-table"
+import { PricingTable } from "@/components/autumn/pricing-table-format"
 
 function EmailSetupFlow() {
   const [activeStep, setActiveStep] = useState(1)

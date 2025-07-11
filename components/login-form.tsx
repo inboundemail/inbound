@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/auth-client";
 import { useState } from "react";
 import { toast } from "sonner";
-import { MailIcon } from "lucide-react";
+import Envelope2 from "@/components/icons/envelope-2";
 
 export function LoginForm({
   className,
@@ -149,8 +149,9 @@ export function LoginForm({
         </Label>
         <div className="grid gap-2">
           <div className="relative">
-            <MailIcon
-              size="15"
+            <Envelope2
+              width="15"
+              height="15"
               className="text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2"
             />
             <Input

@@ -146,10 +146,10 @@ export default function WebhooksPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+      <div className="min-h-screen p-4 font-outfit">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center justify-center py-12">
-            <div className="text-slate-500">Loading webhooks...</div>
+            <div className="text-muted-foreground">Loading webhooks...</div>
           </div>
         </div>
       </div>
@@ -158,14 +158,14 @@ export default function WebhooksPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+      <div className="min-h-screen p-4 font-outfit">
         <div className="max-w-5xl mx-auto">
-          <Card className="border-red-200 bg-red-50">
+          <Card className="border-destructive/50 bg-destructive/10">
             <CardContent className="p-6">
-              <div className="flex items-center gap-2 text-red-600">
+              <div className="flex items-center gap-2 text-destructive">
                 <HiX className="h-4 w-4" />
                 <span>{error.message}</span>
-                <Button variant="ghost" size="sm" onClick={() => refetch()} className="ml-auto text-red-600 hover:text-red-700">
+                <Button variant="ghost" size="sm" onClick={() => refetch()} className="ml-auto text-destructive hover:text-destructive">
                   Try Again
                 </Button>
               </div>
@@ -178,7 +178,7 @@ export default function WebhooksPage() {
 
     return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+      <div className="min-h-screen p-4 font-outfit">
         <div className="max-w-5xl mx-auto">
           {/* Compact Header */}
           <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4 mb-6">
@@ -219,29 +219,29 @@ export default function WebhooksPage() {
 
           {/* Performance Overview */}
           {totalDeliveries > 0 && (
-            <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl mb-6">
+            <Card className="bg-card border-border rounded-xl mb-6">
               <CardContent className="p-4">
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2">
-                    <HiChartBar className="h-4 w-4 text-slate-600" />
-                    <span className="text-sm font-medium text-slate-700">Performance Overview:</span>
+                    <HiChartBar className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium text-foreground">Performance Overview:</span>
                   </div>
                   <div className="flex items-center gap-6 text-sm">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                      <span className="text-slate-600">{totalDeliveries} total</span>
+                      <span className="text-muted-foreground">{totalDeliveries} total</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                      <span className="text-slate-600">{successfulDeliveries} successful</span>
+                      <span className="text-muted-foreground">{successfulDeliveries} successful</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                      <span className="text-slate-600">{totalDeliveries - successfulDeliveries} failed</span>
+                      <span className="text-muted-foreground">{totalDeliveries - successfulDeliveries} failed</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 ml-auto">
-                    <span className="text-sm font-medium text-slate-700">{overallSuccessRate}%</span>
+                    <span className="text-sm font-medium text-foreground">{overallSuccessRate}%</span>
                     <div className="w-16">
                       <Progress value={overallSuccessRate} className="h-1" />
                     </div>
@@ -261,7 +261,7 @@ export default function WebhooksPage() {
 
           <div className="space-y-4">
             {webhooks.length === 0 ? (
-              <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
+              <Card className="bg-card border-border rounded-xl">
                 <CardContent className="p-8">
                   <div className="text-center">
                     <CustomInboundIcon 
@@ -270,7 +270,7 @@ export default function WebhooksPage() {
                       backgroundColor="#8b5cf6" 
                       className="mx-auto mb-4" 
                     />
-                    <p className="text-sm text-slate-500 mb-4">No webhooks configured</p>
+                    <p className="text-sm text-muted-foreground mb-4">No webhooks configured</p>
                     <Button variant="secondary" onClick={() => setCreateDialogOpen(true)}>
                       <HiPlus className="h-4 w-4 mr-2" />
                       Add Your First Webhook
@@ -282,7 +282,7 @@ export default function WebhooksPage() {
               webhooks.map((webhook: Webhook) => (
                 <Card
                   key={webhook.id}
-                  className="bg-white/95 backdrop-blur-sm shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-200/60 rounded-xl group"
+                  className="bg-card border-border hover:bg-accent/5 transition-all duration-300 rounded-xl group"
                 >
                   <CardContent className="p-0">
                     <div className="p-4">
@@ -295,27 +295,27 @@ export default function WebhooksPage() {
                           />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center space-x-2 mb-1">
-                              <h3 className="text-base font-semibold text-gray-900 tracking-tight truncate">{webhook.name}</h3>
+                              <h3 className="text-base font-semibold text-foreground tracking-tight truncate">{webhook.name}</h3>
                               <Badge className="bg-purple-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
                                 Webhook
                               </Badge>
                               {getStatusBadge(webhook)}
                             </div>
                             <div className="flex items-center space-x-3 text-sm">
-                              <div className="flex items-center space-x-2 text-gray-600">
+                              <div className="flex items-center space-x-2 text-muted-foreground">
                                 <span className="font-mono truncate">
                                   {new URL(webhook.url).hostname}
                                 </span>
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-1 h-auto hover:bg-gray-100 rounded hover:scale-105 active:scale-95"
+                                  className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-1 h-auto hover:bg-accent rounded hover:scale-105 active:scale-95"
                                   onClick={() => copyUrl(webhook.url)}
                                 >
                                   {copiedUrl === webhook.url ? (
                                     <HiCheckCircle className="w-3.5 h-3.5 text-emerald-500" />
                                   ) : (
-                                    <HiClipboard className="w-3.5 h-3.5 text-gray-400 transition-all duration-150 hover:text-gray-600" />
+                                    <HiClipboard className="w-3.5 h-3.5 text-muted-foreground transition-all duration-150 hover:text-foreground" />
                                   )}
                                 </Button>
                               </div>
@@ -326,15 +326,15 @@ export default function WebhooksPage() {
                                 </div>
                               )}
                               {(webhook.totalDeliveries || 0) > 0 && (
-                                <div className="flex items-center space-x-1 text-gray-600">
+                                <div className="flex items-center space-x-1 text-muted-foreground">
                                   <span className="text-xs font-medium">{getSuccessRate(webhook)}% success</span>
-                                  <span className="text-xs text-gray-500">({webhook.totalDeliveries} deliveries)</span>
+                                  <span className="text-xs text-muted-foreground/70">({webhook.totalDeliveries} deliveries)</span>
                                 </div>
                               )}
                               {webhook.description && (
-                                <span className="text-gray-500 text-xs truncate">{webhook.description}</span>
+                                <span className="text-muted-foreground text-xs truncate">{webhook.description}</span>
                               )}
-                              <span className="text-gray-400 text-xs">
+                              <span className="text-muted-foreground/70 text-xs">
                                 Added {webhook.createdAt ? formatDistanceToNow(new Date(webhook.createdAt), { addSuffix: true }) : 'recently'}
                               </span>
                             </div>
@@ -344,30 +344,30 @@ export default function WebhooksPage() {
                           <Button 
                             variant="ghost" 
                             size="sm" 
-                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="p-1.5 hover:bg-accent rounded-lg transition-colors"
                             onClick={() => handleTestWebhook(webhook)}
                             disabled={testWebhookMutation.isPending}
                             title="Test webhook"
                           >
-                            <HiPlay className="w-4 h-4 text-gray-500 hover:text-gray-700" />
+                            <HiPlay className="w-4 h-4 text-muted-foreground hover:text-foreground" />
                           </Button>
                           <Button 
                             variant="ghost" 
                             size="sm" 
-                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="p-1.5 hover:bg-accent rounded-lg transition-colors"
                             onClick={() => handleEditWebhook(webhook)}
                             title="Configure webhook"
                           >
-                            <HiCog className="w-4 h-4 text-gray-500 hover:text-gray-700" />
+                            <HiCog className="w-4 h-4 text-muted-foreground hover:text-foreground" />
                           </Button>
                           <Button 
                             variant="ghost" 
                             size="sm" 
-                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="p-1.5 hover:bg-accent rounded-lg transition-colors"
                             onClick={() => handleDeleteWebhook(webhook)}
                             title="Delete webhook"
                           >
-                            <HiTrash className="w-4 h-4 text-gray-500 hover:text-gray-700" />
+                            <HiTrash className="w-4 h-4 text-muted-foreground hover:text-foreground" />
                           </Button>
                         </div>
                       </div>

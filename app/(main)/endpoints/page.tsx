@@ -280,11 +280,11 @@ export default function EndpointsPage() {
 
   if (isLoading || migrationInProgress) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+      <div className="min-h-screen p-4 font-outfit">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <div className="text-slate-500 mb-2">
+              <div className="text-muted-foreground mb-2">
                 {migrationInProgress ? 'Migrating webhooks to endpoints...' : 'Loading endpoints...'}
               </div>
               {migrationInProgress && (
@@ -301,14 +301,14 @@ export default function EndpointsPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+      <div className="min-h-screen p-4 font-outfit">
         <div className="max-w-5xl mx-auto">
-          <Card className="border-red-200 bg-red-50">
+          <Card className="border-destructive/50 bg-destructive/10">
             <CardContent className="p-6">
-              <div className="flex items-center gap-2 text-red-600">
+              <div className="flex items-center gap-2 text-destructive">
                 <HiX className="h-4 w-4" />
                 <span>{error.message}</span>
-                <Button variant="ghost" size="sm" onClick={() => refetch()} className="ml-auto text-red-600 hover:text-red-700">
+                <Button variant="ghost" size="sm" onClick={() => refetch()} className="ml-auto text-destructive hover:text-destructive">
                   Try Again
                 </Button>
               </div>
@@ -321,7 +321,7 @@ export default function EndpointsPage() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+      <div className="min-h-screen p-4 font-outfit">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center justify-between rounded-lg mb-6 mt-4">
             <div>
@@ -410,7 +410,7 @@ export default function EndpointsPage() {
 
             {/* Bulk Selection Controls */}
             {filteredEndpoints.length > 0 && (
-              <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl mb-2">
+              <Card className="bg-card border-border rounded-xl mb-2">
                 <CardContent className="py-2 px-4">
                   <div className="flex items-center justify-between min-h-[32px]">
                     <div className="flex items-center gap-2">
@@ -419,7 +419,7 @@ export default function EndpointsPage() {
                         onCheckedChange={handleSelectAll}
                         id="select-all"
                       />
-                      <label htmlFor="select-all" className="text-sm font-medium text-gray-700 cursor-pointer">
+                      <label htmlFor="select-all" className="text-sm font-medium text-foreground cursor-pointer">
                         {selectedEndpoints.size > 0
                           ? `${selectedEndpoints.size} of ${filteredEndpoints.length} endpoints selected`
                           : `Select all (${filteredEndpoints.length}) endpoints`
@@ -459,19 +459,19 @@ export default function EndpointsPage() {
           <div className="space-y-2">
             {/* Migration Success Banner */}
             {showMigrationSuccess && (
-              <Card className="bg-green-50 border-green-200">
+              <Card className="bg-green-500/10 border-green-500/50">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
-                    <HiCheckCircle className="h-5 w-5 text-green-600" />
+                    <HiCheckCircle className="h-5 w-5 text-green-500" />
                     <div className="flex-1">
-                      <h4 className="text-sm font-medium text-green-800">Migration Completed Successfully!</h4>
-                      <p className="text-sm text-green-700">Your webhooks have been imported as endpoints. You can now manage all your endpoints in one place.</p>
+                      <h4 className="text-sm font-medium text-green-400">Migration Completed Successfully!</h4>
+                      <p className="text-sm text-green-300">Your webhooks have been imported as endpoints. You can now manage all your endpoints in one place.</p>
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setShowMigrationSuccess(false)}
-                      className="text-green-600 hover:text-green-700"
+                      className="text-green-500 hover:text-green-400"
                     >
                       <HiX className="h-4 w-4" />
                     </Button>
@@ -481,7 +481,7 @@ export default function EndpointsPage() {
             )}
 
             {filteredEndpoints.length === 0 ? (
-              <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
+              <Card className="bg-card border-border rounded-xl">
                 <CardContent className="p-8">
                   <div className="text-center">
                     <CustomInboundIcon
@@ -490,7 +490,7 @@ export default function EndpointsPage() {
                       backgroundColor="#6b7280"
                       className="mx-auto mb-4"
                     />
-                    <p className="text-sm text-slate-500 mb-4">
+                    <p className="text-sm text-muted-foreground mb-4">
                       {searchQuery || filterType !== 'all' || filterStatus !== 'all'
                         ? 'No endpoints match your search criteria'
                         : 'No endpoints configured'

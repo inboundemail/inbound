@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { PricingTable } from "@/components/autumn/pricing-table"
+import { PricingTable } from "@/components/autumn/pricing-table-format"
 import { HiArrowRight, HiMail, HiGlobeAlt, HiCheckCircle, HiLightningBolt, HiArrowDown, HiCode, HiSparkles, HiCog, HiShieldCheck, HiClock, HiRefresh, HiDatabase, HiCube, HiTerminal, HiDocumentText, HiExternalLink } from "react-icons/hi"
 import { auth } from "@/lib/auth/auth"
 import { headers } from "next/headers"

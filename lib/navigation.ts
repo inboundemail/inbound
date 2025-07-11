@@ -10,12 +10,20 @@
  * Used by components like AppSidebar, NavMain, NavSecondary, and the NavigationContext
  * to provide consistent navigation experience across the application.
  */
-import { LucideIcon, WebhookIcon, ActivityIcon, SettingsIcon, ShieldCheckIcon, GlobeIcon, MailIcon, CloudIcon, CodeIcon } from "lucide-react"
+import Webhook from "@/components/icons/webhook"
+import ChartActivity2 from "@/components/icons/chart-activity-2"
+import Gear2 from "@/components/icons/gear-2"
+import Shield2 from "@/components/icons/shield-2"
+import Globe2 from "@/components/icons/globe-2"
+import Envelope2 from "@/components/icons/envelope-2"
+import Cloud2 from "@/components/icons/cloud-2"
+import Code2 from "@/components/icons/code-2"
+import { LucideIcon } from "lucide-react"
 
 export interface NavigationItem {
   title: string
   url: string
-  icon?: LucideIcon
+  icon?: LucideIcon | React.ComponentType<any>
   description?: string
 }
 
@@ -30,31 +38,31 @@ export const navigationConfig: NavigationConfig = {
     {
       title: "Mail",
       url: "/mail",
-      icon: MailIcon,
+      icon: Envelope2,
       description: "View and manage your received emails"
     },
     {
       title: "Email Addresses",
       url: "/emails",
-      icon: GlobeIcon,
+      icon: Globe2,
       description: "Manage your email domains and addresses"
     },
     {
       title: "Endpoints",
       url: "/endpoints",
-      icon: WebhookIcon,
+      icon: Webhook,
       description: "Manage webhook and email forwarding endpoints"
     },
     {
       title: "Analytics",
       url: "/analytics",
-      icon: ActivityIcon,
+      icon: ChartActivity2,
       description: "View detailed analytics"
     },
     {
       title: "Settings",
       url: "/settings",
-      icon: SettingsIcon,
+      icon: Gear2,
       description: "Account and app settings"
     },
   ],
@@ -63,19 +71,19 @@ export const navigationConfig: NavigationConfig = {
     {
       title: "Admin Panel",
       url: "/admin",
-      icon: ShieldCheckIcon,
+      icon: Shield2,
       description: "Administrative controls and user management"
     },
     {
       title: "SES Dashboard",
       url: "/admin/ses",
-      icon: CloudIcon,
+      icon: Cloud2,
       description: "AWS SES monitoring and metrics"
     },
     {
       title: "Lambda Logs",
       url: "/admin/lambda",
-      icon: CodeIcon,
+      icon: Code2,
       description: "Lambda function monitoring and logs"
     },
   ],

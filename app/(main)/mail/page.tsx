@@ -5,7 +5,12 @@ import { Input } from '@/components/ui/input'
 import { formatDistanceToNow } from 'date-fns'
 import { getEmailsList } from '@/app/actions/primary'
 import Link from 'next/link'
-import { HiCheckCircle, HiClock, HiSearch, HiTrendingUp, HiX, HiDocumentText } from 'react-icons/hi'
+import Check2 from '@/components/icons/check-2'
+import AlarmClock from '@/components/icons/alarm-clock'
+import Magnifier2 from '@/components/icons/magnifier-2'
+import ArrowUpRight2 from '@/components/icons/arrow-up-right-2'
+import CircleWarning2 from '@/components/icons/circle-warning-2'
+import File2 from '@/components/icons/file-2'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { MarkAllReadButton } from '@/components/mark-all-read-button'
 import { DomainFilterSelect } from '@/components/domain-filter-select'
@@ -23,7 +28,7 @@ interface MailPageProps {
 export default async function MailPage({ searchParams }: MailPageProps) {
     // Await search params
     const params = await searchParams
-    
+
     // Get search params with defaults
     const searchQuery = params.search || ''
     const statusFilter = params.status || 'all'
@@ -42,12 +47,12 @@ export default async function MailPage({ searchParams }: MailPageProps) {
 
     if (emailsResult.error) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+            <div className="min-h-screen p-4 font-outfit">
                 <div className="max-w-5xl mx-auto">
-                    <Card className="border-red-200 bg-red-50">
+                    <Card className="border-destructive/50 bg-destructive/10">
                         <CardContent className="p-6">
-                            <div className="flex items-center gap-2 text-red-600">
-                                <HiX className="h-4 w-4" />
+                            <div className="flex items-center gap-2 text-destructive">
+                                <CircleWarning2 width="16" height="16" />
                                 <span>{emailsResult.error}</span>
                             </div>
                         </CardContent>
@@ -64,35 +69,35 @@ export default async function MailPage({ searchParams }: MailPageProps) {
             case 'received':
                 return (
                     <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-                        <HiCheckCircle className="h-3 w-3 mr-1" />
+                        <Check2 width="12" height="12" className="mr-1" />
                         Received
                     </Badge>
                 )
             case 'processing':
                 return (
                     <Badge className="bg-amber-100 text-amber-800 border-amber-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-                        <HiClock className="h-3 w-3 mr-1" />
+                        <AlarmClock width="12" height="12" className="mr-1" />
                         Processing
                     </Badge>
                 )
             case 'forwarded':
                 return (
                     <Badge className="bg-blue-100 text-blue-800 border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-                        <HiTrendingUp className="h-3 w-3 mr-1" />
+                        <ArrowUpRight2 width="12" height="12" className="mr-1" />
                         Forwarded
                     </Badge>
                 )
             case 'failed':
                 return (
                     <Badge className="bg-rose-100 text-rose-800 border-rose-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-                        <HiX className="h-3 w-3 mr-1" />
+                        <CircleWarning2 width="12" height="12" className="mr-1" />
                         Failed
                     </Badge>
                 )
             default:
                 return (
-                    <Badge className="bg-slate-100 text-slate-700 border-slate-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-                        <HiClock className="h-3 w-3 mr-1" />
+                    <Badge className="bg-secondary text-secondary-foreground border-border rounded-full px-2.5 py-0.5 text-xs font-medium">
+                        <AlarmClock width="12" height="12" className="mr-1" />
                         {status}
                     </Badge>
                 )
@@ -100,16 +105,16 @@ export default async function MailPage({ searchParams }: MailPageProps) {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+        <div className="min-h-screen p-4 font-outfit">
             <div className="max-w-5xl mx-auto">
                 {/* Header Section */}
                 <div className="mb-6">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h2 className="text-2xl font-semibold text-gray-900 mb-1 tracking-tight">
+                            <h2 className="text-2xl font-semibold text-foreground mb-1 tracking-tight">
                                 Email Management ({unreadCount} unread)
                             </h2>
-                            <p className="text-gray-600 text-sm font-medium">Search and filter your received emails</p>
+                            <p className="text-muted-foreground text-sm font-medium">Search and filter your received emails</p>
                         </div>
                         <MarkAllReadButton unreadCount={unreadCount} />
                     </div>
@@ -119,23 +124,23 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                 <div className="mb-6">
                     <div className="flex items-center gap-3">
                         <form method="GET" className="relative flex-1">
-                            <HiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
                             <Input
                                 name="search"
                                 placeholder="Search emails..."
                                 defaultValue={searchQuery}
-                                className="pl-10 h-10 bg-white border-gray-200 focus:border-blue-500 focus:ring-blue-500 rounded-xl"
+                                className="pl-10 h-10 rounded-xl"
                             />
                             {/* Hidden inputs to preserve other filter states */}
                             {domainFilter !== 'all' && (
                                 <input type="hidden" name="domain" value={domainFilter} />
                             )}
                             <Button type="submit" className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 px-2">
-                                <HiSearch className="h-3 w-3" />
+                                <Magnifier2 width="12" height="12" />
                             </Button>
                         </form>
-                        
-                        <DomainFilterSelect 
+
+                        <DomainFilterSelect
                             domains={filters.uniqueDomains}
                             currentDomain={domainFilter}
                         />
@@ -144,26 +149,26 @@ export default async function MailPage({ searchParams }: MailPageProps) {
 
                 {/* Email List */}
                 {emails.length === 0 ? (
-                    <div className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl p-8">
+                    <div className="bg-card border-border rounded-xl p-8">
                         <div className="text-center">
-                            <CustomInboundIcon 
-                                text="EM" 
-                                size={48} 
-                                backgroundColor="#8b5cf6" 
-                                className="mx-auto mb-4" 
+                            <CustomInboundIcon
+                                text="EM"
+                                size={48}
+                                backgroundColor="#8b5cf6"
+                                className="mx-auto mb-4"
                             />
-                            <h3 className="text-lg font-semibold mb-2 text-gray-900">No emails found</h3>
-                            <p className="text-sm text-slate-500 mb-4">
+                            <h3 className="text-lg font-semibold mb-2 text-foreground">No emails found</h3>
+                            <p className="text-sm text-muted-foreground mb-4">
                                 {searchQuery || statusFilter !== 'all' || domainFilter !== 'all'
                                     ? 'No emails match your search criteria.'
                                     : 'Hey! Looks like you don\'t have any emails yet.'}
                             </p>
                             {!(searchQuery || statusFilter !== 'all' || domainFilter !== 'all') && (
                                 <div className="space-y-3">
-                                    <p className="text-sm text-gray-600">
+                                    <p className="text-sm text-muted-foreground">
                                         Ready to start receiving emails? Let's get you set up!
                                     </p>
-                                    <Button asChild className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white">
+                                    <Button asChild>
                                         <Link href="/onboarding">
                                             Start Onboarding
                                         </Link>
@@ -176,11 +181,11 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                     <div className="space-y-2">
                         {emails.map((email) => {
                             // Get sender name and extract initials
-                            const senderName = email.parsedData.fromData?.addresses?.[0]?.name || 
-                                             email.from.split('@')[0] || 
-                                             email.from.split('<')[0] || 
-                                             email.from
-                            
+                            const senderName = email.parsedData.fromData?.addresses?.[0]?.name ||
+                                email.from.split('@')[0] ||
+                                email.from.split('<')[0] ||
+                                email.from
+
                             // Extract initials (1-2 letters)
                             const getInitials = (name: string) => {
                                 const words = name.trim().split(/\s+/)
@@ -192,9 +197,9 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                                     return name.slice(0, 2).toUpperCase()
                                 }
                             }
-                            
+
                             const initials = getInitials(senderName)
-                            
+
                             // Generate consistent color based on sender name
                             const getAvatarColor = (name: string) => {
                                 const colors = [
@@ -213,22 +218,21 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                                 }, 0)
                                 return colors[Math.abs(hash) % colors.length]
                             }
-                            
+
                             const avatarColor = getAvatarColor(senderName)
 
                             return (
-                                <Link 
+                                <Link
                                     key={email.id}
                                     href={`/mail/${email.id}`}
-                                    className={`flex items-center gap-4 p-4 bg-white/95 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 border border-gray-200/60 rounded-xl group ${
-                                        !email.isRead ? 'border-l-4 border-l-[#6366f1]' : ''
-                                    }`}
+                                    className={`flex items-center gap-4 p-4 bg-secondary border-border hover:bg-accent/50 transition-all duration-200 rounded-xl group ${!email.isRead ? 'border-l-4 border-l-primary' : ''
+                                        }`}
                                 >
                                     {/* CustomInboundIcon with sender initials */}
-                                    <CustomInboundIcon 
+                                    <CustomInboundIcon
                                         text={initials}
-                                        size={40} 
-                                        backgroundColor={avatarColor} 
+                                        size={40}
+                                        backgroundColor={avatarColor}
                                     />
 
                                     {/* Email content */}
@@ -237,27 +241,27 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                                             {/* Sender and Subject */}
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 mb-1">
-                                                    <span className={`text-sm truncate ${email.isRead ? 'font-medium text-gray-700' : 'font-bold text-gray-900'}`}>
+                                                    <span className={`text-sm truncate ${email.isRead ? 'font-medium text-muted-foreground' : 'font-bold text-foreground'}`}>
                                                         {senderName}
                                                     </span>
                                                     {email.parsedData.hasAttachments && (
-                                                        <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-xs rounded-full px-2 py-0.5">
-                                                            <HiDocumentText className="w-3 h-3 mr-1" />
+                                                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs rounded-full px-2 py-0.5">
+                                                            <File2 width="12" height="12" className="mr-1" />
                                                             {email.parsedData.attachmentCount}
                                                         </Badge>
                                                     )}
                                                     {!email.isRead && (
-                                                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                                        <div className="w-2 h-2 bg-primary rounded-full"></div>
                                                     )}
                                                 </div>
-                                                <div className={`text-sm truncate ${email.isRead ? 'text-gray-600' : 'text-gray-900 font-medium'}`}>
+                                                <div className={`text-sm truncate ${email.isRead ? 'text-muted-foreground' : 'text-foreground font-medium'}`}>
                                                     {email.subject}
                                                 </div>
                                             </div>
 
                                             {/* Time */}
                                             <div className="text-right flex-shrink-0">
-                                                <div className="text-xs text-gray-500 whitespace-nowrap">
+                                                <div className="text-xs text-muted-foreground whitespace-nowrap">
                                                     {formatDistanceToNow(new Date(email.receivedAt || new Date()), { addSuffix: true })}
                                                 </div>
                                             </div>
@@ -271,9 +275,9 @@ export default async function MailPage({ searchParams }: MailPageProps) {
 
                 {/* Pagination */}
                 {pagination.total > pagination.limit && (
-                    <div className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl p-4 mt-6">
+                    <div className="bg-card border-border rounded-xl p-4 mt-6">
                         <div className="flex items-center justify-between">
-                            <div className="text-sm text-gray-600 font-medium">
+                            <div className="text-sm text-muted-foreground font-medium">
                                 Showing {pagination.offset + 1} to {Math.min(pagination.offset + pagination.limit, pagination.total)} of {pagination.total} emails
                             </div>
                             <div className="flex items-center gap-2">
@@ -289,7 +293,7 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                                             }
                                         }}
                                     >
-                                        <Button variant="secondary" size="sm" className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl">
+                                        <Button variant="secondary" size="sm" className="rounded-xl">
                                             Previous
                                         </Button>
                                     </Link>
@@ -306,7 +310,7 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                                             }
                                         }}
                                     >
-                                        <Button variant="secondary" size="sm" className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl">
+                                        <Button variant="secondary" size="sm" className="rounded-xl">
                                             Next
                                         </Button>
                                     </Link>

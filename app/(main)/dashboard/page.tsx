@@ -156,9 +156,9 @@ export default async function Page() {
 
       {/* Error State */}
       {(analyticsError || domainsError) && (
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-destructive/50 bg-destructive/10">
           <CardContent className="p-3">
-            <div className="flex items-center gap-2 text-red-600 text-sm">
+            <div className="flex items-center gap-2 text-destructive text-sm">
               <XCircleIcon className="h-4 w-4" />
               <span>
                 {analyticsError && domainsError ? 'Failed to load dashboard data' :
@@ -169,7 +169,7 @@ export default async function Page() {
                 variant="ghost"
                 size="sm"
                 asChild
-                className="ml-auto text-red-600 hover:text-red-700 h-auto p-1"
+                className="ml-auto text-destructive hover:text-destructive h-auto p-1"
               >
                 <Link href="/dashboard">Retry</Link>
               </Button>
@@ -179,31 +179,31 @@ export default async function Page() {
       )}
 
       {/* Email Activity Summary */}
-      <Card>
+      <Card className="bg-card border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <ActivityIcon className="h-4 w-4" />
+          <CardTitle className="text-base flex items-center gap-2 text-foreground">
+            <ActivityIcon className="h-4 w-4 text-muted-foreground" />
             Email Activity
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
           <div className="grid grid-cols-2 gap-4">
-            <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-100">
-              <div className="text-2xl font-bold text-blue-700">{analyticsData?.stats.totalEmails || 0}</div>
-              <div className="text-sm text-blue-600 mt-1">Total Emails</div>
-              <div className="text-xs text-slate-500 mt-1">All time processed</div>
+            <div className="text-center p-4 bg-blue-500/10 rounded-lg border border-blue-500/30">
+              <div className="text-2xl font-bold text-blue-400">{analyticsData?.stats.totalEmails || 0}</div>
+              <div className="text-sm text-blue-300 mt-1">Total Emails</div>
+              <div className="text-xs text-muted-foreground mt-1">All time processed</div>
             </div>
-            <div className="text-center p-4 bg-green-50 rounded-lg border border-green-100">
-              <div className="text-2xl font-bold text-green-700">{analyticsData?.stats.emailsLast24h || 0}</div>
-              <div className="text-sm text-green-600 mt-1">Today</div>
-              <div className="text-xs text-slate-500 mt-1">Last 24 hours</div>
+            <div className="text-center p-4 bg-green-500/10 rounded-lg border border-green-500/30">
+              <div className="text-2xl font-bold text-green-400">{analyticsData?.stats.emailsLast24h || 0}</div>
+              <div className="text-sm text-green-300 mt-1">Today</div>
+              <div className="text-xs text-muted-foreground mt-1">Last 24 hours</div>
             </div>
           </div>
           
           {analyticsData?.stats.avgProcessingTime && (
-            <div className="mt-4 p-3 bg-slate-50 rounded-lg flex items-center justify-between">
-              <span className="text-sm font-medium">Average Processing Time</span>
-              <span className="text-sm text-slate-600 font-mono">{analyticsData.stats.avgProcessingTime}ms</span>
+            <div className="mt-4 p-3 bg-accent/5 rounded-lg flex items-center justify-between">
+              <span className="text-sm font-medium text-foreground">Average Processing Time</span>
+              <span className="text-sm text-muted-foreground font-mono">{analyticsData.stats.avgProcessingTime}ms</span>
             </div>
           )}
         </CardContent>
@@ -212,11 +212,11 @@ export default async function Page() {
       {/* Domain Status & Recent Activity - Two Column */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Domain Status */}
-        <Card>
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <GlobeIcon className="h-4 w-4" />
+              <CardTitle className="text-base flex items-center gap-2 text-foreground">
+                <GlobeIcon className="h-4 w-4 text-muted-foreground" />
                 Domain Status
               </CardTitle>
               <Button variant="ghost" size="sm" asChild className="h-auto p-1 text-xs">
@@ -228,7 +228,7 @@ export default async function Page() {
             {displayDomains.length === 0 ? (
               <div className="text-center py-6">
                 <GlobeIcon className="h-6 w-6 text-slate-400 mx-auto mb-2" />
-                <p className="text-sm text-slate-500 mb-2">No domains configured</p>
+                <p className="text-sm text-muted-foreground mb-2">No domains configured</p>
                 <Button variant="secondary" size="sm" asChild>
                   <Link href="/add">
                     <PlusIcon className="h-3 w-3 mr-1" />
@@ -237,20 +237,20 @@ export default async function Page() {
                 </Button>
               </div>
             ) : (
-              <div className="divide-y divide-slate-200">
+              <div className="divide-y divide-border">
                 {displayDomains.slice(0, 6).map((domain) => (
                   <Link 
                     key={domain.id}
                     href={`/emails/${domain.id}`}
-                    className="flex items-center justify-between py-3 -mx-6 px-6 hover:bg-slate-50 transition-colors block"
+                    className="flex items-center justify-between py-3 -mx-6 px-6 hover:bg-accent/5 transition-colors block"
                   >
                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <div className="flex items-center justify-center w-6 h-6 rounded bg-slate-100">
-                        <GlobeIcon className="h-3 w-3 text-slate-600" />
+                      <div className="flex items-center justify-center w-6 h-6 rounded bg-accent/10">
+                        <GlobeIcon className="h-3 w-3 text-muted-foreground" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="font-medium text-xs truncate">{domain.domain}</div>
-                        <div className="text-xs text-slate-500">
+                        <div className="font-medium text-xs truncate text-foreground">{domain.domain}</div>
+                        <div className="text-xs text-muted-foreground">
                           {domain.emailAddressCount} addresses • {domain.emailsLast24h} today
                         </div>
                       </div>
@@ -271,11 +271,11 @@ export default async function Page() {
         </Card>
 
         {/* Recent Activity Stream */}
-        <Card>
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <MailIcon className="h-4 w-4" />
+              <CardTitle className="text-base flex items-center gap-2 text-foreground">
+                <MailIcon className="h-4 w-4 text-muted-foreground" />
                 Activity Stream
               </CardTitle>
               <Button variant="ghost" size="sm" asChild className="h-auto p-1 text-xs">
@@ -287,7 +287,7 @@ export default async function Page() {
             {displayEmails.length === 0 ? (
               <div className="text-center py-6">
                 <MailIcon className="h-6 w-6 text-slate-400 mx-auto mb-2" />
-                <p className="text-sm text-slate-500">No recent activity</p>
+                <p className="text-sm text-muted-foreground">No recent activity</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -295,21 +295,21 @@ export default async function Page() {
                   <Link 
                     key={email.id}
                     href={`/analytics?emailid=${email.id}`}
-                    className="flex items-start gap-2 p-2 hover:bg-slate-50 transition-colors border rounded block"
+                    className="flex items-start gap-2 p-2 hover:bg-accent/5 transition-colors border border-border rounded block"
                   >
-                    <div className="w-1 h-8 bg-blue-200 rounded-full mt-1 flex-shrink-0"></div>
+                    <div className="w-1 h-8 bg-primary/60 rounded-full mt-1 flex-shrink-0"></div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <div className="font-medium text-xs truncate">{email.from}</div>
+                        <div className="font-medium text-xs truncate text-foreground">{email.from}</div>
                         {getEmailStatusBadge(email.status)}
                       </div>
-                      <div className="text-xs text-slate-600 truncate mb-0.5">
+                      <div className="text-xs text-muted-foreground truncate mb-0.5">
                         → {email.recipient}
                       </div>
-                      <div className="text-xs text-slate-500 truncate mb-1">
+                      <div className="text-xs text-muted-foreground truncate mb-1">
                         {email.subject}
                       </div>
-                      <div className="text-xs text-slate-400">
+                      <div className="text-xs text-muted-foreground/70">
                         {formatDistanceToNow(new Date(email.receivedAt), { addSuffix: true })}
                       </div>
                     </div>

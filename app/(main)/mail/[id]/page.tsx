@@ -51,7 +51,7 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
   
   if (emailResult.error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+      <div className="p-4 font-outfit">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center gap-4 mb-6">
             <Link href="/mail">
@@ -62,9 +62,9 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
             </Link>
           </div>
 
-          <Card className="border-red-200 bg-red-50/95 backdrop-blur-sm shadow-sm rounded-xl">
+          <Card className="border-destructive/50 bg-destructive/10 rounded-xl">
             <CardContent className="p-6">
-              <div className="flex items-center gap-2 text-red-600">
+              <div className="flex items-center gap-2 text-destructive">
                 <HiMail className="h-4 w-4" />
                 <span>{emailResult.error}</span>
               </div>
@@ -124,7 +124,7 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
   const avatarColor = getAvatarColor(senderName)
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+    <div className="p-4 font-outfit">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
@@ -137,11 +137,11 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
         </div>
 
         {/* Email Content Card */}
-        <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl overflow-hidden">
+        <Card className="rounded-xl overflow-hidden">
           <CardContent className="p-6">
             {/* Email Header */}
             <div className="mb-6">
-              <h1 className="text-2xl font-semibold text-gray-900 mb-4 tracking-tight">{displaySubject}</h1>
+              <h1 className="text-2xl font-semibold text-foreground mb-4 tracking-tight">{displaySubject}</h1>
 
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-start gap-3">
@@ -152,21 +152,21 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
                   />
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-gray-900">
+                      <span className="font-medium text-foreground">
                         {senderName}
                       </span>
-                      <span className="text-gray-500 text-sm">
+                      <span className="text-muted-foreground text-sm">
                         &lt;{emailDetails.parsedData.fromData?.addresses?.[0]?.address || (displayFrom.includes('<') ? displayFrom.split('<')[1].replace('>', '') : displayFrom)}&gt;
                       </span>
                     </div>
-                    <div className="text-sm text-gray-600 mt-1">
+                    <div className="text-sm text-muted-foreground mt-1">
                       to {emailDetails.recipient}
                     </div>
                   </div>
                 </div>
 
                 <div className="text-right">
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-muted-foreground">
                     {format(
                       emailDetails.parsedData.emailDate 
                         ? new Date(emailDetails.parsedData.emailDate) 
@@ -195,7 +195,7 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
             </div>
 
             {/* Email Body */}
-            <div className="border-t border-gray-200 pt-6">
+            <div className="border-t border-border pt-6">
               {emailDetails.emailContent.htmlBody ? (
                 <div 
                   className="prose prose-sm max-w-none rounded-lg new-thing"
@@ -207,7 +207,7 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
                 />
               ) : emailDetails.emailContent.textBody ? (
                 <div 
-                  className="whitespace-pre-wrap text-gray-900 leading-relaxed"
+                  className="whitespace-pre-wrap text-foreground leading-relaxed"
                   style={{ 
                     fontFamily: 'Inter, system-ui, sans-serif',
                     textAlign: 'left'
@@ -216,7 +216,7 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
                   {emailDetails.emailContent.textBody}
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-muted-foreground">
                   <CustomInboundIcon 
                     text="EM"
                     size={32} 
@@ -236,8 +236,8 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
 
             {/* Debug Info (only in development) */}
             {process.env.NODE_ENV === 'development' && (
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <details className="text-xs text-gray-500">
+              <div className="mt-6 pt-6 border-t border-border">
+                <details className="text-xs text-muted-foreground">
                   <summary className="cursor-pointer font-medium">Debug Info</summary>
                   <div className="mt-2 space-y-2">
                     <div><strong>Parse Success:</strong> {emailDetails.parsedData.parseSuccess ? 'Yes' : 'No'}</div>

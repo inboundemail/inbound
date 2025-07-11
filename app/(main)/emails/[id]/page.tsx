@@ -58,7 +58,7 @@ import {
 import AddDomainForm from '@/components/add-domain-form'
 
 // React Query hooks
-import { 
+import {
     useDomainDetailsQuery,
     useCatchAllStatusQuery,
     useDomainVerificationMutation,
@@ -148,7 +148,7 @@ export default function DomainDetailPage() {
 
     const toggleSelectAll = () => {
         if (!domainDetailsData?.emailAddresses) return
-        
+
         if (selectedEmailIds.size === domainDetailsData.emailAddresses.length) {
             setSelectedEmailIds(new Set())
         } else {
@@ -232,7 +232,7 @@ export default function DomainDetailPage() {
 
         try {
             // Delete all selected emails
-            const deletePromises = Array.from(selectedEmailIds).map(emailId => 
+            const deletePromises = Array.from(selectedEmailIds).map(emailId =>
                 deleteEmailMutation.mutateAsync({
                     domainId,
                     emailAddressId: emailId
@@ -240,7 +240,7 @@ export default function DomainDetailPage() {
             )
 
             await Promise.all(deletePromises)
-            
+
             toast.success(`Successfully deleted ${selectedEmailIds.size} email address${selectedEmailIds.size > 1 ? 'es' : ''}`)
             setSelectedEmailIds(new Set())
             setIsBulkDeleteDialogOpen(false)
@@ -336,13 +336,13 @@ export default function DomainDetailPage() {
 
                 // Check if it's a legacy webhook or an endpoint
                 if (catchAllEndpointId === 'legacy-webhook') {
-                    await enableCatchAllMutation.mutateAsync({ 
-                        domainId, 
+                    await enableCatchAllMutation.mutateAsync({
+                        domainId,
                         webhookId: catchAllStatus.catchAllWebhookId || ''
                     })
                 } else {
-                    await enableCatchAllMutation.mutateAsync({ 
-                        domainId, 
+                    await enableCatchAllMutation.mutateAsync({
+                        domainId,
                         endpointId: catchAllEndpointId
                     })
                 }
@@ -378,16 +378,16 @@ export default function DomainDetailPage() {
                         </Button>
                     </Link>
                 </div>
-                <Card className="border-red-200 bg-red-50">
+                <Card className="border-destructive/50 bg-destructive/10">
                     <CardContent className="pt-6">
-                        <div className="flex items-center gap-2 text-red-600">
+                        <div className="flex items-center gap-2 text-destructive">
                             <XCircleIcon className="h-4 w-4" />
                             <span>{domainError instanceof Error ? domainError.message : 'Domain not found'}</span>
                             <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => refetchDomainDetails()}
-                                className="ml-auto text-red-600 hover:text-red-700"
+                                className="ml-auto text-destructive hover:text-destructive"
                             >
                                 Try Again
                             </Button>
@@ -416,7 +416,7 @@ export default function DomainDetailPage() {
 
     const getEndpointIconColor = (endpoint: any) => {
         if (!endpoint?.isActive) return '#64748b'
-        
+
         switch (endpoint?.type) {
             case 'webhook':
                 return '#8b5cf6'
@@ -436,27 +436,27 @@ export default function DomainDetailPage() {
     const selectedEmails = emailAddresses.filter(email => selectedEmailIds.has(email.id))
 
     return (
-        <div className="h-full bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+        <div className="h-full p-4 font-outfit">
             <div className="max-w-4xl mx-auto space-y-4">
                 {/* Back Button */}
                 <div className="flex items-center">
-                    <Link href="/emails" className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
+                    <Link href="/emails" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
                         <ArrowLeftIcon className="h-4 w-4" />
                         Back to Domains
                     </Link>
                 </div>
 
                 {/* Header */}
-                <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4">
+                <div className="flex items-center justify-between bg-card text-card-foreground rounded-lg p-4 border border-border">
                     <div className="flex items-center gap-4">
-                        <CustomInboundIcon 
-                            Icon={HiGlobeAlt} 
-                            size={40} 
-                            backgroundColor="#3b82f6" 
+                        <CustomInboundIcon
+                            Icon={HiGlobeAlt}
+                            size={40}
+                            backgroundColor="#3b82f6"
                         />
                         <div>
                             <h1 className="text-xl font-semibold mb-1">{domain.domain}</h1>
-                            <div className="text-sm text-slate-300">
+                            <div className="text-sm text-muted-foreground">
                                 {domain.status === DOMAIN_STATUS.PENDING && "Add DNS records to complete verification"}
                                 {domain.status === DOMAIN_STATUS.VERIFIED && "Domain verified - manage email addresses below"}
                                 {domain.status === DOMAIN_STATUS.FAILED && "Domain verification failed - please check your DNS records"}
@@ -484,12 +484,12 @@ export default function DomainDetailPage() {
                             variant="secondary"
                             size="sm"
                             onClick={refreshVerification}
-                            className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+                            className="bg-muted border-border text-muted-foreground hover:bg-accent"
                         >
                             <HiRefresh className="h-3 w-3 mr-1" />
                             Refresh
                         </Button>
-                        
+
                         {/* Delete Domain Button */}
                         <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
                             <Button
@@ -504,7 +504,7 @@ export default function DomainDetailPage() {
                                 <DialogHeader>
                                     <DialogTitle>Delete Domain</DialogTitle>
                                     <DialogDescription>
-                                        This action cannot be undone. This will permanently delete the domain "{domain.domain}" 
+                                        This action cannot be undone. This will permanently delete the domain "{domain.domain}"
                                         and all associated email addresses and data.
                                     </DialogDescription>
                                 </DialogHeader>
@@ -567,24 +567,24 @@ export default function DomainDetailPage() {
 
                 {/* Email Management Section - Only show for verified domains */}
                 {showEmailSection && (
-                    <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
+                    <Card className="bg-card border-border rounded-xl">
                         <CardHeader className="pb-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <CardTitle className="flex items-center gap-2 text-gray-900 text-lg">
+                                    <CardTitle className="flex items-center gap-2 text-foreground text-lg">
                                         Email Management
                                     </CardTitle>
-                                    <CardDescription className="text-gray-600">
-                                        {catchAllStatus?.isCatchAllEnabled 
+                                    <CardDescription className="text-muted-foreground">
+                                        {catchAllStatus?.isCatchAllEnabled
                                             ? `Catch-all enabled - all emails to @${domain.domain} are captured`
                                             : `Manage individual email addresses for @${domain.domain}`
                                         }
                                     </CardDescription>
                                 </div>
-                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                     <MailIcon className="h-4 w-4" />
                                     {stats.totalEmailAddresses} addresses
-                                    <span className="text-gray-400">•</span>
+                                    <span className="text-muted-foreground/60">•</span>
                                     <TrendingUpIcon className="h-4 w-4" />
                                     {stats.totalEmailsLast24h} emails (24h)
                                 </div>
@@ -597,7 +597,7 @@ export default function DomainDetailPage() {
                                     {/* Add Email Form */}
                                     <div className="flex flex-col sm:flex-row gap-3 w-full">
                                         <div className="w-full sm:flex-1">
-                                            <div className="flex items-center border rounded-md bg-white h-10 w-full">
+                                            <div className="flex items-center border border-input rounded-xl bg-background h-10 w-full">
                                                 <Input
                                                     type="text"
                                                     placeholder="username"
@@ -610,14 +610,14 @@ export default function DomainDetailPage() {
                                                     }}
                                                     className="border-0 rounded-r-none focus:ring-0 flex-1 h-full"
                                                 />
-                                                <div className="px-3 bg-gray-50 border-l text-sm text-gray-600 rounded-r-md flex items-center h-full whitespace-nowrap">
+                                                <div className="px-3 bg-muted border-l border-border text-sm text-muted-foreground rounded-r-lg flex items-center h-full whitespace-nowrap">
                                                     @{domain.domain}
                                                 </div>
                                             </div>
                                         </div>
                                         <div className="flex gap-2 w-full sm:flex-1">
-                                            <Select 
-                                                value={selectedEndpointId} 
+                                            <Select
+                                                value={selectedEndpointId}
                                                 onValueChange={handleEndpointSelection}
                                                 disabled={isEndpointsLoading}
                                             >
@@ -640,10 +640,10 @@ export default function DomainDetailPage() {
                                                             {userEndpoints.map((endpoint) => (
                                                                 <SelectItem key={endpoint.id} value={endpoint.id}>
                                                                     <div className="flex items-center gap-2">
-                                                                        <CustomInboundIcon 
-                                                                            Icon={getEndpointIcon(endpoint)} 
-                                                                            size={16} 
-                                                                            backgroundColor={getEndpointIconColor(endpoint)} 
+                                                                        <CustomInboundIcon
+                                                                            Icon={getEndpointIcon(endpoint)}
+                                                                            size={16}
+                                                                            backgroundColor={getEndpointIconColor(endpoint)}
                                                                         />
                                                                         {endpoint.name} ({endpoint.type})
                                                                     </div>
@@ -677,14 +677,14 @@ export default function DomainDetailPage() {
                                     ) : (
                                         <div className="space-y-2">
                                             {/* Select All Checkbox with Bulk Actions */}
-                                            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">
                                                 <div className="flex items-center gap-3">
                                                     <Checkbox
                                                         checked={emailAddresses.length > 0 && selectedEmailIds.size === emailAddresses.length}
                                                         onCheckedChange={toggleSelectAll}
                                                         className="h-4 w-4"
                                                     />
-                                                    <span className="text-sm font-medium text-gray-700">
+                                                    <span className="text-sm font-medium text-foreground">
                                                         Select all ({emailAddresses.length})
                                                         {selectedEmailIds.size > 0 && (
                                                             <span className="text-blue-600 ml-2">
@@ -699,7 +699,7 @@ export default function DomainDetailPage() {
                                                             variant="ghost"
                                                             size="sm"
                                                             onClick={clearSelection}
-                                                            className="text-gray-600 hover:text-gray-800 h-8 px-3"
+                                                            className="text-muted-foreground hover:text-foreground h-8 px-3"
                                                         >
                                                             Clear
                                                         </Button>
@@ -718,13 +718,12 @@ export default function DomainDetailPage() {
                                             </div>
 
                                             {emailAddresses.map((email) => (
-                                                <div 
-                                                    key={email.id} 
-                                                    className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
-                                                        selectedEmailIds.has(email.id) 
-                                                            ? 'bg-blue-50 border-blue-200' 
-                                                            : 'bg-gray-50 border-gray-200'
-                                                    }`}
+                                                <div
+                                                    key={email.id}
+                                                    className={`flex items-center justify-between p-3 rounded-lg border border-border transition-colors ${selectedEmailIds.has(email.id)
+                                                            ? 'bg-accent/50 border-accent'
+                                                            : 'bg-muted/30 border-border'
+                                                        }`}
                                                 >
                                                     <div className="flex items-center gap-3">
                                                         <Checkbox
@@ -746,10 +745,10 @@ export default function DomainDetailPage() {
                                                         </Button>
                                                     </div>
                                                     <div className="flex items-center gap-2">
-                                                        <div className="text-sm text-gray-600">
+                                                        <div className="text-sm text-muted-foreground">
                                                             {(() => {
                                                                 // Find the configured endpoint
-                                                                const configuredEndpoint = email.endpointId 
+                                                                const configuredEndpoint = email.endpointId
                                                                     ? userEndpoints.find(endpoint => endpoint.id === email.endpointId)
                                                                     : null
 
@@ -757,10 +756,10 @@ export default function DomainDetailPage() {
                                                                     const EndpointIcon = getEndpointIcon(configuredEndpoint)
                                                                     return (
                                                                         <div className="flex items-center gap-1.5">
-                                                                            <CustomInboundIcon 
-                                                                                Icon={EndpointIcon} 
-                                                                                size={25} 
-                                                                                backgroundColor={getEndpointIconColor(configuredEndpoint)} 
+                                                                            <CustomInboundIcon
+                                                                                Icon={EndpointIcon}
+                                                                                size={25}
+                                                                                backgroundColor={getEndpointIconColor(configuredEndpoint)}
                                                                             />
                                                                             <span className={`font-medium ${getEndpointIconColor(configuredEndpoint)}`}>
                                                                                 {configuredEndpoint.name}
@@ -771,10 +770,10 @@ export default function DomainDetailPage() {
                                                                     // Legacy webhook configuration
                                                                     return (
                                                                         <div className="flex items-center gap-1.5">
-                                                                            <CustomInboundIcon 
-                                                                                Icon={HiLightningBolt} 
-                                                                                size={14} 
-                                                                                backgroundColor="#8b5cf6" 
+                                                                            <CustomInboundIcon
+                                                                                Icon={HiLightningBolt}
+                                                                                size={14}
+                                                                                backgroundColor="#8b5cf6"
                                                                             />
                                                                             <span className="text-amber-600 font-medium">
                                                                                 Legacy Webhook
@@ -782,11 +781,11 @@ export default function DomainDetailPage() {
                                                                         </div>
                                                                     )
                                                                 } else {
-                                                                    return <span className="text-gray-500">Store in Inbound</span>
+                                                                    return <span className="text-muted-foreground">Store in Inbound</span>
                                                                 }
                                                             })()}
                                                         </div>
-                                                        <div className="text-sm text-gray-500">
+                                                        <div className="text-sm text-muted-foreground">
                                                             {email.emailsLast24h} emails
                                                         </div>
                                                         <Button
@@ -801,7 +800,7 @@ export default function DomainDetailPage() {
                                                             variant="ghost"
                                                             size="sm"
                                                             onClick={() => deleteEmailAddressHandler(email.id, email.address)}
-                                                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                                                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                                                         >
                                                             <TrashIcon className="h-4 w-4" />
                                                         </Button>
@@ -813,8 +812,8 @@ export default function DomainDetailPage() {
 
                                     {/* Link to manage endpoints */}
                                     <div className="flex items-center justify-center pt-2">
-                                        <Link 
-                                            href="/endpoints" 
+                                        <Link
+                                            href="/endpoints"
                                             className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
                                         >
                                             <ExternalLinkIcon className="h-3 w-3" />
@@ -831,21 +830,21 @@ export default function DomainDetailPage() {
                                     <div className="space-y-3">
                                         <div className="flex items-center justify-between">
                                             <div>
-                                                <div className="font-medium text-gray-900">Catch-all Configuration</div>
-                                                <div className="text-sm text-gray-600">
-                                                    {catchAllStatus.isCatchAllEnabled 
+                                                <div className="font-medium text-foreground">Catch-all Configuration</div>
+                                                <div className="text-sm text-muted-foreground">
+                                                    {catchAllStatus.isCatchAllEnabled
                                                         ? 'All emails to any address are captured'
                                                         : 'Capture emails to any address on this domain'
                                                     }
                                                 </div>
                                             </div>
                                         </div>
-                                        
+
                                         <div className="flex flex-col sm:flex-row gap-3">
                                             {!catchAllStatus.isCatchAllEnabled && (
                                                 <div className="flex-1">
-                                                    <Select 
-                                                        value={catchAllEndpointId} 
+                                                    <Select
+                                                        value={catchAllEndpointId}
                                                         onValueChange={handleCatchAllEndpointSelection}
                                                         disabled={isEndpointsLoading}
                                                     >
@@ -868,10 +867,10 @@ export default function DomainDetailPage() {
                                                                     {userEndpoints.map((endpoint) => (
                                                                         <SelectItem key={endpoint.id} value={endpoint.id}>
                                                                             <div className="flex items-center gap-2">
-                                                                                <CustomInboundIcon 
-                                                                                    Icon={getEndpointIcon(endpoint)} 
-                                                                                    size={16} 
-                                                                                    backgroundColor={getEndpointIconColor(endpoint)} 
+                                                                                <CustomInboundIcon
+                                                                                    Icon={getEndpointIcon(endpoint)}
+                                                                                    size={16}
+                                                                                    backgroundColor={getEndpointIconColor(endpoint)}
                                                                                 />
                                                                                 {endpoint.name} ({endpoint.type})
                                                                             </div>
@@ -913,8 +912,8 @@ export default function DomainDetailPage() {
                         <div className="grid gap-4 py-4">
                             <div className="grid gap-2">
                                 <Label htmlFor="endpoint-assignment">Endpoint Assignment</Label>
-                                <Select 
-                                    value={endpointDialogSelectedId} 
+                                <Select
+                                    value={endpointDialogSelectedId}
                                     onValueChange={handleEndpointDialogSelection}
                                     disabled={isEndpointsLoading}
                                 >
@@ -937,10 +936,10 @@ export default function DomainDetailPage() {
                                                 {userEndpoints.map((endpoint) => (
                                                     <SelectItem key={endpoint.id} value={endpoint.id}>
                                                         <div className="flex items-center gap-2">
-                                                            <CustomInboundIcon 
-                                                                Icon={getEndpointIcon(endpoint)} 
-                                                                size={16} 
-                                                                backgroundColor={getEndpointIconColor(endpoint)} 
+                                                            <CustomInboundIcon
+                                                                Icon={getEndpointIcon(endpoint)}
+                                                                size={16}
+                                                                backgroundColor={getEndpointIconColor(endpoint)}
                                                             />
                                                             <span>{endpoint.name} ({endpoint.type})</span>
                                                         </div>
@@ -976,16 +975,16 @@ export default function DomainDetailPage() {
                         <DialogHeader>
                             <DialogTitle>Delete Email Addresses</DialogTitle>
                             <DialogDescription>
-                                Are you sure you want to delete {selectedEmailIds.size} email address{selectedEmailIds.size > 1 ? 'es' : ''}? 
+                                Are you sure you want to delete {selectedEmailIds.size} email address{selectedEmailIds.size > 1 ? 'es' : ''}?
                                 This action cannot be undone.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="py-4">
                             <div className="space-y-2">
-                                <p className="text-sm font-medium text-gray-900">Email addresses to be deleted:</p>
+                                <p className="text-sm font-medium text-foreground">Email addresses to be deleted:</p>
                                 <div className="max-h-32 overflow-y-auto space-y-1">
                                     {selectedEmails.map((email) => (
-                                        <div key={email.id} className="text-sm text-gray-600 font-mono bg-gray-50 px-2 py-1 rounded">
+                                        <div key={email.id} className="text-sm text-muted-foreground font-mono bg-muted px-2 py-1 rounded">
                                             {email.address}
                                         </div>
                                     ))}

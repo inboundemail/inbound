@@ -2,7 +2,7 @@ import { whopSdk } from "@/lib/whop-sdk";
 import { headers } from "next/headers";
 import { getApiKey, saveApiKey } from "@/app/actions/apiManagement";
 import { redirect } from "next/navigation";
-import { Button } from "../../components/button";
+import { Button } from "../../../../components/ui/button";
 import Image from "next/image";
 import Link from "next/link";
 

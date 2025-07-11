@@ -13,12 +13,12 @@ export default async function AnalyticsPage() {
   if (!analyticsResult.success) {
     return (
       <div className="flex flex-1 flex-col gap-4 p-4">
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-destructive/50 bg-destructive/10">
           <CardContent className="p-6">
-            <div className="flex items-center gap-2 text-red-600">
+            <div className="flex items-center gap-2 text-destructive">
               <HiX className="h-4 w-4" />
               <span>{analyticsResult.error}</span>
-              <Button variant="ghost" size="sm" asChild className="ml-auto text-red-600 hover:text-red-700">
+              <Button variant="ghost" size="sm" asChild className="ml-auto text-destructive hover:text-destructive">
                 <Link href="/analytics">Try Again</Link>
               </Button>
             </div>
@@ -207,10 +207,10 @@ export default async function AnalyticsPage() {
       {/* Performance Analysis & Error Insights - Two Column */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Performance Analysis */}
-        <Card className="border-blue-100">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <HiClock className="h-4 w-4 text-blue-600" />
+            <CardTitle className="text-base flex items-center gap-2 text-foreground">
+              <HiClock className="h-4 w-4 text-blue-500" />
               Performance Analysis
             </CardTitle>
           </CardHeader>
@@ -229,22 +229,22 @@ export default async function AnalyticsPage() {
 
               {/* Domain Performance */}
               <div>
-                <h4 className="text-sm font-medium text-slate-700 mb-2">Domain Performance</h4>
+                <h4 className="text-sm font-medium text-foreground mb-2">Domain Performance</h4>
                 <div className="space-y-2">
                   {Object.entries(domainStats)
                     .sort(([, a], [, b]) => b.total - a.total)
                     .slice(0, 5)
                     .map(([domain, stats]: [string, any]) => (
-                      <div key={domain} className="flex items-center justify-between p-2 bg-slate-50 rounded">
+                      <div key={domain} className="flex items-center justify-between p-2 bg-accent/5 rounded">
                         <div className="flex items-center gap-2">
-                          <HiGlobeAlt className="h-3 w-3 text-slate-500" />
-                          <span className="text-sm font-mono">{domain}</span>
+                          <HiGlobeAlt className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-sm font-mono text-foreground">{domain}</span>
                         </div>
                         <div className="flex items-center gap-3 text-xs">
-                          <span className="text-slate-600">{stats.total} emails</span>
-                          <span className="text-slate-600">{Math.round(stats.avgSize / 1024)}KB avg</span>
+                          <span className="text-muted-foreground">{stats.total} emails</span>
+                          <span className="text-muted-foreground">{Math.round(stats.avgSize / 1024)}KB avg</span>
                           {stats.failed > 0 && (
-                            <span className="text-red-600">{stats.failed} failed</span>
+                            <span className="text-destructive">{stats.failed} failed</span>
                           )}
                         </div>
                       </div>
@@ -256,10 +256,10 @@ export default async function AnalyticsPage() {
         </Card>
 
         {/* Error Analysis */}
-        <Card className="border-red-100">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <HiExclamationCircle className="h-4 w-4 text-red-600" />
+            <CardTitle className="text-base flex items-center gap-2 text-foreground">
+              <HiExclamationCircle className="h-4 w-4 text-destructive" />
               Error Analysis
             </CardTitle>
           </CardHeader>
@@ -278,30 +278,30 @@ export default async function AnalyticsPage() {
 
               {/* Error Breakdown */}
               <div>
-                <h4 className="text-sm font-medium text-slate-700 mb-2">Error Breakdown</h4>
+                <h4 className="text-sm font-medium text-foreground mb-2">Error Breakdown</h4>
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
-                    <span className="text-sm">Auth Errors</span>
-                    <span className="text-sm text-red-600">{errorAnalysis.authErrors}</span>
+                  <div className="flex items-center justify-between p-2 bg-accent/5 rounded">
+                    <span className="text-sm text-foreground">Auth Errors</span>
+                    <span className="text-sm text-destructive">{errorAnalysis.authErrors}</span>
                   </div>
-                  <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
-                    <span className="text-sm">Spam Detected</span>
-                    <span className="text-sm text-red-600">{errorAnalysis.spamErrors}</span>
+                  <div className="flex items-center justify-between p-2 bg-accent/5 rounded">
+                    <span className="text-sm text-foreground">Spam Detected</span>
+                    <span className="text-sm text-destructive">{errorAnalysis.spamErrors}</span>
                   </div>
-                  <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
-                    <span className="text-sm">Virus Detected</span>
-                    <span className="text-sm text-red-600">{errorAnalysis.virusErrors}</span>
+                  <div className="flex items-center justify-between p-2 bg-accent/5 rounded">
+                    <span className="text-sm text-foreground">Virus Detected</span>
+                    <span className="text-sm text-destructive">{errorAnalysis.virusErrors}</span>
                   </div>
                 </div>
               </div>
 
               {errorAnalysis.totalErrors > 10 && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                  <div className="flex items-center gap-2 text-amber-700 text-sm font-medium mb-1">
+                <div className="p-3 bg-yellow-500/10 border border-yellow-500/50 rounded-lg">
+                  <div className="flex items-center gap-2 text-yellow-400 text-sm font-medium mb-1">
                     <HiExclamationCircle className="h-4 w-4" />
                     High Error Rate Detected
                   </div>
-                  <div className="text-sm text-amber-600">
+                  <div className="text-sm text-yellow-300">
                     Review endpoint configurations and network connectivity
                   </div>
                 </div>
@@ -312,11 +312,11 @@ export default async function AnalyticsPage() {
       </div>
 
       {/* Detailed Email Logs */}
-      <Card>
+      <Card className="bg-card border-border">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <HiDocumentText className="h-4 w-4" />
+            <CardTitle className="text-base flex items-center gap-2 text-foreground">
+              <HiDocumentText className="h-4 w-4 text-muted-foreground" />
               Email Processing Logs ({recentEmails.length})
             </CardTitle>
             <div className="flex items-center gap-2">
@@ -334,10 +334,10 @@ export default async function AnalyticsPage() {
         <CardContent className="pt-0">
           <div className="space-y-2">
             {recentEmails.slice(0, 20).map((email, index) => (
-              <div key={email.id} className="border border-slate-200 rounded-lg p-3 hover:bg-slate-50 transition-colors">
+              <div key={email.id} className="border border-border rounded-lg p-3 hover:bg-accent/5 transition-colors">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3 min-w-0 flex-1">
-                    <div className="text-xs text-slate-400 font-mono w-16 flex-shrink-0 mt-0.5">
+                    <div className="text-xs text-muted-foreground font-mono w-16 flex-shrink-0 mt-0.5">
                       {format(new Date(email.receivedAt), 'HH:mm:ss')}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -372,14 +372,14 @@ export default async function AnalyticsPage() {
                           )}
                         </div>
                       </div>
-                      <div className="text-sm text-slate-900 mb-1">
+                      <div className="text-sm text-foreground mb-1">
                         <span className="font-medium">{email.from}</span> → <span className="font-medium">{email.recipient}</span>
                       </div>
-                      <div className="text-sm text-slate-600 truncate mb-1">{email.subject}</div>
-                                             <div className="text-xs text-slate-500 font-mono">
+                      <div className="text-sm text-muted-foreground truncate mb-1">{email.subject}</div>
+                                             <div className="text-xs text-muted-foreground font-mono">
                          {email.messageId} • {email.domain}
                          {(email.authResults.spf === 'FAIL' || email.authResults.dkim === 'FAIL') && (
-                           <span className="text-red-600 ml-2">Auth Failed</span>
+                           <span className="text-destructive ml-2">Auth Failed</span>
                          )}
                        </div>
                     </div>

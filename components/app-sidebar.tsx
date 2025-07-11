@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { MailIcon } from "lucide-react"
+import Envelope2 from "@/components/icons/envelope-2"
+import Calendar2 from "@/components/icons/calendar-2"
 import Link from "next/link"
 
 import { NavMain } from "@/components/nav-main"
@@ -9,7 +10,6 @@ import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
 import { HistoricalStatusCard } from "@/components/historical-status-card"
 import { FeedbackDialog } from "@/components/feedback-dialog"
-import { HiCalendar } from "react-icons/hi"
 import {
   Sidebar,
   SidebarContent,
@@ -59,7 +59,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               enabled={false}
               teams={[{
                 name: "Inbound",
-                logo: MailIcon,
+                logo: Envelope2,
                 plan: userData.plan,
 
               }]} />
@@ -89,7 +89,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Book a Call" asChild>
                   <a href="https://cal.inbound.new" target="_blank" rel="noopener noreferrer">
-                    <HiCalendar className="h-4 w-4" />
+                    <Calendar2 className="h-4 w-4" />
                     <span>Book a Call</span>
                   </a>
                 </SidebarMenuButton>
@@ -97,7 +97,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Show Onboarding" asChild>
                   <Link href="/onboarding">
-                    <MailIcon className="h-4 w-4" />
+                    <Envelope2 className="h-4 w-4" />
                     <span>Show Onboarding</span>
                   </Link>
                 </SidebarMenuButton>

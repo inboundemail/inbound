@@ -1,6 +1,6 @@
 "use client"
 
-import { MailPlusIcon } from "lucide-react"
+import EnvelopePlus from "@/components/icons/envelope-plus"
 import { Link } from "next-view-transitions"
 
 import { Button } from "@/components/ui/button"
@@ -31,7 +31,7 @@ export function NavMain({
               asChild
             >
               <a href="/add" className="flex items-center gap-2">
-                <MailPlusIcon className="h-4 w-4" />
+                <EnvelopePlus className="h-4 w-4" />
                 <span className="group-data-[collapsible=icon]:hidden">new inbound</span>
               </a>
             </Button>

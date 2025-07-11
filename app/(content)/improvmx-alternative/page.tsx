@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { PricingTable } from "@/components/autumn/pricing-table" 
+import { PricingTable } from "@/components/autumn/pricing-table-format" 
 import { HiArrowRight, HiMail, HiGlobeAlt, HiLockClosed, HiCheckCircle, HiLightningBolt, HiX, HiStar, HiMailOpen, HiChip, HiCog, HiLightBulb, HiSparkles, HiCheck } from "react-icons/hi"
 import Image from "next/image"
 import { auth } from "@/lib/auth/auth"

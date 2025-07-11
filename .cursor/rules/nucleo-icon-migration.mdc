@@ -1,0 +1,158 @@
+---
+alwaysApply: true
+---
+
+Anytime you see a lucide-react or react-icons icon, you should replace it with the corresponding Nucleo icon.
+
+# Nucleo Icon Migration Guide
+
+
+
+This guide helps you efficiently replace lucide-react and react-icons with Nucleo icons using the MCP.
+
+## Initial Setup
+
+1. **Configure Icon Directory** (One-time setup)
+   ```
+   mcp_Nucleo_Icons_updateConfig with iconDirectory: "/Users/ryanvogel/dev/inbound/components/icons"
+   ```
+   - Always use absolute path to ensure icons are saved in the correct location
+   - Verify with `mcp_Nucleo_Icons_getConfig` after configuration
+
+## Efficient Icon Search Strategy
+
+### 1. Use Simple, Single-Word Searches
+Nucleo search works best with simple terms:
+- ❌ BAD: "mail plus", "add mail", "email icon"
+- ✅ GOOD: "mail", "envelope", "plus"
+
+### 2. Common Icon Mappings
+Based on successful migrations:
+- `MailIcon` → search "envelope" → use `envelope-2`
+- `CalendarIcon` → search "calendar" → use `calendar-2`
+- `SettingsIcon` → search "gear" → use `gear-2`
+- `ActivityIcon` → search "activity" → use `chart-activity-2`
+- `ShieldCheckIcon` → search "shield" → use `shield-2`
+- `GlobeIcon` → search "globe" → use `globe-2`
+- `CloudIcon` → search "cloud" → use `cloud-2`
+- `CodeIcon` → search "code" → use `code-2`
+- `MailPlusIcon` → search "envelope" → use `envelope-plus`
+- `LogOutIcon` → search "logout" → use `circle-logout`
+- `CreditCardIcon` → search "card" → use `credit-card-2`
+
+### 3. Search Workflow
+1. Start with the base word (e.g., "mail" not "mailbox")
+2. If no results, try synonyms (e.g., "envelope" for mail)
+3. Look for numbered variants (many icons have `-2` versions)
+4. Check for action variants (e.g., `envelope-plus`, `envelope-check`)
+
+## Import Process
+
+### 1. Batch Imports Efficiently
+- Import 3-4 icons at a time to avoid timeouts
+- If importing many icons, split into smaller batches:
+  ```
+  ["icon1", "icon2", "icon3"] // First batch
+  ["icon4", "icon5", "icon6"] // Second batch
+  ```
+
+### 2. Verify Imports
+Always check the components/icons directory after importing:
+```
+list_dir with relative_workspace_path: "components/icons"
+```
+
+## Icon Usage Patterns
+
+### 1. Import Syntax
+Nucleo icons use default exports:
+```typescript
+// ❌ Named import (incorrect)
+import { Envelope2 } from "@/components/icons/envelope-2"
+
+// ✅ Default import (correct)
+import Envelope2 from "@/components/icons/envelope-2"
+```
+
+### 2. Props Differences
+Nucleo icons don't accept `size` prop, use `width` and `height`:
+```tsx
+// ❌ Lucide style
+<MailIcon size="15" />
+
+// ✅ Nucleo style
+<Envelope2 width="15" height="15" />
+```
+
+### 3. TypeScript Types
+Update navigation interfaces to accept both icon types:
+```typescript
+export interface NavigationItem {
+  icon?: LucideIcon | React.ComponentType<any>
+}
+```
+
+## Migration Workflow
+
+### 1. Find All Icon Imports
+```
+grep_search with query: 'from "lucide-react"' and include_pattern: "*.tsx"
+grep_search with query: 'from "react-icons' and include_pattern: "*.tsx"
+```
+
+### 2. Prioritize Core Components
+Focus on these files first:
+- `lib/navigation.ts` - Central navigation config
+- `components/app-sidebar.tsx` - Main sidebar
+- `components/nav-main.tsx` - Primary navigation
+- `components/nav-user.tsx` - User menu
+- `components/login-form.tsx` - Authentication UI
+
+### 3. Update in Batches
+1. Search for appropriate Nucleo replacements
+2. Import icons in small batches
+3. Update imports in files
+4. Fix any prop differences (size → width/height)
+
+## Common Issues & Solutions
+
+### Issue: Icon Not Found
+- Try simpler search terms
+- Look for synonyms (mail → envelope, settings → gear)
+- Check plural/singular variations
+
+### Issue: Import Timeout
+- Reduce batch size to 3-4 icons
+- Import one at a time if necessary
+
+### Issue: TypeScript Errors
+- Ensure default imports (not named)
+- Update interface types to accept `React.ComponentType<any>`
+- Check prop compatibility
+
+## Best Practices
+
+1. **Keep HiIcons**: Per user preference, keep react-icons/hi icons
+2. **Test Visually**: Some Nucleo icons may have different visual weights
+3. **Document Mappings**: Keep track of icon replacements for consistency
+4. **Parallel Updates**: Use parallel tool calls when updating multiple files
+
+## Quick Reference Commands
+
+```typescript
+// Check current config
+mcp_Nucleo_Icons_getConfig
+
+// Search icons
+mcp_Nucleo_Icons_searchIcons with query: "envelope", limit: 20
+
+// Import icons
+mcp_Nucleo_Icons_importIcons with iconNames: ["envelope-2", "calendar-2"]
+
+// Find all lucide imports
+grep_search with query: 'from "lucide-react"', include_pattern: "*.tsx"
+```
+description:
+globs:
+alwaysApply: false
+---

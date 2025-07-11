@@ -127,7 +127,7 @@ export default function EmailsPage() {
     return (
       <div className="flex flex-1 flex-col gap-4 p-4">
         <div className="flex items-center justify-center py-12">
-          <div className="text-slate-500">Loading domains...</div>
+          <div className="text-muted-foreground">Loading domains...</div>
         </div>
       </div>
     )
@@ -137,12 +137,12 @@ export default function EmailsPage() {
   if (domainStatsError) {
     return (
       <div className="flex flex-1 flex-col gap-4 p-4">
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-destructive/50 bg-destructive/10">
           <CardContent className="p-6">
-            <div className="flex items-center gap-2 text-red-600">
+            <div className="flex items-center gap-2 text-destructive">
               <HiX className="h-4 w-4" />
               <span>{domainStatsError?.message || 'Failed to load domain data'}</span>
-              <Button variant="ghost" size="sm" onClick={() => refetchDomainStats()} className="ml-auto text-red-600 hover:text-red-700">
+              <Button variant="ghost" size="sm" onClick={() => refetchDomainStats()} className="ml-auto text-destructive hover:text-destructive">
                 Try Again
               </Button>
             </div>
@@ -157,16 +157,16 @@ export default function EmailsPage() {
   const domains = domainStats.domains || []
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+    <div className="min-h-screen p-4 font-outfit">
       <div className="max-w-5xl mx-auto">
 
         {/* Domain and Email Management */}
         <div className="mb-6 flex items-center justify-between mt-8">
           <div className="">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-1 tracking-tight">
+            <h2 className="text-2xl font-semibold text-foreground mb-1 tracking-tight">
               Domains & Email Addresses ({domainStats.totalDomains})
             </h2>
-            <p className="text-gray-600 text-sm font-medium">Manage your email domains and addresses</p></div>
+            <p className="text-muted-foreground text-sm font-medium">Manage your email domains and addresses</p></div>
 
           <div className="flex items-center gap-2">
             <Button size="sm" asChild>
@@ -192,7 +192,7 @@ export default function EmailsPage() {
 
         <div className="space-y-2 mb-6">
           {domains.length === 0 ? (
-            <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
+            <Card className="bg-card border-border rounded-xl">
               <CardContent className="p-8">
                 <div className="text-center">
                   <CustomInboundIcon
@@ -201,7 +201,7 @@ export default function EmailsPage() {
                     backgroundColor="#8b5cf6"
                     className="mx-auto mb-4"
                   />
-                  <p className="text-sm text-slate-500 mb-4">No domains configured</p>
+                  <p className="text-sm text-muted-foreground mb-4">No domains configured</p>
                   <Button variant="secondary" asChild>
                     <Link href="/add">
                       <HiPlus className="h-4 w-4 mr-2" />
@@ -272,11 +272,11 @@ function DomainCard({
   const emailAddresses = (shouldFetchDetails && domainDetails?.success) ? domainDetails.emailAddresses || [] : []
 
   return (
-    <Card className="bg-white/95 backdrop-blur-sm shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-200/60 rounded-xl overflow-hidden group">
+    <Card className="bg-card border-border hover:bg-accent/5 transition-all duration-300 rounded-xl overflow-hidden group">
       <CardContent className="p-0">
         {/* Domain Header */}
         <div
-          className="p-4 cursor-pointer hover:bg-gray-50/80 transition-colors duration-200 border-b border-gray-100/80"
+          className="p-4 cursor-pointer hover:bg-accent/10 transition-colors duration-200 border-b border-border"
           onClick={onToggle}
         >
           <div className="flex items-center justify-between">
@@ -287,27 +287,27 @@ function DomainCard({
                 backgroundColor={getDomainIconColor(domain)}
               />
               <div>
-                <h3 className="text-base font-semibold text-gray-900 tracking-tight">{domain.domain}</h3>
+                <h3 className="text-base font-semibold text-foreground tracking-tight">{domain.domain}</h3>
                 <div className="flex items-center space-x-2 mt-0.5">
                   <div className="flex items-center space-x-1">
                     <div className={`w-2 h-2 rounded-full ${domain.isVerified ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                    <span className="text-xs text-gray-600 font-medium">
+                    <span className="text-xs text-muted-foreground font-medium">
                       {domain.isVerified ? "Verified" : "Pending DNS"}
                     </span>
                   </div>
                   {domain.isCatchAllEnabled && (
                     <>
-                      <span className="text-xs text-gray-600 font-medium">•</span>
+                      <span className="text-xs text-muted-foreground font-medium">•</span>
                       <div className="flex items-center space-x-1">
                         <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                        <span className="text-xs text-gray-600 font-medium">Catch-all</span>
+                        <span className="text-xs text-muted-foreground font-medium">Catch-all</span>
                       </div>
                     </>
                   )}
                   {!domain.isCatchAllEnabled && (
                     <>
-                      <span className="text-xs text-gray-600 font-medium">•</span>
-                      <span className="text-xs text-gray-600 font-medium">
+                      <span className="text-xs text-muted-foreground font-medium">•</span>
+                      <span className="text-xs text-muted-foreground font-medium">
                         {domain.emailAddressCount} address{domain.emailAddressCount !== 1 ? "es" : ""}
                       </span>
                     </>
@@ -347,7 +347,7 @@ function DomainCard({
         {/* Email Addresses - Smooth expansion */}
         {emailAddresses.length > 0 && !domain.isCatchAllEnabled && (
           <div
-            className="bg-gray-50/30 overflow-hidden transition-all duration-300 ease-in-out"
+            className="bg-muted/50 overflow-hidden transition-all duration-300 ease-in-out"
             style={{
               maxHeight: isExpanded ? `${emailAddresses.length * 80 + 16}px` : '0px',
               opacity: isExpanded ? 1 : 0
@@ -356,7 +356,7 @@ function DomainCard({
             {emailAddresses.map((email: any, index: number) => (
               <div
                 key={email.id}
-                className={`group/email relative px-4 py-2 hover:bg-white/60 transition-colors duration-200 border-l-3 ${getBorderColor(email.isActive, email.isReceiptRuleConfigured)} ${index !== emailAddresses.length - 1 ? "border-b border-gray-100/60" : ""
+                className={`group/email relative px-4 py-2 hover:bg-muted/80 transition-colors duration-200 border-l-3 ${getBorderColor(email.isActive, email.isReceiptRuleConfigured)} ${index !== emailAddresses.length - 1 ? "border-b border-border" : ""
                   }`}
               >
                 <div className="flex items-center justify-between">
@@ -368,24 +368,24 @@ function DomainCard({
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2 mb-1">
-                        <span className="text-sm font-medium text-gray-900 truncate">{email.address}</span>
+                        <span className="text-sm font-medium text-foreground truncate">{email.address}</span>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="opacity-0 group-hover/email:opacity-100 transition-all duration-200 p-1 h-auto hover:bg-gray-100 rounded hover:scale-105 active:scale-95"
+                          className="opacity-0 group-hover/email:opacity-100 transition-all duration-200 p-1 h-auto hover:bg-accent rounded hover:scale-105 active:scale-95"
                           onClick={() => onCopyEmail(email.address)}
                         >
                           {copiedEmail === email.address ? (
                             <HiCheckCircle className="w-3.5 h-3.5 text-emerald-500" />
                           ) : (
-                            <HiClipboard className="w-3.5 h-3.5 text-gray-400 transition-all duration-150 hover:text-gray-600" />
+                            <HiClipboard className="w-3.5 h-3.5 text-muted-foreground transition-all duration-150 hover:text-foreground" />
                           )}
                         </Button>
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2 text-right text-sm ">
-                    <span className="text-gray-500">{email.emailsLast24h || 0} emails today</span>
+                    <span className="text-muted-foreground">{email.emailsLast24h || 0} emails today</span>
                   </div>
                 </div>
               </div>

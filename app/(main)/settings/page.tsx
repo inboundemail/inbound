@@ -36,7 +36,7 @@ import {
   TrashIcon
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { PricingTable } from '@/components/autumn/pricing-table'
+import { PricingTable } from '@/components/autumn/pricing-table-format'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 
@@ -401,23 +401,23 @@ export default function SettingsPage() {
                 </div>
               </div>
             ) : customerError ? (
-              <div className="text-center py-8 text-slate-400">
+              <div className="text-center py-8 text-muted-foreground">
                 <CreditCardIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p>Unable to load subscription data</p>
-                <p className="text-sm text-red-400 mt-1">
+                <p className="text-sm text-destructive mt-1">
                   {customerError instanceof Error ? customerError.message : 'Unknown error'}
                 </p>
                 <Button 
                   variant="secondary" 
                   size="sm" 
                   onClick={() => refetchCustomer()}
-                  className="mt-2 bg-slate-800 hover:bg-slate-700 text-white border-slate-600"
+                  className="mt-2"
                 >
                   Retry
                 </Button>
               </div>
             ) : (
-              <div className="text-center py-8 text-slate-400">
+              <div className="text-center py-8 text-muted-foreground">
                 <CreditCardIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p>No subscription data available</p>
               </div>

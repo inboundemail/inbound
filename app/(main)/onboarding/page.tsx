@@ -100,7 +100,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100/50 p-4 font-outfit">
+    <div className="min-h-screen p-4 font-outfit">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -111,10 +111,10 @@ export default function OnboardingPage() {
         </div>
 
         {/* How it Works */}
-        <Card className="bg-blue-50 border-blue-200 rounded-xl mb-6">
+        <Card className="bg-blue-500/10 border-blue-500/30 rounded-xl mb-6">
           <CardContent className="p-6">
-            <h3 className="font-semibold text-blue-900 mb-3">How Inbound Works</h3>
-            <div className="space-y-2 text-sm text-blue-800">
+            <h3 className="font-semibold text-blue-300 mb-3">How Inbound Works</h3>
+            <div className="space-y-2 text-sm text-blue-200">
               <p>• <strong>Add your domain</strong> - Connect any domain you own (example.com)</p>
               <p>• <strong>Configure DNS</strong> - Simple DNS setup to route emails to Inbound</p>
               <p>• <strong>Create endpoints</strong> - Set up email forwarding, webhooks, or groups</p>
@@ -126,7 +126,7 @@ export default function OnboardingPage() {
         {/* Steps Cards */}
         <div className="grid md:grid-cols-3 gap-4 mb-6">
           {/* Add Domain */}
-          <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
+          <Card className="bg-card border-border rounded-xl">
             <CardContent className="p-6 text-center">
               <CustomInboundIcon 
                 Icon={HiGlobe} 
@@ -134,13 +134,13 @@ export default function OnboardingPage() {
                 backgroundColor="#3b82f6" 
                 className="mx-auto mb-3" 
               />
-              <h3 className="font-semibold text-gray-900 mb-2">Add Domain</h3>
-              <p className="text-sm text-gray-600">Connect your domain to start receiving emails</p>
+              <h3 className="font-semibold text-foreground mb-2">Add Domain</h3>
+              <p className="text-sm text-muted-foreground">Connect your domain to start receiving emails</p>
             </CardContent>
           </Card>
 
           {/* Create Endpoint */}
-          <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
+          <Card className="bg-card border-border rounded-xl">
             <CardContent className="p-6 text-center">
               <CustomInboundIcon 
                 Icon={HiMail} 
@@ -148,8 +148,8 @@ export default function OnboardingPage() {
                 backgroundColor="#10b981" 
                 className="mx-auto mb-3" 
               />
-                             <h3 className="font-semibold text-gray-900 mb-2">Create Endpoint</h3>
-               <p className="text-sm text-gray-600 mb-3">Set up email forwarding or webhooks</p>
+                             <h3 className="font-semibold text-foreground mb-2">Create Endpoint</h3>
+               <p className="text-sm text-muted-foreground mb-3">Set up email forwarding or webhooks</p>
                {hasExistingEndpoints || endpointCreated ? (
                  <Badge className="bg-green-100 text-green-800">
                    <HiCheckCircle className="h-3 w-3 mr-1" />
@@ -170,7 +170,7 @@ export default function OnboardingPage() {
           </Card>
 
           {/* Advanced */}
-          <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl">
+          <Card className="bg-card border-border rounded-xl">
             <CardContent className="p-6 text-center">
               <CustomInboundIcon 
                 Icon={HiLightningBolt} 
@@ -178,34 +178,34 @@ export default function OnboardingPage() {
                 backgroundColor="#8b5cf6" 
                 className="mx-auto mb-3" 
               />
-              <h3 className="font-semibold text-gray-900 mb-2">Advanced</h3>
-              <p className="text-sm text-gray-600">Webhooks, groups, and integrations</p>
+              <h3 className="font-semibold text-foreground mb-2">Advanced</h3>
+              <p className="text-sm text-muted-foreground">Webhooks, groups, and integrations</p>
             </CardContent>
           </Card>
         </div>
 
         {/* Next Steps */}
-        <Card className="bg-white/95 backdrop-blur-sm shadow-sm border border-gray-200/60 rounded-xl mb-6">
+        <Card className="bg-card border-border rounded-xl mb-6">
           <CardContent className="p-6">
-            <h3 className="font-semibold text-gray-900 mb-3">Next Steps</h3>
-            <div className="space-y-2 text-sm text-gray-600">
+            <h3 className="font-semibold text-foreground mb-3">Next Steps</h3>
+            <div className="space-y-2 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${hasExistingEndpoints || endpointCreated ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                <span className={hasExistingEndpoints || endpointCreated ? 'line-through text-gray-400' : ''}>
+                <span className={hasExistingEndpoints || endpointCreated ? 'line-through text-muted-foreground/60' : ''}>
                   Create your first endpoint above
                 </span>
-                {(hasExistingEndpoints || endpointCreated) && <span className="text-green-600 text-xs">✓ Done</span>}
+                {(hasExistingEndpoints || endpointCreated) && <span className="text-green-500 text-xs">✓ Done</span>}
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                 <span>Add and verify your domain</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
+                <div className="w-2 h-2 bg-muted-foreground/40 rounded-full"></div>
                 <span>Configure email addresses</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
+                <div className="w-2 h-2 bg-muted-foreground/40 rounded-full"></div>
                 <span>Start receiving emails at your domain</span>
               </div>
             </div>
