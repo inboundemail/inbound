@@ -6,21 +6,19 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
-import { 
-  CodeIcon, 
-  CopyIcon, 
-  CheckIcon,
-  BookOpenIcon,
-  TerminalIcon,
-  KeyIcon,
-  GlobeIcon,
-  MailIcon,
-  WebhookIcon,
-  RefreshCwIcon,
-  PlusIcon,
-  SearchIcon,
-  HashIcon
-} from 'lucide-react'
+import Code2 from "@/components/icons/code-2"
+import Clipboard2 from "@/components/icons/clipboard-2"
+import CircleCheck from "@/components/icons/circle-check"
+import BookOpen2 from "@/components/icons/book-open-2"
+import Terminal from "@/components/icons/terminal"
+import Key2 from "@/components/icons/key-2"
+import Globe2 from "@/components/icons/globe-2"
+import Envelope2 from "@/components/icons/envelope-2"
+import Webhook from "@/components/icons/webhook"
+import Refresh2 from "@/components/icons/refresh-2"
+import CirclePlus from "@/components/icons/circle-plus"
+import Magnifier2 from "@/components/icons/magnifier-2"
+import Hashtag2 from "@/components/icons/hashtag-2"
 import { toast } from 'sonner'
 import { useSession } from '@/lib/auth/auth-client'
 import Link from 'next/link'
@@ -35,13 +33,13 @@ export default function DocsPage() {
 
   // Navigation sections
   const sections = [
-    { id: 'quick-start', title: 'Quick Start', icon: KeyIcon },
-    { id: 'authentication', title: 'Authentication', icon: KeyIcon },
-    { id: 'domains', title: 'Domains', icon: GlobeIcon },
-    { id: 'email-addresses', title: 'Email Addresses', icon: MailIcon },
-    { id: 'webhooks', title: 'Webhooks', icon: WebhookIcon },
-    { id: 'error-handling', title: 'Error Handling', icon: CodeIcon },
-    { id: 'complete-example', title: 'Complete Example', icon: TerminalIcon }
+    { id: 'quick-start', title: 'Quick Start', icon: Key2 },
+    { id: 'authentication', title: 'Authentication', icon: Key2 },
+    { id: 'domains', title: 'Domains', icon: Globe2 },
+    { id: 'email-addresses', title: 'Email Addresses', icon: Envelope2 },
+    { id: 'webhooks', title: 'Webhooks', icon: Webhook },
+    { id: 'error-handling', title: 'Error Handling', icon: Code2 },
+    { id: 'complete-example', title: 'Complete Example', icon: Terminal }
   ]
 
   // Filter sections based on search
@@ -124,9 +122,9 @@ export default function DocsPage() {
         onClick={() => copyToClipboard(children, copyId)}
       >
         {copiedCode === copyId ? (
-          <CheckIcon className="h-4 w-4" />
+          <CircleCheck width="16" height="16" />
         ) : (
-          <CopyIcon className="h-4 w-4" />
+          <Clipboard2 width="16" height="16" />
         )}
       </Button>
     </div>
@@ -166,7 +164,7 @@ export default function DocsPage() {
           <div className="space-y-4">
             {/* Search */}
             <div className="relative">
-              <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <Input
                 placeholder="Search docs..."
                 value={searchQuery}
@@ -205,7 +203,7 @@ export default function DocsPage() {
             {/* Quick Start */}
             <section id="quick-start">
           <div className="flex items-center gap-2 mb-6">
-            <KeyIcon className="h-6 w-6 text-purple-600" />
+            <Key2 width="24" height="24" className="text-purple-600" />
             <h2 className="text-3xl font-bold">SDK and API Docs</h2>
           </div>
           <p className="text-xl text-muted-foreground mb-8">
@@ -287,7 +285,7 @@ if (verifiedDomain) {
             {/* Authentication */}
             <section id="authentication">
           <div className="flex items-center gap-2 mb-6">
-            <KeyIcon className="h-6 w-6 text-purple-600" />
+            <Key2 width="24" height="24" className="text-purple-600" />
             <h2 className="text-3xl font-bold">Authentication</h2>
           </div>
           <p className="text-xl text-muted-foreground mb-8">
@@ -308,7 +306,7 @@ if (verifiedDomain) {
             {/* Domains */}
             <section id="domains">
           <div className="flex items-center gap-2 mb-6">
-            <GlobeIcon className="h-6 w-6 text-purple-600" />
+            <Globe2 width="24" height="24" className="text-purple-600" />
             <h2 className="text-3xl font-bold">Domains</h2>
           </div>
           <p className="text-xl text-muted-foreground mb-8">
@@ -488,7 +486,7 @@ async function setupEmailAddresses() {
             {/* Email Addresses */}
             <section id="email-addresses">
           <div className="flex items-center gap-2 mb-6">
-            <MailIcon className="h-6 w-6 text-purple-600" />
+            <Envelope2 width="24" height="24" className="text-purple-600" />
             <h2 className="text-3xl font-bold">Email Addresses</h2>
           </div>
           <p className="text-xl text-muted-foreground mb-8">
@@ -707,7 +705,7 @@ console.log(result.message)`}
             {/* Webhooks */}
             <section id="webhooks">
           <div className="flex items-center gap-2 mb-6">
-            <WebhookIcon className="h-6 w-6 text-purple-600" />
+            <Webhook width="24" height="24" className="text-purple-600" />
             <h2 className="text-3xl font-bold">Webhooks</h2>
           </div>
           <p className="text-xl text-muted-foreground mb-8">
@@ -945,7 +943,7 @@ console.log(result.message)`}
             {/* Error Handling */}
             <section id="error-handling">
           <div className="flex items-center gap-2 mb-6">
-            <CodeIcon className="h-6 w-6 text-purple-600" />
+            <Code2 width="24" height="24" className="text-purple-600" />
             <h2 className="text-3xl font-bold">Error Handling</h2>
           </div>
           <p className="text-xl text-muted-foreground mb-8">
@@ -1027,7 +1025,7 @@ try {
             {/* Complete Example */}
             <section id="complete-example">
           <div className="flex items-center gap-2 mb-6">
-            <TerminalIcon className="h-6 w-6 text-purple-600" />
+            <Terminal width="24" height="24" className="text-purple-600" />
             <h2 className="text-3xl font-bold">Complete Example</h2>
           </div>
           <p className="text-xl text-muted-foreground mb-8">

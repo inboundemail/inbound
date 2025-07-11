@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState } from "react"
-import { HiChat } from "react-icons/hi"
+import ChatBubble2 from "@/components/icons/chat-bubble-2"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -75,7 +75,7 @@ export function FeedbackDialog({ children }: FeedbackDialogProps) {
       <DialogTrigger asChild>
         {children || (
           <SidebarMenuButton tooltip="Send Feedback" className="w-full">
-            <HiChat className="h-4 w-4" />
+            <ChatBubble2 className="h-4 w-4" />
             <span>Send Feedback</span>
           </SidebarMenuButton>
         )}
@@ -83,7 +83,7 @@ export function FeedbackDialog({ children }: FeedbackDialogProps) {
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <HiChat className="h-5 w-5 text-primary" />
+            <ChatBubble2 className="h-5 w-5 text-primary" />
             Send Feedback
           </DialogTitle>
           <DialogDescription>

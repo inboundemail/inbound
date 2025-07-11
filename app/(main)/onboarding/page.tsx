@@ -6,7 +6,12 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { HiMail, HiGlobe, HiLightningBolt, HiCheckCircle, HiArrowRight, HiPlus } from 'react-icons/hi'
+import Envelope2 from '@/components/icons/envelope-2'
+import Globe2 from '@/components/icons/globe-2'
+import BoltLightning from '@/components/icons/bolt-lightning'
+import CircleCheck from '@/components/icons/circle-check'
+import ArrowBoldRight from '@/components/icons/arrow-bold-right'
+import CirclePlus from '@/components/icons/circle-plus'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { useCreateEndpointMutation, useEndpointsQuery } from '@/features/endpoints/hooks'
 import type { CreateEndpointData } from '@/features/endpoints/types'
@@ -129,7 +134,7 @@ export default function OnboardingPage() {
           <Card className="bg-card border-border rounded-xl">
             <CardContent className="p-6 text-center">
               <CustomInboundIcon 
-                Icon={HiGlobe} 
+                Icon={Globe2} 
                 size={40} 
                 backgroundColor="#3b82f6" 
                 className="mx-auto mb-3" 
@@ -143,7 +148,7 @@ export default function OnboardingPage() {
           <Card className="bg-card border-border rounded-xl">
             <CardContent className="p-6 text-center">
               <CustomInboundIcon 
-                Icon={HiMail} 
+                Icon={Envelope2} 
                 size={40} 
                 backgroundColor="#10b981" 
                 className="mx-auto mb-3" 
@@ -152,7 +157,7 @@ export default function OnboardingPage() {
                <p className="text-sm text-muted-foreground mb-3">Set up email forwarding or webhooks</p>
                {hasExistingEndpoints || endpointCreated ? (
                  <Badge className="bg-green-100 text-green-800">
-                   <HiCheckCircle className="h-3 w-3 mr-1" />
+                   <CircleCheck className="h-3 w-3 mr-1" />
                    {hasExistingEndpoints ? 'Already Created' : 'Created'}
                  </Badge>
                ) : (
@@ -162,7 +167,7 @@ export default function OnboardingPage() {
                    size="sm"
                    className="bg-blue-600 hover:bg-blue-700 text-white"
                  >
-                   <HiPlus className="h-3 w-3 mr-1" />
+                   <CirclePlus className="h-3 w-3 mr-1" />
                    {isCreatingEndpoint ? 'Creating...' : 'Create'}
                  </Button>
                )}
@@ -173,7 +178,7 @@ export default function OnboardingPage() {
           <Card className="bg-card border-border rounded-xl">
             <CardContent className="p-6 text-center">
               <CustomInboundIcon 
-                Icon={HiLightningBolt} 
+                Icon={BoltLightning} 
                 size={40} 
                 backgroundColor="#8b5cf6" 
                 className="mx-auto mb-3" 
@@ -223,7 +228,7 @@ export default function OnboardingPage() {
             {isCompleting ? 'Completing setup...' : (
               <>
                 Continue to Domain Setup
-                <HiArrowRight className="h-4 w-4 ml-2" />
+                <ArrowBoldRight className="h-4 w-4 ml-2" />
               </>
             )}
           </Button>

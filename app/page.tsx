@@ -3,7 +3,9 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
-import { ArrowDown, ArrowRight, Menu } from "lucide-react"
+import ArrowBoldDown from "@/components/icons/arrow-bold-down"
+import ArrowBoldRight from "@/components/icons/arrow-bold-right"
+import Menu from "@/components/icons/menu"
 import { useState } from "react"
 import { useTypingEffect } from "@/hooks/useTypingEffect"
 import { AnimatedCard } from "@/components/AnimatedCard"
@@ -295,7 +297,7 @@ export default function HomePage() {
                 <a href="/login">
                   <span className="hidden sm:inline">Create free alias</span>
                   <span className="sm:hidden">Create alias</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowBoldRight width="16" height="16" />
                 </a>
               </Button>
             </div>
@@ -468,7 +470,7 @@ export default function HomePage() {
             </AnimatedCard>
 
             <div className="flex justify-center">
-              <ArrowDown className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
+              <ArrowBoldDown width="20" height="20" className="sm:w-6 sm:h-6 text-gray-400" />
             </div>
 
             {/* Email Compose Interface */}
@@ -515,7 +517,7 @@ export default function HomePage() {
             </AnimatedCard>
 
             <div className="flex justify-center">
-              <ArrowDown className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
+              <ArrowBoldDown width="20" height="20" className="sm:w-6 sm:h-6 text-gray-400" />
             </div>
 
             {/* Terminal/Code Output */}
@@ -537,7 +539,7 @@ export default function HomePage() {
             </AnimatedCard>
 
             <div className="flex justify-center">
-              <ArrowDown className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
+              <ArrowBoldDown width="20" height="20" className="sm:w-6 sm:h-6 text-gray-400" />
             </div>
 
             {/* AI Agent Processing */}

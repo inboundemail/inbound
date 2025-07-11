@@ -14,7 +14,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { HiCog, HiX, HiPlus, HiLightningBolt, HiMail, HiUserGroup } from 'react-icons/hi'
+import Gear2 from '@/components/icons/gear-2'
+import TabClose from '@/components/icons/tab-close'
+import CirclePlus from '@/components/icons/circle-plus'
+import BoltLightning from '@/components/icons/bolt-lightning'
+import Envelope2 from '@/components/icons/envelope-2'
+import UserGroup from '@/components/icons/user-group'
 import { toast } from 'sonner'
 
 interface EditEndpointDialogProps {
@@ -275,13 +280,13 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
   const getDialogIcon = () => {
     switch (endpoint?.type) {
       case 'webhook':
-        return { icon: HiLightningBolt, color: 'purple' }
+        return { icon: BoltLightning, color: 'purple' }
       case 'email':
-        return { icon: HiMail, color: 'blue' }
+        return { icon: Envelope2, color: 'blue' }
       case 'email_group':
-        return { icon: HiUserGroup, color: 'green' }
+        return { icon: UserGroup, color: 'green' }
       default:
-        return { icon: HiCog, color: 'gray' }
+        return { icon: Gear2, color: 'gray' }
     }
   }
 
@@ -464,7 +469,7 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
                         onClick={addHeader}
                         disabled={!headerKey.trim() || !headerValue.trim()}
                       >
-                        <HiPlus className="h-4 w-4" />
+                        <CirclePlus className="h-4 w-4" />
                       </Button>
                     </div>
                     
@@ -478,7 +483,7 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
                               onClick={() => removeHeader(key)}
                               className="ml-1 hover:text-red-500"
                             >
-                              <HiX className="h-3 w-3" />
+                              <TabClose className="h-3 w-3" />
                             </button>
                           </Badge>
                         ))}
@@ -564,7 +569,7 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
                         onClick={addEmail}
                         disabled={!newEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())}
                       >
-                        <HiPlus className="h-4 w-4" />
+                        <CirclePlus className="h-4 w-4" />
                       </Button>
                     </div>
                     
@@ -578,7 +583,7 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
                               onClick={() => removeEmail(email)}
                               className="ml-1 hover:text-red-500"
                             >
-                              <HiX className="h-3 w-3" />
+                              <TabClose className="h-3 w-3" />
                             </button>
                           </Badge>
                         ))}

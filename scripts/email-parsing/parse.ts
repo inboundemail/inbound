@@ -1,4 +1,4 @@
-import { parseEmail as libParseEmail } from '@/lib/email-parser';
+import { parseEmail as libParseEmail } from '@/lib/email-management/email-parser';
 
 export async function parseEmail(emailContent: string) {
   try {

@@ -41,6 +41,7 @@ Based on successful migrations:
 - `CreditCardIcon` → search "card" → use `credit-card-2`
 
 ### 3. Search Workflow
+AA. Make sure to check the icon directory first to see if the icon exists, then if it doesn't you can search with the tool. 
 1. Start with the base word (e.g., "mail" not "mailbox")
 2. If no results, try synonyms (e.g., "envelope" for mail)
 3. Look for numbered variants (many icons have `-2` versions)

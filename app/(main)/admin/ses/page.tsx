@@ -1,7 +1,8 @@
 'use client'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { HiCloud, HiCog } from 'react-icons/hi'
+import Cloud2 from '@/components/icons/cloud-2'
+import Gear2 from '@/components/icons/gear-2'
 
 export default function SESPage() {
   return (
@@ -10,7 +11,7 @@ export default function SESPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <HiCloud className="h-8 w-8" />
+            <Cloud2 width="32" height="32" />
             SES Dashboard
           </h1>
           <p className="text-muted-foreground">
@@ -23,13 +24,13 @@ export default function SESPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <HiCog className="h-5 w-5" />
+            <Gear2 width="20" height="20" />
             Under Development
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center py-12">
-            <HiCloud className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+            <Cloud2 width="64" height="64" className="mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">SES Dashboard Coming Soon</h3>
             <p className="text-muted-foreground max-w-md mx-auto">
               This dashboard will provide comprehensive monitoring of your AWS SES service including:

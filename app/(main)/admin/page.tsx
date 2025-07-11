@@ -33,7 +33,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { HiBan, HiCalendar, HiCog, HiExclamationCircle, HiGlobe, HiLockOpen, HiMail, HiPlus, HiRefresh, HiSearch, HiShieldCheck, HiTrash, HiUser, HiUserGroup } from "react-icons/hi"
+import Ban2 from "@/components/icons/ban-2"
+import Calendar2 from "@/components/icons/calendar-2"
+import Gear2 from "@/components/icons/gear-2"
+import CircleWarning2 from "@/components/icons/circle-warning-2"
+import Globe2 from "@/components/icons/globe-2"
+import DoorOpen from "@/components/icons/door-open"
+import Envelope2 from "@/components/icons/envelope-2"
+import CirclePlus from "@/components/icons/circle-plus"
+import Refresh2 from "@/components/icons/refresh-2"
+import Magnifier2 from "@/components/icons/magnifier-2"
+import ShieldCheck from "@/components/icons/shield-check"
+import Trash2 from "@/components/icons/trash-2"
+import CircleUser from "@/components/icons/circle-user"
+import UserGroup from "@/components/icons/user-group"
 import { getAllDomainsForAdmin, getDomainEmailAddressesForAdmin } from "@/app/actions/primary"
 
 
@@ -296,7 +309,7 @@ export default function AdminPage() {
       <div className="flex flex-1 flex-col gap-6 p-6">
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="flex items-center gap-2">
-            <HiRefresh className="h-6 w-6 animate-spin" />
+            <Refresh2 className="h-6 w-6 animate-spin" />
             <span>Loading admin panel...</span>
           </div>
         </div>
@@ -311,7 +324,7 @@ export default function AdminPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-red-600">
-              <HiExclamationCircle className="h-4 w-4" />
+              <CircleWarning2 className="h-4 w-4" />
               <span>Error loading admin panel: {error.message}</span>
             </div>
           </CardContent>
@@ -333,7 +346,7 @@ export default function AdminPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <HiShieldCheck className="h-8 w-8" />
+            <ShieldCheck className="h-8 w-8" />
             Admin Panel
           </h1>
           <p className="text-muted-foreground">
@@ -341,7 +354,7 @@ export default function AdminPage() {
           </p>
         </div>
         <Badge variant="secondary" className="flex items-center gap-1">
-          <HiShieldCheck className="h-3 w-3" />
+          <ShieldCheck className="h-3 w-3" />
           Administrator
         </Badge>
       </div>
@@ -350,15 +363,15 @@ export default function AdminPage() {
       <Tabs defaultValue="users" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="users" className="flex items-center gap-2">
-            <HiUserGroup className="h-4 w-4" />
+            <UserGroup className="h-4 w-4" />
             User Management
           </TabsTrigger>
           <TabsTrigger value="domains" className="flex items-center gap-2">
-            <HiGlobe className="h-4 w-4" />
+            <Globe2 className="h-4 w-4" />
             Domain Management
           </TabsTrigger>
           <TabsTrigger value="development" className="flex items-center gap-2">
-            <HiCog className="h-4 w-4" />
+            <Gear2 className="h-4 w-4" />
             Development
           </TabsTrigger>
         </TabsList>
@@ -415,7 +428,7 @@ export default function AdminPage() {
                 <Dialog open={isCreateUserOpen} onOpenChange={setIsCreateUserOpen}>
                   <DialogTrigger asChild>
                     <Button className="flex items-center gap-2">
-                      <HiPlus className="h-4 w-4" />
+                      <CirclePlus className="h-4 w-4" />
                       Create User
                     </Button>
                   </DialogTrigger>
@@ -491,7 +504,7 @@ export default function AdminPage() {
                   />
                 </div>
                 <Button onClick={handleSearch} variant="secondary">
-                  <HiSearch className="h-4 w-4" />
+                  <Magnifier2 className="h-4 w-4" />
                 </Button>
               </div>
 
@@ -511,7 +524,7 @@ export default function AdminPage() {
                     {isLoadingUsers ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-8">
-                          <HiRefresh className="h-6 w-6 animate-spin mx-auto" />
+                          <Refresh2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
                     ) : users.length === 0 ? (
@@ -525,7 +538,7 @@ export default function AdminPage() {
                         <TableRow key={user.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <HiUser className="h-4 w-4" />
+                              <CircleUser className="h-4 w-4" />
                               <div>
                                 <div className="font-medium">{user.name || "No name"}</div>
                                 <div className="text-sm text-muted-foreground">{user.email}</div>
@@ -556,7 +569,7 @@ export default function AdminPage() {
                            </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                              <HiCalendar className="h-3 w-3" />
+                              <Calendar2 className="h-3 w-3" />
                               {new Date(user.createdAt).toLocaleDateString()}
                             </div>
                           </TableCell>
@@ -573,7 +586,7 @@ export default function AdminPage() {
                                        onClick={() => handleUnbanUser(user.id)}
                                        title="Unban user"
                                      >
-                                       <HiLockOpen className="h-3 w-3" />
+                                       <DoorOpen className="h-3 w-3" />
                                      </Button>
                                    ) : (
                                      <Button
@@ -582,7 +595,7 @@ export default function AdminPage() {
                                        onClick={() => handleBanUser(user.id)}
                                        title="Ban user"
                                      >
-                                       <HiBan className="h-3 w-3" />
+                                       <Ban2 className="h-3 w-3" />
                                      </Button>
                                    )}
                                    <Button
@@ -591,7 +604,7 @@ export default function AdminPage() {
                                      onClick={() => handleDeleteUser(user.id)}
                                      title="Delete user"
                                    >
-                                     <HiTrash className="h-3 w-3" />
+                                     <Trash2 className="h-3 w-3" />
                                    </Button>
                                  </>
                                )}
@@ -695,7 +708,7 @@ export default function AdminPage() {
                   </CardDescription>
                 </div>
                 <Button onClick={loadDomains} variant="secondary" className="flex items-center gap-2">
-                  <HiRefresh className="h-4 w-4" />
+                  <Refresh2 className="h-4 w-4" />
                   Refresh
                 </Button>
               </div>
@@ -711,7 +724,7 @@ export default function AdminPage() {
                   />
                 </div>
                 <Button onClick={handleDomainSearch} variant="secondary">
-                  <HiSearch className="h-4 w-4" />
+                  <Magnifier2 className="h-4 w-4" />
                 </Button>
               </div>
 
@@ -733,7 +746,7 @@ export default function AdminPage() {
                     {isLoadingDomains ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8">
-                          <HiRefresh className="h-6 w-6 animate-spin mx-auto" />
+                          <Refresh2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
                     ) : filteredDomains.length === 0 ? (
@@ -747,7 +760,7 @@ export default function AdminPage() {
                         <TableRow key={domain.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <HiGlobe className="h-4 w-4" />
+                              <Globe2 className="h-4 w-4" />
                               <div>
                                 <div className="font-medium">{domain.domain}</div>
                                 {domain.isCatchAllEnabled && (
@@ -791,7 +804,7 @@ export default function AdminPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                              <HiCalendar className="h-3 w-3" />
+                              <Calendar2 className="h-3 w-3" />
                               {new Date(domain.createdAt).toLocaleDateString()}
                             </div>
                           </TableCell>
@@ -803,7 +816,7 @@ export default function AdminPage() {
                                 onClick={() => handleViewDomainEmailAddresses(domain)}
                                 title="View email addresses"
                               >
-                                <HiMail className="h-3 w-3" />
+                                <Envelope2 className="h-3 w-3" />
                               </Button>
                             </div>
                           </TableCell>
@@ -828,7 +841,7 @@ export default function AdminPage() {
               <div className="max-h-96 overflow-y-auto">
                 {isLoadingEmailAddresses ? (
                   <div className="flex items-center justify-center py-8">
-                    <HiRefresh className="h-6 w-6 animate-spin" />
+                    <Refresh2 className="h-6 w-6 animate-spin" />
                   </div>
                 ) : domainEmailAddresses.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
@@ -850,7 +863,7 @@ export default function AdminPage() {
                         <TableRow key={email.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <HiMail className="h-4 w-4" />
+                              <Envelope2 className="h-4 w-4" />
                               <span className="font-medium">{email.address}</span>
                             </div>
                           </TableCell>
@@ -898,7 +911,7 @@ export default function AdminPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                              <HiCalendar className="h-3 w-3" />
+                              <Calendar2 className="h-3 w-3" />
                               {new Date(email.createdAt).toLocaleDateString()}
                             </div>
                           </TableCell>

@@ -1,6 +1,8 @@
 "use client"
 
-import { HiLightningBolt, HiMail, HiUserGroup } from 'react-icons/hi'
+import BoltLightning from '@/components/icons/bolt-lightning'
+import Envelope2 from '@/components/icons/envelope-2'
+import UserGroup from '@/components/icons/user-group'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -14,21 +16,21 @@ export function EndpointTypeSelector({ selectedType, onTypeSelect, disabled = fa
   const types = [
     {
       type: 'webhook' as const,
-      icon: HiLightningBolt,
+      icon: BoltLightning,
       title: 'Webhook',
       description: 'Send HTTP requests to your application',
       color: 'purple'
     },
     {
       type: 'email' as const,
-      icon: HiMail,
+      icon: Envelope2,
       title: 'Email Forward',
       description: 'Forward emails to a single recipient',
       color: 'blue'
     },
     {
       type: 'email_group' as const,
-      icon: HiUserGroup,
+      icon: UserGroup,
       title: 'Email Group',
       description: 'Forward emails to multiple recipients',
       color: 'green'
@@ -90,7 +92,7 @@ export function EndpointTypeSelector({ selectedType, onTypeSelect, disabled = fa
                       ? `bg-${typeOption.color}-100` 
                       : 'bg-gray-100'
                   }`}>
-                    <Icon className={`h-5 w-5 ${colors.icon}`} />
+                    <Icon width="20" height="20" className={colors.icon} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h5 className={`text-sm font-semibold ${colors.title}`}>

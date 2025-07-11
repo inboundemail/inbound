@@ -58,7 +58,7 @@ async function parseEmailFile(filePath: string): Promise<ParsedEmailData | null>
         name: emailData.from.addresses[0].name || undefined,
         address: emailData.from.addresses[0].address || undefined
       } : undefined,
-      recipients: emailData.to?.addresses?.map(addr => ({
+      recipients: emailData.to?.addresses?.map((addr: { name: string | null; address: string | null }) => ({
         name: addr.name || undefined,
         address: addr.address || undefined
       })) || [],

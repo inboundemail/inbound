@@ -4,7 +4,7 @@ import {
   PricingCard,
   PricingTable as PricecnPricingTable,
 } from "@/components/autumn/pricing-table";
-import { LoaderIcon } from "lucide-react";
+import Loader from "@/components/icons/loader";
 
 import { useAutumn, usePricingTable } from "autumn-js/react";
 import ProductChangeDialog from "./product-change-dialog";
@@ -16,7 +16,7 @@ export const PricingTable = () => {
   if (isLoading) {
     return (
       <div className="w-full h-full flex justify-center items-center min-h-[300px]">
-        <LoaderIcon className="w-6 h-6 text-zinc-400 animate-spin" />
+        <Loader className="w-6 h-6 text-zinc-400 animate-spin" />
       </div>
     );
   }

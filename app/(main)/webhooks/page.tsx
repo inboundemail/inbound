@@ -8,24 +8,22 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { CopyButton } from '@/components/copy-button'
-import { 
-  HiCheckCircle, 
-  HiX, 
-  HiClock, 
-  HiPlus,
-  HiRefresh,
-  HiLightningBolt,
-  HiGlobeAlt,
-  HiTrendingUp,
-  HiExclamationCircle,
-  HiShieldCheck,
-  HiPlay,
-  HiCog,
-  HiDotsHorizontal,
-  HiChartBar,
-  HiClipboard,
-  HiTrash
-} from 'react-icons/hi'
+import CircleCheck from '@/components/icons/circle-check'
+import TabClose from '@/components/icons/tab-close'
+import Clock2 from '@/components/icons/clock-2'
+import CirclePlus from '@/components/icons/circle-plus'
+import Refresh2 from '@/components/icons/refresh-2'
+import BoltLightning from '@/components/icons/bolt-lightning'
+import Globe2 from '@/components/icons/globe-2'
+import ChartBarTrendUp from '@/components/icons/chart-bar-trend-up'
+import CircleWarning2 from '@/components/icons/circle-warning-2'
+import ShieldCheck from '@/components/icons/shield-check'
+import CirclePlay from '@/components/icons/circle-play'
+import Gear2 from '@/components/icons/gear-2'
+import DotsVertical from '@/components/icons/dots-vertical'
+import ChartBarAxisX2 from '@/components/icons/chart-bar-axis-x-2'
+import Clipboard2 from '@/components/icons/clipboard-2'
+import Trash2 from '@/components/icons/trash-2'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { formatDistanceToNow } from 'date-fns'
 import Link from 'next/link'
@@ -75,7 +73,7 @@ export default function WebhooksPage() {
       if ((webhook.totalDeliveries || 0) === 0) {
         return (
           <Badge className="bg-blue-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-            <HiLightningBolt className="w-3 h-3 mr-1" />
+            <BoltLightning className="w-3 h-3 mr-1" />
             Ready
           </Badge>
         )
@@ -83,7 +81,7 @@ export default function WebhooksPage() {
       if (successRate >= 95) {
         return (
           <Badge className="bg-emerald-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-            <HiCheckCircle className="w-3 h-3 mr-1" />
+            <CircleCheck className="w-3 h-3 mr-1" />
             Excellent
           </Badge>
         )
@@ -91,21 +89,21 @@ export default function WebhooksPage() {
       if (successRate >= 80) {
         return (
           <Badge className="bg-blue-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-            <HiTrendingUp className="w-3 h-3 mr-1" />
+            <ChartBarTrendUp className="w-3 h-3 mr-1" />
             Good
           </Badge>
         )
       }
       return (
         <Badge className="bg-amber-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-          <HiExclamationCircle className="w-3 h-3 mr-1" />
+          <CircleWarning2 className="w-3 h-3 mr-1" />
           Needs Attention
         </Badge>
       )
     } else {
       return (
         <Badge className="bg-gray-400 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-          <HiX className="w-3 h-3 mr-1" />
+          <TabClose className="w-3 h-3 mr-1" />
           Disabled
         </Badge>
       )
@@ -163,7 +161,7 @@ export default function WebhooksPage() {
           <Card className="border-destructive/50 bg-destructive/10">
             <CardContent className="p-6">
               <div className="flex items-center gap-2 text-destructive">
-                <HiX className="h-4 w-4" />
+                <TabClose className="h-4 w-4" />
                 <span>{error.message}</span>
                 <Button variant="ghost" size="sm" onClick={() => refetch()} className="ml-auto text-destructive hover:text-destructive">
                   Try Again
@@ -188,12 +186,12 @@ export default function WebhooksPage() {
                 <span>{totalEndpoints} webhooks</span>
                 <span>{activeEndpoints} active</span>
                 <span className="flex items-center gap-1">
-                  <HiLightningBolt className="h-3 w-3" />
+                  <BoltLightning className="h-3 w-3" />
                   {totalDeliveries} deliveries
                 </span>
                 {totalDeliveries > 0 && (
                   <span className="flex items-center gap-1">
-                    <HiTrendingUp className="h-3 w-3" />
+                    <ChartBarTrendUp className="h-3 w-3" />
                     {overallSuccessRate}% success rate
                   </span>
                 )}
@@ -207,11 +205,11 @@ export default function WebhooksPage() {
                 disabled={isLoading}
                 className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
               >
-                <HiRefresh className="h-3 w-3 mr-1" />
+                <Refresh2 className="h-3 w-3 mr-1" />
                 Refresh
               </Button>
               <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
-                <HiPlus className="h-3 w-3 mr-1" />
+                <CirclePlus className="h-3 w-3 mr-1" />
                 Add Webhook
               </Button>
             </div>
@@ -223,7 +221,7 @@ export default function WebhooksPage() {
               <CardContent className="p-4">
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2">
-                    <HiChartBar className="h-4 w-4 text-muted-foreground" />
+                    <ChartBarAxisX2 className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm font-medium text-foreground">Performance Overview:</span>
                   </div>
                   <div className="flex items-center gap-6 text-sm">
@@ -265,14 +263,14 @@ export default function WebhooksPage() {
                 <CardContent className="p-8">
                   <div className="text-center">
                     <CustomInboundIcon 
-                      Icon={HiLightningBolt} 
+                      Icon={BoltLightning} 
                       size={48} 
                       backgroundColor="#8b5cf6" 
                       className="mx-auto mb-4" 
                     />
                     <p className="text-sm text-muted-foreground mb-4">No webhooks configured</p>
                     <Button variant="secondary" onClick={() => setCreateDialogOpen(true)}>
-                      <HiPlus className="h-4 w-4 mr-2" />
+                      <CirclePlus className="h-4 w-4 mr-2" />
                       Add Your First Webhook
                     </Button>
                   </div>
@@ -289,7 +287,7 @@ export default function WebhooksPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3 flex-1 min-w-0">
                           <CustomInboundIcon 
-                            Icon={HiLightningBolt} 
+                            Icon={BoltLightning} 
                             size={36} 
                             backgroundColor={getWebhookIconColor(webhook)} 
                           />
@@ -313,15 +311,15 @@ export default function WebhooksPage() {
                                   onClick={() => copyUrl(webhook.url)}
                                 >
                                   {copiedUrl === webhook.url ? (
-                                    <HiCheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                                    <CircleCheck className="w-3.5 h-3.5 text-emerald-500" />
                                   ) : (
-                                    <HiClipboard className="w-3.5 h-3.5 text-muted-foreground transition-all duration-150 hover:text-foreground" />
+                                    <Clipboard2 className="w-3.5 h-3.5 text-muted-foreground transition-all duration-150 hover:text-foreground" />
                                   )}
                                 </Button>
                               </div>
                               {webhook.secret && (
                                 <div className="flex items-center space-x-1 text-green-600">
-                                  <HiShieldCheck className="w-3 h-3" />
+                                  <ShieldCheck className="w-3 h-3" />
                                   <span className="text-xs font-medium">Secured</span>
                                 </div>
                               )}
@@ -349,7 +347,7 @@ export default function WebhooksPage() {
                             disabled={testWebhookMutation.isPending}
                             title="Test webhook"
                           >
-                            <HiPlay className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                            <CirclePlay className="w-4 h-4 text-muted-foreground hover:text-foreground" />
                           </Button>
                           <Button 
                             variant="ghost" 
@@ -358,7 +356,7 @@ export default function WebhooksPage() {
                             onClick={() => handleEditWebhook(webhook)}
                             title="Configure webhook"
                           >
-                            <HiCog className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                            <Gear2 className="w-4 h-4 text-muted-foreground hover:text-foreground" />
                           </Button>
                           <Button 
                             variant="ghost" 
@@ -367,7 +365,7 @@ export default function WebhooksPage() {
                             onClick={() => handleDeleteWebhook(webhook)}
                             title="Delete webhook"
                           >
-                            <HiTrash className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                            <Trash2 className="w-4 h-4 text-muted-foreground hover:text-foreground" />
                           </Button>
                         </div>
                       </div>

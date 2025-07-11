@@ -18,12 +18,11 @@ import Globe2 from "@/components/icons/globe-2"
 import Envelope2 from "@/components/icons/envelope-2"
 import Cloud2 from "@/components/icons/cloud-2"
 import Code2 from "@/components/icons/code-2"
-import { LucideIcon } from "lucide-react"
 
 export interface NavigationItem {
   title: string
   url: string
-  icon?: LucideIcon | React.ComponentType<any>
+  icon?: React.ComponentType<any>
   description?: string
 }
 

@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { HiCheckCircle, HiExclamation } from 'react-icons/hi'
+import CircleCheck from '@/components/icons/circle-check'
+import CircleWarning2 from '@/components/icons/circle-warning-2'
 import { markAllEmailsAsRead } from '@/app/actions/primary'
 import { useRouter } from 'next/navigation'
 
@@ -46,14 +47,14 @@ export function MarkAllReadButton({ unreadCount }: MarkAllReadButtonProps) {
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
                 <Button variant="primary" size="sm" >
-                    <HiCheckCircle className="h-4 w-4 mr-2" />
+                    <CircleCheck className="h-4 w-4 mr-2" />
                     Mark All as Read
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <HiExclamation className="h-5 w-5 text-amber-500" />
+                        <CircleWarning2 className="h-5 w-5 text-amber-500" />
                         Mark All Emails as Read?
                     </DialogTitle>
                     <DialogDescription>
@@ -81,7 +82,7 @@ export function MarkAllReadButton({ unreadCount }: MarkAllReadButtonProps) {
                             </>
                         ) : (
                             <>
-                                <HiCheckCircle className="h-4 w-4 mr-2" />
+                                <CircleCheck className="h-4 w-4 mr-2" />
                                 Mark All as Read
                             </>
                         )}

@@ -6,7 +6,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
+import ArrowBoldRight from "@/components/icons/arrow-bold-right";
 import React from "react";
 
 export const PricingDialog = ({
@@ -180,7 +180,7 @@ export const PricingDialogButton = React.forwardRef<
       className={cn(className, "shadow-sm shadow-stone-400")}
     >
       {children}
-      <ArrowRight className="!h-3" />
+      <ArrowBoldRight className="!h-3" />
     </Button>
   );
 });

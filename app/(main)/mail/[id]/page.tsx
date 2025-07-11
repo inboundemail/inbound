@@ -2,7 +2,11 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { HiArrowLeft, HiDocumentText, HiMail, HiDownload, HiCheckCircle } from 'react-icons/hi'
+import ArrowBoldLeft from '@/components/icons/arrow-bold-left'
+import File2 from '@/components/icons/file-2'
+import Envelope2 from '@/components/icons/envelope-2'
+import Download2 from '@/components/icons/download-2'
+import CircleCheck from '@/components/icons/circle-check'
 import { format } from 'date-fns'
 import { getEmailDetailsFromParsed, markEmailAsRead } from '@/app/actions/primary'
 import { auth } from '@/lib/auth/auth'
@@ -56,7 +60,7 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
           <div className="flex items-center gap-4 mb-6">
             <Link href="/mail">
               <Button variant="primary">
-                <HiArrowLeft className="h-4 w-4 mr-2" />
+                <ArrowBoldLeft className="h-4 w-4 mr-2" />
                 Back to Mail
               </Button>
             </Link>
@@ -65,7 +69,7 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
           <Card className="border-destructive/50 bg-destructive/10 rounded-xl">
             <CardContent className="p-6">
               <div className="flex items-center gap-2 text-destructive">
-                <HiMail className="h-4 w-4" />
+                <Envelope2 className="h-4 w-4" />
                 <span>{emailResult.error}</span>
               </div>
             </CardContent>
@@ -130,7 +134,7 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
         <div className="flex items-center gap-4 mb-6">
           <Link href="/mail">
             <Button variant="primary">
-              <HiArrowLeft className="h-4 w-4 mr-2" />
+              <ArrowBoldLeft className="h-4 w-4 mr-2" />
               Back to Mail
             </Button>
           </Link>
@@ -179,13 +183,13 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
                   <div className="flex items-center gap-2 mt-1">
                     {emailDetails.isRead && (
                       <Badge className="bg-emerald-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-                        <HiCheckCircle className="w-3 h-3 mr-1" />
+                        <CircleCheck className="w-3 h-3 mr-1" />
                         Read
                       </Badge>
                     )}
                     {emailDetails.parsedData.hasAttachments && (
                       <Badge className="bg-blue-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-                        <HiDocumentText className="w-3 h-3 mr-1" />
+                        <File2 className="w-3 h-3 mr-1" />
                         {emailDetails.parsedData.attachmentCount}
                       </Badge>
                     )}

@@ -7,9 +7,10 @@ import { nanoid } from 'nanoid'
 import { eq, and } from 'drizzle-orm'
 import { Autumn as autumn } from 'autumn-js'
 import { createHmac } from 'crypto'
-import { parseEmail, sanitizeHtml, type ParsedEmailData } from '@/lib/email-parser'
+import { parseEmail, sanitizeHtml, type ParsedEmailData } from '@/lib/email-management/email-parser'
 import { type SESEvent, type SESRecord } from '@/lib/aws-ses/aws-ses'
-import { isEmailBlocked } from '@/lib/email-blocking'
+import { isEmailBlocked } from '@/lib/email-management/email-blocking'
+import { routeEmail } from '@/lib/email-management/email-router'
 
 interface ProcessedSESRecord extends SESRecord {
   emailContent?: string | null
@@ -896,7 +897,7 @@ export async function POST(request: NextRequest) {
             }
           } else {
             try {
-              const { routeEmail } = await import('@/lib/email-router')
+              
               await routeEmail(emailRecord.id)
               console.log(`✅ Webhook - Successfully routed email ${emailRecord.id}`)
               

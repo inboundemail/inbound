@@ -2,7 +2,7 @@
 
 import { auth } from '@/lib/auth/auth'
 import { headers } from 'next/headers'
-import { blockEmail, unblockEmail, getBlockedEmailsForUser, isEmailBlocked } from '@/lib/email-blocking'
+import { blockEmail, unblockEmail, getBlockedEmailsForUser, isEmailBlocked } from '@/lib/email-management/email-blocking'
 
 /**
  * Server action to block an email address

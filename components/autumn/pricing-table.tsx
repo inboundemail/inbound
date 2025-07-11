@@ -5,7 +5,8 @@ import { createContext, useContext, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { Check, LoaderIcon } from "lucide-react";
+import Check2 from "@/components/icons/check-2";
+import Loader from "@/components/icons/loader";
 import { useSession } from "@/lib/auth/auth-client";
 import Link from "next/link";
 
@@ -252,7 +253,7 @@ export const PricingFeatureList = ({
       {items.map((item, index) => (
         <div key={index} className="flex items-start gap-3 text-sm">
           {showIcon && (
-            <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+            <Check2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
           )}
           <div className="flex flex-col">
             <span className="text-card-foreground">{item.primaryText}</span>
@@ -310,7 +311,7 @@ export const PricingCardButton = React.forwardRef<
       {...props}
     >
       {loading ? (
-        <LoaderIcon className="h-4 w-4 animate-spin" />
+        <Loader className="h-4 w-4 animate-spin" />
       ) : (
         children
       )}

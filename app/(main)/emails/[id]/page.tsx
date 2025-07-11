@@ -28,23 +28,23 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import {
-    CheckCircleIcon,
-    XCircleIcon,
-    ClockIcon,
-    AlertTriangleIcon,
-    ArrowLeftIcon,
-    PlusIcon,
-    MailIcon,
-    TrendingUpIcon,
-    RefreshCwIcon,
-    CopyIcon,
-    TrashIcon,
-    SettingsIcon,
-    ExternalLinkIcon
-} from 'lucide-react'
+import Clock2 from "@/components/icons/clock-2"
+import CircleWarning2 from "@/components/icons/circle-warning-2"
+import ArrowBoldLeft from "@/components/icons/arrow-bold-left"
+import ChartTrendUp from "@/components/icons/chart-trend-up"
+import Clipboard2 from "@/components/icons/clipboard-2"
+import Trash2 from "@/components/icons/trash-2"
+import Gear2 from "@/components/icons/gear-2"
+import ExternalLink2 from "@/components/icons/external-link-2"
 import { CustomInboundIcon } from '@/components/icons/customInbound'
-import { HiCheckCircle, HiGlobeAlt, HiMail, HiPlus, HiRefresh, HiX, HiLightningBolt, HiUserGroup } from 'react-icons/hi'
+import CircleCheck from '@/components/icons/circle-check'
+import Globe2 from '@/components/icons/globe-2'
+import Envelope2 from '@/components/icons/envelope-2'
+import CirclePlus from '@/components/icons/circle-plus'
+import Refresh2 from '@/components/icons/refresh-2'
+import ObjRemove from '@/components/icons/obj-remove'
+import BoltLightning from '@/components/icons/bolt-lightning'
+import UserGroup from '@/components/icons/user-group'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
@@ -373,7 +373,7 @@ export default function DomainDetailPage() {
                 <div className="flex items-center gap-4">
                     <Link href="/emails">
                         <Button variant="ghost" size="sm">
-                            <ArrowLeftIcon className="h-4 w-4 mr-2" />
+                            <ArrowBoldLeft width="16" height="16" className="mr-2" />
                             Back to Domains
                         </Button>
                     </Link>
@@ -381,7 +381,7 @@ export default function DomainDetailPage() {
                 <Card className="border-destructive/50 bg-destructive/10">
                     <CardContent className="pt-6">
                         <div className="flex items-center gap-2 text-destructive">
-                            <XCircleIcon className="h-4 w-4" />
+                            <ObjRemove width="16" height="16" />
                             <span>{domainError instanceof Error ? domainError.message : 'Domain not found'}</span>
                             <Button
                                 variant="ghost"
@@ -404,13 +404,13 @@ export default function DomainDetailPage() {
     const getEndpointIcon = (endpoint: any) => {
         switch (endpoint?.type) {
             case 'webhook':
-                return HiLightningBolt
+                return BoltLightning
             case 'email':
-                return HiMail
+                return Envelope2
             case 'email_group':
-                return HiUserGroup
+                return UserGroup
             default:
-                return HiMail
+                return Envelope2
         }
     }
 
@@ -441,7 +441,7 @@ export default function DomainDetailPage() {
                 {/* Back Button */}
                 <div className="flex items-center">
                     <Link href="/emails" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-                        <ArrowLeftIcon className="h-4 w-4" />
+                        <ArrowBoldLeft width="16" height="16" />
                         Back to Domains
                     </Link>
                 </div>
@@ -450,7 +450,7 @@ export default function DomainDetailPage() {
                 <div className="flex items-center justify-between bg-card text-card-foreground rounded-lg p-4 border border-border">
                     <div className="flex items-center gap-4">
                         <CustomInboundIcon
-                            Icon={HiGlobeAlt}
+                            Icon={Globe2}
                             size={40}
                             backgroundColor="#3b82f6"
                         />
@@ -466,17 +466,17 @@ export default function DomainDetailPage() {
                     <div className="flex items-center gap-2">
                         {domain.status === DOMAIN_STATUS.VERIFIED ? (
                             <Badge className="bg-emerald-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-                                <HiCheckCircle className="w-3 h-3 mr-1" />
+                                <CircleCheck width="12" height="12" className="mr-1" />
                                 Verified
                             </Badge>
                         ) : domain.status === DOMAIN_STATUS.PENDING ? (
                             <Badge className="bg-amber-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-                                <ClockIcon className="w-3 h-3 mr-1" />
+                                <Clock2 width="12" height="12" className="mr-1" />
                                 Pending
                             </Badge>
                         ) : (
                             <Badge className="bg-red-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-                                <HiX className="w-3 h-3 mr-1" />
+                                <ObjRemove width="12" height="12" className="mr-1" />
                                 Failed
                             </Badge>
                         )}
@@ -486,7 +486,7 @@ export default function DomainDetailPage() {
                             onClick={refreshVerification}
                             className="bg-muted border-border text-muted-foreground hover:bg-accent"
                         >
-                            <HiRefresh className="h-3 w-3 mr-1" />
+                            <Refresh2 width="12" height="12" className="mr-1" />
                             Refresh
                         </Button>
 
@@ -497,7 +497,7 @@ export default function DomainDetailPage() {
                                 size="sm"
                                 onClick={() => setIsDeleteDialogOpen(true)}
                             >
-                                <TrashIcon className="h-4 w-4 mr-2" />
+                                <Trash2 width="16" height="16" className="mr-2" />
                                 Delete
                             </Button>
                             <DialogContent>
@@ -582,10 +582,10 @@ export default function DomainDetailPage() {
                                     </CardDescription>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                    <MailIcon className="h-4 w-4" />
+                                    <Envelope2 width="16" height="16" />
                                     {stats.totalEmailAddresses} addresses
                                     <span className="text-muted-foreground/60">•</span>
-                                    <TrendingUpIcon className="h-4 w-4" />
+                                    <ChartTrendUp width="16" height="16" />
                                     {stats.totalEmailsLast24h} emails (24h)
                                 </div>
                             </div>
@@ -628,7 +628,7 @@ export default function DomainDetailPage() {
                                                     <SelectItem value="none">Store in Inbound</SelectItem>
                                                     <SelectItem value="create-new" className="text-blue-600 font-medium">
                                                         <div className="flex items-center gap-2">
-                                                            <PlusIcon className="h-4 w-4" />
+                                                            <CirclePlus width="16" height="16" />
                                                             Create Endpoint
                                                         </div>
                                                     </SelectItem>
@@ -658,7 +658,7 @@ export default function DomainDetailPage() {
                                                 disabled={!newEmailAddress.trim()}
                                                 className="shrink-0 h-10 w-10"
                                             >
-                                                <PlusIcon className="h-4 w-4" />
+                                                <CirclePlus width="16" height="16" />
                                             </Button>
                                         </div>
                                     </div>
@@ -671,7 +671,7 @@ export default function DomainDetailPage() {
                                     {/* Email Addresses List */}
                                     {emailAddresses.length === 0 ? (
                                         <div className="text-center py-8">
-                                            <MailIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                                            <Envelope2 width="32" height="32" className="text-muted-foreground mx-auto mb-2" />
                                             <p className="text-muted-foreground">No email addresses configured</p>
                                         </div>
                                     ) : (
@@ -711,7 +711,7 @@ export default function DomainDetailPage() {
                                                         disabled={selectedEmailIds.size === 0}
                                                         className="h-8"
                                                     >
-                                                        <TrashIcon className="h-4 w-4 mr-2" />
+                                                        <Trash2 width="16" height="16" className="mr-2" />
                                                         Delete Selected
                                                     </Button>
                                                 </div>
@@ -741,7 +741,7 @@ export default function DomainDetailPage() {
                                                             }}
                                                             className="h-6 w-6 p-0"
                                                         >
-                                                            <CopyIcon className="h-3 w-3" />
+                                                            <Clipboard2 width="12" height="12" />
                                                         </Button>
                                                     </div>
                                                     <div className="flex items-center gap-2">
@@ -771,7 +771,7 @@ export default function DomainDetailPage() {
                                                                     return (
                                                                         <div className="flex items-center gap-1.5">
                                                                             <CustomInboundIcon
-                                                                                Icon={HiLightningBolt}
+                                                                                Icon={BoltLightning}
                                                                                 size={14}
                                                                                 backgroundColor="#8b5cf6"
                                                                             />
@@ -794,7 +794,7 @@ export default function DomainDetailPage() {
                                                             onClick={() => openEndpointDialog(email)}
                                                             className="h-8 w-8 p-0"
                                                         >
-                                                            <SettingsIcon className="h-4 w-4" />
+                                                            <Gear2 width="16" height="16" />
                                                         </Button>
                                                         <Button
                                                             variant="ghost"
@@ -802,7 +802,7 @@ export default function DomainDetailPage() {
                                                             onClick={() => deleteEmailAddressHandler(email.id, email.address)}
                                                             className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                                                         >
-                                                            <TrashIcon className="h-4 w-4" />
+                                                            <Trash2 width="16" height="16" />
                                                         </Button>
                                                     </div>
                                                 </div>
@@ -816,7 +816,7 @@ export default function DomainDetailPage() {
                                             href="/endpoints"
                                             className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
                                         >
-                                            <ExternalLinkIcon className="h-3 w-3" />
+                                            <ExternalLink2 width="12" height="12" />
                                             Manage all endpoints
                                         </Link>
                                     </div>
@@ -855,8 +855,8 @@ export default function DomainDetailPage() {
                                                             <SelectItem value="none">Store in Inbound</SelectItem>
                                                             <SelectItem value="create-new" className="text-blue-600 font-medium">
                                                                 <div className="flex items-center gap-2">
-                                                                    <PlusIcon className="h-4 w-4" />
-                                                                    Create Endpoint
+                                                                                                                                    <CirclePlus width="16" height="16" />
+                                                                Create Endpoint
                                                                 </div>
                                                             </SelectItem>
                                                             {userEndpoints.length > 0 && (
@@ -924,7 +924,7 @@ export default function DomainDetailPage() {
                                         <SelectItem value="none">Store in Inbound</SelectItem>
                                         <SelectItem value="create-new" className="text-blue-600 font-medium">
                                             <div className="flex items-center gap-2">
-                                                <PlusIcon className="h-4 w-4" />
+                                                <CirclePlus width="16" height="16" />
                                                 Create New Endpoint
                                             </div>
                                         </SelectItem>

@@ -26,15 +26,13 @@ import {
   CreateApiKeyForm,
   CircularProgressProps
 } from '@/features/settings/types'
-import { 
-  CreditCardIcon, 
-  TrendingUpIcon, 
-  CheckCircleIcon, 
-  KeyIcon, 
-  PlusIcon, 
-  CopyIcon, 
-  TrashIcon
-} from 'lucide-react'
+import CreditCard2 from "@/components/icons/credit-card-2"
+import ChartTrendUp from "@/components/icons/chart-trend-up"
+import CircleCheck from "@/components/icons/circle-check"
+import Key2 from "@/components/icons/key-2"
+import CirclePlus from "@/components/icons/circle-plus"
+import Clipboard2 from "@/components/icons/clipboard-2"
+import Trash2 from "@/components/icons/trash-2"
 import { formatDistanceToNow } from 'date-fns'
 import { PricingTable } from '@/components/autumn/pricing-table-format'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -315,7 +313,7 @@ export default function SettingsPage() {
                         onClick={handleOpenUpgrade}
                         variant="primary"
                       >
-                        <TrendingUpIcon className="h-4 w-4 mr-2" />
+                        <ChartTrendUp width="16" height="16" className="mr-2" />
                         Upgrade
                       </Button>
                     )}
@@ -402,7 +400,7 @@ export default function SettingsPage() {
               </div>
             ) : customerError ? (
               <div className="text-center py-8 text-muted-foreground">
-                <CreditCardIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <CreditCard2 width="32" height="32" className="mx-auto mb-2 opacity-50" />
                 <p>Unable to load subscription data</p>
                 <p className="text-sm text-destructive mt-1">
                   {customerError instanceof Error ? customerError.message : 'Unknown error'}
@@ -418,7 +416,7 @@ export default function SettingsPage() {
               </div>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                <CreditCardIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <CreditCard2 width="32" height="32" className="mx-auto mb-2 opacity-50" />
                 <p>No subscription data available</p>
               </div>
             )}
@@ -431,7 +429,7 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  <KeyIcon className="h-5 w-5 text-purple-600" />
+                  <Key2 width="20" height="20" className="text-purple-600" />
                   API Keys
                 </CardTitle>
                 <CardDescription>
@@ -441,7 +439,7 @@ export default function SettingsPage() {
               <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
                 <DialogTrigger asChild>
                   <Button>
-                    <PlusIcon className="h-4 w-4 mr-2" />
+                    <CirclePlus width="16" height="16" className="mr-2" />
                     Create API Key
                   </Button>
                 </DialogTrigger>
@@ -501,7 +499,7 @@ export default function SettingsPage() {
           <CardContent>
             {apiKeysError ? (
               <div className="text-center py-8">
-                <KeyIcon className="h-8 w-8 text-red-500 mx-auto mb-2" />
+                <Key2 width="32" height="32" className="text-red-500 mx-auto mb-2" />
                 <p className="text-sm text-red-600 mb-3">Failed to load API keys</p>
                 <p className="text-xs text-muted-foreground mb-3">
                   {apiKeysError instanceof Error ? apiKeysError.message : 'Unknown error'}
@@ -531,14 +529,14 @@ export default function SettingsPage() {
               </div>
             ) : apiKeys.length === 0 ? (
               <div className="text-center py-8">
-                <KeyIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <Key2 width="32" height="32" className="text-muted-foreground mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground mb-3">No API keys created yet</p>
                 <Button 
                   variant="secondary" 
                   size="sm" 
                   onClick={() => setIsCreateDialogOpen(true)}
                 >
-                  <PlusIcon className="h-4 w-4 mr-2" />
+                  <CirclePlus width="16" height="16" className="mr-2" />
                   Create Your First API Key
                 </Button>
               </div>
@@ -551,7 +549,7 @@ export default function SettingsPage() {
                   >
                     <div className="flex items-center gap-3 flex-1">
                       <div className="flex items-center justify-center w-8 h-8 rounded-md bg-purple-100 border border-purple-200">
-                        <KeyIcon className="h-4 w-4 text-purple-600" />
+                        <Key2 width="16" height="16" className="text-purple-600" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
@@ -598,7 +596,7 @@ export default function SettingsPage() {
                            setDeleteConfirmOpen(true)
                          }}
                        >
-                         <TrashIcon className="h-4 w-4" />
+                         <Trash2 width="16" height="16" />
                        </Button>
                     </div>
                   </div>
@@ -726,7 +724,7 @@ export default function SettingsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <CheckCircleIcon className="h-5 w-5 text-green-600" />
+              <CircleCheck width="20" height="20" className="text-green-600" />
               API Key Created
             </DialogTitle>
             <DialogDescription>
@@ -747,7 +745,7 @@ export default function SettingsPage() {
                    size="sm"
                    onClick={() => copyToClipboard(newApiKey || '')}
                  >
-                   <CopyIcon className="h-4 w-4" />
+                   <Clipboard2 width="16" height="16" />
                  </Button>
               </div>
             </div>
@@ -793,7 +791,7 @@ export default function SettingsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
-              <CheckCircleIcon className="h-6 w-6 text-green-600" />
+              <CircleCheck width="24" height="24" className="text-green-600" />
             </div>
             <DialogTitle className="text-2xl font-bold text-center">Upgrade Successful!</DialogTitle>
             <DialogDescription className="text-center">
