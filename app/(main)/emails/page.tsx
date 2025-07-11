@@ -5,7 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/copy-button'
-import { HiCheckCircle, HiChevronDown, HiClipboard, HiCog, HiGlobeAlt, HiLightningBolt, HiMail, HiPlus, HiRefresh, HiX } from 'react-icons/hi'
+import CircleCheck from '@/components/icons/circle-check'
+import ChevronDown from '@/components/icons/chevron-down'
+import Clipboard2 from '@/components/icons/clipboard-2'
+import Gear2 from '@/components/icons/gear-2'
+import Globe2 from '@/components/icons/globe-2'
+import BoltLightning from '@/components/icons/bolt-lightning'
+import Envelope2 from '@/components/icons/envelope-2'
+import CirclePlus from '@/components/icons/circle-plus'
+import Refresh2 from '@/components/icons/refresh-2'
+import ObjRemove from '@/components/icons/obj-remove'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { formatDistanceToNow } from 'date-fns'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
@@ -139,9 +148,9 @@ export default function EmailsPage() {
       <div className="flex flex-1 flex-col gap-4 p-4">
         <Card className="border-destructive/50 bg-destructive/10">
           <CardContent className="p-6">
-            <div className="flex items-center gap-2 text-destructive">
-              <HiX className="h-4 w-4" />
-              <span>{domainStatsError?.message || 'Failed to load domain data'}</span>
+                          <div className="flex items-center gap-2 text-destructive">
+                <ObjRemove width="16" height="16" />
+                <span>{domainStatsError?.message || 'Failed to load domain data'}</span>
               <Button variant="ghost" size="sm" onClick={() => refetchDomainStats()} className="ml-auto text-destructive hover:text-destructive">
                 Try Again
               </Button>
@@ -171,7 +180,7 @@ export default function EmailsPage() {
           <div className="flex items-center gap-2">
             <Button size="sm" asChild>
               <Link href="/add">
-                <HiPlus className="h-3 w-3 mr-1" />
+                <CirclePlus width="12" height="12" className="mr-1" />
                 Add Domain
               </Link>
             </Button>
@@ -181,7 +190,7 @@ export default function EmailsPage() {
               onClick={() => refetchDomainStats()}
               disabled={isDomainStatsLoading}
             >
-              <HiRefresh className="h-3 w-3 mr-1" />
+              <Refresh2 width="12" height="12" className="mr-1" />
               Refresh
             </Button>
 
@@ -196,7 +205,7 @@ export default function EmailsPage() {
               <CardContent className="p-8">
                 <div className="text-center">
                   <CustomInboundIcon
-                    Icon={HiGlobeAlt}
+                    Icon={Globe2}
                     size={48}
                     backgroundColor="#8b5cf6"
                     className="mx-auto mb-4"
@@ -204,7 +213,7 @@ export default function EmailsPage() {
                   <p className="text-sm text-muted-foreground mb-4">No domains configured</p>
                   <Button variant="secondary" asChild>
                     <Link href="/add">
-                      <HiPlus className="h-4 w-4 mr-2" />
+                      <CirclePlus width="16" height="16" className="mr-2" />
                       Add Your First Domain
                     </Link>
                   </Button>
@@ -282,7 +291,7 @@ function DomainCard({
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <CustomInboundIcon
-                Icon={HiGlobeAlt}
+                Icon={Globe2}
                 size={36}
                 backgroundColor={getDomainIconColor(domain)}
               />
@@ -336,7 +345,7 @@ function DomainCard({
                 asChild
               >
                 <Link href={`/emails/${domain.id}`}>
-                  <HiCog className="w-3 h-3 mr-1" />
+                  <Gear2 width="12" height="12" className="mr-1" />
                   Config
                 </Link>
               </Button>
@@ -362,7 +371,7 @@ function DomainCard({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3 flex-1">
                     <CustomInboundIcon
-                      Icon={HiMail}
+                      Icon={Envelope2}
                       size={28}
                       backgroundColor="#10b981"
                     />
@@ -376,9 +385,9 @@ function DomainCard({
                           onClick={() => onCopyEmail(email.address)}
                         >
                           {copiedEmail === email.address ? (
-                            <HiCheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                            <CircleCheck width="14" height="14" className="text-emerald-500" />
                           ) : (
-                            <HiClipboard className="w-3.5 h-3.5 text-muted-foreground transition-all duration-150 hover:text-foreground" />
+                            <Clipboard2 width="14" height="14" className="text-muted-foreground transition-all duration-150 hover:text-foreground" />
                           )}
                         </Button>
                       </div>

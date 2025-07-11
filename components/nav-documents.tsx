@@ -1,11 +1,8 @@
 "use client"
 
-import {
-  FolderIcon,
-  MoreHorizontalIcon,
-  ShareIcon,
-  type LucideIcon,
-} from "lucide-react"
+import Folder2 from "@/components/icons/folder-2"
+import Dots from "@/components/icons/dots"
+import ShareRight2 from "@/components/icons/share-right-2"
 
 import {
   DropdownMenu,
@@ -29,7 +26,7 @@ export function NavDocuments({
   items: {
     name: string
     url: string
-    icon: LucideIcon
+    icon: React.ComponentType<any>
   }[]
 }) {
   const { isMobile } = useSidebar()
@@ -52,7 +49,7 @@ export function NavDocuments({
                   showOnHover
                   className="rounded-sm data-[state=open]:bg-accent"
                 >
-                  <MoreHorizontalIcon />
+                  <Dots />
                   <span className="sr-only">More</span>
                 </SidebarMenuAction>
               </DropdownMenuTrigger>
@@ -62,11 +59,11 @@ export function NavDocuments({
                 align={isMobile ? "end" : "start"}
               >
                 <DropdownMenuItem>
-                  <FolderIcon />
+                  <Folder2 />
                   <span>Open</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem>
-                  <ShareIcon />
+                  <ShareRight2 />
                   <span>Share</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -75,7 +72,7 @@ export function NavDocuments({
         ))}
         <SidebarMenuItem>
           <SidebarMenuButton className="text-sidebar-foreground/70">
-            <MoreHorizontalIcon className="text-sidebar-foreground/70" />
+            <Dots className="text-sidebar-foreground/70" />
             <span>More</span>
           </SidebarMenuButton>
         </SidebarMenuItem>

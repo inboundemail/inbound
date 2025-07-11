@@ -1,12 +1,22 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PricingTable } from "@/components/autumn/pricing-table-format" 
-import { HiArrowRight, HiMail, HiGlobeAlt, HiLockClosed, HiCheckCircle, HiLightningBolt, HiX, HiStar, HiMailOpen, HiChip, HiCog, HiLightBulb, HiSparkles, HiCheck } from "react-icons/hi"
-import Image from "next/image"
 import { auth } from "@/lib/auth/auth"
 import { headers } from "next/headers"
 import CustomInboundIcon from "@/components/icons/customInbound"
 import type { Metadata } from 'next'
+
+// Nucleo icon imports
+import ArrowBoldRight from "@/components/icons/arrow-bold-right"
+import Envelope2 from "@/components/icons/envelope-2"
+import Globe2 from "@/components/icons/globe-2"
+import ShieldCheck from "@/components/icons/shield-check"
+import CircleCheck from "@/components/icons/circle-check"
+import BoltLightning from "@/components/icons/bolt-lightning"
+import TabClose from "@/components/icons/tab-close"
+import Microchip from "@/components/icons/microchip"
+import CircleSparkle from "@/components/icons/circle-sparkle"
+import Check2 from "@/components/icons/check-2"
 
 export const metadata: Metadata = {
   title: 'Best ImprovMX Alternative - Free Email Aliases For Custom Domains | Inbound',
@@ -37,7 +47,7 @@ export default async function ImprovMXAlternativePage() {
           {/* Hero Section */}
           <div className="mb-16">
             <div className="inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
-              <HiCheckCircle className="w-4 h-4" />
+              <CircleCheck width="16" height="16" />
               #1 ImprovMX Alternative for Developers
             </div>
             
@@ -57,12 +67,12 @@ export default async function ImprovMXAlternativePage() {
                 {session ? (
                   <a href="/add">
                     Start Free
-                    <HiArrowRight className="ml-2 w-3 h-3" />
+                    <ArrowBoldRight width="12" height="12" className="ml-2" />
                   </a>
                 ) : (
                   <a href="/login">
                     Start Free
-                    <HiArrowRight className="ml-2 w-3 h-3" />
+                    <ArrowBoldRight width="12" height="12" className="ml-2" />
                   </a>
                 )}
               </Button>
@@ -82,34 +92,34 @@ export default async function ImprovMXAlternativePage() {
               <div className="bg-gray-50 rounded-xl p-8 border border-gray-200">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
-                    <HiMail className="w-6 h-6 text-gray-600" />
+                    <Envelope2 width="24" height="24" className="text-gray-600" />
                   </div>
                   <h3 className="text-xl font-bold text-gray-900">ImprovMX</h3>
                 </div>
                 
                 <div className="space-y-4">
                   <div className="flex items-start gap-3">
-                    <HiX className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
                     <span className="text-gray-600">Limited to 25 free aliases</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <HiX className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
                     <span className="text-gray-600">Paid plans start at $9/month</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <HiX className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />  
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />  
                     <span className="text-gray-600">No email storage or IMAP access</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <HiX className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
                     <span className="text-gray-600">Basic webhook support</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <HiX className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
                     <span className="text-gray-600">No AI agent integration</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <HiX className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
                     <span className="text-gray-600">Limited API capabilities</span>
                   </div>
                 </div>
@@ -121,7 +131,7 @@ export default async function ImprovMXAlternativePage() {
                   <CustomInboundIcon
                     className="flex-shrink-0"
                     backgroundColor="#1C2894"
-                    Icon={HiSparkles}
+                    Icon={CircleSparkle}
                     size={40}
                   />
                   <h3 className="text-xl font-bold text-gray-900">inbound by exon</h3>
@@ -129,27 +139,27 @@ export default async function ImprovMXAlternativePage() {
                 
                 <div className="space-y-4">
                   <div className="flex items-start gap-3">
-                    <HiCheck className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
                     <span className="text-gray-700 font-medium">Unlimited free aliases per domain</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <HiCheck className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
                     <span className="text-gray-700 font-medium">Forever free tier - no hidden costs</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <HiCheck className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
                     <span className="text-gray-700 font-medium">Full catch-all domain support</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <HiCheck className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
                     <span className="text-gray-700 font-medium">Advanced webhook integration</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <HiCheck className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
                     <span className="text-gray-700 font-medium">AI agent & automation ready</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <HiCheck className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
                     <span className="text-gray-700 font-medium">Full REST API + TypeScript SDK</span>
                   </div>
                 </div>
@@ -165,7 +175,7 @@ export default async function ImprovMXAlternativePage() {
               {/* Feature 1 */}
               <div className="text-center p-6">
                 <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <HiGlobeAlt className="w-8 h-8 text-blue-600" />
+                  <Globe2 width="32" height="32" className="text-blue-600" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-3">1 Free Domain</h3>
                 <p className="text-gray-600">
@@ -176,7 +186,7 @@ export default async function ImprovMXAlternativePage() {
               {/* Feature 2 */}
               <div className="text-center p-6">
                 <div className="w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <HiMail className="w-8 h-8 text-green-600" />
+                  <Envelope2 width="32" height="32" className="text-green-600" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-3">Infinite Email Aliases</h3>
                 <p className="text-gray-600">
@@ -187,7 +197,7 @@ export default async function ImprovMXAlternativePage() {
               {/* Feature 3 */}
               <div className="text-center p-6">
                 <div className="w-16 h-16 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <HiLockClosed className="w-8 h-8 text-purple-600" />
+                  <ShieldCheck width="32" height="32" className="text-purple-600" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-3">Granular Email Blocking</h3>
                 <p className="text-gray-600">
@@ -198,7 +208,7 @@ export default async function ImprovMXAlternativePage() {
               {/* Feature 4 */}
               <div className="text-center p-6">
                 <div className="w-16 h-16 bg-yellow-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <HiLightningBolt className="w-8 h-8 text-yellow-600" />
+                  <BoltLightning width="32" height="32" className="text-yellow-600" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-3">Webhook Integration</h3>
                 <p className="text-gray-600">
@@ -209,7 +219,7 @@ export default async function ImprovMXAlternativePage() {
               {/* Feature 5 */}
               <div className="text-center p-6">
                 <div className="w-16 h-16 bg-indigo-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <HiChip className="w-8 h-8 text-indigo-600" />
+                  <Microchip width="32" height="32" className="text-indigo-600" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-3">AI-Ready API</h3>
                 <p className="text-gray-600">
@@ -220,7 +230,7 @@ export default async function ImprovMXAlternativePage() {
               {/* Feature 6 */}
               <div className="text-center p-6">
                 <div className="w-16 h-16 bg-red-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <HiCheckCircle className="w-8 h-8 text-red-600" />
+                  <ShieldCheck width="32" height="32" className="text-red-600" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-3">Enterprise Security</h3>
                 <p className="text-gray-600">
@@ -273,19 +283,19 @@ await client.domains.setCatchAll({
                   <h3 className="text-xl font-bold text-gray-900 mb-3">Developer Experience</h3>
                   <div className="space-y-3">
                     <div className="flex items-start gap-3">
-                      <HiCheck className="w-5 h-5 text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
                       <span className="text-gray-700">Full TypeScript SDK with type safety</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <HiCheck className="w-5 h-5 text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
                       <span className="text-gray-700">Comprehensive REST API documentation</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <HiCheck className="w-5 h-5 text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
                       <span className="text-gray-700">Webhook retry & failure handling</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <HiCheck className="w-5 h-5 text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
                       <span className="text-gray-700">Real-time email processing logs</span>
                     </div>
                   </div>
@@ -295,19 +305,19 @@ await client.domains.setCatchAll({
                   <h3 className="text-xl font-bold text-gray-900 mb-3">AI Integration</h3>
                   <div className="space-y-3">
                     <div className="flex items-start gap-3">
-                      <HiCheck className="w-5 h-5 text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
                       <span className="text-gray-700">Direct webhook delivery to AI agents</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <HiCheck className="w-5 h-5 text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
                       <span className="text-gray-700">Structured email parsing & metadata</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <HiCheck className="w-5 h-5 text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
                       <span className="text-gray-700">Auto-scaling email processing</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <HiCheck className="w-5 h-5 text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
                       <span className="text-gray-700">Built-in spam & security filtering</span>
                     </div>
                   </div>
@@ -360,12 +370,12 @@ await client.domains.setCatchAll({
                 {session ? (
                   <a href="/add" className="flex items-center gap-2">
                     Start Migration Now
-                    <HiArrowRight className="w-4 h-4" />
+                    <ArrowBoldRight width="16" height="16" />
                   </a>
                 ) : (
                   <a href="/login" className="flex items-center gap-2">
                     Start Migration Now
-                    <HiArrowRight className="w-4 h-4" />
+                    <ArrowBoldRight width="16" height="16" />
                   </a>
                 )}
               </Button>
@@ -394,12 +404,12 @@ await client.domains.setCatchAll({
                 {session ? (
                   <a href="/add">
                     Get Started Free
-                    <HiArrowRight className="ml-2 w-3 h-3" />
+                    <ArrowBoldRight width="12" height="12" className="ml-2" />
                   </a>
                 ) : (
                   <a href="/login">
                     Get Started Free
-                    <HiArrowRight className="ml-2 w-3 h-3" />
+                    <ArrowBoldRight width="12" height="12" className="ml-2" />
                   </a>
                 )}
               </Button>

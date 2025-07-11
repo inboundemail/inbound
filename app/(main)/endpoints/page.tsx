@@ -9,7 +9,21 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
-import { HiCheckCircle, HiX, HiPlus, HiRefresh, HiLightningBolt, HiMail, HiUserGroup, HiGlobeAlt, HiPlay, HiCog, HiTrash, HiClipboard, HiDownload, HiSearch, HiFilter } from 'react-icons/hi'
+import CircleCheck from '@/components/icons/circle-check'
+import ObjRemove from '@/components/icons/obj-remove'
+import CirclePlus from '@/components/icons/circle-plus'
+import Refresh2 from '@/components/icons/refresh-2'
+import BoltLightning from '@/components/icons/bolt-lightning'
+import Envelope2 from '@/components/icons/envelope-2'
+import UserGroup from '@/components/icons/user-group'
+import Globe2 from '@/components/icons/globe-2'
+import CirclePlay from '@/components/icons/circle-play'
+import Gear2 from '@/components/icons/gear-2'
+import Trash2 from '@/components/icons/trash-2'
+import Clipboard2 from '@/components/icons/clipboard-2'
+import CloudDownload from '@/components/icons/cloud-download'
+import Magnifier2 from '@/components/icons/magnifier-2'
+import Filter2 from '@/components/icons/filter-2'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
@@ -183,7 +197,7 @@ export default function EndpointsPage() {
           className="bg-emerald-500 text-white rounded-full px-0.5 py-0.5 text-xs font-medium shadow-sm"
           title="Active"
         >
-          <HiCheckCircle className="w-3 h-3" />
+          <CircleCheck width="12" height="12" />
         </Badge>
       )
     } else {
@@ -192,7 +206,7 @@ export default function EndpointsPage() {
           className="bg-gray-400 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm"
           title="Not Active"
         >
-          <HiX className="w-3 h-3" />
+          <ObjRemove width="12" height="12" />
         </Badge>
       )
     }
@@ -201,13 +215,13 @@ export default function EndpointsPage() {
   const getEndpointIcon = (endpoint: Endpoint) => {
     switch (endpoint.type) {
       case 'webhook':
-        return HiLightningBolt
+        return BoltLightning
       case 'email':
-        return HiMail
+        return Envelope2
       case 'email_group':
-        return HiUserGroup
+        return UserGroup
       default:
-        return HiGlobeAlt
+        return Globe2
     }
   }
 
@@ -306,7 +320,7 @@ export default function EndpointsPage() {
           <Card className="border-destructive/50 bg-destructive/10">
             <CardContent className="p-6">
               <div className="flex items-center gap-2 text-destructive">
-                <HiX className="h-4 w-4" />
+                <ObjRemove width="16" height="16" />
                 <span>{error.message}</span>
                 <Button variant="ghost" size="sm" onClick={() => refetch()} className="ml-auto text-destructive hover:text-destructive">
                   Try Again
@@ -331,19 +345,19 @@ export default function EndpointsPage() {
                 <span>{activeEndpoints} active</span>
                 {webhookCount > 0 && (
                   <span className="flex items-center gap-1">
-                    <HiLightningBolt className="h-3 w-3" />
+                    <BoltLightning width="12" height="12" />
                     {webhookCount} webhooks
                   </span>
                 )}
                 {emailCount > 0 && (
                   <span className="flex items-center gap-1">
-                    <HiMail className="h-3 w-3" />
+                    <Envelope2 width="12" height="12" />
                     {emailCount} email forwards
                   </span>
                 )}
                 {emailGroupCount > 0 && (
                   <span className="flex items-center gap-1">
-                    <HiUserGroup className="h-3 w-3" />
+                    <UserGroup width="12" height="12" />
                     {emailGroupCount} email groups
                   </span>
                 )}
@@ -357,11 +371,11 @@ export default function EndpointsPage() {
                 disabled={isLoading}
                 className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
               >
-                <HiRefresh className="h-3 w-3 mr-1" />
+                <Refresh2 width="12" height="12" className="mr-1" />
                 Refresh
               </Button>
               <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
-                <HiPlus className="h-3 w-3 mr-1" />
+                <CirclePlus width="12" height="12" className="mr-1" />
                 Add Endpoint
               </Button>
             </div>
@@ -372,7 +386,7 @@ export default function EndpointsPage() {
             <div className="flex flex-col sm:flex-row gap-1 mb-2">
               <div className="flex-1">
                 <div className="relative">
-                  <HiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <Input
                     placeholder="Search endpoints by name, description, or configuration..."
                     value={searchQuery}
@@ -444,7 +458,7 @@ export default function EndpointsPage() {
                         className="bg-red-600 hover:bg-red-700"
                         disabled={selectedEndpoints.size === 0}
                       >
-                        <HiTrash className="h-3 w-3 mr-1" />
+                        <Trash2 width="12" height="12" className="mr-1" />
                         Delete ({selectedEndpoints.size})
                       </Button>
                     </div>
@@ -462,7 +476,7 @@ export default function EndpointsPage() {
               <Card className="bg-green-500/10 border-green-500/50">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
-                    <HiCheckCircle className="h-5 w-5 text-green-500" />
+                    <CircleCheck width="20" height="20" className="text-green-500" />
                     <div className="flex-1">
                       <h4 className="text-sm font-medium text-green-400">Migration Completed Successfully!</h4>
                       <p className="text-sm text-green-300">Your webhooks have been imported as endpoints. You can now manage all your endpoints in one place.</p>
@@ -473,7 +487,7 @@ export default function EndpointsPage() {
                       onClick={() => setShowMigrationSuccess(false)}
                       className="text-green-500 hover:text-green-400"
                     >
-                      <HiX className="h-4 w-4" />
+                      <ObjRemove width="16" height="16" />
                     </Button>
                   </div>
                 </CardContent>
@@ -485,7 +499,7 @@ export default function EndpointsPage() {
                 <CardContent className="p-8">
                   <div className="text-center">
                     <CustomInboundIcon
-                      Icon={searchQuery || filterType !== 'all' || filterStatus !== 'all' ? HiSearch : HiGlobeAlt}
+                      Icon={searchQuery || filterType !== 'all' || filterStatus !== 'all' ? Magnifier2 : Globe2}
                       size={48}
                       backgroundColor="#6b7280"
                       className="mx-auto mb-4"
@@ -511,7 +525,7 @@ export default function EndpointsPage() {
                       ) : (
                         <>
                           <Button variant="secondary" onClick={() => setCreateDialogOpen(true)}>
-                            <HiPlus className="h-4 w-4 mr-2" />
+                            <CirclePlus width="16" height="16" className="mr-2" />
                             Add Your First Endpoint
                           </Button>
                           {migrationChecked && !migrationInProgress && (
@@ -601,9 +615,9 @@ export default function EndpointsPage() {
                                       }}
                                     >
                                       {copiedUrl && endpoint.config && JSON.parse(endpoint.config).url === copiedUrl ? (
-                                        <HiCheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                                        <CircleCheck width="14" height="14" className="text-emerald-500" />
                                       ) : (
-                                        <HiClipboard className="w-3.5 h-3.5 text-gray-400 transition-all duration-150 hover:text-gray-600" />
+                                        <Clipboard2 width="14" height="14" className="text-gray-400 transition-all duration-150 hover:text-gray-600" />
                                       )}
                                     </Button>
                                   )}
@@ -626,7 +640,7 @@ export default function EndpointsPage() {
                               onClick={() => handleTestEndpoint(endpoint)}
                               title="Test endpoint"
                             >
-                              <HiPlay className="w-4 h-4 text-gray-500 hover:text-gray-700" />
+                              <CirclePlay width="16" height="16" className="text-gray-500 hover:text-gray-700" />
                             </Button>
                             <Button
                               variant="ghost"
@@ -635,7 +649,7 @@ export default function EndpointsPage() {
                               onClick={() => handleEditEndpoint(endpoint)}
                               title="Configure endpoint"
                             >
-                              <HiCog className="w-4 h-4 text-gray-500 hover:text-gray-700" />
+                              <Gear2 width="16" height="16" className="text-gray-500 hover:text-gray-700" />
                             </Button>
                             <Button
                               variant="ghost"
@@ -644,7 +658,7 @@ export default function EndpointsPage() {
                               onClick={() => handleDeleteEndpoint(endpoint)}
                               title="Delete endpoint"
                             >
-                              <HiTrash className="w-4 h-4 text-gray-500 hover:text-gray-700" />
+                              <Trash2 width="16" height="16" className="text-gray-500 hover:text-gray-700" />
                             </Button>
                           </div>
                         </div>

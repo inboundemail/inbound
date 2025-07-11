@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useDeleteMultipleEndpointsMutation } from '@/features/endpoints/hooks'
 import { Endpoint } from '@/features/endpoints/types'
-import { HiTrash, HiExclamationCircle } from 'react-icons/hi'
+import Trash2 from '@/components/icons/trash-2'
+import CircleWarning2 from '@/components/icons/circle-warning-2'
 import { toast } from 'sonner'
 
 interface DeleteMultipleEndpointsDialogProps {
@@ -65,7 +66,7 @@ export const DeleteMultipleEndpointsDialog: React.FC<DeleteMultipleEndpointsDial
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-              <HiExclamationCircle className="h-6 w-6 text-red-600" />
+              <CircleWarning2 className="h-6 w-6 text-red-600" />
             </div>
             <div>
               <DialogTitle>Delete Multiple Endpoints</DialogTitle>
@@ -97,7 +98,7 @@ export const DeleteMultipleEndpointsDialog: React.FC<DeleteMultipleEndpointsDial
 
         <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
           <div className="flex items-start gap-2">
-            <HiExclamationCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+            <CircleWarning2 className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
             <div className="text-sm text-red-700">
               <div className="font-medium">This action cannot be undone.</div>
               <div className="text-red-600">All selected endpoints and their configurations will be permanently deleted.</div>
@@ -120,7 +121,7 @@ export const DeleteMultipleEndpointsDialog: React.FC<DeleteMultipleEndpointsDial
             disabled={deleteMultipleMutation.isPending}
             className="bg-red-600 hover:bg-red-700"
           >
-            <HiTrash className="h-4 w-4 mr-2" />
+            <Trash2 className="h-4 w-4 mr-2" />
             {deleteMultipleMutation.isPending ? 'Deleting...' : `Delete ${endpoints.length} Endpoint${endpoints.length !== 1 ? 's' : ''}`}
           </Button>
         </DialogFooter>

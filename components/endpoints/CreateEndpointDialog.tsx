@@ -20,7 +20,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { HiPlus, HiX, HiLightningBolt, HiMail, HiUserGroup, HiArrowLeft, HiArrowRight } from 'react-icons/hi'
+import CirclePlus from '@/components/icons/circle-plus'
+import TabClose from '@/components/icons/tab-close'
+import BoltLightning from '@/components/icons/bolt-lightning'
+import Envelope2 from '@/components/icons/envelope-2'
+import UserGroup from '@/components/icons/user-group'
+import ArrowBoldLeft from '@/components/icons/arrow-bold-left'
+import ArrowBoldRight from '@/components/icons/arrow-bold-right'
 import { toast } from 'sonner'
 import { EndpointTypeSelector } from './EndpointTypeSelector'
 
@@ -289,13 +295,13 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
   const getDialogIcon = () => {
     switch (selectedType) {
       case 'webhook':
-        return { icon: HiLightningBolt, color: 'purple' }
+        return { icon: BoltLightning, color: 'purple' }
       case 'email':
-        return { icon: HiMail, color: 'blue' }
+        return { icon: Envelope2, color: 'blue' }
       case 'email_group':
-        return { icon: HiUserGroup, color: 'green' }
+        return { icon: UserGroup, color: 'green' }
       default:
-        return { icon: HiPlus, color: 'gray' }
+        return { icon: CirclePlus, color: 'gray' }
     }
   }
 
@@ -523,7 +529,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                         onClick={addHeader}
                         disabled={!headerKey.trim() || !headerValue.trim()}
                       >
-                        <HiPlus className="h-4 w-4" />
+                        <CirclePlus className="h-4 w-4" />
                       </Button>
                     </div>
                     
@@ -537,7 +543,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                               onClick={() => removeHeader(key)}
                               className="ml-1 hover:text-red-500"
                             >
-                              <HiX className="h-3 w-3" />
+                              <TabClose className="h-3 w-3" />
                             </button>
                           </Badge>
                         ))}
@@ -610,7 +616,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                         onClick={addEmail}
                         disabled={!newEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())}
                       >
-                        <HiPlus className="h-4 w-4" />
+                        <CirclePlus className="h-4 w-4" />
                       </Button>
                     </div>
                     
@@ -624,7 +630,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                             onClick={() => removeEmail(email)}
                             className="ml-1 hover:text-red-500"
                           >
-                            <HiX className="h-3 w-3" />
+                            <TabClose className="h-3 w-3" />
                           </button>
                         </Badge>
                       ))}
@@ -668,7 +674,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
           <div className="flex items-center gap-2">
             {currentStep !== 'type' && (
               <Button variant="secondary" onClick={handlePrevious}>
-                <HiArrowLeft className="h-4 w-4 mr-1" />
+                <ArrowBoldLeft className="h-4 w-4 mr-1" />
                 Previous
               </Button>
             )}
@@ -696,7 +702,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                 disabled={!canProceedToNextStep()}
               >
                 Next
-                <HiArrowRight className="h-4 w-4 ml-1" />
+                <ArrowBoldRight className="h-4 w-4 ml-1" />
               </Button>
             )}
           </div>

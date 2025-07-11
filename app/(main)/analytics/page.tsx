@@ -4,7 +4,17 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatDistanceToNow, format, subDays, isAfter } from 'date-fns'
 import Link from 'next/link'
-import { HiClock, HiDatabase, HiDocumentText, HiExclamationCircle, HiEye, HiFilter, HiGlobeAlt, HiRefresh, HiSearch, HiShieldCheck, HiX,  } from 'react-icons/hi'
+import Clock2 from '@/components/icons/clock-2'
+import Database2 from '@/components/icons/database-2'
+import File2 from '@/components/icons/file-2'
+import CircleWarning2 from '@/components/icons/circle-warning-2'
+import Eye2 from '@/components/icons/eye-2'
+import Filter2 from '@/components/icons/filter-2'
+import Globe2 from '@/components/icons/globe-2'
+import Refresh2 from '@/components/icons/refresh-2'
+import Magnifier2 from '@/components/icons/magnifier-2'
+import ShieldCheck from '@/components/icons/shield-check'
+import ObjRemove from '@/components/icons/obj-remove'
 
 export default async function AnalyticsPage() {
   // Fetch analytics data server-side
@@ -15,9 +25,9 @@ export default async function AnalyticsPage() {
       <div className="flex flex-1 flex-col gap-4 p-4">
         <Card className="border-destructive/50 bg-destructive/10">
           <CardContent className="p-6">
-            <div className="flex items-center gap-2 text-destructive">
-              <HiX className="h-4 w-4" />
-              <span>{analyticsResult.error}</span>
+                          <div className="flex items-center gap-2 text-destructive">
+                <ObjRemove width="16" height="16" />
+                <span>{analyticsResult.error}</span>
               <Button variant="ghost" size="sm" asChild className="ml-auto text-destructive hover:text-destructive">
                 <Link href="/analytics">Try Again</Link>
               </Button>
@@ -109,19 +119,19 @@ export default async function AnalyticsPage() {
           <h1 className="text-xl font-semibold mb-1">Email Analytics & Insights</h1>
           <div className="flex items-center gap-4 text-sm text-slate-300">
             <span className="flex items-center gap-1">
-              <HiDatabase className="h-3 w-3" />
+              <Database2 width="12" height="12" />
               {recentEmails.length} log entries
             </span>
             <span className="flex items-center gap-1">
-              <HiExclamationCircle className="h-3 w-3" />
+              <CircleWarning2 width="12" height="12" />
               {errorAnalysis.totalErrors} errors
             </span>
             <span className="flex items-center gap-1">
-              <HiShieldCheck className="h-3 w-3" />
+              <ShieldCheck width="12" height="12" />
               {securityAnalysis.spfFailures + securityAnalysis.dkimFailures} auth failures
             </span>
             <span className="flex items-center gap-1">
-              <HiClock className="h-3 w-3" />
+              <Clock2 width="12" height="12" />
               {avgProcessingTime}ms avg processing
             </span>
           </div>
@@ -134,13 +144,13 @@ export default async function AnalyticsPage() {
             className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
           >
             <Link href="/analytics">
-              <HiRefresh className="h-3 w-3 mr-1" />
+              <Refresh2 width="12" height="12" className="mr-1" />
               Refresh
             </Link>
           </Button>
           <Button size="sm" asChild>
             <Link href="/analytics?export=true">
-              <HiDocumentText className="h-3 w-3 mr-1" />
+              <File2 width="12" height="12" className="mr-1" />
               Export Logs
             </Link>
           </Button>
@@ -151,7 +161,7 @@ export default async function AnalyticsPage() {
       {/* <Card className="border-red-100">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <HiShieldCheck className="h-4 w-4 text-red-600" />
+            <ShieldCheck width="16" height="16" className="text-red-600" />
             Security Analysis
           </CardTitle>
         </CardHeader>
@@ -191,7 +201,7 @@ export default async function AnalyticsPage() {
           {(securityAnalysis.spfFailures > 0 || securityAnalysis.dkimFailures > 0 || securityAnalysis.spamDetected > 0) && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
               <div className="flex items-center gap-2 text-red-700 text-sm font-medium mb-2">
-                <HiExclamationCircle className="h-4 w-4" />
+                <CircleWarning2 width="16" height="16" />
                 Security Recommendations
               </div>
               <div className="text-sm text-red-600 space-y-1">
@@ -210,7 +220,7 @@ export default async function AnalyticsPage() {
         <Card className="bg-card border-border">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2 text-foreground">
-              <HiClock className="h-4 w-4 text-blue-500" />
+              <Clock2 width="16" height="16" className="text-blue-500" />
               Performance Analysis
             </CardTitle>
           </CardHeader>
@@ -237,7 +247,7 @@ export default async function AnalyticsPage() {
                     .map(([domain, stats]: [string, any]) => (
                       <div key={domain} className="flex items-center justify-between p-2 bg-accent/5 rounded">
                         <div className="flex items-center gap-2">
-                          <HiGlobeAlt className="h-3 w-3 text-muted-foreground" />
+                          <Globe2 width="12" height="12" className="text-muted-foreground" />
                           <span className="text-sm font-mono text-foreground">{domain}</span>
                         </div>
                         <div className="flex items-center gap-3 text-xs">
@@ -259,7 +269,7 @@ export default async function AnalyticsPage() {
         <Card className="bg-card border-border">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2 text-foreground">
-              <HiExclamationCircle className="h-4 w-4 text-destructive" />
+              <CircleWarning2 width="16" height="16" className="text-destructive" />
               Error Analysis
             </CardTitle>
           </CardHeader>
@@ -298,7 +308,7 @@ export default async function AnalyticsPage() {
               {errorAnalysis.totalErrors > 10 && (
                 <div className="p-3 bg-yellow-500/10 border border-yellow-500/50 rounded-lg">
                   <div className="flex items-center gap-2 text-yellow-400 text-sm font-medium mb-1">
-                    <HiExclamationCircle className="h-4 w-4" />
+                    <CircleWarning2 width="16" height="16" />
                     High Error Rate Detected
                   </div>
                   <div className="text-sm text-yellow-300">
@@ -315,19 +325,19 @@ export default async function AnalyticsPage() {
       <Card className="bg-card border-border">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2 text-foreground">
-              <HiDocumentText className="h-4 w-4 text-muted-foreground" />
-              Email Processing Logs ({recentEmails.length})
-            </CardTitle>
+                          <CardTitle className="text-base flex items-center gap-2 text-foreground">
+                <File2 width="16" height="16" className="text-muted-foreground" />
+                Email Processing Logs ({recentEmails.length})
+              </CardTitle>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" className="h-auto p-1 text-xs">
-                <HiFilter className="h-3 w-3 mr-1" />
-                Filter
-              </Button>
-              <Button variant="ghost" size="sm" className="h-auto p-1 text-xs">
-                <HiSearch className="h-3 w-3 mr-1" />
-                Search
-              </Button>
+                              <Button variant="ghost" size="sm" className="h-auto p-1 text-xs">
+                  <Filter2 width="12" height="12" className="mr-1" />
+                  Filter
+                </Button>
+                <Button variant="ghost" size="sm" className="h-auto p-1 text-xs">
+                  <Magnifier2 width="12" height="12" className="mr-1" />
+                  Search
+                </Button>
             </div>
           </div>
         </CardHeader>
@@ -386,7 +396,7 @@ export default async function AnalyticsPage() {
                   </div>
                   <div className="flex items-center gap-1 ml-4">
                     <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                      <HiEye className="h-3 w-3" />
+                      <Eye2 width="12" height="12" />
                     </Button>
                   </div>
                 </div>

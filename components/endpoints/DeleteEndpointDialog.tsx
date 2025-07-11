@@ -5,7 +5,10 @@ import { useDeleteEndpointMutation } from '@/features/endpoints/hooks'
 import { Endpoint } from '@/features/endpoints/types'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { HiExclamationCircle, HiLightningBolt, HiMail, HiUserGroup } from 'react-icons/hi'
+import CircleWarning2 from '@/components/icons/circle-warning-2'
+import BoltLightning from '@/components/icons/bolt-lightning'
+import Envelope2 from '@/components/icons/envelope-2'
+import UserGroup from '@/components/icons/user-group'
 import { toast } from 'sonner'
 
 interface DeleteEndpointDialogProps {
@@ -58,13 +61,13 @@ export function DeleteEndpointDialog({ open, onOpenChange, endpoint }: DeleteEnd
   const getEndpointIcon = () => {
     switch (endpoint?.type) {
       case 'webhook':
-        return HiLightningBolt
+        return BoltLightning
       case 'email':
-        return HiMail
+        return Envelope2
       case 'email_group':
-        return HiUserGroup
+        return UserGroup
       default:
-        return HiExclamationCircle
+        return CircleWarning2
     }
   }
 
@@ -113,7 +116,7 @@ export function DeleteEndpointDialog({ open, onOpenChange, endpoint }: DeleteEnd
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-red-100">
-              <HiExclamationCircle className="h-4 w-4 text-red-600" />
+              <CircleWarning2 className="h-4 w-4 text-red-600" />
             </div>
             Delete {getEndpointTypeLabel()}
           </DialogTitle>
@@ -122,7 +125,7 @@ export function DeleteEndpointDialog({ open, onOpenChange, endpoint }: DeleteEnd
         <div className="space-y-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <HiExclamationCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+              <CircleWarning2 className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
               <div>
                 <h4 className="text-sm font-medium text-red-800 mb-1">
                   This action cannot be undone

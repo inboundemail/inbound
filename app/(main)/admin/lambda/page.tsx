@@ -9,7 +9,17 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { HiCode, HiRefresh, HiPause, HiPlay, HiDownload, HiSearch, HiViewList, HiViewGrid, HiChevronDown, HiChevronRight } from 'react-icons/hi'
+// Import Nucleo icons
+import Code2 from '@/components/icons/code-2'
+import Refresh2 from '@/components/icons/refresh-2'
+import MediaPause from '@/components/icons/media-pause'
+import CirclePlay from '@/components/icons/circle-play'
+import CloudDownload from '@/components/icons/cloud-download'
+import Magnifier2 from '@/components/icons/magnifier-2'
+import BulletList from '@/components/icons/bullet-list'
+import Grid2 from '@/components/icons/grid-2'
+import ChevronDown from '@/components/icons/chevron-down'
+import ChevronRight from '@/components/icons/chevron-right'
 import { toast } from 'sonner'
 import { 
   getLambdaFunctionInfo, 
@@ -437,7 +447,7 @@ export default function LambdaPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-              <HiCode className="h-8 w-8" />
+              <Code2 width="32" height="32" />
               Lambda Monitoring
             </h1>
           </div>
@@ -451,10 +461,10 @@ export default function LambdaPage() {
             <p className="text-muted-foreground mb-4">
               {error || 'Unable to connect to AWS services. Please check your AWS credentials and configuration.'}
             </p>
-            <Button onClick={checkConnection}>
-              <HiRefresh className="h-4 w-4 mr-2" />
-              Retry Connection
-            </Button>
+                          <Button onClick={checkConnection}>
+                <Refresh2 width="16" height="16" className="mr-2" />
+                Retry Connection
+              </Button>
           </CardContent>
         </Card>
       </div>
@@ -467,8 +477,8 @@ export default function LambdaPage() {
       <div className="flex items-center justify-between flex-shrink-0">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <HiCode className="h-8 w-8" />
-            Lambda Monitoring
+                          <Code2 width="32" height="32" />
+              Lambda Monitoring
           </h1>
         </div>
         <div className="flex items-center gap-2">
@@ -485,22 +495,22 @@ export default function LambdaPage() {
             onClick={toggleLiveTailing}
             className={isLiveTailing ? 'bg-green-50 border-green-200 text-green-700' : ''}
           >
-            {isLiveTailing ? (
-              <>
-                <HiPause className="h-4 w-4 mr-2" />
-                Live Streaming
-              </>
-            ) : (
-              <>
-                <HiPlay className="h-4 w-4 mr-2" />
-                Start Live Stream
-              </>
-            )}
+                          {isLiveTailing ? (
+                <>
+                  <MediaPause width="16" height="16" className="mr-2" />
+                  Live Streaming
+                </>
+              ) : (
+                <>
+                  <CirclePlay width="16" height="16" className="mr-2" />
+                  Start Live Stream
+                </>
+              )}
           </Button>
-          <Button variant="secondary" onClick={loadAllData} disabled={isLoading}>
-            <HiRefresh className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+                      <Button variant="secondary" onClick={loadAllData} disabled={isLoading}>
+              <Refresh2 width="16" height="16" className="mr-2" />
+              Refresh
+            </Button>
         </div>
       </div>
 
@@ -549,8 +559,8 @@ export default function LambdaPage() {
                   onClick={() => setGroupedMode(!groupedMode)}
                   className="flex items-center gap-1"
                 >
-                  {groupedMode ? <HiViewList className="h-4 w-4" /> : <HiViewGrid className="h-4 w-4" />}
-                  {groupedMode ? 'Grouped' : 'Individual'}
+                                      {groupedMode ? <BulletList width="16" height="16" /> : <Grid2 width="16" height="16" />}
+                    {groupedMode ? 'Grouped' : 'Individual'}
                 </Button>
               </div>
             </div>
@@ -562,11 +572,11 @@ export default function LambdaPage() {
                   </span>
                   <button onClick={clearFilter} className="text-blue-600 hover:text-blue-800">×</button>
                 </div>
-              )}
-              <div className="relative">
-                <HiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                <Input
-                  placeholder={activeFilter.type ? "Search filtered logs..." : "Search logs..."}
+                              )}
+                <div className="relative">
+                  <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder={activeFilter.type ? "Search filtered logs..." : "Search logs..."}
                   value={logSearchTerm}
                   onChange={(e) => setLogSearchTerm(e.target.value)}
                   className="pl-10 w-48"
@@ -584,10 +594,10 @@ export default function LambdaPage() {
                   <SelectItem value="720">Last 12 hours</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="secondary" onClick={downloadLogs}>
-                <HiDownload className="h-4 w-4 mr-2" />
-                Download
-              </Button>
+                              <Button variant="secondary" onClick={downloadLogs}>
+                  <CloudDownload width="16" height="16" className="mr-2" />
+                  Download
+                </Button>
             </div>
           </div>
           
@@ -684,10 +694,10 @@ export default function LambdaPage() {
                                   className="flex items-center gap-1 cursor-pointer"
                                   onClick={() => toggleRequestExpansion(group.requestId)}
                                 >
-                                  {expandedRequests.has(group.requestId) ? 
-                                    <HiChevronDown className="h-3 w-3" /> : 
-                                    <HiChevronRight className="h-3 w-3" />
-                                  }
+                                                                      {expandedRequests.has(group.requestId) ? 
+                                      <ChevronDown width="12" height="12" /> : 
+                                      <ChevronRight width="12" height="12" />
+                                    }
                                   <span className="text-[9px] text-muted-foreground whitespace-nowrap font-mono opacity-60">
                                     {new Date(group.startTime).toLocaleTimeString()}
                                   </span>
@@ -989,11 +999,11 @@ export default function LambdaPage() {
               <div className="text-sm text-muted-foreground">
                 {selectedLog && formatTimestamp(selectedLog.timestamp)}
               </div>
-            </div>
-            <div className="relative">
-              <HiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                placeholder="Search in log..."
+                          </div>
+              <div className="relative">
+                <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search in log..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"

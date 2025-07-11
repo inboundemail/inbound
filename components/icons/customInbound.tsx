@@ -1,5 +1,4 @@
 import React from 'react';
-import { IconType } from 'react-icons';
 
 interface CustomInboundIconProps {
   /** Size of the icon container in pixels */
@@ -7,7 +6,7 @@ interface CustomInboundIconProps {
   /** Background color of the rounded container */
   backgroundColor?: string;
   /** React icon component to display (optional if using text) */
-  Icon?: IconType;
+  Icon?: React.ComponentType<{ width: string | number; height: string | number; className?: string; style?: React.CSSProperties }>;
   /** Text to display (1-2 letters, optional if using Icon) */
   text?: string;
   /** Size of the inner icon relative to container (0-1) */
@@ -48,9 +47,10 @@ export const CustomInboundIcon: React.FC<CustomInboundIconProps> = ({
       }}
     >
       {Icon ? (
-        // Render icon directly without SVG wrapper
+        // Render icon with Nucleo-compatible props
         <Icon
-          size={iconSize}
+          width={iconSize}
+          height={iconSize}
           style={{ 
             color: iconColor,
             filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.1))'

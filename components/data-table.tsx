@@ -35,21 +35,18 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table"
-import {
-  CheckCircle2Icon,
-  CheckCircleIcon,
-  ChevronDownIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  ChevronsLeftIcon,
-  ChevronsRightIcon,
-  ColumnsIcon,
-  GripVerticalIcon,
-  LoaderIcon,
-  MoreVerticalIcon,
-  PlusIcon,
-  TrendingUpIcon,
-} from "lucide-react"
+import CircleCheck from "@/components/icons/circle-check"
+import ChevronDown from "@/components/icons/chevron-down"
+import ChevronLeft from "@/components/icons/chevron-left"
+import ChevronRight from "@/components/icons/chevron-right"
+import DoubleChevronLeft from "@/components/icons/double-chevron-left"
+import DoubleChevronRight from "@/components/icons/double-chevron-right"
+import Grid2 from "@/components/icons/grid-2"
+import GripDotsVertical from "@/components/icons/grip-dots-vertical"
+import Loader from "@/components/icons/loader"
+import DotsVertical from "@/components/icons/dots-vertical"
+import CirclePlus from "@/components/icons/circle-plus"
+import ChartTrendUp from "@/components/icons/chart-trend-up"
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts"
 import { toast } from "sonner"
 import { z } from "zod"
@@ -131,7 +128,7 @@ function DragHandle({ id }: { id: number }) {
       size="icon"
       className="size-7 text-muted-foreground hover:bg-transparent"
     >
-      <GripVerticalIcon className="size-3 text-muted-foreground" />
+      <GripDotsVertical width="12" height="12" className="text-muted-foreground" />
       <span className="sr-only">Drag to reorder</span>
     </Button>
   )
@@ -197,9 +194,9 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
         className="flex gap-1 px-1.5 text-muted-foreground [&_svg]:size-3"
       >
         {row.original.status === "Done" ? (
-          <CheckCircle2Icon className="text-green-500 dark:text-green-400" />
+          <CircleCheck width="12" height="12" className="text-green-500 dark:text-green-400" />
         ) : (
-          <LoaderIcon />
+          <Loader width="12" height="12" />
         )}
         {row.original.status}
       </Badge>
@@ -298,7 +295,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
             className="flex size-8 text-muted-foreground data-[state=open]:bg-muted"
             size="icon"
           >
-            <MoreVerticalIcon />
+            <DotsVertical width="16" height="16" />
             <span className="sr-only">Open menu</span>
           </Button>
         </DropdownMenuTrigger>
@@ -453,10 +450,10 @@ export function DataTable({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="secondary" size="sm">
-                <ColumnsIcon />
+                <Grid2 width="16" height="16" />
                 <span className="hidden lg:inline">Customize Columns</span>
                 <span className="lg:hidden">Columns</span>
-                <ChevronDownIcon />
+                <ChevronDown width="16" height="16" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -484,7 +481,7 @@ export function DataTable({
             </DropdownMenuContent>
           </DropdownMenu>
           <Button variant="secondary" size="sm">
-            <PlusIcon />
+            <CirclePlus width="16" height="16" />
             <span className="hidden lg:inline">Add Section</span>
           </Button>
         </div>
@@ -586,7 +583,7 @@ export function DataTable({
                 disabled={!table.getCanPreviousPage()}
               >
                 <span className="sr-only">Go to first page</span>
-                <ChevronsLeftIcon />
+                <DoubleChevronLeft width="16" height="16" />
               </Button>
               <Button
                 variant="secondary"
@@ -596,7 +593,7 @@ export function DataTable({
                 disabled={!table.getCanPreviousPage()}
               >
                 <span className="sr-only">Go to previous page</span>
-                <ChevronLeftIcon />
+                <ChevronLeft width="16" height="16" />
               </Button>
               <Button
                 variant="secondary"
@@ -606,7 +603,7 @@ export function DataTable({
                 disabled={!table.getCanNextPage()}
               >
                 <span className="sr-only">Go to next page</span>
-                <ChevronRightIcon />
+                <ChevronRight width="16" height="16" />
               </Button>
               <Button
                 variant="secondary"
@@ -616,7 +613,7 @@ export function DataTable({
                 disabled={!table.getCanNextPage()}
               >
                 <span className="sr-only">Go to last page</span>
-                <ChevronsRightIcon />
+                <DoubleChevronRight width="16" height="16" />
               </Button>
             </div>
           </div>
@@ -725,7 +722,7 @@ function TableCellViewer({ item }: { item: z.infer<typeof schema> }) {
               <div className="grid gap-2">
                 <div className="flex gap-2 font-medium leading-none">
                   Trending up by 5.2% this month{" "}
-                  <TrendingUpIcon className="size-4" />
+                  <ChartTrendUp width="16" height="16" />
                 </div>
                 <div className="text-muted-foreground">
                   Showing total visitors for the last 6 months. This is just

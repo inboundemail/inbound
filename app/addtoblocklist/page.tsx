@@ -9,7 +9,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { blockEmailAction } from '@/app/actions/blocking'
-import { HiShieldCheck, HiMail, HiCheck, HiX } from 'react-icons/hi'
+import ShieldCheck from '@/components/icons/shield-check'
+import Envelope2 from '@/components/icons/envelope-2'
+import Check2 from '@/components/icons/check-2'
+import TabClose from '@/components/icons/tab-close'
 
 function AddToBlocklistForm() {
   const searchParams = useSearchParams()
@@ -60,7 +63,7 @@ function AddToBlocklistForm() {
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <div className="bg-blue-100 p-3 rounded-full">
-              <HiShieldCheck className="h-8 w-8 text-blue-600" />
+              <ShieldCheck className="h-8 w-8 text-blue-600" />
             </div>
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Block Email Address</h1>
@@ -72,7 +75,7 @@ function AddToBlocklistForm() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <HiMail className="h-5 w-5" />
+              <Envelope2 className="h-5 w-5" />
               Email Blocking
             </CardTitle>
             <CardDescription>
@@ -84,9 +87,9 @@ function AddToBlocklistForm() {
               <Alert className={`mb-6 ${result.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
                 <div className="flex items-center gap-2">
                   {result.success ? (
-                    <HiCheck className="h-4 w-4 text-green-600" />
+                    <Check2 className="h-4 w-4 text-green-600" />
                   ) : (
-                    <HiX className="h-4 w-4 text-red-600" />
+                    <TabClose className="h-4 w-4 text-red-600" />
                   )}
                   <AlertDescription className={result.success ? 'text-green-800' : 'text-red-800'}>
                     {result.success ? result.message : result.error}
@@ -171,7 +174,7 @@ export default function AddToBlocklistPage() {
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
               <div className="bg-blue-100 p-3 rounded-full">
-                <HiShieldCheck className="h-8 w-8 text-blue-600" />
+                <ShieldCheck className="h-8 w-8 text-blue-600" />
               </div>
             </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Block Email Address</h1>

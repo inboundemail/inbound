@@ -6,7 +6,14 @@ import { Endpoint } from '@/features/endpoints/types'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { HiPlay, HiCheckCircle, HiX, HiClock, HiExclamationCircle, HiLightningBolt, HiMail, HiUserGroup } from 'react-icons/hi'
+import CirclePlay from '@/components/icons/circle-play'
+import CircleCheck from '@/components/icons/circle-check'
+import TabClose from '@/components/icons/tab-close'
+import Clock2 from '@/components/icons/clock-2'
+import CircleWarning2 from '@/components/icons/circle-warning-2'
+import BoltLightning from '@/components/icons/bolt-lightning'
+import Envelope2 from '@/components/icons/envelope-2'
+import UserGroup from '@/components/icons/user-group'
 import { toast } from 'sonner'
 
 interface TestResult {
@@ -86,13 +93,13 @@ export function TestEndpointDialog({ open, onOpenChange, endpoint }: TestEndpoin
   const getEndpointIcon = () => {
     switch (endpoint?.type) {
       case 'webhook':
-        return HiLightningBolt
+        return BoltLightning
       case 'email':
-        return HiMail
+        return Envelope2
       case 'email_group':
-        return HiUserGroup
+        return UserGroup
       default:
-        return HiPlay
+        return CirclePlay
     }
   }
 
@@ -154,7 +161,7 @@ export function TestEndpointDialog({ open, onOpenChange, endpoint }: TestEndpoin
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100">
-              <HiPlay className="h-4 w-4 text-blue-600" />
+              <CirclePlay width="16" height="16" className="text-blue-600" />
             </div>
             Test {getEndpointTypeLabel()}
           </DialogTitle>
@@ -163,7 +170,7 @@ export function TestEndpointDialog({ open, onOpenChange, endpoint }: TestEndpoin
         <div className="space-y-4">
           <div className="bg-gray-50 rounded-lg p-4 border">
             <div className="flex items-center gap-2 mb-2">
-              <EndpointIcon className="h-4 w-4 text-gray-500" />
+              <EndpointIcon width="16" height="16" className="text-gray-500" />
               <h4 className="font-medium text-gray-900">{endpoint.name}</h4>
               <Badge variant="secondary" className="text-xs">
                 {getEndpointTypeLabel()}
@@ -188,7 +195,7 @@ export function TestEndpointDialog({ open, onOpenChange, endpoint }: TestEndpoin
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <HiExclamationCircle className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+              <CircleWarning2 width="20" height="20" className="text-blue-500 mt-0.5 flex-shrink-0" />
               <div>
                 <h4 className="text-sm font-medium text-blue-800 mb-1">
                   Test {getEndpointTypeLabel()}
@@ -203,7 +210,7 @@ export function TestEndpointDialog({ open, onOpenChange, endpoint }: TestEndpoin
           {!endpoint.isActive && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
               <div className="flex items-start gap-3">
-                <HiExclamationCircle className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
+                <CircleWarning2 width="20" height="20" className="text-amber-500 mt-0.5 flex-shrink-0" />
                 <div>
                   <h4 className="text-sm font-medium text-amber-800 mb-1">
                     Endpoint Disabled
@@ -224,9 +231,9 @@ export function TestEndpointDialog({ open, onOpenChange, endpoint }: TestEndpoin
             }`}>
               <div className="flex items-start gap-3">
                 {testResult.success ? (
-                  <HiCheckCircle className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
+                  <CircleCheck width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
                 ) : (
-                  <HiX className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+                  <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
                 )}
                 <div className="flex-1">
                   <h4 className={`text-sm font-medium mb-1 ${
@@ -283,12 +290,12 @@ export function TestEndpointDialog({ open, onOpenChange, endpoint }: TestEndpoin
             >
               {testEndpointMutation.isPending ? (
                 <>
-                  <HiClock className="h-4 w-4 mr-2 animate-spin" />
+                  <Clock2 width="16" height="16" className="mr-2 animate-spin" />
                   Testing...
                 </>
               ) : (
                 <>
-                  <HiPlay className="h-4 w-4 mr-2" />
+                  <CirclePlay width="16" height="16" className="mr-2" />
                   Send Test
                 </>
               )}

@@ -11,7 +11,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { HiExclamationCircle } from 'react-icons/hi'
+import CircleWarning2 from '@/components/icons/circle-warning-2'
 import { toast } from 'sonner'
 
 interface DeleteWebhookDialogProps {
@@ -63,7 +63,7 @@ export function DeleteWebhookDialog({ open, onOpenChange, webhook }: DeleteWebho
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-red-100">
-              <HiExclamationCircle className="h-4 w-4 text-red-600" />
+              <CircleWarning2 width="16" height="16" className="text-red-600" />
             </div>
             Delete Webhook
           </DialogTitle>
@@ -72,7 +72,7 @@ export function DeleteWebhookDialog({ open, onOpenChange, webhook }: DeleteWebho
         <div className="space-y-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <HiExclamationCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+              <CircleWarning2 width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
               <div>
                 <h4 className="text-sm font-medium text-red-800 mb-1">
                   This action cannot be undone

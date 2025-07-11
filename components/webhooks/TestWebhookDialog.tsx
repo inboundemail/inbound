@@ -12,7 +12,11 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { HiPlay, HiCheckCircle, HiX, HiClock, HiExclamationCircle } from 'react-icons/hi'
+import CirclePlay from '@/components/icons/circle-play'
+import CircleCheck from '@/components/icons/circle-check'
+import TabClose from '@/components/icons/tab-close'
+import Clock2 from '@/components/icons/clock-2'
+import CircleWarning2 from '@/components/icons/circle-warning-2'
 import { toast } from 'sonner'
 
 interface TestResult extends WebhookTestResult {
@@ -84,9 +88,9 @@ export function TestWebhookDialog({ open, onOpenChange, webhook }: TestWebhookDi
 
   const getStatusIcon = (result: TestResult) => {
     if (result.success) {
-      return <HiCheckCircle className="h-4 w-4 text-green-600" />
+      return <CircleCheck width="16" height="16" className="text-green-600" />
     } else {
-      return <HiX className="h-4 w-4 text-red-600" />
+      return <TabClose width="16" height="16" className="text-red-600" />
     }
   }
 
@@ -119,7 +123,7 @@ export function TestWebhookDialog({ open, onOpenChange, webhook }: TestWebhookDi
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100">
-              <HiPlay className="h-4 w-4 text-blue-600" />
+              <CirclePlay width="16" height="16" className="text-blue-600" />
             </div>
             Test Webhook
           </DialogTitle>
@@ -136,7 +140,7 @@ export function TestWebhookDialog({ open, onOpenChange, webhook }: TestWebhookDi
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <HiExclamationCircle className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+              <CircleWarning2 width="20" height="20" className="text-blue-500 mt-0.5 flex-shrink-0" />
               <div>
                 <h4 className="text-sm font-medium text-blue-800 mb-1">
                   Test Delivery
@@ -295,12 +299,12 @@ export function TestWebhookDialog({ open, onOpenChange, webhook }: TestWebhookDi
             >
               {testWebhookMutation.isPending ? (
                 <>
-                  <HiClock className="h-4 w-4 mr-2 animate-spin" />
+                  <Clock2 width="16" height="16" className="mr-2 animate-spin" />
                   Testing...
                 </>
               ) : (
                 <>
-                  <HiPlay className="h-4 w-4 mr-2" />
+                  <CirclePlay width="16" height="16" className="mr-2" />
                   Send Test
                 </>
               )}

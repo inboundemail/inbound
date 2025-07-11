@@ -4,7 +4,18 @@ import type React from "react"
 
 import { useState, useEffect, useMemo, type FormEvent } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Globe2, ListChecks, BadgeCheck, CheckCircle2, ArrowRight, ClipboardCopy, LoaderIcon, RefreshCw, Clock, AlertCircle, GlobeIcon, ExternalLinkIcon, Download } from "lucide-react"
+import Globe2 from "@/components/icons/globe-2"
+import CheckList from "@/components/icons/check-list"
+import BadgeCheck2 from "@/components/icons/badge-check-2"
+import CircleCheck from "@/components/icons/circle-check"
+import ArrowBoldRight from "@/components/icons/arrow-bold-right"
+import Clipboard2 from "@/components/icons/clipboard-2"
+import Loader from "@/components/icons/loader"
+import Refresh2 from "@/components/icons/refresh-2"
+import Clock2 from "@/components/icons/clock-2"
+import CircleWarning2 from "@/components/icons/circle-warning-2"
+import ExternalLink2 from "@/components/icons/external-link-2"
+import Download2 from "@/components/icons/download-2"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -24,8 +35,8 @@ interface StepConfig {
 
 const stepsConfig: StepConfig[] = [
   { id: "01", name: "Domain", description: "Domain name for your sending.", icon: Globe2 },
-  { id: "02", name: "DNS Records", description: "Add records to your DNS provider.", icon: ListChecks },
-  { id: "03", name: "Verified", description: "Your domain is ready.", icon: BadgeCheck },
+  { id: "02", name: "DNS Records", description: "Add records to your DNS provider.", icon: CheckList },
+  { id: "03", name: "Verified", description: "Your domain is ready.", icon: BadgeCheck2 },
 ]
 
 const stepVariants = {
@@ -827,7 +838,7 @@ export default function AddDomainForm({
                   {/* Arrow between steps */}
                   {index < stepsConfig.length - 1 && (
                     <div className="mx-8">
-                      <ArrowRight
+                      <ArrowBoldRight
                         className={cn("h-5 w-5 transition-colors duration-300", {
                           "text-brandPurple": completed,
                           "text-gray-400": !completed,
@@ -857,7 +868,7 @@ export default function AddDomainForm({
                 <div className="mb-10 rounded-lg bg-green-50 p-5 border border-green-200">
                   <div className="flex items-center mb-1">
                     <h2 className="text-lg font-semibold text-gray-800">{stepsConfig[0].name}</h2>
-                    <CheckCircle2 size={18} className="ml-2 text-green-600" />
+                    <CircleCheck width="18" height="18" className="ml-2 text-green-600" />
                   </div>
                   <p className="text-sm text-gray-600 mb-3">{stepsConfig[0].description}</p>
                   <div className="flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 shadow-sm">
@@ -1031,16 +1042,16 @@ export default function AddDomainForm({
                                 <span className="text-sm font-medium text-gray-500">{index + 1}</span>
                               )}
                               {status === 'processing' && (
-                                <LoaderIcon className="h-4 w-4 animate-spin text-blue-600" />
+                                <Loader width="16" height="16" className="animate-spin text-blue-600" />
                               )}
                               {status === 'success' && (
-                                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                <CircleCheck width="16" height="16" className="text-green-600" />
                               )}
                               {status === 'exists' && (
-                                <CheckCircle2 className="h-4 w-4 text-yellow-600" />
+                                <CircleCheck width="16" height="16" className="text-yellow-600" />
                               )}
                               {status === 'failed' && (
-                                <AlertCircle className="h-4 w-4 text-red-600" />
+                                <CircleWarning2 width="16" height="16" className="text-red-600" />
                               )}
                             </div>
                             <div>
@@ -1099,7 +1110,7 @@ export default function AddDomainForm({
                         className="flex-1"
                         disabled
                       >
-                        <LoaderIcon className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader width="16" height="16" className="mr-2 animate-spin" />
                         Processing Domains...
                       </Button>
                     )}
@@ -1204,7 +1215,7 @@ export default function AddDomainForm({
                         </div>
                         {isCheckingSuggestions && (
                           <div className="flex items-center mt-2 text-sm text-blue-600">
-                            <LoaderIcon className="mr-2 h-4 w-4 animate-spin" />
+                            <Loader width="16" height="16" className="mr-2 animate-spin" />
                             Checking more alternatives...
                           </div>
                         )}
@@ -1214,12 +1225,12 @@ export default function AddDomainForm({
                     <Button type="submit" variant="primary" className="mt-4 w-full md:w-auto" disabled={isLoading}>
                       {isLoading ? (
                         <>
-                          <LoaderIcon className="mr-2 h-4 w-4 animate-spin" />
+                          <Loader width="16" height="16" className="mr-2 animate-spin" />
                           Adding Domain...
                         </>
                       ) : (
                         <>
-                          Add Domain <ArrowRight size={16} className="ml-1.5" />
+                          Add Domain <ArrowBoldRight width="16" height="16" className="ml-1.5" />
                         </>
                       )}
                     </Button>
@@ -1253,7 +1264,7 @@ export default function AddDomainForm({
                       >
                         {isImporting ? (
                           <>
-                            <LoaderIcon className="mr-2 h-4 w-4 animate-spin" />
+                            <Loader width="16" height="16" className="mr-2 animate-spin" />
                             Importing...
                           </>
                         ) : (
@@ -1281,13 +1292,13 @@ export default function AddDomainForm({
                             onClick={() => window.open(getProviderDocUrl(preloadedProvider)!, '_blank')}
                             className="flex items-center gap-2 text-sm border"
                           >
-                            <GlobeIcon className="h-4 w-4" />
+                            <Globe2 width="16" height="16" />
                             <span>{preloadedProvider} Setup Guide</span>
-                            <ExternalLinkIcon className="h-3 w-3" />
+                            <ExternalLink2 width="12" height="12" />
                           </Button>
                         ) : (
                           <div className="flex items-center gap-1 text-sm text-mediumText">
-                            <GlobeIcon className="h-4 w-4" />
+                            <Globe2 width="16" height="16" />
                             <span>Provider: <span className="font-medium">{preloadedProvider}</span></span>
                           </div>
                         )}
@@ -1328,18 +1339,18 @@ export default function AddDomainForm({
                         <div className="flex items-center">
                           {verificationStatus === 'pending' && (
                             <>
-                              <Clock className="h-4 w-4 text-yellow-600 mr-2" />
+                              <Clock2 width="16" height="16" className="text-yellow-600 mr-2" />
                               <span className="text-sm font-medium text-yellow-800">
                                 Verification Pending
                               </span>
                               {isRefreshing && (
-                                <LoaderIcon className="ml-2 h-4 w-4 animate-spin text-yellow-600" />
+                                <Loader width="16" height="16" className="ml-2 animate-spin text-yellow-600" />
                               )}
                             </>
                           )}
                           {verificationStatus === 'verified' && (
                             <>
-                              <CheckCircle2 className="h-4 w-4 text-green-600 mr-2" />
+                              <CircleCheck width="16" height="16" className="text-green-600 mr-2" />
                               <span className="text-sm font-medium text-green-800">
                                 Domain Verified
                               </span>
@@ -1347,7 +1358,7 @@ export default function AddDomainForm({
                           )}
                           {verificationStatus === 'failed' && (
                             <>
-                              <AlertCircle className="h-4 w-4 text-red-600 mr-2" />
+                              <CircleWarning2 width="16" height="16" className="text-red-600 mr-2" />
                               <span className="text-sm font-medium text-red-800">
                                 Verification Failed
                               </span>
@@ -1407,7 +1418,7 @@ export default function AddDomainForm({
                                 onClick={() => copyToClipboard(extractRecordName(record.name, domainName))}
                                 className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded flex-shrink-0 ml-2"
                               >
-                                <ClipboardCopy size={16} className="text-gray-600" />
+                                <Clipboard2 width="16" height="16" className="text-gray-600" />
                               </Button>
                             </div>
                           </div>
@@ -1416,7 +1427,7 @@ export default function AddDomainForm({
                               <div className="flex items-center gap-2">
                                 <span className="text-sm">{record.type}</span>
                                 {record.isVerified && (
-                                  <CheckCircle2 size={16} className="text-green-600" />
+                                  <CircleCheck width="16" height="16" className="text-green-600" />
                                 )}
                               </div>
                               <Button
@@ -1425,7 +1436,7 @@ export default function AddDomainForm({
                                 onClick={() => copyToClipboard(record.type)}
                                 className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded flex-shrink-0 ml-2"
                               >
-                                <ClipboardCopy size={16} className="text-gray-600" />
+                                <Clipboard2 width="16" height="16" className="text-gray-600" />
                               </Button>
                             </div>
                           </div>
@@ -1441,7 +1452,7 @@ export default function AddDomainForm({
                                 onClick={() => copyToClipboard(record.type === "MX" ? record.value.split(" ")[1] : record.value)}
                                 className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded flex-shrink-0 ml-2"
                               >
-                                <ClipboardCopy size={16} className="text-gray-600" />
+                                <Clipboard2 width="16" height="16" className="text-gray-600" />
                               </Button>
                             </div>
                           </div>
@@ -1455,7 +1466,7 @@ export default function AddDomainForm({
                                   onClick={() => copyToClipboard(record.type === "MX" ? record.value.split(" ")[0] : "")}
                                   className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded flex-shrink-0 ml-2"
                                 >
-                                  <ClipboardCopy size={16} className="text-gray-600" />
+                                  <Clipboard2 width="16" height="16" className="text-gray-600" />
                                 </Button>
                               )}
                             </div>
@@ -1479,7 +1490,7 @@ export default function AddDomainForm({
                       className="w-full md:w-auto"
                       disabled={isRefreshing}
                     >
-                      <RefreshCw className={cn("mr-2 h-4 w-4", { "animate-spin": isRefreshing })} />
+                      <Refresh2 width="16" height="16" className={cn("mr-2", { "animate-spin": isRefreshing })} />
                       Refresh Status
                     </Button>
                     <Button
@@ -1488,7 +1499,7 @@ export default function AddDomainForm({
                       className="w-full md:w-auto"
                       disabled={!domainName || dnsRecords.length === 0}
                     >
-                      <Download className="mr-2 h-4 w-4" />
+                      <Download2 width="16" height="16" className="mr-2" />
                       Download Zone File
                     </Button>
                   </div>
@@ -1497,7 +1508,7 @@ export default function AddDomainForm({
 
               {!showDomainSelection && !showBulkImport && currentStepIdx === 2 && (
                 <div className="text-center py-8">
-                  <BadgeCheck className="mx-auto mb-5 h-20 w-20 text-successGreen" />
+                  <BadgeCheck2 width="80" height="80" className="mx-auto mb-5 text-successGreen" />
                   <h2 className="mb-2 text-2xl font-semibold text-darkText">Domain Verified!</h2>
                   <p className="text-mediumText mb-1">
                     Your domain <span className="font-semibold text-darkText">{domainName}</span> is now ready.

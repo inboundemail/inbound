@@ -1,7 +1,8 @@
 "use client"
 
 import { Button } from '@/components/ui/button'
-import { HiDocumentText, HiDownload } from 'react-icons/hi'
+import File2 from '@/components/icons/file-2'
+import Download2 from '@/components/icons/download-2'
 import { downloadAttachment } from '@/app/actions/primary'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
 
@@ -93,7 +94,7 @@ export function EmailAttachments({ emailId, attachments }: EmailAttachmentsProps
         {validAttachments.map((attachment, index) => (
           <div key={index} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
             <CustomInboundIcon
-              Icon={HiDocumentText}
+              Icon={File2}
               backgroundColor="#6b7280"
               size={32}
               className="flex-shrink-0"
@@ -111,7 +112,7 @@ export function EmailAttachments({ emailId, attachments }: EmailAttachmentsProps
               onClick={() => handleDownloadAttachment(emailId, attachment.filename!)}
               disabled={!attachment.filename}
             >
-              <HiDownload className="h-4 w-4" />
+              <Download2 className="h-4 w-4" />
             </Button>
           </div>
         ))}

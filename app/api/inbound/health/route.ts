@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDomainOwnerByDomain, markDomainAsVerified } from '@/lib/db/domains';
-import { sendDomainVerificationNotification } from '@/lib/email-notifications';
+import { sendDomainVerificationNotification } from '@/lib/email-management/email-notifications';
 
 // Types for AWS SNS notifications
 interface SNSNotification {

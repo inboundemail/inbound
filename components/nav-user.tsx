@@ -1,15 +1,9 @@
 "use client"
 
-import {
-  BellIcon,
-  MoreVerticalIcon,
-  UserCircleIcon,
-  SettingsIcon,
-  KeyIcon,
-} from "lucide-react"
 import CreditCard2 from "@/components/icons/credit-card-2"
 import CircleLogout from "@/components/icons/circle-logout"
 import Shield2 from "@/components/icons/shield-2"
+import DotsVertical from "@/components/icons/dots-vertical"
 
 import {
   Avatar,
@@ -140,7 +134,7 @@ export function NavUser({
                   {displayPlan} Plan
                 </span>
               </div>
-              <MoreVerticalIcon className="ml-auto size-4" />
+              <DotsVertical className="ml-auto size-4" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent

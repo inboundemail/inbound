@@ -16,7 +16,9 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { HiCog, HiX, HiPlus } from 'react-icons/hi'
+import Gear2 from '@/components/icons/gear-2'
+import TabClose from '@/components/icons/tab-close'
+import CirclePlus from '@/components/icons/circle-plus'
 import { toast } from 'sonner'
 
 interface EditWebhookDialogProps {
@@ -173,7 +175,7 @@ export function EditWebhookDialog({ open, onOpenChange, webhook }: EditWebhookDi
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100">
-              <HiCog className="h-4 w-4 text-blue-600" />
+              <Gear2 width="16" height="16" className="text-blue-600" />
             </div>
             Edit Webhook
           </DialogTitle>
@@ -279,7 +281,7 @@ export function EditWebhookDialog({ open, onOpenChange, webhook }: EditWebhookDi
                 onClick={addHeader}
                 disabled={!headerKey.trim() || !headerValue.trim()}
               >
-                <HiPlus className="h-4 w-4" />
+                <CirclePlus width="16" height="16" />
               </Button>
             </div>
             
@@ -293,7 +295,7 @@ export function EditWebhookDialog({ open, onOpenChange, webhook }: EditWebhookDi
                       onClick={() => removeHeader(key)}
                       className="ml-1 hover:text-red-500"
                     >
-                      <HiX className="h-3 w-3" />
+                      <TabClose width="12" height="12" />
                     </button>
                   </Badge>
                 ))}

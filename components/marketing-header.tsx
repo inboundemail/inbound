@@ -1,5 +1,9 @@
 import { Button } from "@/components/ui/button"
-import { HiChevronDown, HiLightningBolt, HiMail, HiShieldCheck, HiCode } from "react-icons/hi"
+import ChevronDown from "@/components/icons/chevron-down"
+import BoltLightning from "@/components/icons/bolt-lightning"
+import Envelope2 from "@/components/icons/envelope-2"
+import ShieldCheck from "@/components/icons/shield-check"
+import Code2 from "@/components/icons/code-2"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,7 +59,7 @@ export default async function MarketingHeader() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-1">
                 Features
-                <HiChevronDown className="w-4 h-4" />
+                <ChevronDown className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center" className="w-80 p-2">
@@ -63,7 +67,7 @@ export default async function MarketingHeader() {
                 <a href="/email-as-webhook" className="w-full cursor-pointer p-4 rounded-lg hover:bg-blue-50 hover:border-blue-200 border border-transparent transition-all duration-200 group">
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-blue-200 transition-colors">
-                      <HiLightningBolt className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
+                      <BoltLightning className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-gray-900 text-sm group-hover:text-blue-900">Email as Webhook</div>
@@ -77,7 +81,7 @@ export default async function MarketingHeader() {
                 <a href="/improvmx-alternative" className="w-full cursor-pointer p-4 rounded-lg hover:bg-green-50 hover:border-green-200 border border-transparent transition-all duration-200 group">
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-green-200 transition-colors">
-                      <HiMail className="w-4 h-4 text-green-600 group-hover:text-green-700" />
+                      <Envelope2 className="w-4 h-4 text-green-600 group-hover:text-green-700" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-gray-900 text-sm group-hover:text-green-900">ImprovMX Alternative</div>
@@ -91,7 +95,7 @@ export default async function MarketingHeader() {
                 <a href="/addtoblocklist" className="w-full cursor-pointer p-4 rounded-lg hover:bg-red-50 hover:border-red-200 border border-transparent transition-all duration-200 group">
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-red-200 transition-colors">
-                      <HiShieldCheck className="w-4 h-4 text-red-600 group-hover:text-red-700" />
+                      <ShieldCheck className="w-4 h-4 text-red-600 group-hover:text-red-700" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-gray-900 text-sm group-hover:text-red-900">Add to Blocklist</div>
@@ -107,7 +111,7 @@ export default async function MarketingHeader() {
                 <a href="/docs" className="w-full cursor-pointer p-4 rounded-lg hover:bg-purple-50 hover:border-purple-200 border border-transparent transition-all duration-200 group">
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-purple-200 transition-colors">
-                      <HiCode className="w-4 h-4 text-purple-600 group-hover:text-purple-700" />
+                      <Code2 className="w-4 h-4 text-purple-600 group-hover:text-purple-700" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-gray-900 text-sm group-hover:text-purple-900">Documentation</div>

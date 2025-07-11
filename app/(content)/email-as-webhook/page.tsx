@@ -1,7 +1,23 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PricingTable } from "@/components/autumn/pricing-table-format"
-import { HiArrowRight, HiMail, HiGlobeAlt, HiCheckCircle, HiLightningBolt, HiArrowDown, HiCode, HiSparkles, HiCog, HiShieldCheck, HiClock, HiRefresh, HiDatabase, HiCube, HiTerminal, HiDocumentText, HiExternalLink } from "react-icons/hi"
+import ArrowBoldRight from "@/components/icons/arrow-bold-right"
+import Envelope2 from "@/components/icons/envelope-2"
+import Globe2 from "@/components/icons/globe-2"
+import CircleCheck from "@/components/icons/circle-check"
+import BoltLightning from "@/components/icons/bolt-lightning"
+import ArrowBoldDown from "@/components/icons/arrow-bold-down"
+import Code2 from "@/components/icons/code-2"
+import Star2 from "@/components/icons/star-2"
+import Gear2 from "@/components/icons/gear-2"
+import ShieldCheck from "@/components/icons/shield-check"
+import Clock2 from "@/components/icons/clock-2"
+import Refresh2 from "@/components/icons/refresh-2"
+import Database2 from "@/components/icons/database-2"
+import Cube2 from "@/components/icons/cube-2"
+import Terminal from "@/components/icons/terminal"
+import File2 from "@/components/icons/file-2"
+import ExternalLink2 from "@/components/icons/external-link-2"
 import { auth } from "@/lib/auth/auth"
 import { headers } from "next/headers"
 import CustomInboundIcon from "@/components/icons/customInbound"
@@ -71,14 +87,14 @@ export default async function EmailAsWebhookPage() {
               <CustomInboundIcon
                 className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_0.5s_forwards]"
                 backgroundColor="#1C2894"
-                Icon={HiMail}
+                Icon={Envelope2}
                 size={48}
               />
               to
               <CustomInboundIcon
                 className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_1s_forwards]"
                 backgroundColor="#6C47FF"
-                Icon={HiLightningBolt}
+                Icon={BoltLightning}
                 size={48}
               />
               <span className="text-[#6C47FF]">webhook</span>
@@ -96,15 +112,15 @@ export default async function EmailAsWebhookPage() {
               <Input type="email" placeholder="support@yourapp.com" />
               <Button variant="primary" asChild>
                 {session ? (
-                  <Link href="/add">
-                    Start Free
-                    <HiArrowRight className="ml-2 w-3 h-3" />
-                  </Link>
+                                      <Link href="/add">
+                      Start Free
+                      <ArrowBoldRight width="12" height="12" className="ml-2" />
+                    </Link>
                 ) : (
-                  <Link href="/login">
-                    Start Free
-                    <HiArrowRight className="ml-2 w-3 h-3" />
-                  </Link>
+                                      <Link href="/login">
+                      Start Free
+                      <ArrowBoldRight width="12" height="12" className="ml-2" />
+                    </Link>
                 )}
               </Button>
             </div>
@@ -119,7 +135,7 @@ export default async function EmailAsWebhookPage() {
               <div className="flex items-center gap-4 mb-6">
                 <CustomInboundIcon 
                   backgroundColor="#10b981" 
-                  Icon={HiMail} 
+                  Icon={Envelope2} 
                   size={40}
                 />
                 <div>
@@ -141,7 +157,7 @@ export default async function EmailAsWebhookPage() {
 
             {/* Arrow */}
             <div className="flex items-center justify-center py-4">
-              <HiArrowDown className="w-6 h-6 text-gray-400" />
+              <ArrowBoldDown width="24" height="24" className="text-gray-400" />
             </div>
 
             {/* Step 2: Parse & Structure */}
@@ -149,7 +165,7 @@ export default async function EmailAsWebhookPage() {
               <div className="flex items-center gap-4 mb-6">
                 <CustomInboundIcon 
                   backgroundColor="#6C47FF" 
-                  Icon={HiCog} 
+                  Icon={Gear2} 
                   size={40}
                 />
                 <div>
@@ -177,7 +193,7 @@ export default async function EmailAsWebhookPage() {
 
             {/* Arrow */}
             <div className="flex items-center justify-center py-4">
-              <HiArrowDown className="w-6 h-6 text-gray-400" />
+              <ArrowBoldDown width="24" height="24" className="text-gray-400" />
             </div>
 
             {/* Step 3: Webhook Delivery */}
@@ -185,7 +201,7 @@ export default async function EmailAsWebhookPage() {
               <div className="flex items-center gap-4 mb-6">
                 <CustomInboundIcon 
                   backgroundColor="#3b82f6" 
-                  Icon={HiLightningBolt} 
+                  Icon={BoltLightning} 
                   size={40}
                 />
                 <div>
@@ -221,7 +237,7 @@ export default async function EmailAsWebhookPage() {
                 <div className="flex items-center gap-3 mb-4">
                   <CustomInboundIcon 
                     backgroundColor="#6C47FF" 
-                    Icon={HiCode} 
+                    Icon={Code2} 
                     size={40}
                   />
                   <h3 className="text-xl font-bold text-gray-900">TypeScript SDK</h3>
@@ -240,7 +256,7 @@ export default async function EmailAsWebhookPage() {
                 <div className="flex items-center gap-3 mb-4">
                   <CustomInboundIcon 
                     backgroundColor="#3b82f6" 
-                    Icon={HiGlobeAlt} 
+                    Icon={Globe2} 
                     size={40}
                   />
                   <h3 className="text-xl font-bold text-gray-900">REST API</h3>
@@ -260,7 +276,7 @@ export default async function EmailAsWebhookPage() {
                 <div className="flex items-center gap-3 mb-4">
                   <CustomInboundIcon 
                     backgroundColor="#10b981" 
-                    Icon={HiDatabase} 
+                    Icon={Database2} 
                     size={40}
                   />
                   <h3 className="text-xl font-bold text-gray-900">Structured Data</h3>
@@ -281,7 +297,7 @@ export default async function EmailAsWebhookPage() {
                 <div className="flex items-center gap-3 mb-4">
                   <CustomInboundIcon 
                     backgroundColor="#f97316" 
-                    Icon={HiRefresh} 
+                    Icon={Refresh2} 
                     size={40}
                   />
                   <h3 className="text-xl font-bold text-gray-900">Reliable Delivery</h3>
@@ -290,7 +306,7 @@ export default async function EmailAsWebhookPage() {
                   Automatic retries, exponential backoff, and delivery tracking.
                 </p>
                 <div className="flex items-center gap-2">
-                  <HiCheckCircle className="w-4 h-4 text-green-500" />
+                  <CircleCheck width="16" height="16" className="text-green-500" />
                   <span className="text-sm text-gray-600">99.9% delivery rate</span>
                 </div>
               </div>
@@ -300,7 +316,7 @@ export default async function EmailAsWebhookPage() {
                 <div className="flex items-center gap-3 mb-4">
                   <CustomInboundIcon 
                     backgroundColor="#dc2626" 
-                    Icon={HiShieldCheck} 
+                    Icon={ShieldCheck} 
                     size={40}
                   />
                   <h3 className="text-xl font-bold text-gray-900">Secure</h3>
@@ -309,7 +325,7 @@ export default async function EmailAsWebhookPage() {
                   HMAC signatures, HTTPS-only, and spam filtering included.
                 </p>
                 <div className="flex items-center gap-2">
-                  <HiCheckCircle className="w-4 h-4 text-green-500" />
+                  <CircleCheck width="16" height="16" className="text-green-500" />
                   <span className="text-sm text-gray-600">SOC 2 compliant</span>
                 </div>
               </div>
@@ -319,7 +335,7 @@ export default async function EmailAsWebhookPage() {
                 <div className="flex items-center gap-3 mb-4">
                   <CustomInboundIcon 
                     backgroundColor="#8b5cf6" 
-                    Icon={HiClock} 
+                    Icon={Clock2} 
                     size={40}
                   />
                   <h3 className="text-xl font-bold text-gray-900">Real-time</h3>
@@ -328,7 +344,7 @@ export default async function EmailAsWebhookPage() {
                   Webhooks delivered within seconds of email receipt.
                 </p>
                                  <div className="flex items-center gap-2">
-                   <HiCheckCircle className="w-4 h-4 text-green-500" />
+                   <CircleCheck width="16" height="16" className="text-green-500" />
                    <span className="text-sm text-gray-600">{'<2s'} average latency</span>
                  </div>
               </div>
@@ -416,16 +432,16 @@ export default async function EmailAsWebhookPage() {
             <div className="mt-12 text-center">
               <Button variant="secondary" asChild className="mr-4">
                 <a href="/docs" className="flex items-center gap-2">
-                  <HiDocumentText className="w-4 h-4" />
+                  <File2 width="16" height="16" />
                   View Full Documentation
-                  <HiExternalLink className="w-3 h-3" />
+                  <ExternalLink2 width="12" height="12" />
                 </a>
               </Button>
               <Button variant="secondary" asChild>
                 <a href="https://github.com/R44VC0RP/inbound" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
-                  <HiCode className="w-4 h-4" />
+                  <Code2 width="16" height="16" />
                   View on GitHub
-                  <HiExternalLink className="w-3 h-3" />
+                  <ExternalLink2 width="12" height="12" />
                 </a>
               </Button>
             </div>
@@ -438,7 +454,7 @@ export default async function EmailAsWebhookPage() {
               <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
                 <CustomInboundIcon 
                   backgroundColor="#3b82f6" 
-                  Icon={HiSparkles} 
+                  Icon={Star2} 
                   size={40}
                   className="mb-4"
                 />
@@ -452,7 +468,7 @@ export default async function EmailAsWebhookPage() {
               <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
                 <CustomInboundIcon 
                   backgroundColor="#10b981" 
-                  Icon={HiCog} 
+                  Icon={Gear2} 
                   size={40}
                   className="mb-4"
                 />
@@ -466,7 +482,7 @@ export default async function EmailAsWebhookPage() {
               <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
                 <CustomInboundIcon 
                   backgroundColor="#f97316" 
-                  Icon={HiMail} 
+                  Icon={Envelope2} 
                   size={40}
                   className="mb-4"
                 />
@@ -480,7 +496,7 @@ export default async function EmailAsWebhookPage() {
               <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
                 <CustomInboundIcon 
                   backgroundColor="#8b5cf6" 
-                  Icon={HiTerminal} 
+                  Icon={Terminal} 
                   size={40}
                   className="mb-4"
                 />

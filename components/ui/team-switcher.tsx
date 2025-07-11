@@ -1,6 +1,7 @@
 "use client"
 import * as React from "react"
-import { ChevronsUpDown, Plus } from "lucide-react"
+import DoubleChevronDown from "@/components/icons/double-chevron-down"
+import CirclePlus from "@/components/icons/circle-plus"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,7 +72,7 @@ export function TeamSwitcher({
                 </span>
                 <span className="truncate text-xs">{activeTeam.plan}</span>
               </div>
-              <ChevronsUpDown className="ml-auto group-data-[collapsible=icon]:hidden" />
+              <DoubleChevronDown className="ml-auto group-data-[collapsible=icon]:hidden" width="16" height="16" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -99,7 +100,7 @@ export function TeamSwitcher({
             <DropdownMenuSeparator />
             <DropdownMenuItem className="gap-2 p-2 hover:!bg-gray-100 hover:!text-gray-900">
               <div className="flex size-6 items-center justify-center rounded-md border bg-background">
-                <Plus className="size-4" />
+                <CirclePlus width="16" height="16" />
               </div>
               <div className="font-medium text-muted-foreground">Add team</div>
             </DropdownMenuItem>

@@ -13,15 +13,13 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { 
-  CopyIcon, 
-  CheckIcon, 
-  FileIcon,
-  ShieldCheckIcon,
-  ShieldXIcon,
-  ShieldAlertIcon,
-  ClockIcon
-} from 'lucide-react'
+import Clipboard2 from "@/components/icons/clipboard-2"
+import CircleCheck from "@/components/icons/circle-check"
+import File2 from "@/components/icons/file-2"
+import ShieldCheck from "@/components/icons/shield-check"
+import Ban2 from "@/components/icons/ban-2"
+import ShieldAlert from "@/components/icons/shield-alert"
+import Clock2 from "@/components/icons/clock-2"
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { useEmailQuery, useMarkEmailAsReadMutation, type EmailDetails } from '@/features/emails/hooks'
@@ -75,21 +73,21 @@ export function EmailDetailSheet({ emailId, isOpen, onClose }: EmailDetailSheetP
     if (isPass) {
       return (
         <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-200 transition-colors">
-          <ShieldCheckIcon className="h-3 w-3 mr-1" />
+          <ShieldCheck width="12" height="12" className="mr-1" />
           {type.toUpperCase()} Pass
         </Badge>
       )
     } else if (isFail) {
       return (
         <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-200 transition-colors">
-          <ShieldXIcon className="h-3 w-3 mr-1" />
+          <Ban2 width="12" height="12" className="mr-1" />
           {type.toUpperCase()} Fail
         </Badge>
       )
     } else {
       return (
         <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200 transition-colors">
-          <ShieldAlertIcon className="h-3 w-3 mr-1" />
+          <ShieldAlert width="12" height="12" className="mr-1" />
           {type.toUpperCase()} {result}
         </Badge>
       )
@@ -191,9 +189,9 @@ export function EmailDetailSheet({ emailId, isOpen, onClose }: EmailDetailSheetP
                         onClick={() => copyToClipboard(emailDetails.emailContent.htmlBody!, 'html')}
                       >
                         {copiedItems.html ? (
-                          <CheckIcon className="h-4 w-4 mr-2" />
+                          <CircleCheck width="16" height="16" className="mr-2" />
                         ) : (
-                          <CopyIcon className="h-4 w-4 mr-2" />
+                          <Clipboard2 width="16" height="16" className="mr-2" />
                         )}
                         Copy HTML
                       </Button>
@@ -223,9 +221,9 @@ export function EmailDetailSheet({ emailId, isOpen, onClose }: EmailDetailSheetP
                         onClick={() => copyToClipboard(emailDetails.emailContent.textBody!, 'text')}
                       >
                         {copiedItems.text ? (
-                          <CheckIcon className="h-4 w-4 mr-2" />
+                          <CircleCheck width="16" height="16" className="mr-2" />
                         ) : (
-                          <CopyIcon className="h-4 w-4 mr-2" />
+                          <Clipboard2 width="16" height="16" className="mr-2" />
                         )}
                         Copy Text
                       </Button>
@@ -253,9 +251,9 @@ export function EmailDetailSheet({ emailId, isOpen, onClose }: EmailDetailSheetP
                       onClick={() => copyToClipboard(JSON.stringify(emailDetails.emailContent.headers, null, 2), 'headers')}
                     >
                       {copiedItems.headers ? (
-                        <CheckIcon className="h-4 w-4 mr-2" />
+                        <CircleCheck width="16" height="16" className="mr-2" />
                       ) : (
-                        <CopyIcon className="h-4 w-4 mr-2" />
+                        <Clipboard2 width="16" height="16" className="mr-2" />
                       )}
                       Copy Headers
                     </Button>
@@ -283,9 +281,9 @@ export function EmailDetailSheet({ emailId, isOpen, onClose }: EmailDetailSheetP
                       onClick={() => copyToClipboard(emailDetails.emailContent.rawContent || '', 'raw')}
                     >
                       {copiedItems.raw ? (
-                        <CheckIcon className="h-4 w-4 mr-2" />
+                        <CircleCheck width="16" height="16" className="mr-2" />
                       ) : (
-                        <CopyIcon className="h-4 w-4 mr-2" />
+                        <Clipboard2 width="16" height="16" className="mr-2" />
                       )}
                       Copy Raw
                     </Button>

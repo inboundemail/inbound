@@ -1,7 +1,13 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { HiChevronDown, HiLightningBolt, HiMail, HiShieldCheck, HiCode, HiCube, HiDocumentText } from "react-icons/hi"
+import ChevronDown from "@/components/icons/chevron-down"
+import BoltLightning from "@/components/icons/bolt-lightning"
+import Envelope2 from "@/components/icons/envelope-2"
+import ShieldCheck from "@/components/icons/shield-check"
+import Code2 from "@/components/icons/code-2"
+import Cube2 from "@/components/icons/cube-2"
+import File2 from "@/components/icons/file-2"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,7 +64,7 @@ export default function SiteHeader() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-1">
                 Features
-                <HiChevronDown className="w-4 h-4" />
+                <ChevronDown className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center" className="w-[450px]">
@@ -68,25 +74,25 @@ export default function SiteHeader() {
                 <div className="flex flex-col gap-1">
                   <div>
                     <a href="/api" className="flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-gray-100 rounded-md transition-colors">
-                      <HiCode className="w-4 h-4" />
+                      <Code2 className="w-4 h-4" />
                       API
                     </a>
                   </div>
                   <div>
                     <a href="/sdk" className="flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-gray-100 rounded-md transition-colors">
-                      <HiCube className="w-4 h-4" />
+                      <Cube2 className="w-4 h-4" />
                       SDK
                     </a>
                   </div>
                   <div>
                     <a href="/mail" className="flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-gray-100 rounded-md transition-colors">
-                      <HiMail className="w-4 h-4" />
+                      <Envelope2 className="w-4 h-4" />
                       Routing
                     </a>
                   </div>
                   <div>
                     <a href="/docs" className="flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-gray-100 rounded-md transition-colors">
-                      <HiDocumentText className="w-4 h-4" />
+                      <File2 className="w-4 h-4" />
                       Docs
                     </a>
                   </div>
@@ -98,7 +104,7 @@ export default function SiteHeader() {
                   <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_40%,rgba(255,255,255,0.2)_50%,transparent_60%)] pointer-events-none"></div>
                   <div className="relative flex flex-col items-start gap-3">
                     <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <HiLightningBolt className="w-5 h-5 text-white" />
+                      <BoltLightning className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-gray-900 text-sm mb-1">Email Webhooks</div>
@@ -113,7 +119,7 @@ export default function SiteHeader() {
                   <div className="absolute inset-0 bg-[linear-gradient(135deg,transparent_40%,rgba(255,255,255,0.3)_50%,transparent_60%)] pointer-events-none"></div>
                   <div className="relative flex flex-col items-start gap-3">
                     <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <HiMail className="w-5 h-5 text-white" />
+                      <Envelope2 className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-gray-900 text-sm mb-1">Email Routing</div>
