@@ -1524,6 +1524,8 @@ export async function getEmailsList(options?: {
                 date: structuredEmails.date,
                 fromData: structuredEmails.fromData,
                 toData: structuredEmails.toData,
+                textBody: structuredEmails.textBody,
+                htmlBody: structuredEmails.htmlBody,
                 attachments: structuredEmails.attachments,
                 parseSuccess: structuredEmails.parseSuccess,
                 parseError: structuredEmails.parseError,
@@ -1586,6 +1588,14 @@ export async function getEmailsList(options?: {
             const recipient = parsedToData?.addresses?.[0]?.address || 'unknown'
             const domain = recipient.split('@')[1] || ''
 
+            // Create preview from text or HTML content
+            let preview = 'No preview available'
+            if (email.textBody) {
+                preview = email.textBody.slice(0, 150).replace(/\n/g, ' ').trim()
+            } else if (email.htmlBody) {
+                preview = email.htmlBody.replace(/<[^>]*>/g, '').slice(0, 150).replace(/\n/g, ' ').trim()
+            }
+
             return {
                 id: email.id,
                 emailId: email.emailId,
@@ -1602,6 +1612,9 @@ export async function getEmailsList(options?: {
                     fromData: parsedFromData,
                     toData: parsedToData,
                     subject: email.subject,
+                    textContent: email.textBody || null,
+                    htmlContent: email.htmlBody || null,
+                    preview: preview,
                     attachmentCount: parsedAttachments.length,
                     hasAttachments: parsedAttachments.length > 0,
                     emailDate: email.date?.toISOString(),

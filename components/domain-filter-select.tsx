@@ -29,7 +29,7 @@ export function DomainFilterSelect({ domains, currentDomain }: DomainFilterSelec
 
   return (
     <Select value={currentDomain} onValueChange={handleDomainChange}>
-      <SelectTrigger className="w-40 rounded-xl">
+      <SelectTrigger className="w-40 h-9 rounded-xl">
         <SelectValue placeholder="All Domains" />
       </SelectTrigger>
       <SelectContent className="rounded-xl">
