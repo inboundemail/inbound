@@ -2,7 +2,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { formatDistanceToNow } from 'date-fns'
 import { getEmailsList } from '@/app/actions/primary'
 import Link from 'next/link'
 import Check2 from '@/components/icons/check-2'
@@ -10,10 +9,11 @@ import AlarmClock from '@/components/icons/alarm-clock'
 import Magnifier2 from '@/components/icons/magnifier-2'
 import ArrowUpRight2 from '@/components/icons/arrow-up-right-2'
 import CircleWarning2 from '@/components/icons/circle-warning-2'
-import File2 from '@/components/icons/file-2'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { MarkAllReadButton } from '@/components/mark-all-read-button'
 import { DomainFilterSelect } from '@/components/domain-filter-select'
+import { EmailListItem } from '@/components/emails/EmailListItem'
+import { PreviewToggle } from '@/components/emails/PreviewToggle'
 
 interface MailPageProps {
     searchParams: Promise<{
@@ -116,7 +116,10 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                             </h2>
                             <p className="text-muted-foreground text-sm font-medium">Search and filter your received emails</p>
                         </div>
-                        <MarkAllReadButton unreadCount={unreadCount} />
+                        <div className="flex items-center gap-2">
+                            <PreviewToggle />
+                            <MarkAllReadButton unreadCount={unreadCount} />
+                        </div>
                     </div>
                 </div>
 
@@ -129,7 +132,7 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                                 name="search"
                                 placeholder="Search emails..."
                                 defaultValue={searchQuery}
-                                className="pl-10 h-10 rounded-xl"
+                                className="pl-10 h-9 rounded-xl"
                             />
                             {/* Hidden inputs to preserve other filter states */}
                             {domainFilter !== 'all' && (
@@ -183,62 +186,9 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                     </div>
                 ) : (
                     <div className="divide-y divide-border">
-                        {emails.map((email) => {
-                            // Get sender name and extract initials
-                            const senderName = email.parsedData.fromData?.addresses?.[0]?.name ||
-                                email.from.split('@')[0] ||
-                                email.from.split('<')[0] ||
-                                email.from
-
-                            // Get email preview from parsedData
-                            const preview = email.parsedData.preview || 'No preview available'
-
-                            return (
-                                <Link
-                                    key={email.id}
-                                    href={`/mail/${email.id}`}
-                                    className={`block w-full px-6 py-3 hover:bg-accent/50 transition-colors duration-200 group ${
-                                        !email.isRead ? 'bg-primary/5 border-l-4 border-l-primary' : ''
-                                    }`}
-                                >
-                                    <div className="flex items-center gap-4 relative">
-                                        {/* Name Column */}
-                                        <div className="w-40 flex-shrink-0">
-                                            <div className="flex items-center gap-2">
-                                                <span className={`font-medium truncate text-foreground text-sm ${!email.isRead ? 'font-semibold' : ''}`}>
-                                                    {senderName}
-                                                </span>
-                                                {!email.isRead && (
-                                                    <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0"></div>
-                                                )}
-                                            </div>
-                                        </div>
-                                        
-                                        {/* Subject + Preview (flowing) */}
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-3 text-sm">
-                                                <span className={`font-medium flex-shrink-0 text-foreground ${!email.isRead ? 'font-semibold' : ''}`}>
-                                                    {email.subject}
-                                                </span>
-                                                <span className="text-muted-foreground/80 truncate">
-                                                    — {preview}
-                                                </span>
-                                                {email.parsedData.hasAttachments && (
-                                                    <File2 width="14" height="14" className="text-muted-foreground flex-shrink-0" />
-                                                )}
-                                            </div>
-                                        </div>
-                                        
-                                        {/* Time Column */}
-                                        <div className="w-24 flex-shrink-0 text-right">
-                                            <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                                {formatDistanceToNow(new Date(email.receivedAt || new Date()), { addSuffix: true })}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </Link>
-                            )
-                        })}
+                        {emails.map((email) => (
+                            <EmailListItem key={email.id} email={email} />
+                        ))}
                     </div>
                 )}
 
