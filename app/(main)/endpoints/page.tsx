@@ -268,17 +268,17 @@ export default function EndpointsPage() {
   }
 
   const getEndpointIconColor = (endpoint: Endpoint) => {
-    if (!endpoint.isActive) return '#64748b'
+    if (!endpoint.isActive) return 'hsl(var(--muted-foreground))'
 
     switch (endpoint.type) {
       case 'webhook':
-        return '#8b5cf6'
+        return 'hsl(262, 83%, 58%)'
       case 'email':
-        return '#3b82f6'
+        return 'hsl(221, 83%, 53%)'
       case 'email_group':
-        return '#10b981'
+        return 'hsl(142, 76%, 36%)'
       default:
-        return '#6b7280'
+        return 'hsl(var(--muted-foreground))'
     }
   }
 
@@ -322,7 +322,7 @@ export default function EndpointsPage() {
               <div className="flex items-center gap-2 text-destructive">
                 <ObjRemove width="16" height="16" />
                 <span>{error.message}</span>
-                <Button variant="ghost" size="sm" onClick={() => refetch()} className="ml-auto text-destructive hover:text-destructive">
+                <Button variant="ghost" size="sm" onClick={() => refetch()} className="ml-auto text-destructive hover:text-destructive/80">
                   Try Again
                 </Button>
               </div>
@@ -369,7 +369,7 @@ export default function EndpointsPage() {
                 size="sm"
                 onClick={() => refetch()}
                 disabled={isLoading}
-                className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+                className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
               >
                 <Refresh2 width="12" height="12" className="mr-1" />
                 Refresh
@@ -386,22 +386,22 @@ export default function EndpointsPage() {
             <div className="flex flex-col sm:flex-row gap-1 mb-2">
               <div className="flex-1">
                 <div className="relative">
-                  <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
                   <Input
                     placeholder="Search endpoints by name, description, or configuration..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 bg-white rounded-xl"
+                    className="pl-10 bg-card border-border rounded-xl"
                   />
                 </div>
               </div>
 
               <div className="flex gap-1">
                 <Select value={filterType} onValueChange={(value: FilterType) => setFilterType(value)}>
-                  <SelectTrigger className="w-40 bg-white rounded-xl">
+                  <SelectTrigger className="w-40 bg-card border-border rounded-xl">
                     <SelectValue placeholder="Type" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white rounded-xl">
+                  <SelectContent className="bg-card border-border rounded-xl">
                     <SelectItem value="all">All Types</SelectItem>
                     <SelectItem value="webhook">Webhooks</SelectItem>
                     <SelectItem value="email">Email Forwards</SelectItem>
@@ -410,10 +410,10 @@ export default function EndpointsPage() {
                 </Select>
 
                 <Select value={filterStatus} onValueChange={(value: FilterStatus) => setFilterStatus(value)}>
-                  <SelectTrigger className="w-32 bg-white rounded-xl">
+                  <SelectTrigger className="w-32 bg-card border-border rounded-xl">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white rounded-xl">
+                  <SelectContent className="bg-card border-border rounded-xl">
                     <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="disabled">Disabled</SelectItem>
@@ -468,7 +468,7 @@ export default function EndpointsPage() {
             )}
           </div>
 
-          <hr className="my-4 border-gray-200" />
+          <hr className="my-4 border-border" />
 
           <div className="space-y-2">
             {/* Migration Success Banner */}
@@ -478,14 +478,14 @@ export default function EndpointsPage() {
                   <div className="flex items-center gap-3">
                     <CircleCheck width="20" height="20" className="text-green-500" />
                     <div className="flex-1">
-                      <h4 className="text-sm font-medium text-green-400">Migration Completed Successfully!</h4>
-                      <p className="text-sm text-green-300">Your webhooks have been imported as endpoints. You can now manage all your endpoints in one place.</p>
+                      <h4 className="text-sm font-medium text-green-500">Migration Completed Successfully!</h4>
+                      <p className="text-sm text-green-500/80">Your webhooks have been imported as endpoints. You can now manage all your endpoints in one place.</p>
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setShowMigrationSuccess(false)}
-                      className="text-green-500 hover:text-green-400"
+                      className="text-green-500 hover:text-green-500/80"
                     >
                       <ObjRemove width="16" height="16" />
                     </Button>
@@ -501,7 +501,7 @@ export default function EndpointsPage() {
                     <CustomInboundIcon
                       Icon={searchQuery || filterType !== 'all' || filterStatus !== 'all' ? Magnifier2 : Globe2}
                       size={48}
-                      backgroundColor="#6b7280"
+                      backgroundColor="hsl(var(--muted-foreground))"
                       className="mx-auto mb-4"
                     />
                     <p className="text-sm text-muted-foreground mb-4">
@@ -529,7 +529,7 @@ export default function EndpointsPage() {
                             Add Your First Endpoint
                           </Button>
                           {migrationChecked && !migrationInProgress && (
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-muted-foreground">
                               <p>Have existing webhooks?
                                 <Button
                                   variant="ghost"
@@ -553,7 +553,7 @@ export default function EndpointsPage() {
                                     }
                                   }}
                                   disabled={migrationMutation.isPending}
-                                  className="p-0 h-auto ml-1 text-blue-600 hover:text-blue-700"
+                                  className="p-0 h-auto ml-1 text-primary hover:text-primary/80"
                                 >
                                   {migrationMutation.isPending ? 'Importing...' : 'Import them now'}
                                 </Button>
@@ -575,7 +575,7 @@ export default function EndpointsPage() {
                 return (
                   <Card
                     key={endpoint.id}
-                    className={`bg-white/95 backdrop-blur-sm shadow-sm hover:shadow-lg transition-all duration-300 border rounded-xl group ${isSelected ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200/60'
+                    className={`bg-card/95 backdrop-blur-sm shadow-sm hover:shadow-lg transition-all duration-300 border rounded-xl group ${isSelected ? 'border-primary bg-primary/5' : 'border-border'
                       }`}
                   >
                     <CardContent className="p-0">
@@ -594,7 +594,7 @@ export default function EndpointsPage() {
                             />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center space-x-2 mb-1">
-                                <h3 className="text-base font-semibold text-gray-900 tracking-tight truncate">{endpoint.name}</h3>
+                                <h3 className="text-base font-semibold text-foreground tracking-tight truncate">{endpoint.name}</h3>
                                 {/* {getEndpointTypeBadge(endpoint)} */}
                               </div>
                               {/* <div className="flex items-center space-x-3 text-sm">
@@ -636,29 +636,29 @@ export default function EndpointsPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                              className="p-1.5 hover:bg-muted rounded-lg transition-colors"
                               onClick={() => handleTestEndpoint(endpoint)}
                               title="Test endpoint"
                             >
-                              <CirclePlay width="16" height="16" className="text-gray-500 hover:text-gray-700" />
+                              <CirclePlay width="16" height="16" className="text-muted-foreground hover:text-foreground" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                              className="p-1.5 hover:bg-muted rounded-lg transition-colors"
                               onClick={() => handleEditEndpoint(endpoint)}
                               title="Configure endpoint"
                             >
-                              <Gear2 width="16" height="16" className="text-gray-500 hover:text-gray-700" />
+                              <Gear2 width="16" height="16" className="text-muted-foreground hover:text-foreground" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                              className="p-1.5 hover:bg-muted rounded-lg transition-colors"
                               onClick={() => handleDeleteEndpoint(endpoint)}
                               title="Delete endpoint"
                             >
-                              <Trash2 width="16" height="16" className="text-gray-500 hover:text-gray-700" />
+                              <Trash2 width="16" height="16" className="text-muted-foreground hover:text-foreground" />
                             </Button>
                           </div>
                         </div>

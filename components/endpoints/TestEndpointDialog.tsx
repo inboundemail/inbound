@@ -160,63 +160,49 @@ export function TestEndpointDialog({ open, onOpenChange, endpoint }: TestEndpoin
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100">
-              <CirclePlay width="16" height="16" className="text-blue-600" />
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20">
+              <CirclePlay width="16" height="16" className="text-primary" />
             </div>
             Test {getEndpointTypeLabel()}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="bg-gray-50 rounded-lg p-4 border">
+          <div className="bg-muted rounded-lg p-4 border border-border">
             <div className="flex items-center gap-2 mb-2">
-              <EndpointIcon width="16" height="16" className="text-gray-500" />
-              <h4 className="font-medium text-gray-900">{endpoint.name}</h4>
+              <EndpointIcon width="16" height="16" className="text-muted-foreground" />
+              <h4 className="font-medium text-foreground">{endpoint.name}</h4>
               <Badge variant="secondary" className="text-xs">
                 {getEndpointTypeLabel()}
               </Badge>
               <Badge 
                 className={`text-xs ${
                   endpoint.isActive 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-gray-100 text-gray-800'
+                    ? 'bg-green-500/20 text-green-500 border-green-500/20' 
+                    : 'bg-muted text-muted-foreground border-border'
                 }`}
               >
                 {endpoint.isActive ? 'Active' : 'Inactive'}
               </Badge>
             </div>
             {configSummary && (
-              <p className="text-sm text-gray-600 font-mono break-all">{configSummary}</p>
+              <p className="text-sm text-muted-foreground font-mono break-all">{configSummary}</p>
             )}
             {endpoint.description && (
-              <p className="text-sm text-gray-500 mt-2">{endpoint.description}</p>
+              <p className="text-sm text-muted-foreground mt-2">{endpoint.description}</p>
             )}
-          </div>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <CircleWarning2 width="20" height="20" className="text-blue-500 mt-0.5 flex-shrink-0" />
-              <div>
-                <h4 className="text-sm font-medium text-blue-800 mb-1">
-                  Test {getEndpointTypeLabel()}
-                </h4>
-                <p className="text-sm text-blue-700">
-                  {getTestDescription()}
-                </p>
-              </div>
-            </div>
           </div>
 
           {!endpoint.isActive && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <CircleWarning2 width="20" height="20" className="text-amber-500 mt-0.5 flex-shrink-0" />
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <CircleWarning2 width="16" height="16" className="text-yellow-600 mt-0.5 flex-shrink-0" />
                 <div>
-                  <h4 className="text-sm font-medium text-amber-800 mb-1">
-                    Endpoint Disabled
+                  <h4 className="text-sm font-medium text-yellow-800 mb-1">
+                    Endpoint is disabled
                   </h4>
-                  <p className="text-sm text-amber-700">
-                    This endpoint is currently disabled. Enable it first to test functionality.
+                  <p className="text-sm text-yellow-700">
+                    This endpoint is currently disabled and won't receive real emails. You can still test it, but it won't be triggered by actual email deliveries.
                   </p>
                 </div>
               </div>
@@ -224,81 +210,87 @@ export function TestEndpointDialog({ open, onOpenChange, endpoint }: TestEndpoin
           )}
 
           {testResult && (
-            <div className={`rounded-lg p-4 border ${
-              testResult.success 
-                ? 'bg-green-50 border-green-200' 
-                : 'bg-red-50 border-red-200'
-            }`}>
-              <div className="flex items-start gap-3">
-                {testResult.success ? (
-                  <CircleCheck width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
-                ) : (
-                  <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
-                )}
-                <div className="flex-1">
-                  <h4 className={`text-sm font-medium mb-1 ${
-                    testResult.success ? 'text-green-800' : 'text-red-800'
-                  }`}>
-                    {testResult.success ? 'Test Successful' : 'Test Failed'}
-                  </h4>
-                  
-                  {testResult.statusCode && (
-                    <p className={`text-sm mb-1 ${
-                      testResult.success ? 'text-green-700' : 'text-red-700'
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-foreground">Test Results</h4>
+              <div className={`p-3 rounded-lg border ${
+                testResult.success 
+                  ? 'bg-green-50 border-green-200' 
+                  : 'bg-destructive/10 border-destructive/20'
+              }`}>
+                <div className="flex items-start gap-2">
+                  {testResult.success ? (
+                    <CircleCheck width="16" height="16" className="text-green-600 mt-0.5 flex-shrink-0" />
+                  ) : (
+                    <TabClose width="16" height="16" className="text-destructive mt-0.5 flex-shrink-0" />
+                  )}
+                  <div className="flex-1">
+                    <div className={`text-sm font-medium mb-1 ${
+                      testResult.success ? 'text-green-800' : 'text-destructive'
                     }`}>
-                      Status Code: {testResult.statusCode}
-                    </p>
-                  )}
-                  
-                  {testResult.message && (
-                    <p className={`text-sm mb-1 ${
-                      testResult.success ? 'text-green-700' : 'text-red-700'
-                    }`}>
-                      {testResult.message}
-                    </p>
-                  )}
-                  
-                  {testResult.error && (
-                    <p className="text-sm text-red-700 font-mono bg-red-100 p-2 rounded mt-2">
-                      {testResult.error}
-                    </p>
-                  )}
-                  
-                  <p className={`text-xs mt-2 ${
-                    testResult.success ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    Tested at {testResult.timestamp.toLocaleTimeString()}
-                  </p>
+                      {testResult.success ? 'Test Successful' : 'Test Failed'}
+                    </div>
+                    {testResult.message && (
+                      <p className={`text-sm ${
+                        testResult.success ? 'text-green-700' : 'text-destructive/80'
+                      }`}>
+                        {testResult.message}
+                      </p>
+                    )}
+                    {testResult.error && (
+                      <p className="text-sm text-destructive/80 font-mono mt-1">
+                        {testResult.error}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                      {testResult.statusCode && (
+                        <span>Status: {testResult.statusCode}</span>
+                      )}
+                      {testResult.responseTime && (
+                        <span>Response: {testResult.responseTime}ms</span>
+                      )}
+                      <span>
+                        <Clock2 width="12" height="12" className="inline mr-1" />
+                        {testResult.timestamp.toLocaleTimeString()}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           )}
+
+          <div className="bg-muted rounded-lg p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <CirclePlay width="16" height="16" className="text-muted-foreground" />
+              <h4 className="text-sm font-medium text-foreground">Test Information</h4>
+            </div>
+            <div className="text-sm text-muted-foreground space-y-1">
+              <p>• This will send a test email to your endpoint</p>
+              <p>• The test email contains sample data to verify your endpoint is working</p>
+              <p>• Check your endpoint logs to see the received data</p>
+              {endpoint.type === 'webhook' && (
+                <p>• For webhooks, we'll send a POST request with email data</p>
+              )}
+              {(endpoint.type === 'email' || endpoint.type === 'email_group') && (
+                <p>• For email forwards, we'll send a test email to the configured recipients</p>
+              )}
+            </div>
+          </div>
         </div>
 
         <DialogFooter className="flex items-center justify-between">
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-muted-foreground">
             Press Cmd+Enter to test
           </span>
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={handleClose}>
+            <Button variant="secondary" onClick={() => onOpenChange(false)}>
               Close
             </Button>
             <Button
               onClick={handleTest}
-              disabled={testEndpointMutation.isPending || !endpoint.isActive}
-              className="bg-blue-600 hover:bg-blue-700"
+              disabled={testEndpointMutation.isPending}
             >
-              {testEndpointMutation.isPending ? (
-                <>
-                  <Clock2 width="16" height="16" className="mr-2 animate-spin" />
-                  Testing...
-                </>
-              ) : (
-                <>
-                  <CirclePlay width="16" height="16" className="mr-2" />
-                  Send Test
-                </>
-              )}
+              {testEndpointMutation.isPending ? 'Testing...' : 'Run Test'}
             </Button>
           </div>
         </DialogFooter>

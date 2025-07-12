@@ -25,10 +25,10 @@ export default async function AnalyticsPage() {
       <div className="flex flex-1 flex-col gap-4 p-4">
         <Card className="border-destructive/50 bg-destructive/10">
           <CardContent className="p-6">
-                          <div className="flex items-center gap-2 text-destructive">
-                <ObjRemove width="16" height="16" />
-                <span>{analyticsResult.error}</span>
-              <Button variant="ghost" size="sm" asChild className="ml-auto text-destructive hover:text-destructive">
+            <div className="flex items-center gap-2 text-destructive">
+              <ObjRemove width="16" height="16" />
+              <span>{analyticsResult.error}</span>
+              <Button variant="ghost" size="sm" asChild className="ml-auto text-destructive hover:text-destructive/80">
                 <Link href="/analytics">Try Again</Link>
               </Button>
             </div>
@@ -113,11 +113,11 @@ export default async function AnalyticsPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4">
-      {/* Compact Header */}
-      <div className="flex items-center justify-between bg-slate-900 text-white rounded-lg p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between bg-card border border-border rounded-lg p-4">
         <div>
-          <h1 className="text-xl font-semibold mb-1">Email Analytics & Insights</h1>
-          <div className="flex items-center gap-4 text-sm text-slate-300">
+          <h1 className="text-xl font-semibold mb-1 text-foreground">Email Analytics & Insights</h1>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <span className="flex items-center gap-1">
               <Database2 width="12" height="12" />
               {recentEmails.length} log entries
@@ -141,7 +141,6 @@ export default async function AnalyticsPage() {
             variant="secondary"
             size="sm"
             asChild
-            className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
           >
             <Link href="/analytics">
               <Refresh2 width="12" height="12" className="mr-1" />
@@ -157,62 +156,7 @@ export default async function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Security Analysis */}
-      {/* <Card className="border-red-100">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <ShieldCheck width="16" height="16" className="text-red-600" />
-            Security Analysis
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <div className="grid grid-cols-5 gap-3 mb-4">
-            <div className="text-center p-3 bg-red-50 rounded-lg border border-red-100">
-              <div className="text-lg font-semibold text-red-700">{securityAnalysis.spfFailures}</div>
-              <div className="text-xs text-red-600 mt-1">SPF Failures</div>
-              <div className="text-xs text-slate-500 mt-1">
-                {recentEmails.length > 0 ? Math.round((securityAnalysis.spfFailures / recentEmails.length) * 100) : 0}%
-              </div>
-            </div>
-            <div className="text-center p-3 bg-orange-50 rounded-lg border border-orange-100">
-              <div className="text-lg font-semibold text-orange-700">{securityAnalysis.dkimFailures}</div>
-              <div className="text-xs text-orange-600 mt-1">DKIM Failures</div>
-              <div className="text-xs text-slate-500 mt-1">
-                {recentEmails.length > 0 ? Math.round((securityAnalysis.dkimFailures / recentEmails.length) * 100) : 0}%
-              </div>
-            </div>
-            <div className="text-center p-3 bg-yellow-50 rounded-lg border border-yellow-100">
-              <div className="text-lg font-semibold text-yellow-700">{securityAnalysis.dmarcFailures}</div>
-              <div className="text-xs text-yellow-600 mt-1">DMARC Failures</div>
-              <div className="text-xs text-slate-500 mt-1">Authentication</div>
-            </div>
-            <div className="text-center p-3 bg-purple-50 rounded-lg border border-purple-100">
-              <div className="text-lg font-semibold text-purple-700">{securityAnalysis.spamDetected}</div>
-              <div className="text-xs text-purple-600 mt-1">Spam Detected</div>
-              <div className="text-xs text-slate-500 mt-1">Content filter</div>
-            </div>
-            <div className="text-center p-3 bg-pink-50 rounded-lg border border-pink-100">
-              <div className="text-lg font-semibold text-pink-700">{securityAnalysis.virusDetected}</div>
-              <div className="text-xs text-pink-600 mt-1">Virus Detected</div>
-              <div className="text-xs text-slate-500 mt-1">Malware scan</div>
-            </div>
-          </div>
-          
-          {(securityAnalysis.spfFailures > 0 || securityAnalysis.dkimFailures > 0 || securityAnalysis.spamDetected > 0) && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-              <div className="flex items-center gap-2 text-red-700 text-sm font-medium mb-2">
-                <CircleWarning2 width="16" height="16" />
-                Security Recommendations
-              </div>
-              <div className="text-sm text-red-600 space-y-1">
-                {securityAnalysis.spfFailures > 5 && <div>• High SPF failure rate detected - verify sender authentication</div>}
-                {securityAnalysis.dkimFailures > 5 && <div>• DKIM signature issues - check domain key configuration</div>}
-                {securityAnalysis.spamDetected > 0 && <div>• Spam detected - review content filtering rules</div>}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card> */}
+
 
       {/* Performance Analysis & Error Insights - Two Column */}
       <div className="grid gap-4 lg:grid-cols-2">
@@ -227,13 +171,13 @@ export default async function AnalyticsPage() {
           <CardContent className="pt-0">
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-                  <div className="text-lg font-semibold text-blue-700">{avgProcessingTime}ms</div>
-                  <div className="text-xs text-blue-600">Avg Processing Time</div>
+                <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <div className="text-lg font-semibold text-blue-500">{avgProcessingTime}ms</div>
+                  <div className="text-xs text-blue-500/80">Avg Processing Time</div>
                 </div>
-                <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
-                  <div className="text-lg font-semibold text-amber-700">{slowEmails.length}</div>
-                  <div className="text-xs text-amber-600">Slow Emails (over 5s)</div>
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                  <div className="text-lg font-semibold text-amber-500">{slowEmails.length}</div>
+                  <div className="text-xs text-amber-500/80">Large Emails (&gt;1MB)</div>
                 </div>
               </div>
 
@@ -245,7 +189,7 @@ export default async function AnalyticsPage() {
                     .sort(([, a], [, b]) => b.total - a.total)
                     .slice(0, 5)
                     .map(([domain, stats]: [string, any]) => (
-                      <div key={domain} className="flex items-center justify-between p-2 bg-accent/5 rounded">
+                      <div key={domain} className="flex items-center justify-between p-2 bg-muted/50 rounded">
                         <div className="flex items-center gap-2">
                           <Globe2 width="12" height="12" className="text-muted-foreground" />
                           <span className="text-sm font-mono text-foreground">{domain}</span>
@@ -276,13 +220,13 @@ export default async function AnalyticsPage() {
           <CardContent className="pt-0">
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-red-50 rounded-lg border border-red-100">
-                  <div className="text-lg font-semibold text-red-700">{errorAnalysis.totalErrors}</div>
-                  <div className="text-xs text-red-600">Total Errors</div>
+                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <div className="text-lg font-semibold text-destructive">{errorAnalysis.totalErrors}</div>
+                  <div className="text-xs text-destructive/80">Total Errors</div>
                 </div>
-                <div className="p-3 bg-orange-50 rounded-lg border border-orange-100">
-                  <div className="text-lg font-semibold text-orange-700">{errorAnalysis.authErrors}</div>
-                  <div className="text-xs text-orange-600">Auth Errors</div>
+                <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+                  <div className="text-lg font-semibold text-orange-500">{errorAnalysis.authErrors}</div>
+                  <div className="text-xs text-orange-500/80">Auth Errors</div>
                 </div>
               </div>
 
@@ -290,15 +234,15 @@ export default async function AnalyticsPage() {
               <div>
                 <h4 className="text-sm font-medium text-foreground mb-2">Error Breakdown</h4>
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between p-2 bg-accent/5 rounded">
+                  <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
                     <span className="text-sm text-foreground">Auth Errors</span>
                     <span className="text-sm text-destructive">{errorAnalysis.authErrors}</span>
                   </div>
-                  <div className="flex items-center justify-between p-2 bg-accent/5 rounded">
+                  <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
                     <span className="text-sm text-foreground">Spam Detected</span>
                     <span className="text-sm text-destructive">{errorAnalysis.spamErrors}</span>
                   </div>
-                  <div className="flex items-center justify-between p-2 bg-accent/5 rounded">
+                  <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
                     <span className="text-sm text-foreground">Virus Detected</span>
                     <span className="text-sm text-destructive">{errorAnalysis.virusErrors}</span>
                   </div>
@@ -306,12 +250,12 @@ export default async function AnalyticsPage() {
               </div>
 
               {errorAnalysis.totalErrors > 10 && (
-                <div className="p-3 bg-yellow-500/10 border border-yellow-500/50 rounded-lg">
-                  <div className="flex items-center gap-2 text-yellow-400 text-sm font-medium mb-1">
+                <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                  <div className="flex items-center gap-2 text-yellow-500 text-sm font-medium mb-1">
                     <CircleWarning2 width="16" height="16" />
                     High Error Rate Detected
                   </div>
-                  <div className="text-sm text-yellow-300">
+                  <div className="text-sm text-yellow-500/80">
                     Review endpoint configurations and network connectivity
                   </div>
                 </div>
@@ -325,26 +269,26 @@ export default async function AnalyticsPage() {
       <Card className="bg-card border-border">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-                          <CardTitle className="text-base flex items-center gap-2 text-foreground">
-                <File2 width="16" height="16" className="text-muted-foreground" />
-                Email Processing Logs ({recentEmails.length})
-              </CardTitle>
+            <CardTitle className="text-base flex items-center gap-2 text-foreground">
+              <File2 width="16" height="16" className="text-muted-foreground" />
+              Email Processing Logs ({recentEmails.length})
+            </CardTitle>
             <div className="flex items-center gap-2">
-                              <Button variant="ghost" size="sm" className="h-auto p-1 text-xs">
-                  <Filter2 width="12" height="12" className="mr-1" />
-                  Filter
-                </Button>
-                <Button variant="ghost" size="sm" className="h-auto p-1 text-xs">
-                  <Magnifier2 width="12" height="12" className="mr-1" />
-                  Search
-                </Button>
+              <Button variant="ghost" size="sm" className="h-auto p-1 text-xs">
+                <Filter2 width="12" height="12" className="mr-1" />
+                Filter
+              </Button>
+              <Button variant="ghost" size="sm" className="h-auto p-1 text-xs">
+                <Magnifier2 width="12" height="12" className="mr-1" />
+                Search
+              </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
           <div className="space-y-2">
             {recentEmails.slice(0, 20).map((email, index) => (
-              <div key={email.id} className="border border-border rounded-lg p-3 hover:bg-accent/5 transition-colors">
+              <div key={email.id} className="border border-border rounded-lg p-3 hover:bg-muted/50 transition-colors">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3 min-w-0 flex-1">
                     <div className="text-xs text-muted-foreground font-mono w-16 flex-shrink-0 mt-0.5">
@@ -355,30 +299,30 @@ export default async function AnalyticsPage() {
                         <Badge 
                           variant="secondary" 
                           className={`text-xs ${
-                            email.status === 'forwarded' ? 'bg-green-50 text-green-700 border-green-200' :
-                            email.status === 'failed' ? 'bg-red-50 text-red-700 border-red-200' :
-                            email.status === 'processing' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                            'bg-blue-50 text-blue-700 border-blue-200'
+                            email.status === 'forwarded' ? 'bg-green-500/20 text-green-500 border-green-500/20' :
+                            email.status === 'failed' ? 'bg-destructive/20 text-destructive border-destructive/20' :
+                            email.status === 'processing' ? 'bg-amber-500/20 text-amber-500 border-amber-500/20' :
+                            'bg-blue-500/20 text-blue-500 border-blue-500/20'
                           }`}>
                           {email.status.toUpperCase()}
                         </Badge>
-                         {email.contentSize && (
-                           <Badge variant="secondary" className="bg-slate-50 text-slate-600 border-slate-200 text-xs">
-                             {Math.round(email.contentSize / 1024)}KB
-                           </Badge>
-                         )}
+                        {email.contentSize && (
+                          <Badge variant="secondary" className="bg-muted text-muted-foreground border-border text-xs">
+                            {Math.round(email.contentSize / 1024)}KB
+                          </Badge>
+                        )}
                         <div className="flex gap-1">
                           {email.authResults.spf === 'PASS' && (
-                            <Badge variant="secondary" className="bg-green-50 text-green-600 border-green-200 text-xs">SPF</Badge>
+                            <Badge variant="secondary" className="bg-green-500/20 text-green-500 border-green-500/20 text-xs">SPF</Badge>
                           )}
                           {email.authResults.dkim === 'PASS' && (
-                            <Badge variant="secondary" className="bg-green-50 text-green-600 border-green-200 text-xs">DKIM</Badge>
+                            <Badge variant="secondary" className="bg-green-500/20 text-green-500 border-green-500/20 text-xs">DKIM</Badge>
                           )}
                           {email.authResults.spf === 'FAIL' && (
-                            <Badge variant="secondary" className="bg-red-50 text-red-600 border-red-200 text-xs">SPF✗</Badge>
+                            <Badge variant="secondary" className="bg-destructive/20 text-destructive border-destructive/20 text-xs">SPF✗</Badge>
                           )}
                           {email.authResults.dkim === 'FAIL' && (
-                            <Badge variant="secondary" className="bg-red-50 text-red-600 border-red-200 text-xs">DKIM✗</Badge>
+                            <Badge variant="secondary" className="bg-destructive/20 text-destructive border-destructive/20 text-xs">DKIM✗</Badge>
                           )}
                         </div>
                       </div>
@@ -386,12 +330,12 @@ export default async function AnalyticsPage() {
                         <span className="font-medium">{email.from}</span> → <span className="font-medium">{email.recipient}</span>
                       </div>
                       <div className="text-sm text-muted-foreground truncate mb-1">{email.subject}</div>
-                                             <div className="text-xs text-muted-foreground font-mono">
-                         {email.messageId} • {email.domain}
-                         {(email.authResults.spf === 'FAIL' || email.authResults.dkim === 'FAIL') && (
-                           <span className="text-destructive ml-2">Auth Failed</span>
-                         )}
-                       </div>
+                      <div className="text-xs text-muted-foreground font-mono">
+                        {email.messageId} • {email.domain}
+                        {(email.authResults.spf === 'FAIL' || email.authResults.dkim === 'FAIL') && (
+                          <span className="text-destructive ml-2">Auth Failed</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-1 ml-4">

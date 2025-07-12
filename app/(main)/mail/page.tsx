@@ -105,14 +105,14 @@ export default async function MailPage({ searchParams }: MailPageProps) {
     }
 
     return (
-        <div className="min-h-screen p-4 font-outfit">
-            <div className="max-w-5xl mx-auto">
+        <div className="min-h-screen font-outfit">
+            <div className="max-w-6xl mx-auto p-4">
                 {/* Header Section */}
                 <div className="mb-6">
                     <div className="flex items-center justify-between">
                         <div>
                             <h2 className="text-2xl font-semibold text-foreground mb-1 tracking-tight">
-                                Email Management ({unreadCount} unread)
+                                Mail ({unreadCount} unread)
                             </h2>
                             <p className="text-muted-foreground text-sm font-medium">Search and filter your received emails</p>
                         </div>
@@ -146,39 +146,43 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                         />
                     </div>
                 </div>
+            </div>
 
-                {/* Email List */}
+            {/* Email List - Edge to Edge */}
+            <div className="w-full max-w-6xl mx-auto">
                 {emails.length === 0 ? (
-                    <div className="bg-card border-border rounded-xl p-8">
-                        <div className="text-center">
-                            <CustomInboundIcon
-                                text="EM"
-                                size={48}
-                                backgroundColor="#8b5cf6"
-                                className="mx-auto mb-4"
-                            />
-                            <h3 className="text-lg font-semibold mb-2 text-foreground">No emails found</h3>
-                            <p className="text-sm text-muted-foreground mb-4">
-                                {searchQuery || statusFilter !== 'all' || domainFilter !== 'all'
-                                    ? 'No emails match your search criteria.'
-                                    : 'Hey! Looks like you don\'t have any emails yet.'}
-                            </p>
-                            {!(searchQuery || statusFilter !== 'all' || domainFilter !== 'all') && (
-                                <div className="space-y-3">
-                                    <p className="text-sm text-muted-foreground">
-                                        Ready to start receiving emails? Let's get you set up!
-                                    </p>
-                                    <Button asChild>
-                                        <Link href="/onboarding">
-                                            Start Onboarding
-                                        </Link>
-                                    </Button>
-                                </div>
-                            )}
+                    <div className="max-w-5xl mx-auto p-4">
+                        <div className="bg-card border-border rounded-xl p-8">
+                            <div className="text-center">
+                                <CustomInboundIcon
+                                    text="EM"
+                                    size={48}
+                                    backgroundColor="#8b5cf6"
+                                    className="mx-auto mb-4"
+                                />
+                                <h3 className="text-lg font-semibold mb-2 text-foreground">No emails found</h3>
+                                <p className="text-sm text-muted-foreground mb-4">
+                                    {searchQuery || statusFilter !== 'all' || domainFilter !== 'all'
+                                        ? 'No emails match your search criteria.'
+                                        : 'Hey! Looks like you don\'t have any emails yet.'}
+                                </p>
+                                {!(searchQuery || statusFilter !== 'all' || domainFilter !== 'all') && (
+                                    <div className="space-y-3">
+                                        <p className="text-sm text-muted-foreground">
+                                            Ready to start receiving emails? Let's get you set up!
+                                        </p>
+                                        <Button asChild>
+                                            <Link href="/onboarding">
+                                                Start Onboarding
+                                            </Link>
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 ) : (
-                    <div className="space-y-2">
+                    <div className="divide-y divide-border">
                         {emails.map((email) => {
                             // Get sender name and extract initials
                             const senderName = email.parsedData.fromData?.addresses?.[0]?.name ||
@@ -186,85 +190,50 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                                 email.from.split('<')[0] ||
                                 email.from
 
-                            // Extract initials (1-2 letters)
-                            const getInitials = (name: string) => {
-                                const words = name.trim().split(/\s+/)
-                                if (words.length >= 2) {
-                                    // Take first letter of first two words
-                                    return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase()
-                                } else {
-                                    // Take first two letters of single word
-                                    return name.slice(0, 2).toUpperCase()
-                                }
-                            }
-
-                            const initials = getInitials(senderName)
-
-                            // Generate consistent color based on sender name
-                            const getAvatarColor = (name: string) => {
-                                const colors = [
-                                    '#6366f1', // indigo
-                                    '#8b5cf6', // violet  
-                                    '#06b6d4', // cyan
-                                    '#10b981', // emerald
-                                    '#f59e0b', // amber
-                                    '#ef4444', // red
-                                    '#ec4899', // pink
-                                    '#84cc16', // lime
-                                ]
-                                const hash = name.split('').reduce((a, b) => {
-                                    a = ((a << 5) - a) + b.charCodeAt(0)
-                                    return a & a
-                                }, 0)
-                                return colors[Math.abs(hash) % colors.length]
-                            }
-
-                            const avatarColor = getAvatarColor(senderName)
+                            // Get email preview from parsedData
+                            const preview = email.parsedData.preview || 'No preview available'
 
                             return (
                                 <Link
                                     key={email.id}
                                     href={`/mail/${email.id}`}
-                                    className={`flex items-center gap-4 p-4 bg-secondary border-border hover:bg-accent/50 transition-all duration-200 rounded-xl group ${!email.isRead ? 'border-l-4 border-l-primary' : ''
-                                        }`}
+                                    className={`block w-full px-6 py-3 hover:bg-accent/50 transition-colors duration-200 group ${
+                                        !email.isRead ? 'bg-primary/5 border-l-4 border-l-primary' : ''
+                                    }`}
                                 >
-                                    {/* CustomInboundIcon with sender initials */}
-                                    <CustomInboundIcon
-                                        text={initials}
-                                        size={40}
-                                        backgroundColor={avatarColor}
-                                    />
-
-                                    {/* Email content */}
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between gap-4">
-                                            {/* Sender and Subject */}
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className={`text-sm truncate ${email.isRead ? 'font-medium text-muted-foreground' : 'font-bold text-foreground'}`}>
-                                                        {senderName}
-                                                    </span>
-                                                    {email.parsedData.hasAttachments && (
-                                                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs rounded-full px-2 py-0.5">
-                                                            <File2 width="12" height="12" className="mr-1" />
-                                                            {email.parsedData.attachmentCount}
-                                                        </Badge>
-                                                    )}
-                                                    {!email.isRead && (
-                                                        <div className="w-2 h-2 bg-primary rounded-full"></div>
-                                                    )}
-                                                </div>
-                                                <div className={`text-sm truncate ${email.isRead ? 'text-muted-foreground' : 'text-foreground font-medium'}`}>
+                                    <div className="flex items-center gap-4 relative">
+                                        {/* Name Column */}
+                                        <div className="w-40 flex-shrink-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`font-medium truncate text-foreground text-sm ${!email.isRead ? 'font-semibold' : ''}`}>
+                                                    {senderName}
+                                                </span>
+                                                {!email.isRead && (
+                                                    <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0"></div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Subject + Preview (flowing) */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-3 text-sm">
+                                                <span className={`font-medium flex-shrink-0 text-foreground ${!email.isRead ? 'font-semibold' : ''}`}>
                                                     {email.subject}
-                                                </div>
+                                                </span>
+                                                <span className="text-muted-foreground/80 truncate">
+                                                    — {preview}
+                                                </span>
+                                                {email.parsedData.hasAttachments && (
+                                                    <File2 width="14" height="14" className="text-muted-foreground flex-shrink-0" />
+                                                )}
                                             </div>
-
-                                            {/* Time */}
-                                            <div className="text-right flex-shrink-0">
-                                                <div className="text-xs text-muted-foreground whitespace-nowrap">
-                                                    {formatDistanceToNow(new Date(email.receivedAt || new Date()), { addSuffix: true })}
-                                                </div>
-                                            </div>
+                                        </div>
+                                        
+                                        {/* Time Column */}
+                                        <div className="w-24 flex-shrink-0 text-right">
+                                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                                {formatDistanceToNow(new Date(email.receivedAt || new Date()), { addSuffix: true })}
+                                            </span>
                                         </div>
                                     </div>
                                 </Link>
@@ -275,46 +244,48 @@ export default async function MailPage({ searchParams }: MailPageProps) {
 
                 {/* Pagination */}
                 {pagination.total > pagination.limit && (
-                    <div className="bg-card border-border rounded-xl p-4 mt-6">
-                        <div className="flex items-center justify-between">
-                            <div className="text-sm text-muted-foreground font-medium">
-                                Showing {pagination.offset + 1} to {Math.min(pagination.offset + pagination.limit, pagination.total)} of {pagination.total} emails
-                            </div>
-                            <div className="flex items-center gap-2">
-                                {pagination.offset > 0 && (
-                                    <Link
-                                        href={{
-                                            pathname: '/mail',
-                                            query: {
-                                                ...(searchQuery && { search: searchQuery }),
-                                                ...(statusFilter !== 'all' && { status: statusFilter }),
-                                                ...(domainFilter !== 'all' && { domain: domainFilter }),
-                                                offset: Math.max(0, pagination.offset - pagination.limit).toString()
-                                            }
-                                        }}
-                                    >
-                                        <Button variant="secondary" size="sm" className="rounded-xl">
-                                            Previous
-                                        </Button>
-                                    </Link>
-                                )}
-                                {pagination.hasMore && (
-                                    <Link
-                                        href={{
-                                            pathname: '/mail',
-                                            query: {
-                                                ...(searchQuery && { search: searchQuery }),
-                                                ...(statusFilter !== 'all' && { status: statusFilter }),
-                                                ...(domainFilter !== 'all' && { domain: domainFilter }),
-                                                offset: (pagination.offset + pagination.limit).toString()
-                                            }
-                                        }}
-                                    >
-                                        <Button variant="secondary" size="sm" className="rounded-xl">
-                                            Next
-                                        </Button>
-                                    </Link>
-                                )}
+                    <div className="max-w-5xl mx-auto p-4">
+                        <div className="bg-card border-border rounded-xl p-4">
+                            <div className="flex items-center justify-between">
+                                <div className="text-sm text-muted-foreground font-medium">
+                                    Showing {pagination.offset + 1} to {Math.min(pagination.offset + pagination.limit, pagination.total)} of {pagination.total} emails
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {pagination.offset > 0 && (
+                                        <Link
+                                            href={{
+                                                pathname: '/mail',
+                                                query: {
+                                                    ...(searchQuery && { search: searchQuery }),
+                                                    ...(statusFilter !== 'all' && { status: statusFilter }),
+                                                    ...(domainFilter !== 'all' && { domain: domainFilter }),
+                                                    offset: Math.max(0, pagination.offset - pagination.limit).toString()
+                                                }
+                                            }}
+                                        >
+                                            <Button variant="secondary" size="sm" className="rounded-xl">
+                                                Previous
+                                            </Button>
+                                        </Link>
+                                    )}
+                                    {pagination.hasMore && (
+                                        <Link
+                                            href={{
+                                                pathname: '/mail',
+                                                query: {
+                                                    ...(searchQuery && { search: searchQuery }),
+                                                    ...(statusFilter !== 'all' && { status: statusFilter }),
+                                                    ...(domainFilter !== 'all' && { domain: domainFilter }),
+                                                    offset: (pagination.offset + pagination.limit).toString()
+                                                }
+                                            }}
+                                        >
+                                            <Button variant="secondary" size="sm" className="rounded-xl">
+                                                Next
+                                            </Button>
+                                        </Link>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
