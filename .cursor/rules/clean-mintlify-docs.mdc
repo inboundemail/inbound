@@ -1,0 +1,328 @@
+---
+description: Clean Mintlify Documentation Standards - Guidelines for creating streamlined, functional, and user-friendly API documentation
+alwaysApply: false
+---
+
+# Clean Mintlify Documentation Standards
+
+This rule provides guidelines for creating clean, functional, and simple Mintlify documentation that prioritizes user experience and maintainability.
+
+## Core Principles
+
+### 1. Simplicity Over Complexity
+- **Minimize navigation depth** - Keep the structure flat and intuitive
+- **Focus on essential content** - Remove anything that doesn't directly help users achieve their goals
+- **One clear path** - Avoid overwhelming users with too many options
+
+### 2. User-Centered Design
+- **Start with authentication** - Users need to know how to authenticate before anything else
+- **Provide working examples** - Every endpoint should have complete, copy-pasteable examples
+- **Show expected outcomes** - Include realistic response examples and error handling
+
+### 3. Consistency and Standards
+- **Use proper base URLs** - Always specify the correct base URL prominently
+- **Follow naming conventions** - Use consistent file naming and URL structures
+- **Maintain component standards** - Use Mintlify components correctly and consistently
+
+## Documentation Structure
+
+### Essential Files Only
+```
+docs/
+├── index.mdx                    # Home page - API overview and quick start
+├── authentication.mdx           # Authentication guide
+├── docs.json                   # Navigation configuration
+├── api-reference/
+│   └── [feature]/
+│       ├── [endpoint-name].mdx  # One file per endpoint
+│       └── ...
+├── logo/                       # Branding assets
+├── images/                     # Documentation images
+└── favicon.svg                 # Site icon
+```
+
+### What to Remove
+- **SDK documentation** - Focus on REST API only unless SDK is primary
+- **Multiple examples directories** - Consolidate examples into endpoint docs
+- **Essentials/getting-started bloat** - Keep getting started content in index.mdx
+- **Redundant navigation levels** - Avoid deep nested structures
+
+## docs.json Configuration
+
+### Streamlined Navigation
+```json
+{
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": ["index", "authentication"]
+          },
+          {
+            "group": "API Reference", 
+            "pages": [
+              "api-reference/[feature]/[endpoint-1]",
+              "api-reference/[feature]/[endpoint-2]"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Best Practices
+- **Single tab structure** - Avoid multiple tabs unless absolutely necessary
+- **Descriptive group names** - Use clear, action-oriented group names
+- **Logical page ordering** - Order by user workflow, not alphabetically
+- **Correct base URLs** - Ensure all links point to the correct environment
+
+## Content Standards
+
+### Home Page (index.mdx)
+```markdown
+# API Name
+
+Brief description of what the API does.
+
+## Base URL
+```
+https://your-domain.com/api/v2
+```
+
+## Getting Started
+<Steps>
+  <Step title="Get API Key">...</Step>
+  <Step title="Authenticate">...</Step>
+  <Step title="Make First Request">...</Step>
+</Steps>
+
+## API Features
+<CardGroup cols={2}>
+  <Card title="Feature 1" href="/api-reference/...">...</Card>
+  <Card title="Feature 2" href="/api-reference/...">...</Card>
+</CardGroup>
+
+## Quick Example
+<CodeGroup>
+```bash cURL
+curl -X GET https://your-domain.com/api/v2/endpoint
+```
+```javascript JavaScript
+// Working example
+```
+</CodeGroup>
+```
+
+### Authentication Page
+- **Clear step-by-step instructions** for getting API keys
+- **Multiple code examples** (cURL, JavaScript, Python)
+- **Security best practices** section
+- **Common error responses** with solutions
+- **Rate limiting information**
+
+### API Endpoint Documentation
+
+#### Required Sections
+1. **Endpoint declaration** with RequestExample
+2. **Authentication** requirements
+3. **Parameters** with proper ParamField components
+4. **Request examples** in multiple languages
+5. **Response examples** with real data
+6. **Response field documentation** with types
+7. **Error responses** with status codes
+8. **Usage examples** with practical scenarios
+
+#### File Naming Convention
+- Use kebab-case: `list-emails.mdx`, `get-email.mdx`, `reply-to-email.mdx`
+- Be descriptive: `create-webhook.mdx` not `webhook.mdx`
+- Group by feature: `api-reference/mail/`, `api-reference/webhooks/`
+
+## Mintlify Component Usage
+
+### Request/Response Examples
+```markdown
+<RequestExample>
+```bash
+GET https://api.example.com/v2/endpoint
+```
+</RequestExample>
+
+<ResponseExample>
+```json Success
+{
+  "data": "example response"
+}
+```
+</ResponseExample>
+```
+
+### Parameter Documentation
+```markdown
+<ParamField query="limit" type="integer" default="50">
+  Maximum number of results to return. Range: 1-100.
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  Valid email address for the user.
+</ParamField>
+```
+
+### Response Fields
+```markdown
+<ResponseField name="id" type="string">
+  Unique identifier for the record.
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Additional information about the record.
+  
+  <Expandable title="Metadata Properties">
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp of creation.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+```
+
+### Error Documentation
+```markdown
+<AccordionGroup>
+  <Accordion title="400 Bad Request">
+    ```json
+    {
+      "error": "Invalid parameter value"
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="401 Unauthorized">
+    ```json
+    {
+      "error": "Invalid or missing API key"
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+```
+
+## Code Examples Standards
+
+### Multi-Language Support
+Always provide examples in at least:
+- **cURL** - Universal and copy-pasteable
+- **JavaScript** - Most common web development language
+- **Python** - Popular for automation and scripting
+
+### Example Quality
+- **Complete and runnable** - Users should be able to copy and execute
+- **Realistic data** - Use realistic values, not placeholders
+- **Proper error handling** - Show how to handle errors
+- **Environment variables** - Use env vars for sensitive data
+
+```javascript
+// Good example
+const response = await fetch('https://api.example.com/v2/mail', {
+  headers: {
+    'Authorization': `Bearer ${process.env.API_KEY}`,
+    'Content-Type': 'application/json'
+  }
+});
+
+if (!response.ok) {
+  throw new Error(`HTTP error! status: ${response.status}`);
+}
+
+const data = await response.json();
+```
+
+## Content Guidelines
+
+### Writing Style
+- **Second person** ("you") for instructions
+- **Present tense** for current states
+- **Active voice** over passive voice
+- **Clear, concise sentences**
+- **Consistent terminology** throughout
+
+### Information Hierarchy
+1. **What** - What does this endpoint do?
+2. **How** - How do I use it?
+3. **Examples** - Show me working code
+4. **Reference** - What are all the parameters/fields?
+5. **Troubleshooting** - What can go wrong?
+
+### Helpful Elements
+- **Tips** for best practices
+- **Warnings** for important cautions
+- **Notes** for additional context
+- **Cards** for navigation
+- **Steps** for procedures
+
+## Quality Checklist
+
+Before publishing documentation:
+
+### Structure
+- [ ] Navigation is logical and minimal
+- [ ] File naming follows conventions
+- [ ] Base URLs are correct throughout
+- [ ] Links work and point to right locations
+
+### Content
+- [ ] All code examples are tested and working
+- [ ] Response examples use realistic data
+- [ ] Error responses are documented
+- [ ] Authentication is clearly explained
+
+### Components
+- [ ] Mintlify components are used correctly
+- [ ] ParamField types match actual API
+- [ ] ResponseField documentation is complete
+- [ ] Code blocks specify language
+
+### User Experience
+- [ ] Getting started path is clear
+- [ ] Examples are copy-pasteable
+- [ ] Common use cases are covered
+- [ ] Troubleshooting information is provided
+
+## Maintenance
+
+### Regular Updates
+- **Remove outdated content** immediately
+- **Update base URLs** when environments change
+- **Refresh examples** with current data
+- **Review navigation** for user feedback
+
+### Version Management
+- **Document version changes** clearly
+- **Migrate examples** to new versions
+- **Maintain backward compatibility** notes
+- **Archive old versions** properly
+
+## Anti-Patterns to Avoid
+
+### Structure Anti-Patterns
+- **Deep navigation hierarchies** (more than 3 levels)
+- **Duplicate content** in multiple places
+- **Orphaned pages** not linked from navigation
+- **Generic page names** like "API" or "Docs"
+
+### Content Anti-Patterns
+- **Placeholder text** in examples
+- **Incomplete code samples** that don't run
+- **Missing error handling** documentation
+- **Inconsistent terminology** across pages
+
+### Component Anti-Patterns
+- **Wrong component types** (using ParamField for responses)
+- **Missing required attributes** (type, descriptions)
+- **Overly complex nested structures**
+- **Inconsistent formatting** across pages
+
+Remember: The best documentation is the one that gets users to their goal with minimum friction. Always prioritize clarity and usability over comprehensive coverage.

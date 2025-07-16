@@ -13,7 +13,7 @@ export async function validateRequest(request: NextRequest) {
 
         const apiSession = await auth.api.verifyApiKey({
             body: {
-                key: request.headers.get('Authorization') || ''
+                key: request.headers.get('Authorization') || request.headers.get('Bearer') || ''
             }
         })
 
