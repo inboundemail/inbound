@@ -19,6 +19,9 @@ const config: Config = {
       },
     },
     extend: {
+      screens: {
+        'xs': '475px',
+      },
       fontFamily: {
         sans: [
           "Outfit",

@@ -21,7 +21,7 @@ export default function LoginPage() {
   // Show loading state while checking session
   if (isPending) {
     return (
-      <div className="min-h-svh flex items-center justify-center bg-gradient-to-br from-purple-600 via-purple-700 to-purple-900">
+      <div className="min-h-svh flex items-center justify-center bg-gradient-to-br from-purple-600 via-purple-700 to-purple-900 dark:from-purple-900 dark:via-purple-800 dark:to-purple-950">
         <div className="flex items-center gap-2 text-white">
           <InboundIcon className="w-7 h-7" variant="white" />
           <span className="text-xl">loading...</span>
@@ -36,7 +36,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F8FA] relative overflow-hidden flex items-center justify-center" style={{ overscrollBehaviorY: "none" }}>
+    <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center" style={{ overscrollBehaviorY: "none" }}>
       <BackgroundSvg />
       {/* Main content */}
       <div className="w-full max-w-sm z-10 px-4 sm:px-0">
@@ -46,12 +46,12 @@ export default function LoginPage() {
             <img
               src="/inbound-logo-3.png"
               alt="Inbound Logo"
-              className="w-11 h-11 shadow-[0_4px_10px_1px_rgba(0,0,0,0.3)] rounded-[14px]"
+              className="w-11 h-11 shadow-[0_4px_10px_1px_rgba(0,0,0,0.3)] dark:shadow-[0_4px_10px_1px_rgba(0,0,0,0.5)] rounded-[14px]"
             />
 
             <div className="flex flex-col items-center gap-2">
-              <p className="text-3xl font-semibold">Welcome Back!</p>
-              <p className="text-sm text-neutral-500">
+              <p className="text-3xl font-semibold text-foreground">Welcome Back!</p>
+              <p className="text-sm text-muted-foreground">
                 Enter your email below to login to your account.
               </p>
             </div>
@@ -59,17 +59,17 @@ export default function LoginPage() {
         </Link>
         {/* Login card */}
         <div>
-          <div className="bg-white rounded-2xl shadow-sm p-6 border z-10 relative">
+          <div className="bg-card rounded-2xl shadow-sm p-6 border border-border z-10 relative">
             <LoginForm />
           </div>
-          <div className="flex flex-col items-center gap-2 -mt-4 p-4 pt-6 bg-[#EFF0F2] border rounded-b-2xl shadow-[0_4px_10px_0.5px_rgba(0,0,0,0.1),inset_0_0_0_1px_rgba(255,255,255,0.8)]">
-            <p className="text-xs text-neutral-500">
+          <div className="flex flex-col items-center gap-2 -mt-4 p-4 pt-6 bg-muted/50 border border-border rounded-b-2xl shadow-[0_4px_10px_0.5px_rgba(0,0,0,0.1),inset_0_0_0_1px_rgba(255,255,255,0.8)] dark:shadow-[0_4px_10px_0.5px_rgba(0,0,0,0.3),inset_0_0_0_1px_rgba(255,255,255,0.1)]">
+            <p className="text-xs text-muted-foreground">
               By clicking signing in , you agree to our{" "}
-              <Link href="/terms" className="underline underline-offset-2">
+              <Link href="/terms" className="underline underline-offset-2 hover:text-foreground transition-colors">
                 Terms of Service
               </Link>{" "}
               and{" "}
-              <Link href="/privacy" className="underline underline-offset-2">
+              <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground transition-colors">
                 Privacy Policy
               </Link>
             </p>
@@ -102,7 +102,7 @@ const BackgroundSvg = () => {
           height="14"
           patternUnits="userSpaceOnUse"
         >
-          <circle cx="7" cy="7" r="2" fill="#0A0A0A" opacity="0.1" />
+          <circle cx="7" cy="7" r="2" className="fill-foreground/10" />
         </pattern>
         <mask id="circleMask">
           <circle

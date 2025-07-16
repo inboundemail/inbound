@@ -18,6 +18,7 @@ import Globe2 from "@/components/icons/globe-2"
 import Envelope2 from "@/components/icons/envelope-2"
 import Cloud2 from "@/components/icons/cloud-2"
 import Code2 from "@/components/icons/code-2"
+import Database2 from "@/components/icons/database-2"
 
 export interface NavigationItem {
   title: string
@@ -57,6 +58,12 @@ export const navigationConfig: NavigationConfig = {
       url: "/analytics",
       icon: ChartActivity2,
       description: "View detailed analytics"
+    },
+    {
+      title: "Logs",
+      url: "/logs",
+      icon: Database2,
+      description: "View email delivery logs and status"
     },
     {
       title: "Settings",

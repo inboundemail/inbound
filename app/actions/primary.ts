@@ -4,8 +4,8 @@ import { auth } from "@/lib/auth/auth"
 import { headers } from "next/headers"
 import { Autumn as autumn, Customer } from "autumn-js"
 import { db } from '@/lib/db'
-import { emailDomains, emailAddresses, webhooks, sesEvents, structuredEmails, endpoints, user, DOMAIN_STATUS } from '@/lib/db/schema'
-import { eq, and, sql, desc } from 'drizzle-orm'
+import { emailDomains, emailAddresses, webhooks, sesEvents, structuredEmails, endpoints, user, DOMAIN_STATUS, webhookDeliveries, endpointDeliveries } from '@/lib/db/schema'
+import { eq, and, sql, desc, gte } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { AWSSESReceiptRuleManager } from '@/lib/aws-ses/aws-ses-rules'
 import { parseEmail as libParseEmail, sanitizeHtml } from '@/lib/email-management/email-parser'
@@ -1643,6 +1643,340 @@ export async function getEmailsList(options?: {
     } catch (error) {
         console.error('Error fetching emails list:', error)
         return { error: 'Failed to fetch emails list' }
+    }
+}
+
+// ============================================================================
+// USER EMAIL LOGS WITH DELIVERY STATUS
+// ============================================================================
+
+export async function getUserEmailLogs(options?: {
+    limit?: number
+    offset?: number
+    searchQuery?: string
+    statusFilter?: string
+    domainFilter?: string
+    timeRange?: string
+}) {
+    try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+
+        if (!session?.user?.id) {
+            return { error: 'Unauthorized' }
+        }
+
+        const {
+            limit = 50,
+            offset = 0,
+            searchQuery = '',
+            statusFilter = 'all',
+            domainFilter = 'all',
+            timeRange = '7d'
+        } = options || {}
+
+        // Calculate time range
+        let timeRangeStart: Date | null = null
+        const now = new Date()
+        
+        switch (timeRange) {
+            case '24h':
+                timeRangeStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+                break
+            case '7d':
+                timeRangeStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+                break
+            case '30d':
+                timeRangeStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+                break
+            case '90d':
+                timeRangeStart = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+                break
+            default:
+                timeRangeStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        }
+
+        // Build where conditions
+        let whereConditions = [eq(structuredEmails.userId, session.user.id)]
+
+        // Add time range filter
+        if (timeRangeStart) {
+            whereConditions.push(
+                gte(structuredEmails.createdAt, timeRangeStart)
+            )
+        }
+
+        // Add domain filter - extract domain from toData JSON
+        if (domainFilter !== 'all') {
+            whereConditions.push(
+                sql`${structuredEmails.toData}::jsonb->'addresses'->0->>'address' LIKE ${`%@${domainFilter}`}`
+            )
+        }
+
+        // Add search filter
+        if (searchQuery) {
+            whereConditions.push(
+                sql`(
+                    ${structuredEmails.subject} ILIKE ${`%${searchQuery}%`} OR
+                    ${structuredEmails.messageId} ILIKE ${`%${searchQuery}%`} OR
+                    ${structuredEmails.fromData}::text ILIKE ${`%${searchQuery}%`} OR
+                    ${structuredEmails.toData}::text ILIKE ${`%${searchQuery}%`}
+                )`
+            )
+        }
+
+        // Fetch emails with delivery status from both webhook and endpoint deliveries
+        const emailsWithDeliveries = await db
+            .select({
+                // Structured email info
+                id: structuredEmails.id,
+                emailId: structuredEmails.emailId,
+                messageId: structuredEmails.messageId,
+                subject: structuredEmails.subject,
+                date: structuredEmails.date,
+                fromData: structuredEmails.fromData,
+                toData: structuredEmails.toData,
+                textBody: structuredEmails.textBody,
+                htmlBody: structuredEmails.htmlBody,
+                attachments: structuredEmails.attachments,
+                parseSuccess: structuredEmails.parseSuccess,
+                parseError: structuredEmails.parseError,
+                createdAt: structuredEmails.createdAt,
+                isRead: structuredEmails.isRead,
+                readAt: structuredEmails.readAt,
+                
+                // SES event info for auth results
+                spfVerdict: sesEvents.spfVerdict,
+                dkimVerdict: sesEvents.dkimVerdict,
+                dmarcVerdict: sesEvents.dmarcVerdict,
+                spamVerdict: sesEvents.spamVerdict,
+                virusVerdict: sesEvents.virusVerdict,
+                processingTimeMillis: sesEvents.processingTimeMillis,
+                
+                // Webhook delivery info (legacy)
+                webhookDeliveryId: webhookDeliveries.id,
+                webhookDeliveryStatus: webhookDeliveries.status,
+                webhookDeliveryAttempts: webhookDeliveries.attempts,
+                webhookDeliveryError: webhookDeliveries.error,
+                webhookDeliveryTime: webhookDeliveries.deliveryTime,
+                webhookDeliveryLastAttempt: webhookDeliveries.lastAttemptAt,
+                webhookDeliveryResponseCode: webhookDeliveries.responseCode,
+                webhookName: webhooks.name,
+                webhookUrl: webhooks.url,
+                
+                // Endpoint delivery info (new unified system)
+                endpointDeliveryId: endpointDeliveries.id,
+                endpointDeliveryStatus: endpointDeliveries.status,
+                endpointDeliveryType: endpointDeliveries.deliveryType,
+                endpointDeliveryAttempts: endpointDeliveries.attempts,
+                endpointDeliveryLastAttempt: endpointDeliveries.lastAttemptAt,
+                endpointDeliveryResponseData: endpointDeliveries.responseData,
+                endpointName: endpoints.name,
+                endpointType: endpoints.type,
+                endpointConfig: endpoints.config,
+            })
+            .from(structuredEmails)
+            .leftJoin(sesEvents, eq(structuredEmails.sesEventId, sesEvents.id))
+            .leftJoin(webhookDeliveries, eq(structuredEmails.emailId, webhookDeliveries.emailId))
+            .leftJoin(webhooks, eq(webhookDeliveries.webhookId, webhooks.id))
+            .leftJoin(endpointDeliveries, eq(structuredEmails.emailId, endpointDeliveries.emailId))
+            .leftJoin(endpoints, eq(endpointDeliveries.endpointId, endpoints.id))
+            .where(and(...whereConditions))
+            .orderBy(desc(structuredEmails.createdAt))
+            .limit(limit)
+            .offset(offset)
+
+        // Get total count for pagination
+        const totalCountResult = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(structuredEmails)
+            .where(and(...whereConditions))
+
+        const totalCount = totalCountResult[0]?.count || 0
+
+        // Get unique domains for filter options
+        const uniqueDomainsResult = await db
+            .select({
+                domain: sql<string>`DISTINCT SPLIT_PART(${structuredEmails.toData}::jsonb->'addresses'->0->>'address', '@', 2)`
+            })
+            .from(structuredEmails)
+            .where(eq(structuredEmails.userId, session.user.id))
+            .orderBy(sql`SPLIT_PART(${structuredEmails.toData}::jsonb->'addresses'->0->>'address', '@', 2)`)
+
+        const uniqueDomains = uniqueDomainsResult.map(row => row.domain).filter(Boolean)
+
+        // Group emails by emailId to handle multiple deliveries
+        const emailsMap = new Map()
+        
+        emailsWithDeliveries.forEach(row => {
+            const emailId = row.emailId
+            
+            if (!emailsMap.has(emailId)) {
+                // Parse JSON fields for display
+                let parsedFromData = null
+                let parsedToData = null
+                let parsedAttachments = []
+
+                try {
+                    if (row.fromData) parsedFromData = JSON.parse(row.fromData)
+                    if (row.toData) parsedToData = JSON.parse(row.toData)
+                    if (row.attachments) parsedAttachments = JSON.parse(row.attachments)
+                } catch (e) {
+                    console.error('Failed to parse email data for display:', e)
+                }
+
+                const fromAddress = parsedFromData?.addresses?.[0]?.address || 'unknown'
+                const recipient = parsedToData?.addresses?.[0]?.address || 'unknown'
+                const domain = recipient.split('@')[1] || ''
+
+                // Create preview from text or HTML content
+                let preview = 'No preview available'
+                if (row.textBody) {
+                    preview = row.textBody.slice(0, 150).replace(/\n/g, ' ').trim()
+                } else if (row.htmlBody) {
+                    preview = row.htmlBody.replace(/<[^>]*>/g, '').slice(0, 150).replace(/\n/g, ' ').trim()
+                }
+
+                emailsMap.set(emailId, {
+                    id: row.id,
+                    emailId: row.emailId,
+                    messageId: row.messageId,
+                    from: fromAddress,
+                    recipient: recipient,
+                    subject: row.subject || 'No Subject',
+                    receivedAt: row.date?.toISOString() || row.createdAt?.toISOString(),
+                    domain: domain,
+                    isRead: row.isRead || false,
+                    readAt: row.readAt?.toISOString() || null,
+                    preview: preview,
+                    attachmentCount: parsedAttachments.length,
+                    hasAttachments: parsedAttachments.length > 0,
+                    parseSuccess: row.parseSuccess,
+                    parseError: row.parseError,
+                    processingTimeMs: row.processingTimeMillis || 0,
+                    authResults: {
+                        spf: row.spfVerdict || 'UNKNOWN',
+                        dkim: row.dkimVerdict || 'UNKNOWN',
+                        dmarc: row.dmarcVerdict || 'UNKNOWN',
+                        spam: row.spamVerdict || 'UNKNOWN',
+                        virus: row.virusVerdict || 'UNKNOWN'
+                    },
+                    deliveries: []
+                })
+            }
+
+            const email = emailsMap.get(emailId)
+
+            // Add webhook delivery if exists
+            if (row.webhookDeliveryId) {
+                let webhookConfig = null
+                try {
+                    webhookConfig = {
+                        name: row.webhookName || 'Unknown Webhook',
+                        url: row.webhookUrl || 'Unknown URL'
+                    }
+                } catch (e) {
+                    console.error('Failed to parse webhook config:', e)
+                }
+
+                email.deliveries.push({
+                    id: row.webhookDeliveryId,
+                    type: 'webhook',
+                    status: row.webhookDeliveryStatus || 'unknown',
+                    attempts: row.webhookDeliveryAttempts || 0,
+                    lastAttemptAt: row.webhookDeliveryLastAttempt?.toISOString() || null,
+                    error: row.webhookDeliveryError || null,
+                    deliveryTimeMs: row.webhookDeliveryTime || null,
+                    responseCode: row.webhookDeliveryResponseCode || null,
+                    config: webhookConfig
+                })
+            }
+
+            // Add endpoint delivery if exists
+            if (row.endpointDeliveryId) {
+                let endpointConfig = null
+                try {
+                    endpointConfig = {
+                        name: row.endpointName || 'Unknown Endpoint',
+                        type: row.endpointType || 'unknown',
+                        config: row.endpointConfig ? JSON.parse(row.endpointConfig) : null
+                    }
+                } catch (e) {
+                    console.error('Failed to parse endpoint config:', e)
+                }
+
+                let responseData = null
+                try {
+                    responseData = row.endpointDeliveryResponseData ? JSON.parse(row.endpointDeliveryResponseData) : null
+                } catch (e) {
+                    console.error('Failed to parse endpoint response data:', e)
+                }
+
+                email.deliveries.push({
+                    id: row.endpointDeliveryId,
+                    type: row.endpointDeliveryType || 'unknown',
+                    status: row.endpointDeliveryStatus || 'unknown',
+                    attempts: row.endpointDeliveryAttempts || 0,
+                    lastAttemptAt: row.endpointDeliveryLastAttempt?.toISOString() || null,
+                    responseData: responseData,
+                    config: endpointConfig
+                })
+            }
+        })
+
+        // Convert map to array and filter by status if needed
+        let formattedEmails = Array.from(emailsMap.values())
+
+        // Apply status filter
+        if (statusFilter !== 'all') {
+            formattedEmails = formattedEmails.filter(email => {
+                switch (statusFilter) {
+                    case 'delivered':
+                        return email.deliveries.some((d: any) => d.status === 'success')
+                    case 'failed':
+                        return email.deliveries.some((d: any) => d.status === 'failed') || !email.parseSuccess
+                    case 'pending':
+                        return email.deliveries.some((d: any) => d.status === 'pending')
+                    case 'no_delivery':
+                        return email.deliveries.length === 0
+                    case 'parse_failed':
+                        return !email.parseSuccess
+                    default:
+                        return true
+                }
+            })
+        }
+
+        // Calculate delivery stats
+        const stats = {
+            totalEmails: formattedEmails.length,
+            delivered: formattedEmails.filter(e => e.deliveries.some((d: any) => d.status === 'success')).length,
+            failed: formattedEmails.filter(e => e.deliveries.some((d: any) => d.status === 'failed') || !e.parseSuccess).length,
+            pending: formattedEmails.filter(e => e.deliveries.some((d: any) => d.status === 'pending')).length,
+            noDelivery: formattedEmails.filter(e => e.deliveries.length === 0).length,
+            avgProcessingTime: formattedEmails.reduce((sum, e) => sum + e.processingTimeMs, 0) / (formattedEmails.length || 1)
+        }
+
+        return {
+            success: true,
+            data: {
+                emails: formattedEmails,
+                pagination: {
+                    total: totalCount,
+                    limit,
+                    offset,
+                    hasMore: offset + limit < totalCount
+                },
+                filters: {
+                    uniqueDomains
+                },
+                stats: stats
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching user email logs:', error)
+        return { error: 'Failed to fetch email logs' }
     }
 }
 

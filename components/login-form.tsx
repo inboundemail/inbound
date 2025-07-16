@@ -94,10 +94,10 @@ export function LoginForm({
     return (
       <div className={cn("flex flex-col gap-6", className)}>
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+          <div className="w-16 h-16 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              className="h-8 w-8 text-green-600"
+              className="h-8 w-8 text-green-600 dark:text-green-400"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -110,13 +110,13 @@ export function LoginForm({
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold">check your email</h1>
+          <h1 className="text-2xl font-bold text-foreground">check your email</h1>
           <p className="text-balance text-sm text-muted-foreground">
-            We've sent a magic link to <strong>{email}</strong>. Click the link
+            We've sent a magic link to <strong className="text-foreground">{email}</strong>. Click the link
             in your email to sign in.
           </p>
           {process.env.NODE_ENV === "development" && (
-            <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+            <p className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 p-2 rounded">
               <strong>Dev mode:</strong> Check your console for the magic link
               URL
             </p>
@@ -184,11 +184,11 @@ export function LoginForm({
 
       {/* Divider */}
       <div className="relative flex items-center justify-center text-xs uppercase">
-        <div className="w-full h-px bg-gradient-to-r from-transparent to-gray-300" />
-        <span className="bg-white px-2 text-muted-foreground whitespace-nowrap">
+        <div className="w-full h-px bg-gradient-to-r from-transparent to-border" />
+        <span className="bg-card px-2 text-muted-foreground whitespace-nowrap">
           or continue with
         </span>
-        <div className="w-full h-px bg-gradient-to-l from-transparent to-gray-300" />
+        <div className="w-full h-px bg-gradient-to-l from-transparent to-border" />
       </div>
 
       <div className="grid gap-2">

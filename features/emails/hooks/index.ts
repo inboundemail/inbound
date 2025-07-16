@@ -2,8 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { markEmailAsRead, getEmailsList, getEmailDetailsFromParsed } from '@/app/actions/primary'
 
 // Export the useEmailQuery hook and types from the dedicated file
-export { useEmailQuery, type EmailDetails } from './useEmailQuery'
+export { useEmailQuery } from './useEmailQuery'
 export { useMarkEmailAsReadMutation } from './useMarkEmailAsReadMutation'
+export { useUserEmailLogsQuery } from './useUserEmailLogsQuery'
 
 // Query keys
 export const emailKeys = {
