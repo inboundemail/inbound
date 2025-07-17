@@ -1,0 +1,29 @@
+---
+alwaysApply: true
+---
+At the beginning of each message response start it with "v2 API Rules Loaded"
+
+
+Every API endpoint for the v2 API should be in this format:
+
+1. The endpoint should be in the format /api/v2/{resource}/{id} (the depth for any one research should be no more than 2)
+2. Simple is KEY, just core functionality is needed. Nothing super fancy. 
+3. At the beginning of each request use the validateRequest function to validate the request, this will return a userId if the request is valid, otherwise it will return an error.
+4. For all endpoint types (like a GET and POST on the same endpoint), above each of those requests there should be a type for the request and for the response, formatted like this:
+
+TYPES FOR A
+PUT FUNCTION A
+
+TYPES FOR B
+POST FUNCTION B
+
+TYPES FOR C
+GET FUNCTION C
+
+5. Copy the console.logging style from the existing endpoints and use it for all new endpoints. We need descriptive logging with emojis for all endpoint funtions, especially for the error cases.
+
+6. For dynamic routes with [id] or other params, ALWAYS await the params object before accessing its properties. Use `const { id } = await params` at the beginning of each function and type params as `Promise<{ id: string }>` in the function signature.
+
+7. NEVER use the 'any' type for any of the endpoints or the testing.
+
+8. If you update or create a new api endpoint, make sure that the mintlify documentation is updated. You can find it under the docs.inbound.new folder. 

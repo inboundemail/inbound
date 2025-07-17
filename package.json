@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
+    "test": "bun run app/api/v2/testing.test.ts",
     "start": "next start",
     "lint": "next lint",
     "db-prepare": "bun run scripts/db-prepare.ts",
@@ -60,6 +61,7 @@
     "async_hooks": "^1.0.0",
     "autumn-js": "^0.0.47",
     "better-auth": "^1.2.8",
+    "bun-types": "^1.2.18",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",

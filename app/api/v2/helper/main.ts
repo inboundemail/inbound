@@ -11,9 +11,11 @@ export async function validateRequest(request: NextRequest) {
             headers: await headers()
         })
 
+        const apiKey = request.headers.get('Authorization')?.replace('Bearer ', '') || ""
+
         const apiSession = await auth.api.verifyApiKey({
             body: {
-                key: request.headers.get('Authorization') || request.headers.get('Bearer') || ''
+                key: apiKey
             }
         })
 
