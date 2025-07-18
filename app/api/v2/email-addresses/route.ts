@@ -283,7 +283,7 @@ export interface PostEmailAddressesRequest {
     address: string
     domainId: string
     endpointId?: string
-    webhookId?: string
+    webhookId?: string 
     isActive?: boolean
 }
 

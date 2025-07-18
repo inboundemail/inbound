@@ -659,11 +659,13 @@ describe("end-to-end email webhook test", () => {
     let testEndpointId: string;
     let testEmailAddressId: string;
     let testDomainId: string;
+    let testDomain: string;
     
     it("should create endpoint, email address, send email, and receive webhook", async () => {
         // Skip if no domains available
         
         testDomainId = "indm_h6yoR3_ENuce_J8OLm7Yh"; // exon.dev domain id
+        testDomain = "exon.dev";
         
         console.log("🚀 Starting end-to-end email webhook test...");
         
@@ -714,7 +716,7 @@ describe("end-to-end email webhook test", () => {
         console.log(`✅ Created webhook endpoint: ${testEndpointId}`);
         
         // Step 3: Create email address
-        const testEmailAddress = `e2e-test-${Date.now()}@${testDomainId}`;
+        const testEmailAddress = `e2e-test-${Date.now()}@${testDomain}`;
         
         const createEmailResponse = await fetch(`${API_URL}/email-addresses`, {
             headers: {
@@ -725,6 +727,7 @@ describe("end-to-end email webhook test", () => {
             body: JSON.stringify({
                 address: testEmailAddress,
                 domainId: testDomainId,
+                endpointId: testEndpointId,
                 isActive: true
             })
         });
@@ -733,23 +736,19 @@ describe("end-to-end email webhook test", () => {
         expect(createEmailResponse.status).toBe(201);
         testEmailAddressId = emailData.id;
         console.log(`✅ Created email address: ${testEmailAddress}`);
-        
-        // Step 4: Set up email address routing to the webhook endpoint
-        const updateEmailResponse = await fetch(`${API_URL}/email-addresses/${testEmailAddressId}`, {
+
+        // Step 4.5: Confirm the email address is routed to the webhook endpoint
+        const getEmailResponse = await fetch(`${API_URL}/email-addresses/${testEmailAddressId}`, {
             headers: {
-                "Authorization": `Bearer ${API_KEY}`,
-                "Content-Type": "application/json"
-            },
-            method: "PUT",
-            body: JSON.stringify({
-                routing: {
-                    type: "endpoint",
-                    endpointId: testEndpointId
-                }
-            })
+                "Authorization": `Bearer ${API_KEY}`
+            }
         });
-        
-        expect(updateEmailResponse.status).toBe(200);
+        const emailAddressData = await getEmailResponse.json();
+        console.log("🔍 Email address data:", emailAddressData);
+        expect(getEmailResponse.status).toBe(200);
+        expect(emailAddressData.routing.type).toBe("endpoint");
+        expect(emailAddressData.endpointId).toBe(testEndpointId);
+
         console.log(`✅ Email address routing configured to webhook endpoint`);
         
         // Step 5: Send test email via Resend
