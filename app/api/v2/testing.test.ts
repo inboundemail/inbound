@@ -1,10 +1,15 @@
 // This is a test file to test the API endpoints
 
+// @ts-ignore - bun:test is a Bun-specific module not recognized by TypeScript
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { GetMailResponse, PostMailResponse } from "./mail/route";
 import { GetMailByIdResponse } from "./mail/[id]/route";
 import { GetEndpointsResponse, PostEndpointsResponse } from "./endpoints/route";
 import { GetEndpointByIdResponse, PutEndpointByIdResponse, DeleteEndpointByIdResponse } from "./endpoints/[id]/route";
+import { GetEmailAddressesResponse, PostEmailAddressesResponse } from "./email-addresses/route";
+import { GetEmailAddressByIdResponse, PutEmailAddressByIdResponse, DeleteEmailAddressByIdResponse } from "./email-addresses/[id]/route";
+import { GetDomainsResponse } from "./domains/route";
+import { GetDomainByIdResponse, PutDomainByIdRequest, PutDomainByIdResponse } from "./domains/[id]/route";
 import type { WebhookConfig } from "@/features/endpoints/types";
 import dotenv from "dotenv";
 
@@ -17,6 +22,8 @@ const API_KEY = process.env.INBOUND_API_KEY;
 
 let emailId: string;
 let endpointId: string;
+let emailAddressId: string;
+let domainId: string;
 
 // Mail API
 
@@ -225,5 +232,342 @@ describe("verify endpoint deletion", () => {
         expect(response.status).toBe(404);
         const data = await response.json();
         expect(data.error).toBe("Endpoint not found");
+    });
+});
+
+// Domains API
+
+/**
+ * This is going to:
+ * 1. List all domains (GET /api/v2/domains)
+ * 2. Get a domain by ID (GET /api/v2/domains/{id})
+ * 3. Update catch-all settings (PUT /api/v2/domains/{id}) - turn on
+ * 4. Update catch-all settings (PUT /api/v2/domains/{id}) - turn off
+ * 5. List domains again to verify changes
+ * 6. Save domain ID for email address tests
+ */
+
+describe("list all domains", () => {
+    it("should return domains with stats and a 200 status code", async () => {
+        const response = await fetch(`${API_URL}/domains`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        const data: GetDomainsResponse = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.data).toBeDefined();
+        expect(Array.isArray(data.data)).toBe(true);
+        expect(data.pagination).toBeDefined();
+        expect(data.pagination.limit).toBeDefined();
+        expect(data.pagination.offset).toBeDefined();
+        expect(data.pagination.total).toBeDefined();
+        expect(data.meta).toBeDefined();
+        expect(data.meta.totalCount).toBeDefined();
+        expect(data.meta.verifiedCount).toBeDefined();
+        expect(data.meta.statusBreakdown).toBeDefined();
+        
+        // Save domain ID for email tests
+        if (data.data.length > 0) {
+            domainId = data.data[0].id;
+        }
+    });
+});
+
+describe("get a domain by id", () => {
+    it("should return domain details with stats and a 200 status code", async () => {
+        if (!domainId) {
+            console.warn("⚠️ Skipping domain get test - no domain ID available");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/domains/${domainId}`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        const data: GetDomainByIdResponse = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBe(domainId);
+        expect(data.domain).toBeDefined();
+        expect(data.status).toBeDefined();
+        expect(data.canReceiveEmails).toBeDefined();
+        expect(data.isCatchAllEnabled).toBeDefined();
+        expect(data.stats).toBeDefined();
+        expect(data.stats.totalEmailAddresses).toBeDefined();
+        expect(data.stats.activeEmailAddresses).toBeDefined();
+    });
+});
+
+describe("update domain catch-all settings - enable", () => {
+    it("should enable catch-all for the domain and return a 200 status code", async () => {
+        if (!domainId) {
+            console.warn("⚠️ Skipping domain catch-all enable test - no domain ID available");
+            return;
+        }
+
+        // First, get an endpoint to use for catch-all
+        const endpointsResponse = await fetch(`${API_URL}/endpoints`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        const endpointsData = await endpointsResponse.json();
+        
+        if (!endpointsData.data || endpointsData.data.length === 0) {
+            console.warn("⚠️ Skipping domain catch-all enable test - no endpoints available");
+            return;
+        }
+
+        const endpointId = endpointsData.data[0].id;
+        
+        const response = await fetch(`${API_URL}/domains/${domainId}`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            method: "PUT",
+            body: JSON.stringify({
+                isCatchAllEnabled: true,
+                catchAllEndpointId: endpointId
+            } as PutDomainByIdRequest)
+        });
+        
+        const data: PutDomainByIdResponse = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBe(domainId);
+        expect(data.isCatchAllEnabled).toBe(true);
+        expect(data.catchAllEndpointId).toBe(endpointId);
+        expect(data.catchAllEndpoint).toBeDefined();
+        expect(data.catchAllEndpoint?.id).toBe(endpointId);
+    });
+});
+
+describe("update domain catch-all settings - disable", () => {
+    it("should disable catch-all for the domain and return a 200 status code", async () => {
+        if (!domainId) {
+            console.warn("⚠️ Skipping domain catch-all disable test - no domain ID available");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/domains/${domainId}`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            method: "PUT",
+            body: JSON.stringify({
+                isCatchAllEnabled: false,
+                catchAllEndpointId: null
+            } as PutDomainByIdRequest)
+        });
+        
+        const data: PutDomainByIdResponse = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBe(domainId);
+        expect(data.isCatchAllEnabled).toBe(false);
+        expect(data.catchAllEndpointId).toBeNull();
+        expect(data.catchAllEndpoint).toBeNull();
+    });
+});
+
+describe("verify domain changes by listing again", () => {
+    it("should reflect the catch-all changes in the domains list", async () => {
+        const response = await fetch(`${API_URL}/domains`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        const data: GetDomainsResponse = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.data).toBeDefined();
+        
+        // Find our domain and verify catch-all is disabled
+        const ourDomain = data.data.find(d => d.id === domainId);
+        expect(ourDomain).toBeDefined();
+        expect(ourDomain?.isCatchAllEnabled).toBe(false);
+        expect(ourDomain?.catchAllEndpointId).toBeNull();
+    });
+});
+
+// Email Addresses API
+
+/**
+ * This is going to:
+ * 1. List all email addresses (GET /api/v2/email-addresses)
+ * 2. Create an email address (POST /api/v2/email-addresses) -> (id)
+ * 3. Get an email address by (id) (GET /api/v2/email-addresses/{id})
+ * 4. Update that email address (PUT /api/v2/email-addresses/{id})
+ * 5. Delete that email address (DELETE /api/v2/email-addresses/{id})
+ * 6. Verify the email address is deleted (GET /api/v2/email-addresses/{id})
+ */
+
+describe("list all email addresses", () => {
+    it("should return email addresses with pagination and a 200 status code", async () => {
+        const response = await fetch(`${API_URL}/email-addresses`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        const data: GetEmailAddressesResponse = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.data).toBeDefined();
+        expect(Array.isArray(data.data)).toBe(true);
+        expect(data.pagination).toBeDefined();
+        expect(data.pagination.limit).toBeDefined();
+        expect(data.pagination.offset).toBeDefined();
+        expect(data.pagination.total).toBeDefined();
+        
+        // Store domainId for creating email address if we have existing email addresses
+        if (data.data.length > 0) {
+            domainId = data.data[0].domainId;
+        }
+    });
+});
+
+describe("create an email address", () => {
+    it("should create an email address and return a 201 status code", async () => {
+        // Skip test if we don't have a domainId
+        if (!domainId) {
+            console.warn("⚠️ Skipping email address creation test - no domains found");
+            return;
+        }
+
+        // First, get domain info to create valid email address
+        const domainResponse = await fetch(`${API_URL}/domains`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        
+        if (!domainResponse.ok) {
+            console.warn("⚠️ Skipping email address creation test - could not fetch domains");
+            return;
+        }
+
+        const domainData: GetDomainsResponse = await domainResponse.json();
+        if (!domainData.data || domainData.data.length === 0) {
+            console.warn("⚠️ Skipping email address creation test - no domains available");
+            return;
+        }
+
+        const domain = domainData.data[0];
+        const testEmailAddress = `test-${Date.now()}@${domain.domain}`;
+
+        const response = await fetch(`${API_URL}/email-addresses`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            method: "POST",
+            body: JSON.stringify({
+                address: testEmailAddress,
+                domainId: domain.id,
+                isActive: true
+            })
+        });
+        
+        const data: PostEmailAddressesResponse = await response.json();
+        expect(response.status).toBe(201);
+        expect(data.id).toBeDefined();
+        expect(data.address).toBe(testEmailAddress);
+        expect(data.domainId).toBe(domain.id);
+        expect(data.isActive).toBe(true);
+        expect(data.domain).toBeDefined();
+        expect(data.domain.name).toBe(domain.domain);
+        expect(data.routing).toBeDefined();
+        expect(data.routing.type).toBe("none");
+        emailAddressId = data.id;
+    });
+});
+
+describe("get an email address by id", () => {
+    it("should return email address details and a 200 status code", async () => {
+        if (!emailAddressId) {
+            console.warn("⚠️ Skipping email address get test - no email address created");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/email-addresses/${emailAddressId}`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        const data: GetEmailAddressByIdResponse = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBe(emailAddressId);
+        expect(data.address).toBeDefined();
+        expect(data.domain).toBeDefined();
+        expect(data.domain.name).toBeDefined();
+        expect(data.routing).toBeDefined();
+        expect(data.isActive).toBe(true);
+        expect(data.isReceiptRuleConfigured).toBeDefined();
+    });
+});
+
+describe("update an email address", () => {
+    it("should update the email address and return a 200 status code", async () => {
+        if (!emailAddressId) {
+            console.warn("⚠️ Skipping email address update test - no email address created");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/email-addresses/${emailAddressId}`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            method: "PUT",
+            body: JSON.stringify({
+                isActive: false
+            })
+        });
+        const data: PutEmailAddressByIdResponse = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBe(emailAddressId);
+        expect(data.isActive).toBe(false);
+        expect(data.domain).toBeDefined();
+        expect(data.routing).toBeDefined();
+    });
+});
+
+describe("delete an email address", () => {
+    it("should delete the email address and return cleanup info with a 200 status code", async () => {
+        if (!emailAddressId) {
+            console.warn("⚠️ Skipping email address delete test - no email address created");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/email-addresses/${emailAddressId}`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            },
+            method: "DELETE"
+        });
+        const data: DeleteEmailAddressByIdResponse = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.message).toBe("Email address deleted successfully");
+        expect(data.cleanup).toBeDefined();
+        expect(data.cleanup.emailAddress).toBeDefined();
+        expect(data.cleanup.domain).toBeDefined();
+        expect(data.cleanup.sesRuleUpdated).toBeDefined();
+    });
+});
+
+describe("verify email address deletion", () => {
+    it("should not find the deleted email address when getting by id", async () => {
+        if (!emailAddressId) {
+            console.warn("⚠️ Skipping email address deletion verification test - no email address created");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/email-addresses/${emailAddressId}`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        expect(response.status).toBe(404);
+        const data = await response.json();
+        expect(data.error).toBe("Email address not found");
     });
 });
