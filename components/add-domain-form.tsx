@@ -1,42 +1,54 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect, useMemo, type FormEvent } from "react"
+import React, { useState, useEffect, useMemo, FormEvent } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import Globe2 from "@/components/icons/globe-2"
-import CheckList from "@/components/icons/check-list"
-import BadgeCheck2 from "@/components/icons/badge-check-2"
-import CircleCheck from "@/components/icons/circle-check"
-import ArrowBoldRight from "@/components/icons/arrow-bold-right"
-import Clipboard2 from "@/components/icons/clipboard-2"
-import Loader from "@/components/icons/loader"
-import Refresh2 from "@/components/icons/refresh-2"
-import Clock2 from "@/components/icons/clock-2"
-import CircleWarning2 from "@/components/icons/circle-warning-2"
-import ExternalLink2 from "@/components/icons/external-link-2"
-import Download2 from "@/components/icons/download-2"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
+import ArrowBoldRight from "@/components/icons/arrow-bold-right"
+import Clock2 from "@/components/icons/clock-2"
+import CircleCheck from "@/components/icons/circle-check"
+import CircleWarning2 from "@/components/icons/circle-warning-2"
+import Loader from "@/components/icons/loader"
+import Clipboard2 from "@/components/icons/clipboard-2"
+import Download2 from "@/components/icons/download-2"
+import Refresh2 from "@/components/icons/refresh-2"
+import BadgeCheck2 from "@/components/icons/badge-check-2"
+import Globe2 from "@/components/icons/globe-2"
+import ExternalLink2 from "@/components/icons/external-link-2"
+import ResendIcon from "@/components/ResendIcon"
+import CheckList from "@/components/icons/check-list"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
-import { toast } from "sonner"
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table"
-import ResendIcon from "@/components/ResendIcon"
-import { Checkbox } from "@/components/ui/checkbox"
+import type { 
+  PostDomainsResponse, 
+  DomainWithStats
+} from "@/app/api/v2/domains/route"
 
 interface StepConfig {
   id: string
   name: string
-  description?: string
-  icon: React.ElementType
+  description: string
 }
 
 const stepsConfig: StepConfig[] = [
-  { id: "01", name: "Domain", description: "Domain name for your sending.", icon: Globe2 },
-  { id: "02", name: "DNS Records", description: "Add records to your DNS provider.", icon: CheckList },
-  { id: "03", name: "Verified", description: "Your domain is ready.", icon: BadgeCheck2 },
+  {
+    id: "add-domain",
+    name: "Add Domain",
+    description: "Add a domain you own to send emails.",
+  },
+  {
+    id: "configure-dns",
+    name: "Configure DNS",
+    description: "Add the following DNS records to your domain provider.",
+  },
+  {
+    id: "verified",
+    name: "Verified",
+    description: "Start sending emails to your domain.",
+  },
 ]
 
 const stepVariants = {
@@ -46,20 +58,54 @@ const stepVariants = {
 }
 
 interface DnsRecord {
+  type: 'TXT' | 'MX' | string  // Allow string for flexibility
   name: string
-  type: "TXT" | "MX"
+  value: string
+  isVerified?: boolean
+}
+
+// Type for DNS records from verification check
+type VerificationDnsRecord = {
+  type: string
+  name: string
   value: string
   isVerified: boolean
+  error?: string
+}
+
+// Enhanced type for domain response with verification check
+interface DomainResponseWithCheck extends Omit<DomainWithStats, 'stats' | 'catchAllEndpoint'> {
+  stats: {
+    totalEmailAddresses: number
+    activeEmailAddresses: number
+    hasCatchAll: boolean
+  }
+  catchAllEndpoint?: {
+    id: string
+    name: string
+    type: string
+    isActive: boolean
+  } | null
+  verificationCheck?: {
+    dnsRecords?: Array<VerificationDnsRecord>
+    sesStatus?: string
+    isFullyVerified?: boolean
+    lastChecked?: Date
+  }
 }
 
 interface ApiResponse {
   success: boolean
-  domain: string
-  domainId: string
-  verificationToken: string
-  status: 'pending' | 'verified' | 'failed'
-  dnsRecords: DnsRecord[]
   error?: string
+  domain?: string
+  domainId?: string
+  status?: 'pending' | 'verified' | 'failed'
+  dnsRecords?: DnsRecord[]
+  verificationToken?: string
+  provider?: {
+    name: string
+    confidence: 'high' | 'medium' | 'low'
+  }
 }
 
 interface AddDomainFormProps {
@@ -128,8 +174,6 @@ export default function AddDomainForm({
   }>({})
   const [isProcessing, setIsProcessing] = useState(false)
   const [periodicCheckEnabled, setPeriodicCheckEnabled] = useState(false)
-  const [domainSuggestions, setDomainSuggestions] = useState<string[]>([])
-  const [isCheckingSuggestions, setIsCheckingSuggestions] = useState(false)
   const router = useRouter()
 
   // Memoize the DNS records to prevent unnecessary re-renders
@@ -186,37 +230,45 @@ export default function AddDomainForm({
     }
 
     try {
-      const response = await fetch('/api/domain/verifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'checkVerification',
-          domain: domainName,
-          domainId: domainId
-        })
-      })
+      const response = await fetch(`/api/v2/domains?status=pending&check=true`)
 
-      const result: ApiResponse = await response.json()
+      if (!response.ok) {
+        console.error('Failed to check domain status:', response.status)
+        return
+      }
 
-      if (result.success) {
-        // Update verification status
-        setVerificationStatus(result.status)
+      const result = await response.json()
+      
+      // Find our domain in the response
+      const ourDomain = result.data?.find((d: DomainResponseWithCheck) => d.id === domainId)
+      
+      if (!ourDomain) {
+        console.error('Domain not found in response')
+        return
+      }
 
-        // Update DNS records if provided
-        if (result.dnsRecords) {
-          setDnsRecords(result.dnsRecords)
-        }
+      // Update verification status based on domain status
+      setVerificationStatus(ourDomain.status as 'pending' | 'verified' | 'failed')
 
-        if (result.status === 'verified') {
-          console.log("✅ Domain verified! Redirecting to domain details page...")
-          toast.success("Domain verified successfully! Redirecting...")
-          setPeriodicCheckEnabled(false) // Stop periodic checks
-          
-          // Redirect to domain details page
-          setTimeout(() => {
-            router.push(`/emails/${domainId}`)
-          }, 1500) // Small delay to show the success message
-        }
+      // Update DNS records if verification check is available
+      if (ourDomain.verificationCheck?.dnsRecords) {
+        setDnsRecords(ourDomain.verificationCheck.dnsRecords.map((record: VerificationDnsRecord) => ({
+          type: record.type,
+          name: record.name,
+          value: record.value,
+          isVerified: record.isVerified
+        })))
+      }
+
+      if (ourDomain.status === 'verified') {
+        console.log("✅ Domain verified! Redirecting to domain details page...")
+        toast.success("Domain verified successfully! Redirecting...")
+        setPeriodicCheckEnabled(false) // Stop periodic checks
+        
+        // Redirect to domain details page
+        setTimeout(() => {
+          router.push(`/emails/${domainId}`)
+        }, 1500) // Small delay to show the success message
       }
     } catch (err) {
       console.error('Error in periodic verification check:', err)
@@ -241,47 +293,7 @@ export default function AddDomainForm({
     }
   }
 
-  const generateSubdomainSuggestions = async (domain: string): Promise<string[]> => {
-    const subdomainPrefixes = ['e', 'i', 'inbound', 'mail', 'receive']
-    const suggestions: string[] = []
-    
-    setIsCheckingSuggestions(true)
-    
-    for (const prefix of subdomainPrefixes) {
-      if (suggestions.length >= 3) break // Limit to 3 suggestions
-      
-      const subdomain = `${prefix}.${domain}`
-      
-      try {
-        const checkResponse = await fetch('/api/domain/verifications', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'canDomainBeUsed',
-            domain: subdomain
-          })
-        })
 
-        const checkResult = await checkResponse.json()
-        
-        if (checkResult.success && checkResult.canBeUsed) {
-          suggestions.push(subdomain)
-        }
-      } catch (error) {
-        console.error(`Error checking subdomain ${subdomain}:`, error)
-        // Continue to next suggestion
-      }
-    }
-    
-    setIsCheckingSuggestions(false)
-    return suggestions
-  }
-
-  const handleSuggestionClick = (suggestion: string) => {
-    setDomainName(suggestion)
-    setDomainSuggestions([])
-    setError("")
-  }
 
   const handleSubmitDomain = async (e: FormEvent) => {
     e.preventDefault()
@@ -299,65 +311,50 @@ export default function AddDomainForm({
     setError("")
 
     try {
-      // First check if domain can be used
-      const checkResponse = await fetch('/api/domain/verifications', {
+      // Use v2 API to add domain
+      const addResponse = await fetch('/api/v2/domains', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'canDomainBeUsed',
           domain: domainName
         })
       })
 
-      const checkResult = await checkResponse.json()
+      const addResult: PostDomainsResponse | { error: string } = await addResponse.json()
 
-      if (!checkResult.success) {
-        setError(checkResult.error || 'Failed to check domain')
-        return
-      }
-
-      if (!checkResult.canBeUsed) {
-        // Generate subdomain suggestions
-        const suggestions = await generateSubdomainSuggestions(domainName)
-        setDomainSuggestions(suggestions)
+      if (!addResponse.ok) {
+        const errorResult = addResult as { error: string }
         
-        if (suggestions.length > 0) {
-          setError(`This domain cannot be used. It may have conflicting DNS records. Try one of these available alternatives:`)
+        // Check for specific error types
+        if (addResponse.status === 409) {
+          setError('This domain already exists in your account.')
+        } else if (addResponse.status === 403) {
+          setError(errorResult.error || 'Domain limit reached. Please upgrade your plan.')
+        } else if (addResponse.status === 400 && errorResult.error?.includes('conflicting DNS records')) {
+          setError('This domain cannot be used. It may have conflicting DNS records (MX or CNAME). Please remove them before adding this domain.')
         } else {
-          setError('This domain cannot be used. It may have conflicting DNS records.')
+          setError(errorResult.error || 'Failed to add domain')
         }
         return
       }
 
-      // If domain can be used, add it
-      const addResponse = await fetch('/api/domain/verifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'addDomain',
-          domain: domainName
-        })
-      })
-
-      const addResult: ApiResponse = await addResponse.json()
-
-      if (!addResult.success) {
-        setError(addResult.error || 'Failed to add domain')
-        return
-      }
-
-      console.log("addResult", addResult)
+      const successResult = addResult as PostDomainsResponse
+      console.log("Domain added successfully:", successResult)
 
       // Success - move to next step
-      setDnsRecords(addResult.dnsRecords)
-      setDomainId(addResult.domainId)
-      setVerificationStatus(addResult.status)
+      setDnsRecords(successResult.dnsRecords.map(record => ({
+        type: record.type,
+        name: record.name,
+        value: record.value,
+        isVerified: false // New domains start unverified
+      })))
+      setDomainId(successResult.id)
+      setVerificationStatus(successResult.status as 'pending' | 'verified' | 'failed')
       setCurrentStepIdx(1)
-      setDomainSuggestions([]) // Clear any suggestions
 
       // Call success callback if provided
       if (onSuccess) {
-        onSuccess(addResult.domainId)
+        onSuccess(successResult.id)
       }
 
     } catch (err) {
@@ -399,31 +396,34 @@ export default function AddDomainForm({
     console.log("🔄 Manual refresh for domainId:", domainId)
 
     try {
-      const response = await fetch('/api/domain/verifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'checkVerification',
-          domain: domainName,
-          domainId: domainId
-        })
-      })
+      const response = await fetch(`/api/v2/domains?status=pending&check=true`)
 
-      const result: ApiResponse = await response.json()
-
-      console.log("🔍 Manual refresh result:", result)
-
-      if (!result.success) {
-        setError(result.error || 'Failed to check verification status')
+      if (!response.ok) {
+        const errorData = await response.json()
+        setError(errorData.error || 'Failed to check verification status')
         toast.error("Failed to refresh status")
         setPeriodicCheckEnabled(false) // Stop periodic checks on error
         return
       }
 
-      // Update verification status
-      setVerificationStatus(result.status)
+      const result = await response.json()
+      
+      // Find our domain in the response
+      const ourDomain = result.data?.find((d: DomainResponseWithCheck) => d.id === domainId)
+      
+      if (!ourDomain) {
+        setError('Domain not found')
+        toast.error("Domain not found")
+        setPeriodicCheckEnabled(false)
+        return
+      }
 
-      if (result.status === 'verified') {
+      console.log("🔍 Manual refresh result:", ourDomain)
+
+      // Update verification status
+      setVerificationStatus(ourDomain.status as 'pending' | 'verified' | 'failed')
+
+      if (ourDomain.status === 'verified') {
         console.log("✅ Domain verified via manual refresh! Redirecting...")
         toast.success("Domain verified successfully! Redirecting...")
         setPeriodicCheckEnabled(false) // Stop periodic checks
@@ -432,7 +432,7 @@ export default function AddDomainForm({
         setTimeout(() => {
           router.push(`/emails/${domainId}`)
         }, 1500) // Small delay to show the success message
-      } else if (result.status === 'failed') {
+      } else if (ourDomain.status === 'failed') {
         toast.error("Domain verification failed")
         setPeriodicCheckEnabled(false) // Stop periodic checks on failure
       } else {
@@ -443,9 +443,14 @@ export default function AddDomainForm({
         }
       }
 
-      // Update DNS records if provided
-      if (result.dnsRecords) {
-        setDnsRecords(result.dnsRecords)
+      // Update DNS records if verification check is available
+      if (ourDomain.verificationCheck?.dnsRecords) {
+        setDnsRecords(ourDomain.verificationCheck.dnsRecords.map((record: VerificationDnsRecord) => ({
+          type: record.type,
+          name: record.name,
+          value: record.value,
+          isVerified: record.isVerified
+        })))
       }
 
     } catch (err) {
@@ -650,75 +655,40 @@ export default function AddDomainForm({
       }))
 
       try {
-        // First check if domain can be used
-        const checkResponse = await fetch('/api/domain/verifications', {
+        // Use v2 API to add domain
+        const addResponse = await fetch('/api/v2/domains', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            action: 'canDomainBeUsed',
-            domain: domainName
-          })
-        })
-
-        const checkResult = await checkResponse.json()
-
-        if (!checkResult.success) {
-          setImportProgress(prev => ({
-            ...prev,
-            [domainName]: {
-              status: 'failed',
-              message: checkResult.error || 'Failed to check domain compatibility'
-            }
-          }))
-          continue
-        }
-
-        if (!checkResult.canBeUsed) {
-          setImportProgress(prev => ({
-            ...prev,
-            [domainName]: {
-              status: 'failed',
-              message: 'Domain cannot be used. May have conflicting DNS records or MX records already configured.'
-            }
-          }))
-          continue
-        }
-
-        // If domain can be used, add it
-        const addResponse = await fetch('/api/domain/verifications', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'addDomain',
             domain: domainName
           })
         })
 
         const addResult = await addResponse.json()
 
-        if (addResult.success) {
+        if (addResponse.ok) {
+          const successResult = addResult as PostDomainsResponse
           setImportProgress(prev => ({
             ...prev,
             [domainName]: {
               status: 'success',
-              message: `Successfully added. Status: ${addResult.status}`,
-              domainId: addResult.domainId
+              message: `Successfully added. Status: ${successResult.status}`,
+              domainId: successResult.id
             }
           }))
         } else {
           // Handle specific error cases
           let errorMessage = addResult.error || 'Failed to add domain'
 
-          if (addResult.error?.includes('already exists')) {
+          if (addResponse.status === 409) {
             setImportProgress(prev => ({
               ...prev,
               [domainName]: {
                 status: 'exists',
-                message: 'Domain already exists in your account',
-                domainId: addResult.domainId
+                message: 'Domain already exists in your account'
               }
             }))
-          } else if (addResult.error?.includes('limit reached')) {
+          } else if (addResponse.status === 403) {
             setImportProgress(prev => ({
               ...prev,
               [domainName]: {
@@ -728,6 +698,14 @@ export default function AddDomainForm({
             }))
             // Stop processing if limit reached
             break
+          } else if (addResponse.status === 400 && errorMessage.includes('conflicting DNS records')) {
+            setImportProgress(prev => ({
+              ...prev,
+              [domainName]: {
+                status: 'failed',
+                message: 'Domain cannot be used. May have conflicting DNS records or MX records already configured.'
+              }
+            }))
           } else {
             setImportProgress(prev => ({
               ...prev,
@@ -865,15 +843,15 @@ export default function AddDomainForm({
               className="pt-1"
             >
               {currentStepIdx > 0 && (
-                <div className="mb-10 rounded-lg bg-green-50 p-5 border border-green-200">
+                <div className="mb-10 rounded-lg bg-accent/20 p-5 border border-accent">
                   <div className="flex items-center mb-1">
-                    <h2 className="text-lg font-semibold text-gray-800">{stepsConfig[0].name}</h2>
+                    <h2 className="text-lg font-semibold text-foreground">{stepsConfig[0].name}</h2>
                     <CircleCheck width="18" height="18" className="ml-2 text-green-600" />
                   </div>
-                  <p className="text-sm text-gray-600 mb-3">{stepsConfig[0].description}</p>
-                  <div className="flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 shadow-sm">
+                  <p className="text-sm text-muted-foreground mb-3">{stepsConfig[0].description}</p>
+                  <div className="flex items-center rounded-md border border-border bg-card px-3 py-2 shadow-sm">
                     {/* <Image src="/domain-icon.png" alt="Logo" width={16} height={16} /> */}
-                    <span className="font-mono text-sm text-gray-700">{domainName}</span>
+                    <span className="font-mono text-sm text-foreground">{domainName}</span>
                   </div>
                 </div>
               )}
@@ -882,8 +860,8 @@ export default function AddDomainForm({
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-lg font-semibold text-darkText">Select Domains to Import</h2>
-                      <p className="text-sm text-mediumText">
+                      <h2 className="text-lg font-semibold text-foreground">Select Domains to Import</h2>
+                      <p className="text-sm text-muted-foreground">
                         Choose which domains from your Resend account to import into Inbound
                       </p>
                     </div>
@@ -900,7 +878,7 @@ export default function AddDomainForm({
                   </div>
 
                   {/* Selection Controls */}
-                  <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
                     <div className="flex items-center gap-2">
                       <Button
                         variant="secondary"
@@ -917,7 +895,7 @@ export default function AddDomainForm({
                         Select None
                       </Button>
                     </div>
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-muted-foreground">
                       {selectedDomains.size} of {resendDomains.length} domains selected
                     </div>
                   </div>
@@ -935,15 +913,15 @@ export default function AddDomainForm({
                     </div>
 
                     {/* Table Body */}
-                    <div className="bg-white">
+                    <div className="bg-card">
                       {resendDomains.map((domain, index) => (
                         <div
                           key={domain.id}
                           className={cn(
-                            "flex items-center px-4 py-3 hover:bg-gray-50 cursor-pointer",
+                            "flex items-center px-4 py-3 hover:bg-muted/50 cursor-pointer",
                             {
                               "border-b border-border/50": index < resendDomains.length - 1,
-                              "bg-blue-50": selectedDomains.has(domain.name)
+                              "bg-accent/20": selectedDomains.has(domain.name)
                             }
                           )}
                           onClick={() => handleDomainToggle(domain.name)}
@@ -957,23 +935,23 @@ export default function AddDomainForm({
                           <div className="flex-1">
                             <div className="font-mono text-sm font-medium">{domain.name}</div>
                             {domain.region && (
-                              <div className="text-xs text-gray-500">Region: {domain.region}</div>
+                              <div className="text-xs text-muted-foreground">Region: {domain.region}</div>
                             )}
                           </div>
                           <div className="w-24">
                             <span className={cn(
                               "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
                               {
-                                "bg-green-100 text-green-800": domain.status === 'verified',
-                                "bg-yellow-100 text-yellow-800": domain.status === 'pending',
-                                "bg-red-100 text-red-800": domain.status === 'failed',
-                                "bg-gray-100 text-gray-800": !domain.status
+                                "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400": domain.status === 'verified',
+                                "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400": domain.status === 'pending',
+                                "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400": domain.status === 'failed',
+                                "bg-muted text-muted-foreground": !domain.status
                               }
                             )}>
                               {domain.status || 'unknown'}
                             </span>
                           </div>
-                          <div className="w-32 text-sm text-gray-600">
+                          <div className="w-32 text-sm text-muted-foreground">
                             {domain.created_at ? new Date(domain.created_at).toLocaleDateString() : 'N/A'}
                           </div>
                         </div>
@@ -996,14 +974,14 @@ export default function AddDomainForm({
               )}
 
               {showBulkImport && (
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-lg font-semibold text-darkText">Import Domains from Resend</h2>
-                      <p className="text-sm text-mediumText">
-                        Processing {selectedDomains.size} selected domain(s) from your Resend account
-                      </p>
-                    </div>
+                                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-lg font-semibold text-foreground">Import Domains from Resend</h2>
+                        <p className="text-sm text-muted-foreground">
+                          Processing {selectedDomains.size} selected domain(s) from your Resend account
+                        </p>
+                      </div>
                     <Button
                       variant="secondary"
                       onClick={() => {
@@ -1028,65 +1006,65 @@ export default function AddDomainForm({
                           className={cn(
                             "flex items-center justify-between p-4 rounded-lg border",
                             {
-                              "bg-gray-50 border-gray-200": status === 'pending',
-                              "bg-blue-50 border-blue-200": status === 'processing',
-                              "bg-green-50 border-green-200": status === 'success',
-                              "bg-yellow-50 border-yellow-200": status === 'exists',
-                              "bg-red-50 border-red-200": status === 'failed',
+                              "bg-muted/50 border-border": status === 'pending',
+                              "bg-blue-500/10 border-blue-500/20 dark:bg-blue-500/5": status === 'processing',
+                              "bg-green-500/10 border-green-500/20 dark:bg-green-500/5": status === 'success',
+                              "bg-yellow-500/10 border-yellow-500/20 dark:bg-yellow-500/5": status === 'exists',
+                              "bg-destructive/10 border-destructive/20 dark:bg-destructive/5": status === 'failed',
                             }
                           )}
                         >
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-white border">
-                              {status === 'pending' && (
-                                <span className="text-sm font-medium text-gray-500">{index + 1}</span>
-                              )}
-                              {status === 'processing' && (
-                                <Loader width="16" height="16" className="animate-spin text-blue-600" />
-                              )}
-                              {status === 'success' && (
-                                <CircleCheck width="16" height="16" className="text-green-600" />
-                              )}
-                              {status === 'exists' && (
-                                <CircleCheck width="16" height="16" className="text-yellow-600" />
-                              )}
-                              {status === 'failed' && (
-                                <CircleWarning2 width="16" height="16" className="text-red-600" />
-                              )}
+                                                      <div className="flex items-center gap-3">
+                              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-background border">
+                                {status === 'pending' && (
+                                  <span className="text-sm font-medium text-muted-foreground">{index + 1}</span>
+                                )}
+                                {status === 'processing' && (
+                                  <Loader width="16" height="16" className="animate-spin text-blue-600" />
+                                )}
+                                {status === 'success' && (
+                                  <CircleCheck width="16" height="16" className="text-green-600" />
+                                )}
+                                {status === 'exists' && (
+                                  <CircleCheck width="16" height="16" className="text-yellow-600" />
+                                )}
+                                {status === 'failed' && (
+                                  <CircleWarning2 width="16" height="16" className="text-destructive" />
+                                )}
+                              </div>
+                              <div>
+                                <div className="font-mono text-sm font-medium">{domain.name}</div>
+                                {domain.status && (
+                                  <div className="text-xs text-muted-foreground">
+                                    Resend Status: {domain.status}
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            <div>
-                              <div className="font-mono text-sm font-medium">{domain.name}</div>
-                              {domain.status && (
-                                <div className="text-xs text-gray-500">
-                                  Resend Status: {domain.status}
+
+                                                      <div className="text-right">
+                              <div className={cn(
+                                "text-sm font-medium",
+                                {
+                                  "text-muted-foreground": status === 'pending',
+                                  "text-blue-600": status === 'processing',
+                                  "text-green-600": status === 'success',
+                                  "text-yellow-600": status === 'exists',
+                                  "text-destructive": status === 'failed',
+                                }
+                              )}>
+                                {status === 'pending' && 'Waiting...'}
+                                {status === 'processing' && 'Processing...'}
+                                {status === 'success' && 'Added Successfully'}
+                                {status === 'exists' && 'Already Exists'}
+                                {status === 'failed' && 'Failed'}
+                              </div>
+                              {progress?.message && (
+                                <div className="text-xs text-muted-foreground mt-1 max-w-xs">
+                                  {progress.message}
                                 </div>
                               )}
                             </div>
-                          </div>
-
-                          <div className="text-right">
-                            <div className={cn(
-                              "text-sm font-medium",
-                              {
-                                "text-gray-500": status === 'pending',
-                                "text-blue-600": status === 'processing',
-                                "text-green-600": status === 'success',
-                                "text-yellow-600": status === 'exists',
-                                "text-red-600": status === 'failed',
-                              }
-                            )}>
-                              {status === 'pending' && 'Waiting...'}
-                              {status === 'processing' && 'Processing...'}
-                              {status === 'success' && 'Added Successfully'}
-                              {status === 'exists' && 'Already Exists'}
-                              {status === 'failed' && 'Failed'}
-                            </div>
-                            {progress?.message && (
-                              <div className="text-xs text-gray-600 mt-1 max-w-xs">
-                                {progress.message}
-                              </div>
-                            )}
-                          </div>
                         </div>
                       )
                     })}
@@ -1140,44 +1118,44 @@ export default function AddDomainForm({
                     )}
                   </div>
 
-                  {/* Summary Stats */}
-                  {Object.keys(importProgress).length > 0 && (
-                    <div className="grid grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
-                      <div className="text-center">
-                        <div className="text-lg font-semibold text-green-600">
-                          {Object.values(importProgress).filter(p => p.status === 'success').length}
+                                      {/* Summary Stats */}
+                    {Object.keys(importProgress).length > 0 && (
+                      <div className="grid grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
+                        <div className="text-center">
+                          <div className="text-lg font-semibold text-green-600">
+                            {Object.values(importProgress).filter(p => p.status === 'success').length}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Added</div>
                         </div>
-                        <div className="text-xs text-gray-600">Added</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-lg font-semibold text-yellow-600">
-                          {Object.values(importProgress).filter(p => p.status === 'exists').length}
+                        <div className="text-center">
+                          <div className="text-lg font-semibold text-yellow-600">
+                            {Object.values(importProgress).filter(p => p.status === 'exists').length}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Existing</div>
                         </div>
-                        <div className="text-xs text-gray-600">Existing</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-lg font-semibold text-red-600">
-                          {Object.values(importProgress).filter(p => p.status === 'failed').length}
+                        <div className="text-center">
+                          <div className="text-lg font-semibold text-destructive">
+                            {Object.values(importProgress).filter(p => p.status === 'failed').length}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Failed</div>
                         </div>
-                        <div className="text-xs text-gray-600">Failed</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-lg font-semibold text-gray-600">
-                          {Object.values(importProgress).filter(p => p.status === 'pending').length}
+                        <div className="text-center">
+                          <div className="text-lg font-semibold text-muted-foreground">
+                            {Object.values(importProgress).filter(p => p.status === 'pending').length}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Pending</div>
                         </div>
-                        <div className="text-xs text-gray-600">Pending</div>
                       </div>
-                    </div>
-                  )}
+                    )}
                 </div>
               )}
 
               {!showDomainSelection && !showBulkImport && currentStepIdx === 0 && (
                 <div className="">
-                  <h2 className="mb-1 text-lg font-semibold text-darkText">{stepsConfig[0].name}</h2>
-                  <p className="mb-5 text-sm text-mediumText">{stepsConfig[0].description}</p>
+                  <h2 className="mb-1 text-lg font-semibold text-foreground">{stepsConfig[0].name}</h2>
+                  <p className="mb-5 text-sm text-muted-foreground">{stepsConfig[0].description}</p>
                   <form onSubmit={handleSubmitDomain}>
-                    <label htmlFor="domainName" className="mb-1.5 block text-sm font-medium text-darkText">
+                    <label htmlFor="domainName" className="mb-1.5 block text-sm font-medium text-foreground">
                       Name
                     </label>
                     <Input
@@ -1187,40 +1165,13 @@ export default function AddDomainForm({
                       onChange={(e) => {
                         setDomainName(e.target.value)
                         if (error) setError("")
-                        if (domainSuggestions.length > 0) setDomainSuggestions([])
                       }}
                       placeholder="0.email"
                       className="mb-2 w-full font-mono text-sm"
                       aria-label="Domain Name"
                       disabled={isLoading || !!preloadedDomain} // Disable if preloaded
                     />
-                    {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
-                    
-                    {/* Domain Suggestions */}
-                    {domainSuggestions.length > 0 && (
-                      <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <h4 className="text-sm font-medium text-blue-900 mb-2">Available alternatives:</h4>
-                        <div className="space-y-2">
-                          {domainSuggestions.map((suggestion, index) => (
-                            <button
-                              key={suggestion}
-                              type="button"
-                              onClick={() => handleSuggestionClick(suggestion)}
-                              className="flex items-center justify-between w-full p-2 text-sm bg-white border border-blue-300 rounded hover:bg-blue-50 transition-colors"
-                            >
-                              <span className="font-mono text-blue-800">{suggestion}</span>
-                              <span className="text-xs text-blue-600">Click to use</span>
-                            </button>
-                          ))}
-                        </div>
-                        {isCheckingSuggestions && (
-                          <div className="flex items-center mt-2 text-sm text-blue-600">
-                            <Loader width="16" height="16" className="mr-2 animate-spin" />
-                            Checking more alternatives...
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
                     
                     <Button type="submit" variant="primary" className="mt-4 w-full md:w-auto" disabled={isLoading}>
                       {isLoading ? (
@@ -1237,13 +1188,13 @@ export default function AddDomainForm({
                   </form>
 
                   {/* Import from Resend Section */}
-                  <div className="mt-8 rounded-lg">
+                  <div className="mt-8 rounded-lg border border-border bg-card p-6">
                     <div className="flex items-center gap-3 mb-4">
 
-                      <h3 className="text-lg font-semibold text-black">Import from</h3>
-                      <ResendIcon variant="black" className="h-12 w-16 -ml-1" />
+                      <h3 className="text-lg font-semibold text-foreground">Import from</h3>
+                      <ResendIcon variant="black" className="h-12 w-16 -ml-1 dark:invert" />
                     </div>
-                    <p className="text-sm text-black/80 mb-4">
+                    <p className="text-sm text-muted-foreground mb-4">
                       Already have domains in Resend? Paste your API key to import them for bulk processing.
                     </p>
                     <div className="space-y-3">
@@ -1252,8 +1203,7 @@ export default function AddDomainForm({
                         value={resendApiKey}
                         onChange={(e) => setResendApiKey(e.target.value)}
                         placeholder="Paste your Resend API key (re_...)"
-                        className="bg-transparent border text-black placeholder:text-black/50"
-                        style={{ borderColor: '#2C3037' }}
+                        className="bg-transparent border-input"
                         disabled={isImporting}
                       />
                       <Button
@@ -1272,7 +1222,7 @@ export default function AddDomainForm({
                         )}
                       </Button>
                     </div>
-                    <p className="text-xs text-white/60 mt-3">
+                    <p className="text-xs text-muted-foreground mt-3">
                       Your API key is not stored and only used to fetch your domains.
                     </p>
                   </div>
@@ -1282,7 +1232,7 @@ export default function AddDomainForm({
               {!showDomainSelection && !showBulkImport && currentStepIdx === 1 && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <h2 className="text-lg font-semibold text-darkText">{stepsConfig[1].name}</h2>
+                    <h2 className="text-lg font-semibold text-foreground">{stepsConfig[1].name}</h2>
                     {preloadedProvider && (
                       <div className="flex items-center gap-2">
                         {getProviderDocUrl(preloadedProvider) ? (
@@ -1297,7 +1247,7 @@ export default function AddDomainForm({
                             <ExternalLink2 width="12" height="12" />
                           </Button>
                         ) : (
-                          <div className="flex items-center gap-1 text-sm text-mediumText">
+                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
                             <Globe2 width="16" height="16" />
                             <span>Provider: <span className="font-medium">{preloadedProvider}</span></span>
                           </div>
@@ -1305,7 +1255,7 @@ export default function AddDomainForm({
                       </div>
                     )}
                   </div>
-                  <p className="mb-6 text-sm text-mediumText">{stepsConfig[1].description}</p>
+                  <p className="mb-6 text-sm text-muted-foreground">{stepsConfig[1].description}</p>
 
                   {/* Provider Information Note */}
                   {/* {preloadedProvider && (
@@ -1330,9 +1280,9 @@ export default function AddDomainForm({
                     <div className={cn(
                       "mb-6 rounded-lg p-4 border",
                       {
-                        "bg-yellow-50 border-yellow-200": verificationStatus === 'pending',
-                        "bg-green-50 border-green-200": verificationStatus === 'verified',
-                        "bg-red-50 border-red-200": verificationStatus === 'failed',
+                        "bg-yellow-500/10 border-yellow-500/20 dark:bg-yellow-500/5": verificationStatus === 'pending',
+                        "bg-green-500/10 border-green-500/20 dark:bg-green-500/5": verificationStatus === 'verified',
+                        "bg-destructive/10 border-destructive/20 dark:bg-destructive/5": verificationStatus === 'failed',
                       }
                     )}>
                       <div className="flex items-center justify-between">
@@ -1340,7 +1290,7 @@ export default function AddDomainForm({
                           {verificationStatus === 'pending' && (
                             <>
                               <Clock2 width="16" height="16" className="text-yellow-600 mr-2" />
-                              <span className="text-sm font-medium text-yellow-800">
+                              <span className="text-sm font-medium text-yellow-700 dark:text-yellow-400">
                                 Verification Pending
                               </span>
                               {isRefreshing && (
@@ -1351,15 +1301,15 @@ export default function AddDomainForm({
                           {verificationStatus === 'verified' && (
                             <>
                               <CircleCheck width="16" height="16" className="text-green-600 mr-2" />
-                              <span className="text-sm font-medium text-green-800">
+                              <span className="text-sm font-medium text-green-700 dark:text-green-400">
                                 Domain Verified
                               </span>
                             </>
                           )}
                           {verificationStatus === 'failed' && (
                             <>
-                              <CircleWarning2 width="16" height="16" className="text-red-600 mr-2" />
-                              <span className="text-sm font-medium text-red-800">
+                              <CircleWarning2 width="16" height="16" className="text-destructive mr-2" />
+                              <span className="text-sm font-medium text-destructive">
                                 Verification Failed
                               </span>
                             </>
@@ -1368,14 +1318,14 @@ export default function AddDomainForm({
                         
                         {/* Periodic Check Indicator */}
                         {periodicCheckEnabled && verificationStatus === 'pending' && (
-                          <div className="flex items-center text-xs text-yellow-600">
+                          <div className="flex items-center text-xs text-yellow-600 dark:text-yellow-400">
                             <div className="w-2 h-2 bg-yellow-500 rounded-full mr-2 animate-pulse"></div>
                             <span>Auto-checking every 5s</span>
                           </div>
                         )}
                       </div>
                       
-                      <p className="text-xs text-gray-600 mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         {verificationStatus === 'pending' && !periodicCheckEnabled && "DNS records are being verified. This may take a few hours."}
                         {verificationStatus === 'pending' && periodicCheckEnabled && "We're automatically checking your domain verification status. You'll be redirected once it's verified."}
                         {verificationStatus === 'verified' && "Your domain has been successfully verified and is ready to use."}
@@ -1397,13 +1347,13 @@ export default function AddDomainForm({
                     </div>
 
                     {/* Table Body */}
-                    <div className="bg-white">
+                    <div className="bg-card">
                       {dnsRecords.map((record, idx) => (
                         <div key={`${record.type}-${idx}`} className={cn(
                           "flex transition-colors px-4 py-3",
                           {
-                            "bg-green-50 hover:bg-green-100": record.isVerified,
-                            "bg-white hover:bg-muted/50": !record.isVerified,
+                            "bg-green-500/10 hover:bg-green-500/20 dark:bg-green-500/5 dark:hover:bg-green-500/10": record.isVerified,
+                            "bg-card hover:bg-muted/50": !record.isVerified,
                             "border-b border-border/50": idx < dnsRecords.length - 1
                           }
                         )}>
@@ -1412,14 +1362,14 @@ export default function AddDomainForm({
                               <span className="font-mono text-sm truncate">
                                 {extractRecordName(record.name, domainName)}
                               </span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => copyToClipboard(extractRecordName(record.name, domainName))}
-                                className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded flex-shrink-0 ml-2"
-                              >
-                                <Clipboard2 width="16" height="16" className="text-gray-600" />
-                              </Button>
+                                                          <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => copyToClipboard(extractRecordName(record.name, domainName))}
+                              className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                            >
+                              <Clipboard2 width="16" height="16" className="text-muted-foreground" />
+                            </Button>
                             </div>
                           </div>
                           <div className="w-[15%] pr-4">
@@ -1434,9 +1384,9 @@ export default function AddDomainForm({
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => copyToClipboard(record.type)}
-                                className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded flex-shrink-0 ml-2"
+                                className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
                               >
-                                <Clipboard2 width="16" height="16" className="text-gray-600" />
+                                <Clipboard2 width="16" height="16" className="text-muted-foreground" />
                               </Button>
                             </div>
                           </div>
@@ -1450,9 +1400,9 @@ export default function AddDomainForm({
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => copyToClipboard(record.type === "MX" ? record.value.split(" ")[1] : record.value)}
-                                className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded flex-shrink-0 ml-2"
+                                className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
                               >
-                                <Clipboard2 width="16" height="16" className="text-gray-600" />
+                                <Clipboard2 width="16" height="16" className="text-muted-foreground" />
                               </Button>
                             </div>
                           </div>
@@ -1464,9 +1414,9 @@ export default function AddDomainForm({
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => copyToClipboard(record.type === "MX" ? record.value.split(" ")[0] : "")}
-                                  className="h-8 w-8 p-0 hover:bg-gray-100 border border-gray-300 rounded flex-shrink-0 ml-2"
+                                  className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
                                 >
-                                  <Clipboard2 width="16" height="16" className="text-gray-600" />
+                                  <Clipboard2 width="16" height="16" className="text-muted-foreground" />
                                 </Button>
                               )}
                             </div>
@@ -1474,14 +1424,14 @@ export default function AddDomainForm({
                         </div>
                       ))}
                       {dnsRecords.length === 0 && (
-                        <div className="text-center py-8 text-gray-500">
+                        <div className="text-center py-8 text-muted-foreground">
                           No DNS records available yet.
                         </div>
                       )}
                     </div>
                   </div>
 
-                  {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+                  {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 
                   <div className="flex gap-3 mt-10">
                     <Button
@@ -1508,12 +1458,12 @@ export default function AddDomainForm({
 
               {!showDomainSelection && !showBulkImport && currentStepIdx === 2 && (
                 <div className="text-center py-8">
-                  <BadgeCheck2 width="80" height="80" className="mx-auto mb-5 text-successGreen" />
-                  <h2 className="mb-2 text-2xl font-semibold text-darkText">Domain Verified!</h2>
-                  <p className="text-mediumText mb-1">
-                    Your domain <span className="font-semibold text-darkText">{domainName}</span> is now ready.
+                  <BadgeCheck2 width="80" height="80" className="mx-auto mb-5 text-green-600" />
+                  <h2 className="mb-2 text-2xl font-semibold text-foreground">Domain Verified!</h2>
+                  <p className="text-muted-foreground mb-1">
+                    Your domain <span className="font-semibold text-foreground">{domainName}</span> is now ready.
                   </p>
-                  <p className="text-sm text-mediumText">{stepsConfig[2].description}</p>
+                  <p className="text-sm text-muted-foreground">{stepsConfig[2].description}</p>
                   <div className="flex gap-4 justify-center mt-10">
                     <Button
                       onClick={() => router.push('/emails')}
@@ -1528,7 +1478,6 @@ export default function AddDomainForm({
                         setDnsRecords([])
                         setDomainId("")
                         setError("")
-                        setDomainSuggestions([])
                       }}
                       variant="secondary"
                     >

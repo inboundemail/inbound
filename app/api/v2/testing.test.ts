@@ -8,7 +8,7 @@ import { GetEndpointsResponse, PostEndpointsResponse } from "./endpoints/route";
 import { GetEndpointByIdResponse, PutEndpointByIdResponse, DeleteEndpointByIdResponse } from "./endpoints/[id]/route";
 import { GetEmailAddressesResponse, PostEmailAddressesResponse } from "./email-addresses/route";
 import { GetEmailAddressByIdResponse, PutEmailAddressByIdResponse, DeleteEmailAddressByIdResponse } from "./email-addresses/[id]/route";
-import { GetDomainsResponse } from "./domains/route";
+import { GetDomainsResponse, PostDomainsRequest, PostDomainsResponse } from "./domains/route";
 import { GetDomainByIdResponse, PutDomainByIdRequest, PutDomainByIdResponse } from "./domains/[id]/route";
 import type { WebhookConfig } from "@/features/endpoints/types";
 import { setupWebhook, createTestFlag, sendTestEmail } from "./helper/webhook-tester";
@@ -240,13 +240,60 @@ describe("verify endpoint deletion", () => {
 
 /**
  * This is going to:
- * 1. List all domains (GET /api/v2/domains)
- * 2. Get a domain by ID (GET /api/v2/domains/{id})
- * 3. Update catch-all settings (PUT /api/v2/domains/{id}) - turn on
- * 4. Update catch-all settings (PUT /api/v2/domains/{id}) - turn off
- * 5. List domains again to verify changes
- * 6. Save domain ID for email address tests
+ * 1. Create a domain (POST /api/v2/domains) - Note: This will fail in tests as DNS checks will fail
+ * 2. List all domains (GET /api/v2/domains)
+ * 3. Get a domain by ID (GET /api/v2/domains/{id})
+ * 4. Update catch-all settings (PUT /api/v2/domains/{id}) - turn on
+ * 5. Update catch-all settings (PUT /api/v2/domains/{id}) - turn off
+ * 6. List domains again to verify changes
+ * 7. Save domain ID for email address tests
  */
+
+describe("create a domain", () => {
+    it("should attempt to create a domain and handle DNS conflict error", async () => {
+        const testDomain = `test-${Date.now()}.example.com`;
+        const requestBody: PostDomainsRequest = {
+            domain: testDomain
+        };
+
+        const response = await fetch(`${API_URL}/domains`, {
+            method: 'POST',
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        // Since we're testing with a real DNS check, this will likely fail
+        // unless the domain truly has no MX/CNAME records
+        if (response.status === 201) {
+            const data: PostDomainsResponse = await response.json();
+            expect(data.id).toBeDefined();
+            expect(data.domain).toBe(testDomain);
+            expect(data.status).toBe('pending');
+            expect(data.dnsRecords).toBeDefined();
+            expect(Array.isArray(data.dnsRecords)).toBe(true);
+            expect(data.dnsRecords.length).toBeGreaterThan(0);
+            
+            // Check for TXT and MX records
+            const txtRecord = data.dnsRecords.find(r => r.type === 'TXT');
+            const mxRecord = data.dnsRecords.find(r => r.type === 'MX');
+            expect(txtRecord).toBeDefined();
+            expect(mxRecord).toBeDefined();
+        } else if (response.status === 400) {
+            const error = await response.json();
+            // Expected error for domains with existing MX/CNAME records
+            expect(error.error).toBeDefined();
+            console.log('Expected DNS conflict error:', error.error);
+        } else {
+            // Log unexpected status codes
+            const error = await response.json();
+            console.error('Unexpected response:', response.status, error);
+            expect(response.status).toBeOneOf([201, 400]);
+        }
+    });
+});
 
 describe("list all domains", () => {
     it("should return domains with stats and a 200 status code", async () => {
@@ -271,6 +318,39 @@ describe("list all domains", () => {
         // Save domain ID for email tests
         if (data.data.length > 0) {
             domainId = data.data[0].id;
+        }
+    });
+});
+
+describe("list domains with verification check", () => {
+    it("should return domains with verification status when check=true", async () => {
+        const response = await fetch(`${API_URL}/domains?check=true&limit=1`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        const data: GetDomainsResponse = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.data).toBeDefined();
+        expect(Array.isArray(data.data)).toBe(true);
+        
+        // If we have domains, check verification data
+        if (data.data.length > 0) {
+            const domain = data.data[0];
+            expect(domain.verificationCheck).toBeDefined();
+            expect(domain.verificationCheck?.sesStatus).toBeDefined();
+            expect(domain.verificationCheck?.isFullyVerified).toBeDefined();
+            expect(domain.verificationCheck?.lastChecked).toBeDefined();
+            
+            // DNS records should be an array (can be empty)
+            expect(Array.isArray(domain.verificationCheck?.dnsRecords)).toBe(true);
+            
+            console.log('Verification check result:', {
+                domain: domain.domain,
+                sesStatus: domain.verificationCheck?.sesStatus,
+                isFullyVerified: domain.verificationCheck?.isFullyVerified,
+                dnsRecordsCount: domain.verificationCheck?.dnsRecords?.length || 0
+            });
         }
     });
 });

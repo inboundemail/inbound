@@ -455,16 +455,16 @@ export default function LambdaPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-red-600">AWS Connection Error</CardTitle>
+            <CardTitle className="text-destructive">AWS Connection Error</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground mb-4">
               {error || 'Unable to connect to AWS services. Please check your AWS credentials and configuration.'}
             </p>
-                          <Button onClick={checkConnection}>
-                <Refresh2 width="16" height="16" className="mr-2" />
-                Retry Connection
-              </Button>
+            <Button onClick={checkConnection}>
+              <Refresh2 width="16" height="16" className="mr-2" />
+              Retry Connection
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -477,8 +477,8 @@ export default function LambdaPage() {
       <div className="flex items-center justify-between flex-shrink-0">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-                          <Code2 width="32" height="32" />
-              Lambda Monitoring
+            <Code2 width="32" height="32" />
+            Lambda Monitoring
           </h1>
         </div>
         <div className="flex items-center gap-2">
@@ -493,28 +493,26 @@ export default function LambdaPage() {
           <Button 
             variant="secondary" 
             onClick={toggleLiveTailing}
-            className={isLiveTailing ? 'bg-green-50 border-green-200 text-green-700' : ''}
+            className={isLiveTailing ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-950 dark:border-green-800 dark:text-green-300' : ''}
           >
-                          {isLiveTailing ? (
-                <>
-                  <MediaPause width="16" height="16" className="mr-2" />
-                  Live Streaming
-                </>
-              ) : (
-                <>
-                  <CirclePlay width="16" height="16" className="mr-2" />
-                  Start Live Stream
-                </>
-              )}
+            {isLiveTailing ? (
+              <>
+                <MediaPause width="16" height="16" className="mr-2" />
+                Live Streaming
+              </>
+            ) : (
+              <>
+                <CirclePlay width="16" height="16" className="mr-2" />
+                Start Live Stream
+              </>
+            )}
           </Button>
-                      <Button variant="secondary" onClick={loadAllData} disabled={isLoading}>
-              <Refresh2 width="16" height="16" className="mr-2" />
-              Refresh
-            </Button>
+          <Button variant="secondary" onClick={loadAllData} disabled={isLoading}>
+            <Refresh2 width="16" height="16" className="mr-2" />
+            Refresh
+          </Button>
         </div>
       </div>
-
-
 
       {/* Logs Section */}
       <Tabs defaultValue="logs" className="flex flex-col flex-1 gap-4">
@@ -528,7 +526,7 @@ export default function LambdaPage() {
             <div className="flex items-center gap-4">
               <h3 className="text-lg font-semibold">Lambda Logs</h3>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground bg-gray-100 px-2 py-1 rounded-md font-mono">
+                <span className="text-sm text-muted-foreground bg-muted px-2 py-1 rounded-md font-mono">
                   {(() => {
                     let filteredLogs = logs
                     if (activeFilter.type && activeFilter.value) {
@@ -559,24 +557,24 @@ export default function LambdaPage() {
                   onClick={() => setGroupedMode(!groupedMode)}
                   className="flex items-center gap-1"
                 >
-                                      {groupedMode ? <BulletList width="16" height="16" /> : <Grid2 width="16" height="16" />}
-                    {groupedMode ? 'Grouped' : 'Individual'}
+                  {groupedMode ? <BulletList width="16" height="16" /> : <Grid2 width="16" height="16" />}
+                  {groupedMode ? 'Grouped' : 'Individual'}
                 </Button>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {activeFilter.type && (
-                <div className="flex items-center gap-2 px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs">
-                  <span className="text-blue-700">
+                <div className="flex items-center gap-2 px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs dark:bg-blue-950 dark:border-blue-800">
+                  <span className="text-blue-700 dark:text-blue-300">
                     {activeFilter.type === 'request' ? '🔍 Request:' : '📧 Email:'} {activeFilter.value}
                   </span>
-                  <button onClick={clearFilter} className="text-blue-600 hover:text-blue-800">×</button>
+                  <button onClick={clearFilter} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200">×</button>
                 </div>
-                              )}
-                <div className="relative">
-                  <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder={activeFilter.type ? "Search filtered logs..." : "Search logs..."}
+              )}
+              <div className="relative">
+                <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder={activeFilter.type ? "Search filtered logs..." : "Search logs..."}
                   value={logSearchTerm}
                   onChange={(e) => setLogSearchTerm(e.target.value)}
                   className="pl-10 w-48"
@@ -594,15 +592,15 @@ export default function LambdaPage() {
                   <SelectItem value="720">Last 12 hours</SelectItem>
                 </SelectContent>
               </Select>
-                              <Button variant="secondary" onClick={downloadLogs}>
-                  <CloudDownload width="16" height="16" className="mr-2" />
-                  Download
-                </Button>
+              <Button variant="secondary" onClick={downloadLogs}>
+                <CloudDownload width="16" height="16" className="mr-2" />
+                Download
+              </Button>
             </div>
           </div>
           
           <ScrollArea className="flex-1 w-full" ref={scrollAreaRef}>
-                        <div className="p-2 space-y-0.5 font-mono text-xs">
+            <div className="p-2 space-y-0.5 font-mono text-xs">
               {(() => {
                 let filteredLogs = logs
 
@@ -681,23 +679,23 @@ export default function LambdaPage() {
                         if (item.type === 'group' && item.group) {
                           const group = item.group
                           return (
-                            <div key={`group-${group.requestId}`} className="border rounded-md bg-white">
+                            <div key={`group-${group.requestId}`} className="border rounded-md bg-card">
                               {/* Request Group Header */}
                               <div 
                                 className={`px-3 py-2 transition-colors border-l-4 flex items-center gap-2 ${
-                                  group.status === 'SUCCESS' ? 'bg-green-50/50 hover:bg-green-50 text-green-800 border-l-green-400' :
-                                  group.status === 'FAILED' ? 'bg-red-50/50 hover:bg-red-50 text-red-800 border-l-red-400' :
-                                  'bg-blue-50/50 hover:bg-blue-50 text-blue-800 border-l-blue-400'
+                                  group.status === 'SUCCESS' ? 'bg-green-50/50 hover:bg-green-50 text-green-800 border-l-green-400 dark:bg-green-950/30 dark:hover:bg-green-950/50 dark:text-green-300 dark:border-l-green-600' :
+                                  group.status === 'FAILED' ? 'bg-red-50/50 hover:bg-red-50 text-red-800 border-l-red-400 dark:bg-red-950/30 dark:hover:bg-red-950/50 dark:text-red-300 dark:border-l-red-600' :
+                                  'bg-blue-50/50 hover:bg-blue-50 text-blue-800 border-l-blue-400 dark:bg-blue-950/30 dark:hover:bg-blue-950/50 dark:text-blue-300 dark:border-l-blue-600'
                                 }`}
                               >
                                 <div 
                                   className="flex items-center gap-1 cursor-pointer"
                                   onClick={() => toggleRequestExpansion(group.requestId)}
                                 >
-                                                                      {expandedRequests.has(group.requestId) ? 
-                                      <ChevronDown width="12" height="12" /> : 
-                                      <ChevronRight width="12" height="12" />
-                                    }
+                                  {expandedRequests.has(group.requestId) ? 
+                                    <ChevronDown width="12" height="12" /> : 
+                                    <ChevronRight width="12" height="12" />
+                                  }
                                   <span className="text-[9px] text-muted-foreground whitespace-nowrap font-mono opacity-60">
                                     {new Date(group.startTime).toLocaleTimeString()}
                                   </span>
@@ -717,7 +715,7 @@ export default function LambdaPage() {
                                         e.stopPropagation()
                                         filterByEmail(group.emailTarget!)
                                       }}
-                                      className="h-5 px-2 text-[10px] bg-blue-100 hover:bg-blue-200 text-blue-700"
+                                      className="h-5 px-2 text-[10px] bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900 dark:hover:bg-blue-800 dark:text-blue-300"
                                     >
                                       📧 Email
                                     </Button>
@@ -729,7 +727,7 @@ export default function LambdaPage() {
                                       e.stopPropagation()
                                       filterByRequest(group.requestId)
                                     }}
-                                    className="h-5 px-2 text-[10px] bg-purple-100 hover:bg-purple-200 text-purple-700"
+                                    className="h-5 px-2 text-[10px] bg-purple-100 hover:bg-purple-200 text-purple-700 dark:bg-purple-900 dark:hover:bg-purple-800 dark:text-purple-300"
                                   >
                                     🔍 Filter
                                   </Button>
@@ -741,7 +739,7 @@ export default function LambdaPage() {
                                       navigator.clipboard.writeText(group.requestId)
                                       toast.success('Request ID copied to clipboard')
                                     }}
-                                    className="h-5 px-2 text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-700"
+                                    className="h-5 px-2 text-[10px] bg-muted hover:bg-muted/80 text-muted-foreground"
                                     title={`Copy request ID: ${group.requestId}`}
                                   >
                                     📋 Copy ID
@@ -757,7 +755,7 @@ export default function LambdaPage() {
 
                               {/* Expanded Request Logs */}
                               {expandedRequests.has(group.requestId) && (
-                                <div className="border-t bg-gray-50/30 space-y-0.5 p-2">
+                                <div className="border-t bg-muted/30 space-y-0.5 p-2">
                                   {group.logs.map((log, logIndex) => {
                                     // Parse the log to extract the actual message content
                                     const parsed = parseRequestInfo(log.message)
@@ -786,7 +784,7 @@ export default function LambdaPage() {
                                       <div 
                                         key={logIndex}
                                         onClick={() => handleLogClick(log)}
-                                        className="px-2 py-1 hover:bg-white rounded cursor-pointer transition-colors text-xs"
+                                        className="px-2 py-1 hover:bg-card rounded cursor-pointer transition-colors text-xs"
                                       >
                                         <div className="flex items-start gap-2">
                                           <span className="text-[9px] text-muted-foreground whitespace-nowrap flex-shrink-0 font-mono opacity-50">
@@ -835,10 +833,10 @@ export default function LambdaPage() {
                               key={`log-${item.originalIndex}`}
                               onClick={() => handleLogClick(log)}
                               className={`px-3 py-2 rounded-md cursor-pointer transition-colors border-l-2 h-8 flex items-center opacity-60 ${
-                                formatted.type === 'error' ? 'bg-red-50/50 hover:bg-red-50 text-red-800 border-l-red-400' :
-                                formatted.type === 'warning' ? 'bg-yellow-50/50 hover:bg-yellow-50 text-yellow-800 border-l-yellow-400' :
-                                formatted.type === 'success' ? 'bg-green-50/50 hover:bg-green-50 text-green-800 border-l-green-400' :
-                                'bg-gray-50/50 hover:bg-gray-50 border-l-gray-300'
+                                formatted.type === 'error' ? 'bg-red-50/50 hover:bg-red-50 text-red-800 border-l-red-400 dark:bg-red-950/30 dark:hover:bg-red-950/50 dark:text-red-300 dark:border-l-red-600' :
+                                formatted.type === 'warning' ? 'bg-yellow-50/50 hover:bg-yellow-50 text-yellow-800 border-l-yellow-400 dark:bg-yellow-950/30 dark:hover:bg-yellow-950/50 dark:text-yellow-300 dark:border-l-yellow-600' :
+                                formatted.type === 'success' ? 'bg-green-50/50 hover:bg-green-50 text-green-800 border-l-green-400 dark:bg-green-950/30 dark:hover:bg-green-950/50 dark:text-green-300 dark:border-l-green-600' :
+                                'bg-muted/50 hover:bg-muted border-l-border'
                               }`}
                             >
                               <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0 font-mono opacity-60">
@@ -894,10 +892,10 @@ export default function LambdaPage() {
                         key={index} 
                         onClick={() => handleLogClick(log)}
                         className={`px-3 py-2 rounded-md cursor-pointer transition-colors border-l-2 h-8 flex items-center ${
-                          formatted.type === 'error' ? 'bg-red-50/50 hover:bg-red-50 text-red-800 border-l-red-400' :
-                          formatted.type === 'warning' ? 'bg-yellow-50/50 hover:bg-yellow-50 text-yellow-800 border-l-yellow-400' :
-                          formatted.type === 'success' ? 'bg-green-50/50 hover:bg-green-50 text-green-800 border-l-green-400' :
-                          'bg-gray-50/50 hover:bg-gray-50 border-l-gray-300'
+                          formatted.type === 'error' ? 'bg-red-50/50 hover:bg-red-50 text-red-800 border-l-red-400 dark:bg-red-950/30 dark:hover:bg-red-950/50 dark:text-red-300 dark:border-l-red-600' :
+                          formatted.type === 'warning' ? 'bg-yellow-50/50 hover:bg-yellow-50 text-yellow-800 border-l-yellow-400 dark:bg-yellow-950/30 dark:hover:bg-yellow-950/50 dark:text-yellow-300 dark:border-l-yellow-600' :
+                          formatted.type === 'success' ? 'bg-green-50/50 hover:bg-green-50 text-green-800 border-l-green-400 dark:bg-green-950/30 dark:hover:bg-green-950/50 dark:text-green-300 dark:border-l-green-600' :
+                          'bg-muted/50 hover:bg-muted border-l-border'
                         }`}
                       >
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0 font-mono opacity-60">
@@ -999,11 +997,11 @@ export default function LambdaPage() {
               <div className="text-sm text-muted-foreground">
                 {selectedLog && formatTimestamp(selectedLog.timestamp)}
               </div>
-                          </div>
-              <div className="relative">
-                <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search in log..."
+            </div>
+            <div className="relative">
+              <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search in log..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -1017,7 +1015,7 @@ export default function LambdaPage() {
                 searchTerm ? (
                   getFilteredLogLines().length > 0 ? (
                     getFilteredLogLines().map((line, index) => (
-                      <div key={index} className="py-1 border-b border-gray-100 last:border-b-0">
+                      <div key={index} className="py-1 border-b border-border last:border-b-0">
                         <span className="text-muted-foreground text-xs mr-2">
                           {index + 1}
                         </span>
@@ -1025,7 +1023,7 @@ export default function LambdaPage() {
                           dangerouslySetInnerHTML={{
                             __html: line.replace(
                               new RegExp(searchTerm, 'gi'),
-                              `<mark class="bg-yellow-200 text-yellow-900 px-1 rounded">$&</mark>`
+                              `<mark class="bg-yellow-200 text-yellow-900 px-1 rounded dark:bg-yellow-800 dark:text-yellow-100">$&</mark>`
                             )
                           }}
                         />
@@ -1042,10 +1040,10 @@ export default function LambdaPage() {
                     return (
                       <div 
                         key={index} 
-                        className={`py-1 border-b border-gray-100 last:border-b-0 ${
-                          formatted.type === 'error' ? 'bg-red-50 text-red-700' :
-                          formatted.type === 'warning' ? 'bg-yellow-50 text-yellow-700' :
-                          formatted.type === 'success' ? 'bg-green-50 text-green-700' :
+                        className={`py-1 border-b border-border last:border-b-0 ${
+                          formatted.type === 'error' ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300' :
+                          formatted.type === 'warning' ? 'bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-300' :
+                          formatted.type === 'success' ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300' :
                           ''
                         }`}
                       >
