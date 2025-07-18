@@ -1,0 +1,52 @@
+{
+  "name": "@inboundemail/sdk",
+  "version": "2.0.0",
+  "description": "Official SDK for Inbound Email API",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "test:ci": "vitest run",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "inbound",
+    "email",
+    "api",
+    "sdk",
+    "typescript"
+  ],
+  "author": "Inbound Email",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/inboundemail/sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/inboundemail/sdk/issues"
+  },
+  "homepage": "https://github.com/inboundemail/sdk#readme",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "eslint": "^8.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "dependencies": {},
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+} 
