@@ -428,11 +428,24 @@ export async function verifyTxtRecord(name: string, expectedValue: string): Prom
   }
 
   try {
+    console.log(`🔍 TXT Verification - Checking TXT records for: ${name}`)
+    console.log(`🎯 TXT Verification - Expected value: ${expectedValue}`)
+    
     const txtRecords = await dns.resolveTxt(name)
+    console.log(`📋 TXT Verification - Found ${txtRecords.length} TXT records:`, txtRecords)
+    
     result.actualValues = txtRecords.flat()
+    console.log(`📊 TXT Verification - Flattened values:`, result.actualValues)
+    
     result.isVerified = result.actualValues.some(value => value === expectedValue)
+    console.log(`✅ TXT Verification - Is verified: ${result.isVerified}`)
+    
+    if (!result.isVerified && result.actualValues.length > 0) {
+      console.log(`❌ TXT Verification - Expected "${expectedValue}" but found:`, result.actualValues)
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown DNS error'
+    console.log(`💥 TXT Verification - DNS lookup failed for ${name}:`, errorMessage)
     
     // Provide more user-friendly error messages
     if (errorMessage.includes('ENODATA') || errorMessage.includes('ENOTFOUND')) {
@@ -490,6 +503,42 @@ export async function verifyMxRecord(name: string, expectedValue: string): Promi
   }
 
   return result
+}
+
+/**
+ * Try alternative DNS resolution for TXT records using different resolvers
+ */
+async function tryAlternativeTxtResolution(name: string): Promise<string[][]> {
+  const resolvers = [
+    ['8.8.8.8', '8.8.4.4'], // Google DNS
+    ['1.1.1.1', '1.0.0.1'], // Cloudflare DNS
+    ['208.67.222.222', '208.67.220.220'], // OpenDNS
+  ]
+
+  for (const resolverIPs of resolvers) {
+    try {
+      console.log(`🔄 TXT Alternative - Trying resolver: ${resolverIPs.join(', ')}`)
+      const resolver = new Resolver()
+      resolver.setServers(resolverIPs)
+      
+      const txtRecords = await new Promise<string[][]>((resolve, reject) => {
+        resolver.resolveTxt(name, (err, records) => {
+          if (err) reject(err)
+          else resolve(records || [])
+        })
+      })
+      
+      if (txtRecords.length > 0) {
+        console.log(`✅ TXT Alternative - Found records with ${resolverIPs[0]}:`, txtRecords)
+        return txtRecords
+      }
+    } catch (error) {
+      console.log(`❌ TXT Alternative - Failed with ${resolverIPs[0]}:`, error instanceof Error ? error.message : 'Unknown error')
+      continue
+    }
+  }
+  
+  return []
 }
 
 /**
@@ -578,6 +627,55 @@ export async function verifyMxRecordWithFallback(name: string, expectedValue: st
 }
 
 /**
+ * Enhanced TXT record verification with fallback resolvers
+ */
+export async function verifyTxtRecordWithFallback(name: string, expectedValue: string): Promise<DnsRecordCheck> {
+  const result: DnsRecordCheck = {
+    type: 'TXT',
+    name,
+    expectedValue,
+    actualValues: [],
+    isVerified: false,
+  }
+
+  try {
+    console.log(`🔍 TXT Verification - Checking TXT records for: ${name}`)
+    console.log(`🎯 TXT Verification - Expected value: ${expectedValue}`)
+    
+    // Try default DNS first
+    let txtRecords: string[][] = []
+    try {
+      txtRecords = await dns.resolveTxt(name)
+      console.log(`📋 TXT Verification - Default DNS found ${txtRecords.length} TXT records:`, txtRecords)
+    } catch (error) {
+      console.log(`⚠️ TXT Verification - Default DNS failed, trying alternative resolvers...`)
+      txtRecords = await tryAlternativeTxtResolution(name)
+    }
+    
+    result.actualValues = txtRecords.flat()
+    console.log(`📊 TXT Verification - Flattened values:`, result.actualValues)
+    
+    result.isVerified = result.actualValues.some(value => value === expectedValue)
+    console.log(`✅ TXT Verification - Is verified: ${result.isVerified}`)
+    
+    if (!result.isVerified && result.actualValues.length > 0) {
+      console.log(`❌ TXT Verification - Expected "${expectedValue}" but found:`, result.actualValues)
+    }
+    
+    if (result.actualValues.length === 0) {
+      result.error = `No TXT records found for ${name} using multiple DNS resolvers. Please add the TXT record to your DNS.`
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown DNS error'
+    console.log(`💥 TXT Verification - All DNS lookups failed for ${name}:`, errorMessage)
+    result.error = `DNS resolution failed: ${errorMessage}`
+    result.isVerified = false
+  }
+
+  return result
+}
+
+/**
  * Verify multiple DNS records (from dns-verification.ts)
  */
 export async function verifyDnsRecords(records: Array<{
@@ -585,10 +683,15 @@ export async function verifyDnsRecords(records: Array<{
   name: string
   value: string
 }>): Promise<DnsRecordCheck[]> {
+  console.log(`📋 Starting verification of ${records.length} DNS records:`)
+  records.forEach((record, index) => {
+    console.log(`  ${index + 1}. ${record.type} record for ${record.name}`)
+  })
+  
   const checks = records.map(async (record) => {
     switch (record.type.toUpperCase()) {
       case 'TXT':
-        return verifyTxtRecord(record.name, record.value)
+        return verifyTxtRecordWithFallback(record.name, record.value)
       case 'MX':
         return verifyMxRecordWithFallback(record.name, record.value)
       default:

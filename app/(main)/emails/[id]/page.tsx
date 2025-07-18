@@ -57,25 +57,36 @@ import {
 } from '@/components/ui/select'
 import AddDomainForm from '@/components/add-domain-form'
 
-// React Query hooks
-import {
-    useDomainDetailsQuery,
-    useCatchAllStatusQuery,
-    useDomainVerificationMutation,
-    useDomainDeletionMutation,
-    useAddEmailAddressMutation,
-    useDeleteEmailAddressMutation,
-    useUpdateEmailWebhookMutation,
-    useEnableCatchAllMutation,
-    useDisableCatchAllMutation
-} from '@/features/domains/hooks/useDomainDetailsQuery'
+// React Query hooks for v2 API
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEndpointsQuery } from '@/features/endpoints/hooks'
+import {
+    useDomainDetailsV2Query,
+    useDomainVerificationCheckV2,
+    useDeleteDomainV2Mutation,
+    useAddEmailAddressV2Mutation,
+    useDeleteEmailAddressV2Mutation,
+    useUpdateEmailEndpointV2Mutation,
+    useUpdateDomainCatchAllV2Mutation,
+    domainV2Keys
+} from '@/features/domains/hooks/useDomainV2Hooks'
+
+// v2 API types
+import type { 
+    GetDomainByIdResponse,
+    PutDomainByIdRequest
+} from '@/app/api/v2/domains/[id]/route'
+import type {
+    GetEmailAddressesResponse,
+    EmailAddressWithDomain
+} from '@/app/api/v2/email-addresses/route'
 
 export default function DomainDetailPage() {
     const { data: session } = useSession()
     const params = useParams()
     const router = useRouter()
     const domainId = params.id as string
+    const queryClient = useQueryClient()
 
     // React Query hooks for data fetching
     const {
@@ -83,13 +94,46 @@ export default function DomainDetailPage() {
         isLoading: isDomainLoading,
         error: domainError,
         refetch: refetchDomainDetails
-    } = useDomainDetailsQuery(domainId)
+    } = useDomainDetailsV2Query(domainId)
 
+    // Get email addresses for this domain
     const {
-        data: catchAllStatus,
-        isLoading: isCatchAllLoading,
-        refetch: refetchCatchAllStatus
-    } = useCatchAllStatusQuery(domainId)
+        data: emailAddressesData,
+        isLoading: isEmailAddressesLoading,
+        refetch: refetchEmailAddresses
+    } = useQuery<GetEmailAddressesResponse>({
+        queryKey: [...domainV2Keys.emailAddresses(domainId)],
+        queryFn: async () => {
+            const response = await fetch(`/api/v2/email-addresses?domainId=${domainId}`)
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.error || 'Failed to fetch email addresses')
+            }
+            return response.json()
+        },
+        enabled: !!domainId && domainDetailsData?.status === 'verified',
+        staleTime: 2 * 60 * 1000, // 2 minutes
+        gcTime: 10 * 60 * 1000, // 10 minutes
+    })
+
+    // Get DNS records for pending domains
+    const {
+        data: dnsRecordsData,
+        isLoading: isDnsRecordsLoading
+    } = useQuery<{ records: Array<{ recordType: string; name: string; value: string; isVerified: boolean }> }>({
+        queryKey: ['dnsRecords', domainId],
+        queryFn: async () => {
+            const response = await fetch(`/api/v2/domains/${domainId}/dns-records`)
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.error || 'Failed to fetch DNS records')
+            }
+            return response.json()
+        },
+        enabled: !!domainId && domainDetailsData?.status === 'pending',
+        staleTime: 2 * 60 * 1000, // 2 minutes
+        gcTime: 10 * 60 * 1000, // 10 minutes
+    })
 
     const {
         data: userEndpoints = [],
@@ -97,18 +141,18 @@ export default function DomainDetailPage() {
     } = useEndpointsQuery()
 
     // React Query mutations
-    const domainVerificationMutation = useDomainVerificationMutation()
-    const domainDeletionMutation = useDomainDeletionMutation()
-    const addEmailMutation = useAddEmailAddressMutation()
-    const deleteEmailMutation = useDeleteEmailAddressMutation()
-    const updateEmailWebhookMutation = useUpdateEmailWebhookMutation()
-    const enableCatchAllMutation = useEnableCatchAllMutation()
-    const disableCatchAllMutation = useDisableCatchAllMutation()
+    const domainVerificationMutation = useDomainVerificationCheckV2(domainId)
+    const domainDeletionMutation = useDeleteDomainV2Mutation()
+    const addEmailMutation = useAddEmailAddressV2Mutation()
+    const deleteEmailMutation = useDeleteEmailAddressV2Mutation()
+    const updateEmailWebhookMutation = useUpdateEmailEndpointV2Mutation()
+    const updateCatchAllMutation = useUpdateDomainCatchAllV2Mutation()
 
     // Local state for UI interactions
     const [newEmailAddress, setNewEmailAddress] = useState('')
     const [selectedEndpointId, setSelectedEndpointId] = useState<string>('none')
     const [emailError, setEmailError] = useState<string | null>(null)
+    const [isRefreshingVerification, setIsRefreshingVerification] = useState(false)
 
     // Multi-select state for email addresses
     const [selectedEmailIds, setSelectedEmailIds] = useState<Set<string>>(new Set())
@@ -120,7 +164,7 @@ export default function DomainDetailPage() {
 
     // Endpoint management dialog state
     const [isEndpointDialogOpen, setIsEndpointDialogOpen] = useState(false)
-    const [selectedEmailForEndpoint, setSelectedEmailForEndpoint] = useState<any>(null)
+    const [selectedEmailForEndpoint, setSelectedEmailForEndpoint] = useState<EmailAddressWithDomain | null>(null)
     const [endpointDialogSelectedId, setEndpointDialogSelectedId] = useState<string>('none')
 
     // Catch-all state
@@ -128,12 +172,13 @@ export default function DomainDetailPage() {
 
     // Set catch-all endpoint ID when data loads
     useState(() => {
-        if (catchAllStatus?.catchAllEndpointId) {
-            setCatchAllEndpointId(catchAllStatus.catchAllEndpointId)
-        } else if (catchAllStatus?.catchAllWebhookId) {
-            setCatchAllEndpointId('legacy-webhook')
+        if (domainDetailsData?.catchAllEndpointId) {
+            setCatchAllEndpointId(domainDetailsData.catchAllEndpointId)
         }
     })
+
+    // Get email addresses from the query result
+    const emailAddresses = emailAddressesData?.data || []
 
     // Multi-select helper functions
     const toggleEmailSelection = (emailId: string) => {
@@ -147,12 +192,12 @@ export default function DomainDetailPage() {
     }
 
     const toggleSelectAll = () => {
-        if (!domainDetailsData?.emailAddresses) return
+        if (emailAddresses.length === 0) return
 
-        if (selectedEmailIds.size === domainDetailsData.emailAddresses.length) {
+        if (selectedEmailIds.size === emailAddresses.length) {
             setSelectedEmailIds(new Set())
         } else {
-            setSelectedEmailIds(new Set(domainDetailsData.emailAddresses.map(email => email.id)))
+            setSelectedEmailIds(new Set(emailAddresses.map(email => email.id)))
         }
     }
 
@@ -161,41 +206,87 @@ export default function DomainDetailPage() {
     }
 
     const refreshVerification = async () => {
-        if (!domainDetailsData?.domain) return
-
+        console.log('🔄 Forcing domain verification check...')
+        setIsRefreshingVerification(true)
         try {
-            const result = await domainVerificationMutation.mutateAsync({
-                domain: domainDetailsData.domain.domain,
-                domainId: domainDetailsData.domain.id
-            })
-
-            if (result.allVerified) {
-                toast.success('Domain fully verified! You can now manage email addresses.')
-            } else if (result.dnsVerified && !result.sesVerified) {
-                toast.success('DNS records verified! SES verification in progress.')
-            } else if (!result.dnsVerified) {
-                toast.warning('DNS records not yet propagated. Please wait and try again.')
-            } else {
-                toast.info('Verification status updated.')
+            // Use check=true to force a fresh verification check
+            const response = await fetch(`/api/v2/domains/${domainId}?check=true`)
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.error || 'Failed to check domain verification')
             }
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to check verification')
+            
+            const updatedDomain = await response.json()
+            
+            // Manually update the query cache with the fresh data
+            queryClient.setQueryData(domainV2Keys.detail(domainId), updatedDomain)
+            
+            // Check if status changed from pending to verified
+            if (domainDetailsData?.status === 'pending' && updatedDomain.status === 'verified') {
+                toast.success('Domain verified successfully!')
+                // Refetch email addresses since domain is now verified
+                await refetchEmailAddresses()
+            } else if (updatedDomain.status === 'verified') {
+                toast.success('Domain is already verified')
+            } else if (updatedDomain.status === 'failed') {
+                toast.error('Domain verification failed. Please check your DNS records.')
+            } else {
+                // Still pending - check if we have verification details
+                if (updatedDomain.verificationCheck) {
+                    const { dnsRecords, sesStatus } = updatedDomain.verificationCheck
+                    const unverifiedRecords = dnsRecords?.filter((r: any) => !r.isVerified) || []
+                    
+                    if (unverifiedRecords.length > 0) {
+                        // Check for specific MX record issues
+                        const mxRecord = unverifiedRecords.find((r: any) => r.type === 'MX')
+                        if (mxRecord && mxRecord.error) {
+                            // Check if the MX record has the domain appended
+                            const expectedMx = mxRecord.value
+                            const actualValues = mxRecord.error.match(/but found: \[(.*?)\]/)?.[1]
+                            
+                            if (actualValues && actualValues.includes(`.${domainDetailsData?.domain || ''}`)) {
+                                toast.error(
+                                    `MX record issue: Remove ".${domainDetailsData?.domain || ''}" from the end of your MX record value. It should be just "${expectedMx.split(' ')[1]}"`,
+                                    { duration: 8000 }
+                                )
+                            } else {
+                                toast.warning(`${unverifiedRecords.length} DNS record(s) still pending verification`)
+                            }
+                        } else {
+                            // List which records are not verified
+                            const recordTypes = unverifiedRecords.map((r: any) => r.type).join(', ')
+                            toast.warning(`DNS records not verified: ${recordTypes}`)
+                        }
+                    } else if (sesStatus !== 'Success') {
+                        toast.info(`DNS records verified. AWS SES status: ${sesStatus}`)
+                    } else {
+                        toast.info('Verification in progress...')
+                    }
+                } else {
+                    toast.info('Verification status refreshed')
+                }
+            }
+        } catch (err) {
+            console.error('Error refreshing verification:', err)
+            toast.error('Failed to refresh verification status')
+        } finally {
+            setIsRefreshingVerification(false)
         }
     }
 
     const addEmailAddressHandler = async () => {
-        if (!domainDetailsData?.domain || !newEmailAddress.trim()) return
+        if (!domainDetailsData || !newEmailAddress.trim()) return
 
         setEmailError(null)
 
         try {
             const fullEmailAddress = newEmailAddress.includes('@')
                 ? newEmailAddress
-                : `${newEmailAddress}@${domainDetailsData.domain.domain}`
+                : `${newEmailAddress}@${domainDetailsData.domain}`
 
             await addEmailMutation.mutateAsync({
-                domainId,
-                emailAddress: fullEmailAddress,
+                address: fullEmailAddress,
+                domainId: domainId,
                 endpointId: selectedEndpointId === 'none' ? undefined : selectedEndpointId
             })
 
@@ -210,33 +301,26 @@ export default function DomainDetailPage() {
     }
 
     const deleteEmailAddressHandler = async (emailAddressId: string, emailAddress: string) => {
-        if (!domainDetailsData?.domain) return
+        if (!domainDetailsData) return
 
         if (!confirm(`Are you sure you want to delete ${emailAddress}?`)) {
             return
         }
 
         try {
-            await deleteEmailMutation.mutateAsync({
-                domainId,
-                emailAddressId
-            })
-            toast.success('Email address deleted successfully')
+            await deleteEmailMutation.mutateAsync({ emailAddressId, domainId })
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to delete email address')
         }
     }
 
     const bulkDeleteEmailAddresses = async () => {
-        if (!domainDetailsData?.domain || selectedEmailIds.size === 0) return
+        if (!domainDetailsData || selectedEmailIds.size === 0) return
 
         try {
             // Delete all selected emails
             const deletePromises = Array.from(selectedEmailIds).map(emailId =>
-                deleteEmailMutation.mutateAsync({
-                    domainId,
-                    emailAddressId: emailId
-                })
+                deleteEmailMutation.mutateAsync({ emailAddressId: emailId, domainId })
             )
 
             await Promise.all(deletePromises)
@@ -250,18 +334,15 @@ export default function DomainDetailPage() {
     }
 
     const deleteDomainHandler = async () => {
-        if (!domainDetailsData?.domain) return
+        if (!domainDetailsData) return
 
-        if (deleteConfirmText !== domainDetailsData.domain.domain) {
+        if (deleteConfirmText !== domainDetailsData.domain) {
             toast.error('Please type the domain name exactly to confirm deletion')
             return
         }
 
         try {
-            await domainDeletionMutation.mutateAsync({
-                domain: domainDetailsData.domain.domain,
-                domainId: domainDetailsData.domain.id
-            })
+            await domainDeletionMutation.mutateAsync(domainId)
 
             toast.success('Domain deleted successfully')
             setIsDeleteDialogOpen(false)
@@ -276,9 +357,9 @@ export default function DomainDetailPage() {
 
         try {
             await updateEmailWebhookMutation.mutateAsync({
-                domainId,
                 emailAddressId: selectedEmailForEndpoint.id,
-                endpointId: endpointDialogSelectedId === 'none' ? undefined : endpointDialogSelectedId
+                endpointId: endpointDialogSelectedId === 'none' ? null : endpointDialogSelectedId,
+                domainId: domainId
             })
 
             toast.success('Endpoint updated successfully')
@@ -290,7 +371,7 @@ export default function DomainDetailPage() {
         }
     }
 
-    const openEndpointDialog = (email: any) => {
+    const openEndpointDialog = (email: EmailAddressWithDomain) => {
         setSelectedEmailForEndpoint(email)
         // Prioritize endpointId over webhookId (for migrated webhooks)
         setEndpointDialogSelectedId(email.endpointId || email.webhookId || 'none')
@@ -322,11 +403,15 @@ export default function DomainDetailPage() {
     }
 
     const toggleCatchAll = async () => {
-        if (!catchAllStatus) return
+        if (!domainDetailsData) return
 
         try {
-            if (catchAllStatus.isCatchAllEnabled) {
-                await disableCatchAllMutation.mutateAsync({ domainId })
+            if (domainDetailsData.isCatchAllEnabled) {
+                await updateCatchAllMutation.mutateAsync({ 
+                    domainId,
+                    isCatchAllEnabled: false,
+                    catchAllEndpointId: null
+                })
                 toast.success('Catch-all disabled successfully')
             } else {
                 if (catchAllEndpointId === 'none') {
@@ -334,18 +419,11 @@ export default function DomainDetailPage() {
                     return
                 }
 
-                // Check if it's a legacy webhook or an endpoint
-                if (catchAllEndpointId === 'legacy-webhook') {
-                    await enableCatchAllMutation.mutateAsync({
-                        domainId,
-                        webhookId: catchAllStatus.catchAllWebhookId || ''
-                    })
-                } else {
-                    await enableCatchAllMutation.mutateAsync({
-                        domainId,
-                        endpointId: catchAllEndpointId
-                    })
-                }
+                await updateCatchAllMutation.mutateAsync({
+                    domainId,
+                    isCatchAllEnabled: true,
+                    catchAllEndpointId: catchAllEndpointId
+                })
                 toast.success('Catch-all enabled successfully')
             }
         } catch (error) {
@@ -367,7 +445,7 @@ export default function DomainDetailPage() {
     }
 
     // Error state
-    if (domainError || !domainDetailsData?.domain) {
+    if (domainError || !domainDetailsData) {
         return (
             <div className="flex flex-1 flex-col gap-6 p-6">
                 <div className="flex items-center gap-4">
@@ -398,7 +476,7 @@ export default function DomainDetailPage() {
         )
     }
 
-    const { domain, dnsRecords = [], emailAddresses = [], stats = { totalEmailAddresses: 0, activeEmailAddresses: 0, configuredEmailAddresses: 0, totalEmailsLast24h: 0 } } = domainDetailsData
+    const { domain, status, stats = { totalEmailAddresses: 0, activeEmailAddresses: 0, emailsLast24h: 0, emailsLast7d: 0, emailsLast30d: 0 } } = domainDetailsData
 
     // Helper functions for endpoint icons and colors
     const getEndpointIcon = (endpoint: any) => {
@@ -430,7 +508,7 @@ export default function DomainDetailPage() {
     }
 
     // Determine what to show based on domain status
-    const showEmailSection = domain.status === DOMAIN_STATUS.VERIFIED
+    const showEmailSection = status === DOMAIN_STATUS.VERIFIED
 
     // Get selected emails for display
     const selectedEmails = emailAddresses.filter(email => selectedEmailIds.has(email.id))
@@ -455,21 +533,21 @@ export default function DomainDetailPage() {
                             backgroundColor="#3b82f6"
                         />
                         <div>
-                            <h1 className="text-xl font-semibold mb-1">{domain.domain}</h1>
+                            <h1 className="text-xl font-semibold mb-1">{domain}</h1>
                             <div className="text-sm text-muted-foreground">
-                                {domain.status === DOMAIN_STATUS.PENDING && "Add DNS records to complete verification"}
-                                {domain.status === DOMAIN_STATUS.VERIFIED && "Domain verified - manage email addresses below"}
-                                {domain.status === DOMAIN_STATUS.FAILED && "Domain verification failed - please check your DNS records"}
+                                {status === DOMAIN_STATUS.PENDING && "Add DNS records to complete verification"}
+                                {status === DOMAIN_STATUS.VERIFIED && "Domain verified - manage email addresses below"}
+                                {status === DOMAIN_STATUS.FAILED && "Domain verification failed - please check your DNS records"}
                             </div>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        {domain.status === DOMAIN_STATUS.VERIFIED ? (
+                        {status === DOMAIN_STATUS.VERIFIED ? (
                             <Badge className="bg-emerald-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
                                 <CircleCheck width="12" height="12" className="mr-1" />
                                 Verified
                             </Badge>
-                        ) : domain.status === DOMAIN_STATUS.PENDING ? (
+                        ) : status === DOMAIN_STATUS.PENDING ? (
                             <Badge className="bg-amber-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
                                 <Clock2 width="12" height="12" className="mr-1" />
                                 Pending
@@ -480,14 +558,19 @@ export default function DomainDetailPage() {
                                 Failed
                             </Badge>
                         )}
-                        <Button
-                            variant="secondary"
-                            size="sm"
+                        <Button 
+                            variant="secondary" 
+                            size="sm" 
                             onClick={refreshVerification}
-                            className="bg-muted border-border text-muted-foreground hover:bg-accent"
+                            disabled={isRefreshingVerification}
+                            className="flex items-center gap-2"
                         >
-                            <Refresh2 width="12" height="12" className="mr-1" />
-                            Refresh
+                            <Refresh2 
+                                width="16" 
+                                height="16" 
+                                className={isRefreshingVerification ? "animate-spin" : ""} 
+                            />
+                            {isRefreshingVerification ? 'Checking...' : 'Refresh'}
                         </Button>
 
                         {/* Delete Domain Button */}
@@ -504,20 +587,20 @@ export default function DomainDetailPage() {
                                 <DialogHeader>
                                     <DialogTitle>Delete Domain</DialogTitle>
                                     <DialogDescription>
-                                        This action cannot be undone. This will permanently delete the domain "{domain.domain}"
+                                        This action cannot be undone. This will permanently delete the domain "{domain}"
                                         and all associated email addresses and data.
                                     </DialogDescription>
                                 </DialogHeader>
                                 <div className="space-y-4">
                                     <div>
                                         <Label htmlFor="delete-confirm">
-                                            Type <strong>{domain.domain}</strong> to confirm deletion:
+                                            Type <strong>{domain}</strong> to confirm deletion:
                                         </Label>
                                         <Input
                                             id="delete-confirm"
                                             value={deleteConfirmText}
                                             onChange={(e) => setDeleteConfirmText(e.target.value)}
-                                            placeholder={domain.domain}
+                                            placeholder={domain}
                                             className="mt-2"
                                         />
                                     </div>
@@ -535,7 +618,7 @@ export default function DomainDetailPage() {
                                     <Button
                                         variant="destructive"
                                         onClick={deleteDomainHandler}
-                                        disabled={deleteConfirmText !== domain.domain}
+                                        disabled={deleteConfirmText !== domain}
                                     >
                                         Delete Domain
                                     </Button>
@@ -546,18 +629,18 @@ export default function DomainDetailPage() {
                 </div>
 
                 {/* Show AddDomainForm for pending domains */}
-                {domain.status === DOMAIN_STATUS.PENDING && (
+                {status === DOMAIN_STATUS.PENDING && (
                     <AddDomainForm
-                        preloadedDomain={domain.domain}
-                        preloadedDomainId={domain.id}
-                        preloadedDnsRecords={dnsRecords.map(record => ({
+                        preloadedDomain={domain}
+                        preloadedDomainId={domainDetailsData.id}
+                        preloadedDnsRecords={dnsRecordsData?.records?.map(record => ({
+                            type: record.recordType as "TXT" | "MX",
                             name: record.name,
-                            type: record.type as "TXT" | "MX",
                             value: record.value,
                             isVerified: record.isVerified
-                        }))}
+                        })) || []}
                         preloadedStep={1}
-                        preloadedProvider={domain.domainProvider}
+                        preloadedProvider={domainDetailsData.domainProvider || undefined}
                         overrideRefreshFunction={refreshVerification}
                         onSuccess={(domainId) => {
                             refetchDomainDetails()
@@ -575,9 +658,9 @@ export default function DomainDetailPage() {
                                         Email Management
                                     </CardTitle>
                                     <CardDescription className="text-muted-foreground">
-                                        {catchAllStatus?.isCatchAllEnabled
-                                            ? `Catch-all enabled - all emails to @${domain.domain} are captured`
-                                            : `Manage individual email addresses for @${domain.domain}`
+                                        {domainDetailsData?.isCatchAllEnabled
+                                            ? `Catch-all enabled - all emails to @${domain} are captured`
+                                            : `Manage individual email addresses for @${domain}`
                                         }
                                     </CardDescription>
                                 </div>
@@ -586,13 +669,13 @@ export default function DomainDetailPage() {
                                     {stats.totalEmailAddresses} addresses
                                     <span className="text-muted-foreground/60">•</span>
                                     <ChartTrendUp width="16" height="16" />
-                                    {stats.totalEmailsLast24h} emails (24h)
+                                    {stats.emailsLast24h} emails (24h)
                                 </div>
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             {/* Individual email addresses - only show if catch-all is disabled */}
-                            {!catchAllStatus?.isCatchAllEnabled && (
+                            {!domainDetailsData?.isCatchAllEnabled && (
                                 <div className="space-y-4">
                                     {/* Add Email Form */}
                                     <div className="flex flex-col sm:flex-row gap-3 w-full">
@@ -611,7 +694,7 @@ export default function DomainDetailPage() {
                                                     className="border-0 rounded-r-none focus:ring-0 flex-1 h-full"
                                                 />
                                                 <div className="px-3 bg-muted border-l border-border text-sm text-muted-foreground rounded-r-lg flex items-center h-full whitespace-nowrap">
-                                                    @{domain.domain}
+                                                    @{domain}
                                                 </div>
                                             </div>
                                         </div>
@@ -747,27 +830,27 @@ export default function DomainDetailPage() {
                                                     <div className="flex items-center gap-2">
                                                         <div className="text-sm text-muted-foreground">
                                                             {(() => {
-                                                                // Find the configured endpoint
-                                                                const configuredEndpoint = email.endpointId
-                                                                    ? userEndpoints.find(endpoint => endpoint.id === email.endpointId)
-                                                                    : null
+                                                                // Use the routing information from the email
+                                                                const routing = email.routing
 
-                                                                if (configuredEndpoint) {
-                                                                    const EndpointIcon = getEndpointIcon(configuredEndpoint)
-                                                                    return (
-                                                                        <div className="flex items-center gap-1.5">
-                                                                            <CustomInboundIcon
-                                                                                Icon={EndpointIcon}
-                                                                                size={25}
-                                                                                backgroundColor={getEndpointIconColor(configuredEndpoint)}
-                                                                            />
-                                                                            <span className={`font-medium ${getEndpointIconColor(configuredEndpoint)}`}>
-                                                                                {configuredEndpoint.name}
-                                                                            </span>
-                                                                        </div>
-                                                                    )
-                                                                } else if (email.webhookId) {
-                                                                    // Legacy webhook configuration
+                                                                if (routing.type === 'endpoint' && routing.id) {
+                                                                    const endpoint = userEndpoints.find(ep => ep.id === routing.id)
+                                                                    if (endpoint) {
+                                                                        const EndpointIcon = getEndpointIcon(endpoint)
+                                                                        return (
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <CustomInboundIcon
+                                                                                    Icon={EndpointIcon}
+                                                                                    size={25}
+                                                                                    backgroundColor={getEndpointIconColor(endpoint)}
+                                                                                />
+                                                                                <span className={`font-medium`} style={{ color: getEndpointIconColor(endpoint) }}>
+                                                                                    {routing.name}
+                                                                                </span>
+                                                                            </div>
+                                                                        )
+                                                                    }
+                                                                } else if (routing.type === 'webhook' && routing.id) {
                                                                     return (
                                                                         <div className="flex items-center gap-1.5">
                                                                             <CustomInboundIcon
@@ -776,17 +859,14 @@ export default function DomainDetailPage() {
                                                                                 backgroundColor="#8b5cf6"
                                                                             />
                                                                             <span className="text-amber-600 font-medium">
-                                                                                Legacy Webhook
+                                                                                {routing.name || 'Legacy Webhook'}
                                                                             </span>
                                                                         </div>
                                                                     )
-                                                                } else {
-                                                                    return <span className="text-muted-foreground">Store in Inbound</span>
                                                                 }
+                                                                
+                                                                return <span className="text-muted-foreground">Store in Inbound</span>
                                                             })()}
-                                                        </div>
-                                                        <div className="text-sm text-muted-foreground">
-                                                            {email.emailsLast24h} emails
                                                         </div>
                                                         <Button
                                                             variant="ghost"
@@ -824,15 +904,15 @@ export default function DomainDetailPage() {
                             )}
 
                             {/* Catch-all toggle and configuration - moved below individual emails */}
-                            {catchAllStatus && (
+                            {domainDetailsData && (
                                 <>
-                                    {!catchAllStatus.isCatchAllEnabled && <Separator />}
+                                    {!domainDetailsData.isCatchAllEnabled && <Separator />}
                                     <div className="space-y-3">
                                         <div className="flex items-center justify-between">
                                             <div>
                                                 <div className="font-medium text-foreground">Catch-all Configuration</div>
                                                 <div className="text-sm text-muted-foreground">
-                                                    {catchAllStatus.isCatchAllEnabled
+                                                    {domainDetailsData.isCatchAllEnabled
                                                         ? 'All emails to any address are captured'
                                                         : 'Capture emails to any address on this domain'
                                                     }
@@ -841,7 +921,7 @@ export default function DomainDetailPage() {
                                         </div>
 
                                         <div className="flex flex-col sm:flex-row gap-3">
-                                            {!catchAllStatus.isCatchAllEnabled && (
+                                            {!domainDetailsData.isCatchAllEnabled && (
                                                 <div className="flex-1">
                                                     <Select
                                                         value={catchAllEndpointId}
@@ -882,14 +962,14 @@ export default function DomainDetailPage() {
                                                     </Select>
                                                 </div>
                                             )}
-                                            <div className={catchAllStatus.isCatchAllEnabled ? "w-full" : "w-full sm:w-auto sm:min-w-[140px]"}>
+                                            <div className={domainDetailsData.isCatchAllEnabled ? "w-full" : "w-full sm:w-auto sm:min-w-[140px]"}>
                                                 <Button
-                                                    variant={catchAllStatus.isCatchAllEnabled ? "destructive" : "secondary"}
+                                                    variant={domainDetailsData.isCatchAllEnabled ? "destructive" : "secondary"}
                                                     className="h-10 w-full"
                                                     onClick={toggleCatchAll}
-                                                    disabled={!catchAllStatus.isCatchAllEnabled && catchAllEndpointId === 'none'}
+                                                    disabled={!domainDetailsData.isCatchAllEnabled && catchAllEndpointId === 'none'}
                                                 >
-                                                    {catchAllStatus.isCatchAllEnabled ? 'Disable Catch-all' : 'Enable Catch-all'}
+                                                    {domainDetailsData.isCatchAllEnabled ? 'Disable Catch-all' : 'Enable Catch-all'}
                                                 </Button>
                                             </div>
                                         </div>

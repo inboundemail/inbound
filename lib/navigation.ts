@@ -42,7 +42,7 @@ export const navigationConfig: NavigationConfig = {
       description: "View and manage your received emails"
     },
     {
-      title: "Email Addresses",
+      title: "Domains and Addresses",
       url: "/emails",
       icon: Globe2,
       description: "Manage your email domains and addresses"

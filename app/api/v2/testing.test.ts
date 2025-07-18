@@ -662,20 +662,8 @@ describe("end-to-end email webhook test", () => {
     
     it("should create endpoint, email address, send email, and receive webhook", async () => {
         // Skip if no domains available
-        const domainsResponse = await fetch(`${API_URL}/domains`, {
-            headers: {
-                "Authorization": `Bearer ${API_KEY}`
-            }
-        });
-        const domainsData = await domainsResponse.json();
         
-        if (!domainsData.data || domainsData.data.length === 0) {
-            console.warn("⚠️ Skipping end-to-end test - no domains available");
-            return;
-        }
-        
-        const testDomain = domainsData.data[1];
-        testDomainId = testDomain.id;
+        testDomainId = "indm_h6yoR3_ENuce_J8OLm7Yh"; // exon.dev domain id
         
         console.log("🚀 Starting end-to-end email webhook test...");
         
@@ -726,7 +714,7 @@ describe("end-to-end email webhook test", () => {
         console.log(`✅ Created webhook endpoint: ${testEndpointId}`);
         
         // Step 3: Create email address
-        const testEmailAddress = `e2e-test-${Date.now()}@${testDomain.domain}`;
+        const testEmailAddress = `e2e-test-${Date.now()}@${testDomainId}`;
         
         const createEmailResponse = await fetch(`${API_URL}/email-addresses`, {
             headers: {
