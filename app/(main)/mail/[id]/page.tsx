@@ -1,3 +1,8 @@
+"use client"
+
+import { useParams, useRouter } from 'next/navigation'
+import { useSession } from '@/lib/auth/auth-client'
+import { useEffect } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -8,52 +13,53 @@ import Envelope2 from '@/components/icons/envelope-2'
 import Download2 from '@/components/icons/download-2'
 import CircleCheck from '@/components/icons/circle-check'
 import { format } from 'date-fns'
-import { getEmailDetailsFromParsed, markEmailAsRead } from '@/app/actions/primary'
-import { auth } from '@/lib/auth/auth'
-import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { EmailAttachments } from '@/components/email-attachments'
+import { useMailDetailsV2Query, useMarkEmailAsReadV2Mutation } from '@/features/emails/hooks'
 
-interface PageProps {
-  params: Promise<{
-    id: string
-  }>
-  searchParams: Promise<{
-    read?: string
-  }>
-}
+export default function EmailViewPage() {
+  const params = useParams()
+  const router = useRouter()
+  const { data: session } = useSession()
+  const emailId = params.id as string
 
+  // Use v2 hooks for data fetching
+  const {
+    data: emailDetails,
+    isLoading,
+    error: emailError,
+    refetch
+  } = useMailDetailsV2Query(emailId)
 
+  const markAsReadMutation = useMarkEmailAsReadV2Mutation()
 
-export default async function EmailViewPage({ params, searchParams }: PageProps) {
-  const { id: emailId } = await params
-  const { read: readEmailId } = await searchParams
-  
-  // Get session on server
-  const session = await auth.api.getSession({
-    headers: await headers()
-  })
-
-  if (!session?.user) {
-    redirect('/login')
-  }
-
-  // Handle read parameter - mark email as read if specified
-  if (readEmailId) {
-    try {
-      console.log('Marking email as read on server:', readEmailId)
-      await markEmailAsRead(readEmailId)
-      console.log('Successfully marked email as read:', readEmailId)
-    } catch (error) {
-      console.error('Failed to mark email as read:', readEmailId, error)
+  // Handle authentication
+  useEffect(() => {
+    if (!session) {
+      router.push('/login')
     }
+  }, [session, router])
+
+  // Auto-mark email as read when viewing
+  useEffect(() => {
+    if (emailDetails && !emailDetails.isRead) {
+      markAsReadMutation.mutate(emailId)
+    }
+  }, [emailDetails, emailId, markAsReadMutation])
+
+  if (isLoading) {
+    return (
+      <div className="p-4 font-outfit">
+        <div className="max-w-5xl mx-auto">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-muted-foreground">Loading email...</div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
-  // Fetch email details on server using the new parsed email action
-  const emailResult = await getEmailDetailsFromParsed(emailId)
-  
-  if (emailResult.error) {
+  if (emailError || !emailDetails) {
     return (
       <div className="p-4 font-outfit">
         <div className="max-w-5xl mx-auto">
@@ -70,23 +76,13 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
             <CardContent className="p-6">
               <div className="flex items-center gap-2 text-destructive">
                 <Envelope2 className="h-4 w-4" />
-                <span>{emailResult.error}</span>
+                <span>{emailError?.message || 'Failed to load email'}</span>
               </div>
             </CardContent>
           </Card>
         </div>
       </div>
     )
-  }
-
-  const emailDetails = emailResult.data!
-
-  // Mark email as read synchronously
-  try {
-    await markEmailAsRead(emailId)
-    console.log('Email marked as read:', emailId)
-  } catch (error) {
-    console.error('Failed to mark email as read:', emailId, error)
   }
 
   const formatBytes = (bytes: number) => {
@@ -97,9 +93,9 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  // Use parsed data when available, fallback to original data
-  const displayFrom = emailDetails.parsedData.fromData?.text || emailDetails.from
-  const displaySubject = emailDetails.subject
+  // Use v2 API data structure
+  const displayFrom = emailDetails.addresses.from?.text || emailDetails.from
+  const displaySubject = emailDetails.subject || 'No Subject'
 
   // Extract initials for avatar
   const getInitials = (name: string) => {
@@ -123,7 +119,7 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
     return colors[Math.abs(hash) % colors.length]
   }
 
-  const senderName = emailDetails.parsedData.fromData?.addresses?.[0]?.name || displayFrom.split('<')[0].trim() || displayFrom.split('@')[0]
+  const senderName = emailDetails.fromName || emailDetails.addresses.from?.addresses?.[0]?.name || displayFrom.split('<')[0].trim() || displayFrom.split('@')[0]
   const initials = getInitials(senderName)
   const avatarColor = getAvatarColor(senderName)
 
@@ -160,7 +156,7 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
                         {senderName}
                       </span>
                       <span className="text-muted-foreground text-sm">
-                        &lt;{emailDetails.parsedData.fromData?.addresses?.[0]?.address || (displayFrom.includes('<') ? displayFrom.split('<')[1].replace('>', '') : displayFrom)}&gt;
+                        &lt;{emailDetails.addresses.from?.addresses?.[0]?.address || (displayFrom.includes('<') ? displayFrom.split('<')[1].replace('>', '') : displayFrom)}&gt;
                       </span>
                     </div>
                     <div className="text-sm text-muted-foreground mt-1">
@@ -172,11 +168,9 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
                 <div className="text-right">
                   <div className="text-sm text-muted-foreground">
                     {format(
-                      emailDetails.parsedData.emailDate 
-                        ? new Date(emailDetails.parsedData.emailDate) 
-                        : emailDetails.receivedAt 
-                          ? new Date(emailDetails.receivedAt) 
-                          : new Date(), 
+                      emailDetails.receivedAt 
+                        ? new Date(emailDetails.receivedAt) 
+                        : new Date(), 
                       'MMM d, yyyy, h:mm a'
                     )}
                   </div>
@@ -187,10 +181,10 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
                         Read
                       </Badge>
                     )}
-                    {emailDetails.parsedData.hasAttachments && (
+                    {emailDetails.metadata.hasAttachments && (
                       <Badge className="bg-blue-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
                         <File2 className="w-3 h-3 mr-1" />
-                        {emailDetails.parsedData.attachmentCount}
+                        {emailDetails.metadata.attachmentCount}
                       </Badge>
                     )}
                   </div>
@@ -200,16 +194,16 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
 
             {/* Email Body */}
             <div className="border-t border-border pt-6">
-              {emailDetails.emailContent.htmlBody ? (
+              {emailDetails.content.htmlBody ? (
                 <div 
                   className="prose prose-sm max-w-none rounded-lg new-thing"
                   style={{ 
                     fontFamily: 'Inter, system-ui, sans-serif',
                     textAlign: 'left'
                   }}
-                  dangerouslySetInnerHTML={{ __html: emailDetails.emailContent.htmlBody }}
+                  dangerouslySetInnerHTML={{ __html: emailDetails.content.htmlBody }}
                 />
-              ) : emailDetails.emailContent.textBody ? (
+              ) : emailDetails.content.textBody ? (
                 <div 
                   className="whitespace-pre-wrap text-foreground leading-relaxed"
                   style={{ 
@@ -217,7 +211,7 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
                     textAlign: 'left'
                   }}
                 >
-                  {emailDetails.emailContent.textBody}
+                  {emailDetails.content.textBody}
                 </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
@@ -235,7 +229,7 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
             {/* Attachments */}
             <EmailAttachments 
               emailId={emailDetails.id} 
-              attachments={emailDetails.emailContent.attachments || []} 
+              attachments={emailDetails.content.attachments || []} 
             />
 
             {/* Debug Info (only in development) */}
@@ -244,13 +238,13 @@ export default async function EmailViewPage({ params, searchParams }: PageProps)
                 <details className="text-xs text-muted-foreground">
                   <summary className="cursor-pointer font-medium">Debug Info</summary>
                   <div className="mt-2 space-y-2">
-                    <div><strong>Parse Success:</strong> {emailDetails.parsedData.parseSuccess ? 'Yes' : 'No'}</div>
-                    {emailDetails.parsedData.parseError && (
-                      <div><strong>Parse Error:</strong> {emailDetails.parsedData.parseError}</div>
+                    <div><strong>Parse Success:</strong> {emailDetails.metadata.parseSuccess ? 'Yes' : 'No'}</div>
+                    {emailDetails.metadata.parseError && (
+                      <div><strong>Parse Error:</strong> {emailDetails.metadata.parseError}</div>
                     )}
                     <div><strong>Message ID:</strong> {emailDetails.messageId}</div>
-                    <div><strong>Has Text Body:</strong> {emailDetails.parsedData.hasTextBody ? 'Yes' : 'No'}</div>
-                    <div><strong>Has HTML Body:</strong> {emailDetails.parsedData.hasHtmlBody ? 'Yes' : 'No'}</div>
+                    <div><strong>Has Text Body:</strong> {emailDetails.metadata.hasTextBody ? 'Yes' : 'No'}</div>
+                    <div><strong>Has HTML Body:</strong> {emailDetails.metadata.hasHtmlBody ? 'Yes' : 'No'}</div>
                   </div>
                 </details>
               </div>

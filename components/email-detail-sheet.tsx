@@ -22,7 +22,7 @@ import ShieldAlert from "@/components/icons/shield-alert"
 import Clock2 from "@/components/icons/clock-2"
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
-import { useEmailQuery, useMarkEmailAsReadMutation, type EmailDetails } from '@/features/emails/hooks'
+import { useEmailQuery, useMarkEmailAsReadMutation } from '@/features/emails/hooks'
 import { EmailAttachments } from '@/components/email-attachments'
 
 interface EmailDetailSheetProps {

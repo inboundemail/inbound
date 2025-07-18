@@ -1,5 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { 
+    GetDomainsResponse,
+    GetDomainsRequest,
+    DomainWithStats
+} from '@/app/api/v2/domains/route'
+import type { 
     GetDomainByIdResponse,
     PutDomainByIdRequest
 } from '@/app/api/v2/domains/[id]/route'
@@ -16,9 +21,34 @@ import type {
 // Query keys for v2 domain API
 export const domainV2Keys = {
     all: ['v2', 'domains'] as const,
+    list: (params?: GetDomainsRequest) => [...domainV2Keys.all, 'list', params] as const,
     detail: (domainId: string) => [...domainV2Keys.all, domainId] as const,
     verification: (domainId: string) => [...domainV2Keys.all, domainId, 'verification'] as const,
     emailAddresses: (domainId: string) => [...domainV2Keys.all, domainId, 'email-addresses'] as const,
+}
+
+// Hook for domains list (replacement for useDomainStatsQuery)
+export const useDomainsListV2Query = (params?: GetDomainsRequest) => {
+    return useQuery<GetDomainsResponse>({
+        queryKey: domainV2Keys.list(params),
+        queryFn: async () => {
+            const searchParams = new URLSearchParams()
+            if (params?.limit) searchParams.set('limit', params.limit.toString())
+            if (params?.offset) searchParams.set('offset', params.offset.toString())
+            if (params?.status) searchParams.set('status', params.status)
+            if (params?.canReceive) searchParams.set('canReceive', params.canReceive)
+            if (params?.check) searchParams.set('check', params.check)
+
+            const response = await fetch(`/api/v2/domains?${searchParams}`)
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.error || `HTTP error! status: ${response.status}`)
+            }
+            return response.json()
+        },
+        staleTime: 2 * 60 * 1000, // 2 minutes
+        gcTime: 5 * 60 * 1000, // 5 minutes
+    })
 }
 
 // Hook for domain details query

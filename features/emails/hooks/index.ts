@@ -1,7 +1,30 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { markEmailAsRead, getEmailsList, getEmailDetailsFromParsed } from '@/app/actions/primary'
 
-// Export the useEmailQuery hook and types from the dedicated file
+// Export the v2 hooks as primary exports
+export {
+  useDomainsListV2Query,
+  useDomainDetailsV2Query,
+  useAddEmailAddressV2Mutation,
+  useUpdateEmailEndpointV2Mutation
+} from '@/features/domains/hooks/useDomainV2Hooks'
+
+export {
+  useEmailAddressesV2Query,
+  useEmailAddressV2Query,
+  useCreateEmailAddressV2Mutation,
+  useUpdateEmailAddressV2Mutation,
+  useDeleteEmailAddressV2Mutation
+} from './useEmailAddressesV2Hooks'
+
+export {
+  useMailV2Query,
+  useMailDetailsV2Query,
+  useMarkEmailAsReadV2Mutation,
+  useUserEmailLogsV2Query
+} from './useMailV2Hooks'
+
+// Legacy exports from dedicated files (keep for backward compatibility)
 export { useEmailQuery } from './useEmailQuery'
 export { useMarkEmailAsReadMutation } from './useMarkEmailAsReadMutation'
 export { useUserEmailLogsQuery } from './useUserEmailLogsQuery'
@@ -15,7 +38,7 @@ export const emailKeys = {
   detail: (id: string) => [...emailKeys.details(), id] as const,
 }
 
-// Hook for listing emails
+// Legacy hook for listing emails (kept for backward compatibility)
 export function useEmailsListQuery(options?: {
   limit?: number
   offset?: number
@@ -31,7 +54,7 @@ export function useEmailsListQuery(options?: {
   })
 }
 
-// Hook for getting email details
+// Legacy hook for getting email details (kept for backward compatibility)
 export function useEmailDetailsQuery(emailId: string, enabled = true) {
   return useQuery({
     queryKey: emailKeys.detail(emailId),
