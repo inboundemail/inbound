@@ -33,6 +33,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@lordicon/react": "^1.11.0",
     "@neondatabase/serverless": "^1.0.0",
+    "@ngrok/ngrok": "^1.5.1",
     "@planetscale/database": "^1.19.0",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-checkbox": "^1.3.2",

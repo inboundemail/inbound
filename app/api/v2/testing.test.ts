@@ -11,6 +11,7 @@ import { GetEmailAddressByIdResponse, PutEmailAddressByIdResponse, DeleteEmailAd
 import { GetDomainsResponse } from "./domains/route";
 import { GetDomainByIdResponse, PutDomainByIdRequest, PutDomainByIdResponse } from "./domains/[id]/route";
 import type { WebhookConfig } from "@/features/endpoints/types";
+import { setupWebhook, createTestFlag, sendTestEmail } from "./helper/webhook-tester";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -569,5 +570,163 @@ describe("verify email address deletion", () => {
         expect(response.status).toBe(404);
         const data = await response.json();
         expect(data.error).toBe("Email address not found");
+    });
+});
+
+// End-to-End Email Webhook Test
+
+describe("end-to-end email webhook test", () => {
+    let testEndpointId: string;
+    let testEmailAddressId: string;
+    let testDomainId: string;
+    
+    it("should create endpoint, email address, send email, and receive webhook", async () => {
+        // Skip if no domains available
+        const domainsResponse = await fetch(`${API_URL}/domains`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        const domainsData = await domainsResponse.json();
+        
+        if (!domainsData.data || domainsData.data.length === 0) {
+            console.warn("⚠️ Skipping end-to-end test - no domains available");
+            return;
+        }
+        
+        const testDomain = domainsData.data[1];
+        testDomainId = testDomain.id;
+        
+        console.log("🚀 Starting end-to-end email webhook test...");
+        
+        // Create unique test flag
+        const testFlag = createTestFlag();
+        console.log(`🏷️ Test flag: ${testFlag}`);
+        
+        // Step 1: Start webhook listener
+        const webhook = await setupWebhook({
+            match: (body: any) => {
+                console.log("🔍 Checking webhook payload for flag:", testFlag);
+                return body?.text?.includes(testFlag) || 
+                       body?.html?.includes(testFlag) || 
+                       body?.subject?.includes(testFlag) ||
+                       JSON.stringify(body).includes(testFlag);
+            },
+            timeoutMs: 45000 // 45 seconds for email delivery
+        });
+        
+        const webhookUrl = webhook.url;
+        console.log(`🌐 Webhook URL: ${webhookUrl}`);
+        
+        // Step 2: Create a webhook endpoint
+        const createEndpointResponse = await fetch(`${API_URL}/endpoints`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            method: "POST",
+            body: JSON.stringify({
+                name: "E2E Test Webhook Endpoint",
+                type: "webhook",
+                description: "End-to-end test webhook endpoint",
+                config: {
+                    url: webhookUrl,
+                    timeout: 30,
+                    retryAttempts: 3,
+                    headers: {
+                        "X-Test": "e2e-webhook-test"
+                    }
+                }
+            })
+        });
+        
+        const endpointData = await createEndpointResponse.json();
+        expect(createEndpointResponse.status).toBe(201);
+        testEndpointId = endpointData.id;
+        console.log(`✅ Created webhook endpoint: ${testEndpointId}`);
+        
+        // Step 3: Create email address
+        const testEmailAddress = `e2e-test-${Date.now()}@${testDomain.domain}`;
+        
+        const createEmailResponse = await fetch(`${API_URL}/email-addresses`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            method: "POST",
+            body: JSON.stringify({
+                address: testEmailAddress,
+                domainId: testDomainId,
+                isActive: true
+            })
+        });
+        
+        const emailData = await createEmailResponse.json();
+        expect(createEmailResponse.status).toBe(201);
+        testEmailAddressId = emailData.id;
+        console.log(`✅ Created email address: ${testEmailAddress}`);
+        
+        // Step 4: Set up email address routing to the webhook endpoint
+        const updateEmailResponse = await fetch(`${API_URL}/email-addresses/${testEmailAddressId}`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            method: "PUT",
+            body: JSON.stringify({
+                routing: {
+                    type: "endpoint",
+                    endpointId: testEndpointId
+                }
+            })
+        });
+        
+        expect(updateEmailResponse.status).toBe(200);
+        console.log(`✅ Email address routing configured to webhook endpoint`);
+        
+        // Step 5: Send test email via Resend
+        console.log("📧 Sending test email via Resend...");
+        await sendTestEmail({
+            to: testEmailAddress,
+            subject: `E2E Test Email - ${testFlag}`,
+            text: `This is an end-to-end test email with flag: ${testFlag}`,
+            html: `<p>This is an end-to-end test email with flag: <strong>${testFlag}</strong></p>`
+        });
+        
+        // Step 6: Await webhook delivery
+        console.log("⏳ Awaiting webhook delivery...");
+        const webhookBody = await webhook.waitForWebhook();
+        
+        // Step 7: Verify webhook received correct data
+        expect(webhookBody).toBeDefined();
+        expect(JSON.stringify(webhookBody)).toContain(testFlag);
+        console.log("✅ End-to-end test completed successfully!");
+        
+        // Cleanup
+        await webhook.close();
+        
+    }, 60000); // 60 second timeout for the entire test
+    
+    // Cleanup test data
+    afterAll(async () => {
+        if (testEmailAddressId) {
+            console.log("🧹 Cleaning up test email address...");
+            await fetch(`${API_URL}/email-addresses/${testEmailAddressId}`, {
+                method: "DELETE",
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`
+                }
+            });
+        }
+        
+        if (testEndpointId) {
+            console.log("🧹 Cleaning up test endpoint...");
+            await fetch(`${API_URL}/endpoints/${testEndpointId}`, {
+                method: "DELETE",
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`
+                }
+            });
+        }
     });
 });
