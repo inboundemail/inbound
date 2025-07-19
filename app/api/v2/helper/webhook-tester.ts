@@ -40,6 +40,7 @@ export async function setupWebhook({
     let listener: Listener | undefined;
     let webhookResolver: ((body: any) => void) | undefined;
     let webhookRejecter: ((error: Error) => void) | undefined;
+    let bufferedPayload: any | undefined; // Buffer the payload if it arrives early
 
     const server = http.createServer((req, res) => {
       let body = "";
@@ -65,6 +66,10 @@ export async function setupWebhook({
             console.log("✅ Webhook matched! Resolving...");
             if (webhookResolver) {
               webhookResolver(parsed);
+            } else {
+              // Buffer the payload if waitForWebhook hasn't been called yet
+              bufferedPayload = parsed;
+              console.log("📦 Buffering webhook payload for later retrieval");
             }
           } else {
             console.log("⏳ Webhook received but didn't match criteria");
@@ -118,12 +123,19 @@ export async function setupWebhook({
 
     const waitForWebhook = () => {
       return new Promise<any>((resolveWebhook, rejectWebhook) => {
+        // Check if we already have a buffered payload
+        if (bufferedPayload) {
+          console.log("📤 Returning buffered webhook payload");
+          resolveWebhook(bufferedPayload);
+          return;
+        }
+        
         webhookResolver = resolveWebhook;
         webhookRejecter = rejectWebhook;
         
         // Set up timeout
         setTimeout(() => {
-          if (!resolved) {
+          if (!resolved && !bufferedPayload) {
             console.log("⏰ Webhook timeout reached");
             rejectWebhook(new Error(`Webhook timeout after ${timeoutMs}ms`));
           }

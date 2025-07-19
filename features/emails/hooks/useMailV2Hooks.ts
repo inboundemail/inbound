@@ -94,4 +94,46 @@ export const useUserEmailLogsV2Query = (options?: GetMailRequest) => {
         limit: options?.limit || 50,
         offset: options?.offset || 0,
     })
+}
+
+// Hook for replying to an email
+export const useReplyToEmailV2Mutation = () => {
+    const queryClient = useQueryClient()
+
+    return useMutation<
+        { id: string },
+        Error,
+        {
+            emailId: string
+            from: string
+            to?: string | string[]
+            subject?: string
+            text?: string
+            html?: string
+            include_original?: boolean
+        }
+    >({
+        mutationFn: async ({ emailId, ...replyData }) => {
+            const response = await fetch(`/api/v2/emails/${emailId}/reply`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(replyData),
+            })
+            
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.error || 'Failed to send reply')
+            }
+            
+            return response.json()
+        },
+        onSuccess: (_, { emailId }) => {
+            // Invalidate mail lists to show the sent reply
+            queryClient.invalidateQueries({ queryKey: mailV2Keys.lists() })
+            // Also invalidate the specific email detail
+            queryClient.invalidateQueries({ queryKey: mailV2Keys.detail(emailId) })
+        },
+    })
 } 

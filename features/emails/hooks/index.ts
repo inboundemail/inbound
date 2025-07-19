@@ -21,7 +21,8 @@ export {
   useMailV2Query,
   useMailDetailsV2Query,
   useMarkEmailAsReadV2Mutation,
-  useUserEmailLogsV2Query
+  useUserEmailLogsV2Query,
+  useReplyToEmailV2Mutation
 } from './useMailV2Hooks'
 
 // Legacy exports from dedicated files (keep for backward compatibility)

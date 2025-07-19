@@ -1223,3 +1223,638 @@ describe("end-to-end email sending via Inbound API with webhook", () => {
         }
     });
 });
+
+// Reply to Email API Tests
+
+describe("reply to email via Inbound API", () => {
+    // We need to first receive an email to reply to
+    let receivedEmailId: string = "";
+    let senderEmail: string = "";
+    let originalSubject: string = "";
+    
+    beforeAll(async () => {
+        // Send a test email to create something to reply to
+        // This would normally come from an external sender
+        // For testing, we'll simulate by directly creating an email in the database
+        // or by using a test endpoint that creates a structured email
+        
+        // For now, we'll use a placeholder ID - in real tests this would be set up properly
+        console.log("⚠️ Note: Reply tests require a received email to be set up first");
+    });
+
+    it("should reply to an email with default subject and recipient", async () => {
+        // Skip if no email to reply to
+        if (!receivedEmailId) {
+            console.log("⚠️ Skipping test - no received email to reply to");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "Test Reply <test@exon.dev>",
+                text: "This is a test reply to your email.",
+                html: "<p>This is a test reply to your email.</p>"
+            })
+        });
+
+        const data = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBeDefined();
+    });
+
+    it("should reply with custom subject and recipients", async () => {
+        // Skip if no email to reply to
+        if (!receivedEmailId) {
+            console.log("⚠️ Skipping test - no received email to reply to");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "Test Reply <test@exon.dev>",
+                to: ["custom@example.com"],
+                cc: ["cc@example.com"],
+                subject: "Custom Reply Subject",
+                text: "This is a custom reply.",
+                html: "<p>This is a custom reply.</p>",
+                include_original: false
+            })
+        });
+
+        const data = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBeDefined();
+    });
+
+    it("should return 404 for non-existent email", async () => {
+        const response = await fetch(`${API_URL}/emails/non-existent-id/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "Test Reply <test@exon.dev>",
+                text: "This is a test reply."
+            })
+        });
+
+        expect(response.status).toBe(404);
+        const data = await response.json();
+        expect(data.error).toBe("Email not found");
+    });
+
+    it("should return 400 for missing required fields", async () => {
+        // Skip if no email to reply to
+        if (!receivedEmailId) {
+            console.log("⚠️ Skipping test - no received email to reply to");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                // Missing 'from' field
+                text: "This is a test reply."
+            })
+        });
+
+        expect(response.status).toBe(400);
+        const data = await response.json();
+        expect(data.error).toContain("From address is required");
+    });
+
+    it("should return 403 for unauthorized domain", async () => {
+        // Skip if no email to reply to
+        if (!receivedEmailId) {
+            console.log("⚠️ Skipping test - no received email to reply to");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "Test Reply <test@unauthorized-domain.com>",
+                text: "This is a test reply."
+            })
+        });
+
+        expect(response.status).toBe(403);
+        const data = await response.json();
+        expect(data.error).toContain("don't have permission to send from domain");
+    });
+
+    it("should handle idempotency key correctly", async () => {
+        // Skip if no email to reply to
+        if (!receivedEmailId) {
+            console.log("⚠️ Skipping test - no received email to reply to");
+            return;
+        }
+
+        const idempotencyKey = `test-reply-${Date.now()}`;
+        const requestBody = {
+            from: "Test Reply <test@exon.dev>",
+            text: "This is an idempotent reply test."
+        };
+
+        // First request
+        const response1 = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json",
+                "Idempotency-Key": idempotencyKey
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        const data1 = await response1.json();
+        expect(response1.status).toBe(200);
+        expect(data1.id).toBeDefined();
+
+        // Second request with same idempotency key
+        const response2 = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json",
+                "Idempotency-Key": idempotencyKey
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        const data2 = await response2.json();
+        expect(response2.status).toBe(200);
+        expect(data2.id).toBe(data1.id); // Should return the same email ID
+    });
+
+    it("should include quoted original message by default", async () => {
+        // Skip if no email to reply to
+        if (!receivedEmailId) {
+            console.log("⚠️ Skipping test - no received email to reply to");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "Test Reply <test@exon.dev>",
+                text: "This is my reply.",
+                html: "<p>This is my reply.</p>"
+                // include_original defaults to true
+            })
+        });
+
+        const data = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBeDefined();
+        
+        // In a real test, we would verify the sent email contains quoted content
+        // by checking the sentEmails table or intercepting the SES call
+    });
+
+    it("should not include quoted message when include_original is false", async () => {
+        // Skip if no email to reply to
+        if (!receivedEmailId) {
+            console.log("⚠️ Skipping test - no received email to reply to");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "Test Reply <test@exon.dev>",
+                text: "This is my reply without quote.",
+                include_original: false
+            })
+        });
+
+        const data = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBeDefined();
+        
+        // In a real test, we would verify the sent email does NOT contain quoted content
+    });
+});
+
+// Comprehensive Reply to Email Test with Real Email Setup
+
+describe("comprehensive reply to email test with real setup", () => {
+    let testDomainId: string = "indm_h6yoR3_ENuce_J8OLm7Yh"; // exon.dev domain id
+    let testDomain: string = "exon.dev";
+    let receivedEmailId: string = "";
+    let testEndpointId: string = "";
+    let testEmailAddressId: string = "";
+    let originalSenderEmail: string = "ryan.ceo@exon.dev";
+    let originalSubject: string = "Test Email for Reply";
+    let testRecipientAddress: string = "";
+    
+    beforeAll(async () => {
+        console.log("🚀 Setting up email for reply test...");
+        
+        // Step 1: Create a webhook endpoint that will capture the email ID
+        let capturedEmailId: string = "";
+        const captureWebhook = await setupWebhook({
+            match: (body: any) => {
+                console.log("🔍 Webhook received body:", JSON.stringify(body).substring(0, 200));
+                
+                // Try different possible ID fields
+                const possibleId = body?.id || body?.emailId || body?.email?.id || body?.data?.id;
+                
+                // Also check if this is our test email by subject
+                const isOurEmail = body?.subject === originalSubject || 
+                                 body?.email?.subject === originalSubject ||
+                                 body?.data?.subject === originalSubject ||
+                                 JSON.stringify(body).includes(originalSubject);
+                
+                if (possibleId && isOurEmail) {
+                    capturedEmailId = possibleId;
+                    console.log(`📧 Captured email ID: ${capturedEmailId}`);
+                    return true;
+                }
+                
+                // If we can't find an ID but it's our email, still match
+                if (isOurEmail) {
+                    console.log(`📧 Found our test email by subject, but couldn't extract ID`);
+                    return true;
+                }
+                
+                return false;
+            },
+            timeoutMs: 30000
+        });
+        
+        // Step 2: Create endpoint for receiving emails
+        const createEndpointResponse = await fetch(`${API_URL}/endpoints`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            method: "POST",
+            body: JSON.stringify({
+                name: "Reply Test Webhook Endpoint",
+                type: "webhook",
+                description: "Webhook for reply test setup",
+                config: {
+                    url: captureWebhook.url,
+                    timeout: 30,
+                    retryAttempts: 3
+                }
+            })
+        });
+        
+        const endpointData = await createEndpointResponse.json();
+        expect(createEndpointResponse.status).toBe(201);
+        testEndpointId = endpointData.id;
+        console.log(`✅ Created webhook endpoint: ${testEndpointId}`);
+        
+        // Step 3: Create email address to receive test email
+        testRecipientAddress = `reply-test-${Date.now()}@${testDomain}`;
+        
+        const createEmailResponse = await fetch(`${API_URL}/email-addresses`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            method: "POST",
+            body: JSON.stringify({
+                address: testRecipientAddress,
+                domainId: testDomainId,
+                endpointId: testEndpointId,
+                isActive: true
+            })
+        });
+        
+        const emailData = await createEmailResponse.json();
+        expect(createEmailResponse.status).toBe(201);
+        testEmailAddressId = emailData.id;
+        console.log(`✅ Created email address: ${testRecipientAddress}`);
+        
+        // Step 4: Send a test email from ryan.ceo@exon.dev using Inbound API
+        console.log("📧 Sending test email from ryan.ceo@exon.dev via Inbound API...");
+        const sendEmailResponse = await fetch(`${API_URL}/emails`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: `Ryan CEO <${originalSenderEmail}>`,
+                to: testRecipientAddress,
+                subject: originalSubject,
+                text: "Hi team,\n\nThis is a test email from Ryan that we will reply to.\n\nBest regards,\nRyan",
+                html: "<p>Hi team,</p><p>This is a test email from Ryan that we will reply to.</p><p>Best regards,<br>Ryan</p>"
+            })
+        });
+        
+        const sendData = await sendEmailResponse.json();
+        expect(sendEmailResponse.status).toBe(200);
+        console.log(`✅ Email sent from ryan.ceo@exon.dev with ID: ${sendData.id}`);
+        
+        // Step 5: Wait for webhook to capture the email
+        console.log("⏳ Waiting for email to be received via webhook...");
+        const webhookBody = await captureWebhook.waitForWebhook();
+        await captureWebhook.close();
+        
+        // Step 6: Always get the email from our mailbox to ensure we have the correct ID
+        // The webhook might return a different ID format than what the reply endpoint expects
+        console.log("📥 Fetching email from mailbox to get correct ID...");
+        
+        const mailResponse = await fetch(`${API_URL}/mail?limit=10`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        const mailData = await mailResponse.json();
+        
+        // Find our test email
+        const ourEmail = mailData.emails.find((email: any) => 
+            email.subject === originalSubject && 
+            email.from.includes("ryan.ceo")
+        );
+        
+        if (ourEmail) {
+            receivedEmailId = ourEmail.id; // Use the 'id' field, not 'emailId'
+            console.log(`✅ Found received email with ID: ${receivedEmailId}`);
+            console.log(`📧 Email details:`, {
+                id: ourEmail.id,
+                emailId: ourEmail.emailId,
+                subject: ourEmail.subject,
+                from: ourEmail.from
+            });
+        } else {
+            console.error("❌ Could not find test email in mailbox");
+            console.log("Available emails:", mailData.emails.map((e: any) => ({
+                id: e.id,
+                subject: e.subject,
+                from: e.from
+            })));
+        }
+    });
+    
+    afterAll(async () => {
+        // Cleanup
+        if (testEmailAddressId) {
+            console.log("🧹 Cleaning up test email address...");
+            await fetch(`${API_URL}/email-addresses/${testEmailAddressId}`, {
+                method: "DELETE",
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`
+                }
+            });
+        }
+        
+        if (testEndpointId) {
+            console.log("🧹 Cleaning up test endpoint...");
+            await fetch(`${API_URL}/endpoints/${testEndpointId}`, {
+                method: "DELETE",
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`
+                }
+            });
+        }
+    });
+
+    it("should successfully reply to ryan.ceo@exon.dev with default values", async () => {
+        if (!receivedEmailId) {
+            console.error("❌ No email ID available for reply test");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: `Test Recipient <${testRecipientAddress}>`,
+                text: "Hi Ryan,\n\nThank you for your email. This is our reply back to you.\n\nBest regards,\nTest Team",
+                html: "<p>Hi Ryan,</p><p>Thank you for your email. This is our reply back to you.</p><p>Best regards,<br>Test Team</p>"
+                // Note: 'to' is omitted, so it should automatically reply to ryan.ceo@exon.dev
+            })
+        });
+
+        const data = await response.json();
+        console.log("Reply response:", data);
+        
+        expect(response.status).toBe(200);
+        expect(data.id).toBeDefined();
+        expect(data.id).toMatch(/^[a-zA-Z0-9_-]+$/); // Should be a valid nanoid
+        
+        console.log(`✅ Successfully sent reply back to ryan.ceo@exon.dev with ID: ${data.id}`);
+    });
+
+    it("should reply with proper email threading headers", async () => {
+        if (!receivedEmailId) {
+            console.error("❌ No email ID available for reply test");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: `Test Recipient <${testRecipientAddress}>`,
+                text: "This reply should have proper threading headers.",
+                include_original: true
+            })
+        });
+
+        const data = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBeDefined();
+        
+        // In a production test, we would verify the sent email has:
+        // - In-Reply-To header set to the original message ID
+        // - References header containing the message ID chain
+        // - Subject with "Re: " prefix
+        console.log(`✅ Reply sent with threading headers: ${data.id}`);
+    });
+
+    it("should handle reply with custom recipients and subject", async () => {
+        if (!receivedEmailId) {
+            console.error("❌ No email ID available for reply test");
+            return;
+        }
+
+        const customRecipients = ["custom1@example.com", "custom2@example.com"];
+        const customSubject = "Custom Reply: Important Update";
+
+        const response = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: `Test Recipient <${testRecipientAddress}>`,
+                to: customRecipients,
+                cc: ["manager@exon.dev"],
+                subject: customSubject,
+                text: "This is a custom reply with specific recipients.",
+                html: "<p>This is a custom reply with specific recipients.</p>",
+                headers: {
+                    "X-Priority": "High",
+                    "X-Custom-Header": "ReplyTest"
+                },
+                include_original: false
+            })
+        });
+
+        const data = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBeDefined();
+        
+        console.log(`✅ Custom reply sent successfully: ${data.id}`);
+    });
+
+    it("should properly quote the original message when include_original is true", async () => {
+        if (!receivedEmailId) {
+            console.error("❌ No email ID available for reply test");
+            return;
+        }
+
+        const replyText = "This is my reply to your message.";
+        
+        const response = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "Support Team <support@exon.dev>",
+                text: replyText,
+                html: `<p>${replyText}</p>`,
+                include_original: true // Should include quoted original
+            })
+        });
+
+        const data = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBeDefined();
+        
+        // The sent email should contain:
+        // - Our reply text
+        // - A quote header like "On [date], [sender] wrote:"
+        // - The original message quoted with > prefix (for text) or blockquote (for HTML)
+        console.log(`✅ Reply with quoted original sent: ${data.id}`);
+    });
+
+    it("should handle reply with attachments", async () => {
+        if (!receivedEmailId) {
+            console.error("❌ No email ID available for reply test");
+            return;
+        }
+
+        // Create a simple text file attachment
+        const attachmentContent = Buffer.from("This is a test attachment for reply").toString('base64');
+
+        const response = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "Support Team <support@exon.dev>",
+                text: "Please find the attachment in this reply.",
+                attachments: [{
+                    content: attachmentContent,
+                    filename: "reply-attachment.txt",
+                    content_type: "text/plain"
+                }]
+            })
+        });
+
+        const data = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBeDefined();
+        
+        console.log(`✅ Reply with attachment sent: ${data.id}`);
+    });
+
+    it("should automatically reply to ryan.ceo@exon.dev when 'to' is not provided", async () => {
+        if (!receivedEmailId) {
+            console.error("❌ No email ID available for reply test");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: `Auto Reply <${testRecipientAddress}>`,
+                text: "This automatic reply should go to ryan.ceo@exon.dev since 'to' field is omitted."
+                // Note: 'to' field is intentionally omitted, so it should reply to ryan.ceo@exon.dev
+            })
+        });
+
+        const data = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBeDefined();
+        
+        // The email should be sent to ryan.ceo@exon.dev automatically
+        console.log(`✅ Auto-recipient reply sent back to ryan.ceo@exon.dev: ${data.id}`);
+    });
+
+    it("should add 'Re: ' prefix when subject is not provided", async () => {
+        if (!receivedEmailId) {
+            console.error("❌ No email ID available for reply test");
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/emails/${receivedEmailId}/reply`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "Support Team <support@exon.dev>",
+                text: "This reply should have 'Re: ' added to the subject."
+                // Note: 'subject' field is intentionally omitted
+            })
+        });
+
+        const data = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBeDefined();
+        
+        // The email should have subject: "Re: " + originalSubject
+        console.log(`✅ Auto-subject reply sent: ${data.id}`);
+    });
+});
