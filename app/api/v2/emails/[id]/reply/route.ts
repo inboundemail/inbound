@@ -95,7 +95,7 @@ function quoteMessage(originalEmail: any, includeOriginal: boolean = true): stri
     
     // Quote the original message with > prefix
     const originalText = originalEmail.textBody || ''
-    const quotedLines = originalText.split('\n').map(line => `> ${line}`).join('\n')
+    const quotedLines = originalText.split('\n').map((line: string) => `> ${line}`).join('\n')
     
     return quoteHeader + quotedLines
 }
