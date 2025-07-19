@@ -1,8 +1,13 @@
+"use client"
+
+import { useState, useEffect } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { getEmailsList } from '@/app/actions/primary'
+import { useMailV2Query } from '@/features/emails/hooks'
+import type { EmailItem } from '@/app/api/v2/mail/route'
 import Link from 'next/link'
 import Check2 from '@/components/icons/check-2'
 import AlarmClock from '@/components/icons/alarm-clock'
@@ -15,37 +20,41 @@ import { DomainFilterSelect } from '@/components/domain-filter-select'
 import { EmailListItem } from '@/components/emails/EmailListItem'
 import { PreviewToggle } from '@/components/emails/PreviewToggle'
 
-interface MailPageProps {
-    searchParams: Promise<{
-        search?: string
-        status?: string
-        domain?: string
-        limit?: string
-        offset?: string
-    }>
-}
-
-export default async function MailPage({ searchParams }: MailPageProps) {
-    // Await search params
-    const params = await searchParams
+export default function MailPage() {
+    const searchParams = useSearchParams()
+    const router = useRouter()
 
     // Get search params with defaults
-    const searchQuery = params.search || ''
-    const statusFilter = params.status || 'all'
-    const domainFilter = params.domain || 'all'
-    const limit = parseInt(params.limit || '50')
-    const offset = parseInt(params.offset || '0')
+    const searchQuery = searchParams.get('search') || ''
+    const statusFilter = searchParams.get('status') || 'all'
+    const domainFilter = searchParams.get('domain') || 'all'
+    const limit = parseInt(searchParams.get('limit') || '50')
+    const offset = parseInt(searchParams.get('offset') || '0')
 
-    // Fetch emails server-side
-    const emailsResult = await getEmailsList({
+    // Fetch emails using v2 API with 5-second refresh
+    const {
+        data: emailsResult,
+        isLoading,
+        error,
+        refetch
+    } = useMailV2Query({
         limit,
         offset,
-        searchQuery,
-        statusFilter,
-        domainFilter
+        search: searchQuery,
+        status: statusFilter === 'all' ? undefined : (statusFilter as 'all' | 'processed' | 'failed'),
+        domain: domainFilter === 'all' ? undefined : domainFilter
     })
 
-    if (emailsResult.error) {
+    // Set up 5-second auto-refresh
+    useEffect(() => {
+        const interval = setInterval(() => {
+            refetch()
+        }, 5000) // 5 seconds
+
+        return () => clearInterval(interval)
+    }, [refetch])
+
+    if (error) {
         return (
             <div className="min-h-screen p-4 font-outfit">
                 <div className="max-w-5xl mx-auto">
@@ -53,7 +62,7 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                         <CardContent className="p-6">
                             <div className="flex items-center gap-2 text-destructive">
                                 <CircleWarning2 width="16" height="16" />
-                                <span>{emailsResult.error}</span>
+                                <span>{error.message}</span>
                             </div>
                         </CardContent>
                     </Card>
@@ -62,7 +71,53 @@ export default async function MailPage({ searchParams }: MailPageProps) {
         )
     }
 
-    const { emails, pagination, filters, unreadCount } = emailsResult.data!
+    if (isLoading) {
+        return (
+            <div className="min-h-screen p-4 font-outfit">
+                <div className="max-w-5xl mx-auto">
+                    <div className="flex items-center justify-center py-12">
+                        <div className="text-muted-foreground">Loading emails...</div>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    if (!emailsResult) {
+        return (
+            <div className="min-h-screen p-4 font-outfit">
+                <div className="max-w-5xl mx-auto">
+                    <div className="flex items-center justify-center py-12">
+                        <div className="text-muted-foreground">No emails found</div>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    const { emails, pagination, filters = { uniqueDomains: [] } } = emailsResult
+    const unreadCount = emails.filter(email => !email.isRead).length
+
+    // Adapter function to convert v2 EmailItem to EmailListItem format
+    const adaptEmailForListItem = (email: EmailItem) => ({
+        id: email.id,
+        from: email.from,
+        subject: email.subject || 'No Subject',
+        receivedAt: email.receivedAt.toString(),
+        isRead: email.isRead,
+        parsedData: {
+            fromData: {
+                addresses: [{
+                    name: email.fromName,
+                    address: email.from
+                }]
+            },
+            preview: email.preview,
+            hasAttachments: email.hasAttachments,
+            htmlContent: null,
+            textContent: null
+        }
+    })
 
     const getStatusBadge = (status: string) => {
         switch (status) {
@@ -187,7 +242,7 @@ export default async function MailPage({ searchParams }: MailPageProps) {
                 ) : (
                     <div className="divide-y divide-border">
                         {emails.map((email) => (
-                            <EmailListItem key={email.id} email={email} />
+                            <EmailListItem key={email.id} email={adaptEmailForListItem(email)} />
                         ))}
                     </div>
                 )}
