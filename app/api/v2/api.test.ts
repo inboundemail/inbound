@@ -10,6 +10,8 @@ import { GetEmailAddressesResponse, PostEmailAddressesResponse } from "./email-a
 import { GetEmailAddressByIdResponse, PutEmailAddressByIdResponse, DeleteEmailAddressByIdResponse } from "./email-addresses/[id]/route";
 import { GetDomainsResponse, PostDomainsRequest, PostDomainsResponse } from "./domains/route";
 import { GetDomainByIdResponse, PutDomainByIdRequest, PutDomainByIdResponse } from "./domains/[id]/route";
+import { PostEmailsResponse } from "./emails/route";
+import { GetEmailByIdResponse } from "./emails/[id]/route";
 import type { WebhookConfig } from "@/features/endpoints/types";
 import { setupWebhook, createTestFlag, sendTestEmail } from "./helper/webhook-tester";
 import dotenv from "dotenv";
@@ -768,6 +770,430 @@ describe("end-to-end email webhook test", () => {
         expect(webhookBody).toBeDefined();
         expect(JSON.stringify(webhookBody)).toContain(testFlag);
         console.log("✅ End-to-end test completed successfully!");
+        
+        // Cleanup
+        await webhook.close();
+        
+    }, 60000); // 60 second timeout for the entire test
+    
+    // Cleanup test data
+    afterAll(async () => {
+        if (testEmailAddressId) {
+            console.log("🧹 Cleaning up test email address...");
+            await fetch(`${API_URL}/email-addresses/${testEmailAddressId}`, {
+                method: "DELETE",
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`
+                }
+            });
+        }
+        
+        if (testEndpointId) {
+            console.log("🧹 Cleaning up test endpoint...");
+            await fetch(`${API_URL}/endpoints/${testEndpointId}`, {
+                method: "DELETE",
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`
+                }
+            });
+        }
+    });
+});
+
+// Send Email API Tests
+
+describe("send email via Inbound API", () => {
+    let sentEmailId: string; // Store email ID for retrieval test
+
+    it("should send an email and return email ID with a 200 status code", async () => {
+        const response = await fetch(`${API_URL}/emails`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "Test Sender <test@exon.dev>",
+                to: "test-recipient@example.com",
+                subject: "Test Email from Inbound API",
+                text: "This is a test email sent via Inbound API",
+                html: "<p>This is a test email sent via <strong>Inbound API</strong></p>"
+            })
+        });
+        
+        const data = await response.json();
+        expect(response.status).toBe(200);
+        expect(data.id).toBeDefined();
+        expect(data.id).toMatch(/^[a-zA-Z0-9_-]+$/); // Should be a valid nanoid
+        sentEmailId = data.id; // Store for retrieval test
+        console.log(`✅ Email sent successfully with ID: ${data.id}`);
+    });
+
+    it("should handle missing required fields with a 400 status code", async () => {
+        const response = await fetch(`${API_URL}/emails`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "test@exon.dev",
+                // Missing 'to' and 'subject'
+                text: "Test email"
+            })
+        });
+        
+        const data = await response.json();
+        expect(response.status).toBe(400);
+        expect(data.error).toBe("Missing required fields: from, to, and subject are required");
+    });
+
+    it("should handle missing email content with a 400 status code", async () => {
+        const response = await fetch(`${API_URL}/emails`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "test@exon.dev",
+                to: "recipient@example.com",
+                subject: "Test Subject"
+                // Missing both 'text' and 'html'
+            })
+        });
+        
+        const data = await response.json();
+        expect(response.status).toBe(400);
+        expect(data.error).toBe("Either html or text content must be provided");
+    });
+
+    it("should handle unauthorized domain with a 403 status code", async () => {
+        const response = await fetch(`${API_URL}/emails`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "test@unauthorized-domain.com",
+                to: "recipient@example.com",
+                subject: "Test Subject",
+                text: "Test content"
+            })
+        });
+        
+        const data = await response.json();
+        expect(response.status).toBe(403);
+        expect(data.error).toContain("You don't have permission to send from domain");
+    });
+
+    it("should handle idempotency key correctly", async () => {
+        const idempotencyKey = `test-idempotency-${Date.now()}`;
+        const emailData = {
+            from: "Test Sender <test@exon.dev>",
+            to: "test-recipient@example.com",
+            subject: "Idempotency Test Email",
+            text: "This email tests idempotency"
+        };
+
+        // First request
+        const response1 = await fetch(`${API_URL}/emails`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json",
+                "Idempotency-Key": idempotencyKey
+            },
+            body: JSON.stringify(emailData)
+        });
+        
+        const data1 = await response1.json();
+        expect(response1.status).toBe(200);
+        expect(data1.id).toBeDefined();
+
+        // Second request with same idempotency key
+        const response2 = await fetch(`${API_URL}/emails`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json",
+                "Idempotency-Key": idempotencyKey
+            },
+            body: JSON.stringify(emailData)
+        });
+        
+        const data2 = await response2.json();
+        expect(response2.status).toBe(200);
+        expect(data2.id).toBe(data1.id); // Should return the same email ID
+        console.log(`✅ Idempotency working correctly - same ID returned: ${data1.id}`);
+    });
+});
+
+// Retrieve Sent Email API Tests
+
+describe("retrieve sent email via Inbound API", () => {
+    let retrieveEmailId: string;
+
+    // First, send an email to have something to retrieve
+    beforeAll(async () => {
+        const response = await fetch(`${API_URL}/emails`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "Retrieval Test <test@exon.dev>",
+                to: ["retrieve-test@example.com", "second@example.com"],
+                cc: ["cc-test@example.com"],
+                bcc: ["bcc-test@example.com"],
+                reply_to: ["reply@example.com"],
+                subject: "Email for Retrieval Test",
+                text: "This is a test email for retrieval testing",
+                html: "<h1>Test Email</h1><p>This is a test email for retrieval testing</p>",
+                headers: {
+                    "X-Test-Header": "test-value"
+                }
+            })
+        });
+        
+        const data = await response.json();
+        expect(response.status).toBe(200);
+        retrieveEmailId = data.id;
+        console.log(`📧 Created test email for retrieval: ${retrieveEmailId}`);
+    });
+
+    it("should retrieve an email by ID with a 200 status code", async () => {
+        const response = await fetch(`${API_URL}/emails/${retrieveEmailId}`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        
+        const data = await response.json();
+        expect(response.status).toBe(200);
+        
+        // Verify response structure
+        expect(data.object).toBe("email");
+        expect(data.id).toBe(retrieveEmailId);
+        expect(data.from).toBe("Retrieval Test <test@exon.dev>");
+        expect(data.subject).toBe("Email for Retrieval Test");
+        expect(data.text).toBe("This is a test email for retrieval testing");
+        expect(data.html).toBe("<h1>Test Email</h1><p>This is a test email for retrieval testing</p>");
+        
+        // Verify arrays
+        expect(Array.isArray(data.to)).toBe(true);
+        expect(data.to).toContain("retrieve-test@example.com");
+        expect(data.to).toContain("second@example.com");
+        expect(Array.isArray(data.cc)).toBe(true);
+        expect(data.cc).toContain("cc-test@example.com");
+        expect(Array.isArray(data.bcc)).toBe(true);
+        expect(data.bcc).toContain("bcc-test@example.com");
+        expect(Array.isArray(data.reply_to)).toBe(true);
+        expect(data.reply_to).toContain("reply@example.com");
+        
+        // Verify metadata
+        expect(data.created_at).toBeDefined();
+        expect(data.last_event).toBeDefined();
+        expect(['pending', 'delivered', 'failed']).toContain(data.last_event);
+        
+        console.log(`✅ Successfully retrieved email with status: ${data.last_event}`);
+    });
+
+    it("should handle non-existent email ID with a 404 status code", async () => {
+        const fakeId = "em_nonexistent123456789";
+        const response = await fetch(`${API_URL}/emails/${fakeId}`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        
+        const data = await response.json();
+        expect(response.status).toBe(404);
+        expect(data.error).toBe("Email not found");
+    });
+
+    it("should handle unauthorized access with a 401 status code", async () => {
+        const response = await fetch(`${API_URL}/emails/${retrieveEmailId}`, {
+            headers: {
+                "Authorization": "Bearer invalid_api_key"
+            }
+        });
+        
+        const data = await response.json();
+        expect(response.status).toBe(401);
+        expect(data.error).toBe("Unauthorized");
+    });
+
+    it("should handle empty arrays correctly", async () => {
+        // Send an email with minimal fields
+        const sendResponse = await fetch(`${API_URL}/emails`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: "Minimal Test <test@exon.dev>",
+                to: "minimal@example.com",
+                subject: "Minimal Email Test",
+                text: "Minimal content"
+            })
+        });
+        
+        const sendData = await sendResponse.json();
+        expect(sendResponse.status).toBe(200);
+        const minimalEmailId = sendData.id;
+        
+        // Retrieve the minimal email
+        const getResponse = await fetch(`${API_URL}/emails/${minimalEmailId}`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        
+        const getData = await getResponse.json();
+        expect(getResponse.status).toBe(200);
+        
+        // Verify empty arrays are returned as [null]
+        expect(getData.bcc).toEqual([null]);
+        expect(getData.cc).toEqual([null]);
+        expect(getData.reply_to).toEqual([null]);
+        
+        console.log(`✅ Empty arrays correctly returned as [null]`);
+    });
+});
+
+// End-to-End Email Sending and Webhook Test using Inbound API
+
+describe("end-to-end email sending via Inbound API with webhook", () => {
+    let testEndpointId: string;
+    let testEmailAddressId: string;
+    let testDomainId: string;
+    let testDomain: string;
+    
+    it("should send email via Inbound API and receive webhook", async () => {
+        testDomainId = "indm_h6yoR3_ENuce_J8OLm7Yh"; // exon.dev domain id
+        testDomain = "exon.dev";
+        
+        console.log("🚀 Starting end-to-end Inbound API email test...");
+        
+        // Create unique test flag
+        const testFlag = createTestFlag();
+        console.log(`🏷️ Test flag: ${testFlag}`);
+        
+        // Step 1: Start webhook listener
+        const webhook = await setupWebhook({
+            match: (body: any) => {
+                console.log("🔍 Checking webhook payload for flag:", testFlag);
+                return body?.text?.includes(testFlag) || 
+                       body?.html?.includes(testFlag) || 
+                       body?.subject?.includes(testFlag) ||
+                       JSON.stringify(body).includes(testFlag);
+            },
+            timeoutMs: 45000 // 45 seconds for email delivery
+        });
+        
+        const webhookUrl = webhook.url;
+        console.log(`🌐 Webhook URL: ${webhookUrl}`);
+        
+        // Step 2: Create a webhook endpoint
+        const createEndpointResponse = await fetch(`${API_URL}/endpoints`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            method: "POST",
+            body: JSON.stringify({
+                name: "Inbound API E2E Test Webhook",
+                type: "webhook",
+                description: "End-to-end test webhook for Inbound API email sending",
+                config: {
+                    url: webhookUrl,
+                    timeout: 30,
+                    retryAttempts: 3,
+                    headers: {
+                        "X-Test": "inbound-api-e2e-test"
+                    }
+                }
+            })
+        });
+        
+        const endpointData = await createEndpointResponse.json();
+        expect(createEndpointResponse.status).toBe(201);
+        testEndpointId = endpointData.id;
+        console.log(`✅ Created webhook endpoint: ${testEndpointId}`);
+        
+        // Step 3: Create email address
+        const testEmailAddress = `inbound-api-test-${Date.now()}@${testDomain}`;
+        
+        const createEmailResponse = await fetch(`${API_URL}/email-addresses`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            method: "POST",
+            body: JSON.stringify({
+                address: testEmailAddress,
+                domainId: testDomainId,
+                endpointId: testEndpointId,
+                isActive: true
+            })
+        });
+        
+        const emailData = await createEmailResponse.json();
+        expect(createEmailResponse.status).toBe(201);
+        testEmailAddressId = emailData.id;
+        console.log(`✅ Created email address: ${testEmailAddress}`);
+
+        // Step 4: Confirm the email address is routed to the webhook endpoint
+        const getEmailResponse = await fetch(`${API_URL}/email-addresses/${testEmailAddressId}`, {
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`
+            }
+        });
+        const emailAddressData = await getEmailResponse.json();
+        console.log("🔍 Email address data:", emailAddressData);
+        expect(getEmailResponse.status).toBe(200);
+        expect(emailAddressData.routing.type).toBe("endpoint");
+        expect(emailAddressData.endpointId).toBe(testEndpointId);
+
+        console.log(`✅ Email address routing configured to webhook endpoint`);
+        
+        // Step 5: Send test email via Inbound API
+        console.log("📧 Sending test email via Inbound API...");
+        const sendEmailResponse = await fetch(`${API_URL}/emails`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: `Inbound API Test <noreply@${testDomain}>`,
+                to: testEmailAddress,
+                subject: `Inbound API E2E Test - ${testFlag}`,
+                text: `This is an end-to-end test email sent via Inbound API with flag: ${testFlag}`,
+                html: `<h1>Inbound API Test</h1><p>This is an end-to-end test email sent via <strong>Inbound API</strong> with flag: <strong>${testFlag}</strong></p>`,
+                headers: {
+                    "X-Test-Flag": testFlag
+                }
+            })
+        });
+        
+        const sendEmailData = await sendEmailResponse.json();
+        expect(sendEmailResponse.status).toBe(200);
+        expect(sendEmailData.id).toBeDefined();
+        console.log(`✅ Email sent via Inbound API with ID: ${sendEmailData.id}`);
+        
+        // Step 6: Await webhook delivery
+        console.log("⏳ Awaiting webhook delivery...");
+        const webhookBody = await webhook.waitForWebhook();
+        
+        // Step 7: Verify webhook received correct data
+        expect(webhookBody).toBeDefined();
+        expect(JSON.stringify(webhookBody)).toContain(testFlag);
+        console.log("✅ Inbound API end-to-end test completed successfully!");
         
         // Cleanup
         await webhook.close();

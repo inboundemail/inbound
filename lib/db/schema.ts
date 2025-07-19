@@ -348,6 +348,45 @@ export const blockedEmails = pgTable('blocked_emails', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+// Sent Emails table - stores emails sent through the API
+export const sentEmails = pgTable('sent_emails', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  
+  // Sender and recipient information
+  from: varchar('from', { length: 500 }).notNull(), // Full "Name <email@domain.com>" format
+  fromAddress: varchar('from_address', { length: 255 }).notNull(), // Just the email address for validation
+  fromDomain: varchar('from_domain', { length: 255 }).notNull(), // Domain part for validation
+  to: text('to').notNull(), // JSON array of email addresses
+  cc: text('cc'), // JSON array of email addresses
+  bcc: text('bcc'), // JSON array of email addresses
+  replyTo: text('reply_to'), // JSON array of email addresses
+  
+  // Email content
+  subject: text('subject').notNull(),
+  textBody: text('text_body'),
+  htmlBody: text('html_body'),
+  
+  // Headers and metadata
+  headers: text('headers'), // JSON object of custom headers
+  attachments: text('attachments'), // JSON array of attachment metadata
+  
+  // Delivery status
+  status: varchar('status', { length: 50 }).notNull().default('pending'), // 'pending', 'sent', 'failed'
+  messageId: varchar('message_id', { length: 255 }), // Provider message ID after sending
+  provider: varchar('provider', { length: 50 }).default('ses'), // Email provider used
+  providerResponse: text('provider_response'), // Full response from provider
+  sentAt: timestamp('sent_at'), // When the email was actually sent
+  failureReason: text('failure_reason'), // If failed, why
+  
+  // Idempotency
+  idempotencyKey: varchar('idempotency_key', { length: 256 }), // For preventing duplicates
+  
+  // User and timestamps
+  userId: varchar('user_id', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // Export types for Better Auth tables (using the imported tables)
 export { user, session, account, verification, apikey };
 
@@ -393,6 +432,8 @@ export type EndpointDelivery = typeof endpointDeliveries.$inferSelect;
 export type NewEndpointDelivery = typeof endpointDeliveries.$inferInsert;
 export type BlockedEmail = typeof blockedEmails.$inferSelect;
 export type NewBlockedEmail = typeof blockedEmails.$inferInsert;
+export type SentEmail = typeof sentEmails.$inferSelect;
+export type NewSentEmail = typeof sentEmails.$inferInsert;
 
 // Domain status enums
 export const DOMAIN_STATUS = {
@@ -450,6 +491,12 @@ export const DELIVERY_STATUS = {
   FAILED: 'failed'
 } as const;
 
+export const SENT_EMAIL_STATUS = {
+  PENDING: 'pending',
+  SENT: 'sent',
+  FAILED: 'failed'
+} as const;
+
 // Type definitions
 export type DomainStatus = typeof DOMAIN_STATUS[keyof typeof DOMAIN_STATUS];
 export type SesVerificationStatus = typeof SES_VERIFICATION_STATUS[keyof typeof SES_VERIFICATION_STATUS];
@@ -460,3 +507,4 @@ export type EndpointType = typeof ENDPOINT_TYPES[keyof typeof ENDPOINT_TYPES];
 export type WebhookFormat = typeof WEBHOOK_FORMATS[keyof typeof WEBHOOK_FORMATS];
 export type DeliveryType = typeof DELIVERY_TYPES[keyof typeof DELIVERY_TYPES];
 export type DeliveryStatus = typeof DELIVERY_STATUS[keyof typeof DELIVERY_STATUS];
+export type SentEmailStatus = typeof SENT_EMAIL_STATUS[keyof typeof SENT_EMAIL_STATUS];
