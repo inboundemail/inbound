@@ -37,32 +37,33 @@ async function InboundHeroSection() {
   return (
     <AnimatedSection>
       {/* Header */}
-      <header className="flex items-center justify-between py-4 sm:py-6 w-full">
+      <header className="flex items-center justify-between py-3 sm:py-4 lg:py-6 w-full px-4 sm:px-0">
         <div className="flex items-center gap-2 sm:gap-3">
           <Image
             src="https://inbound.new/inbound-logo-3.png"
             alt="Inbound Logo"
-            width={28}
-            height={28}
-            className="rounded-lg shadow-sm sm:w-8 sm:h-8"
+            width={24}
+            height={24}
+            className="rounded-lg shadow-sm sm:w-7 sm:h-7 lg:w-8 lg:h-8"
           />
-          <span className="font-semibold text-2xl sm:text-3xl text-foreground">inbound</span>
+          <span className="font-semibold text-xl sm:text-2xl lg:text-3xl text-foreground">inbound</span>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
           {/* Desktop navigation */}
-          <div className="hidden md:flex items-center gap-4 text-md text-muted-foreground">
+          <div className="hidden md:flex items-center gap-4 text-sm lg:text-base text-muted-foreground">
             <a href="/docs" className="hover:text-foreground transition-colors">docs</a>
             <a href="#pricing" className="hover:text-foreground transition-colors">pricing</a>
             <a href="mailto:support@inbound.email" className="hover:text-foreground transition-colors">help</a>
           </div>
           { session?.user ? (
-            <Button size="lg" asChild>
+            <Button size="default" className="text-sm sm:text-base" asChild>
               <Link href="/mail">
-                hey {session.user.name.toLowerCase()} 👋
+                <span className="hidden sm:inline">hey {session.user.name.toLowerCase()} 👋</span>
+                <span className="sm:hidden">dashboard</span>
               </Link>
             </Button>
           ) : (
-            <Button size="lg" asChild>
+            <Button size="default" className="text-sm sm:text-base" asChild>
               <Link href="/login">
                 get started
               </Link>
@@ -74,46 +75,49 @@ async function InboundHeroSection() {
       {/* Main content area - Hero image with overlaid text */}
       <div className="relative w-full">
         {/* Hero image as background */}
-        <div className="rounded-t-[20px] sm:rounded-t-[30px] border-t border-l border-r border-border overflow-hidden relative">
-          <div className="relative">
+        <div className="rounded-t-[12px] sm:rounded-t-[20px] lg:rounded-t-[30px] border-t border-l border-r border-border overflow-hidden relative">
+          <div className="relative min-h-[500px] sm:min-h-[600px] lg:min-h-[700px]">
             <Image
               src="/inbound-hero.png"
               alt="Inbound Email for AI Agents"
-              width={1920}
-              height={1080}
-              className="w-full h-full object-cover brightness-75 animate-[scale-in_2s_ease-out_forwards] scale-110"
+              width={1080}
+              height={1920}
+              className="sm:w-full sm:h-full object-cover brightness-75 animate-[scale-in_2s_ease-out_forwards] scale-110 w-[500px] h-[500px] "
               priority
             />
 
+            {/* Mobile gradient overlay for better text readability */}
+            <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/30 to-black/50 lg:bg-gradient-to-r lg:from-black/40 lg:via-black/20 lg:to-transparent" />
+
             {/* Bottom fade overlay */}
-            <div className="absolute inset-x-0 bottom-0 h-[100px] pointer-events-none bg-gradient-to-t from-background to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 h-[80px] sm:h-[100px] pointer-events-none bg-gradient-to-t from-background to-transparent" />
 
             {/* Fading border overlay for bottom */}
-            <div className="absolute inset-x-0 bottom-0 h-[100px] pointer-events-none">
+            <div className="absolute inset-x-0 bottom-0 h-[80px] sm:h-[100px] pointer-events-none">
               <div className="absolute left-0 bottom-0 w-px h-full bg-gradient-to-t from-transparent to-border"></div>
               <div className="absolute right-0 bottom-0 w-px h-full bg-gradient-to-t from-transparent to-border"></div>
             </div>
 
-            {/* Overlaid content - two columns */}
+            {/* Overlaid content - responsive layout */}
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full px-8 sm:px-12 lg:px-16 grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+              <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12 items-center">
                 {/* Left column - Text content */}
-                <div className="space-y-4 sm:space-y-6">
-                  <h1 className="text-3xl xs:text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight tracking-tight">
+                <div className="space-y-4 sm:space-y-6 text-center sm:text-left">
+                  <h1 className="text-5xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight tracking-tight">
                     email for<br />
                     ai agents
                   </h1>
-                  <p className="text-white/90 text-sm xs:text-base sm:text-lg lg:text-xl leading-relaxed">
+                  <p className="text-white/90 text-sm sm:text-base lg:text-lg xl:text-xl leading-relaxed max-w-lg mx-auto lg:mx-0">
                     give your AI agents the power to send, receive, and manage emails programmatically with our simple API.
                   </p>
-                  <div className="flex flex-col xs:flex-row items-start gap-3 xs:gap-4 pt-2 sm:pt-4">
+                  <div className="flex flex-col sm:flex-row items-center lg:items-start gap-3 sm:gap-4 pt-2 sm:pt-4 justify-center lg:justify-start">
                     <Link href="/login">
-                      <Button size="lg" className="w-full xs:w-auto">
+                      <Button size="lg" className="w-full sm:w-auto min-w-[160px]">
                         get started now
                       </Button>
                     </Link>
                     <Link href="https://docs.inbound.new" target="_blank"> 
-                      <Button variant="ghost" size="lg" className="w-full xs:w-auto bg-white/10 border-white/20 text-white hover:bg-white/20">
+                      <Button variant="ghost" size="lg" className="w-full sm:w-auto min-w-[140px] bg-white/10 border-white/20 text-white hover:bg-white/20">
                         go to the docs →
                       </Button>
                     </Link>
@@ -386,17 +390,17 @@ export default async function HomePage() {
 
   return (
     <div className="bg-background">
-      <div className="min-h-screen font-sans relative rounded-b-[30px] sm:rounded-b-[50px] tracking-tight flex flex-col justify-center items-center px-2 xs:px-4 sm:px-6 md:px-12">
+      <div className="min-h-screen font-sans relative rounded-b-[20px] sm:rounded-b-[30px] lg:rounded-b-[50px] tracking-tight flex flex-col justify-center items-center px-2 sm:px-4 lg:px-6 xl:px-12">
 
 
         {/* Hero Section */}
         <InboundHeroSection />
 
         {/* Vendor Showcase */}
-        <AnimatedSection className="py-8 xs:py-12 sm:py-16 w-full overflow-hidden">
-          <div className="text-center mb-6 xs:mb-8 sm:mb-12">
-            <h2 className="text-2xl xs:text-3xl sm:text-4xl font-medium mb-2 xs:mb-3 sm:mb-4 text-foreground">trusted by companies</h2>
-            <p className="text-muted-foreground text-xs xs:text-sm sm:text-base px-2 xs:px-4">
+        <AnimatedSection className="py-6 sm:py-8 lg:py-12 xl:py-16 w-full overflow-hidden">
+          <div className="text-center mb-4 sm:mb-6 lg:mb-8 xl:mb-12 px-4">
+            <h2 className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-medium mb-2 sm:mb-3 lg:mb-4 text-foreground">trusted by companies</h2>
+            <p className="text-muted-foreground text-xs sm:text-sm lg:text-base">
               leading ai companies use inbound for their email infrastructure
             </p>
           </div>
@@ -414,14 +418,14 @@ export default async function HomePage() {
             </VelocityScroll>
 
             {/* Fade overlays */}
-            <div className="absolute inset-y-0 left-0 w-16 xs:w-24 sm:w-32 bg-gradient-to-r from-background to-transparent pointer-events-none z-10" />
-            <div className="absolute inset-y-0 right-0 w-16 xs:w-24 sm:w-32 bg-gradient-to-l from-background to-transparent pointer-events-none z-10" />
+            <div className="absolute inset-y-0 left-0 w-12 sm:w-16 lg:w-24 xl:w-32 bg-gradient-to-r from-background to-transparent pointer-events-none z-10" />
+            <div className="absolute inset-y-0 right-0 w-12 sm:w-16 lg:w-24 xl:w-32 bg-gradient-to-l from-background to-transparent pointer-events-none z-10" />
           </div>
         </AnimatedSection>
 
         {/* How it works section */}
-        <AnimatedSection className="px-2 xs:px-4 sm:px-6 bg-card w-full m-1 xs:m-2 sm:m-4 py-8 xs:py-12 sm:py-20 z-1 rounded-[20px] xs:rounded-[30px] sm:rounded-[50px]">
-          <h2 className="text-2xl xs:text-3xl sm:text-4xl font-medium text-center mb-6 xs:mb-8 sm:mb-12 text-foreground">how does it work?</h2>
+        <AnimatedSection className="px-4 sm:px-6 lg:px-8 bg-card w-full m-2 sm:m-4 lg:m-6 py-6 sm:py-8 lg:py-12 xl:py-20 z-1 rounded-[16px] sm:rounded-[20px] lg:rounded-[30px] xl:rounded-[50px]">
+          <h2 className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-medium text-center mb-4 sm:mb-6 lg:mb-8 xl:mb-12 text-foreground">how does it work?</h2>
 
           <div className="space-y-4 xs:space-y-6 sm:space-y-8">
             {/* Email Addresses Dashboard */}
