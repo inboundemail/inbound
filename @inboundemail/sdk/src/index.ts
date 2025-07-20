@@ -6,6 +6,7 @@
 
 // Main SDK client
 export { InboundEmailClient } from './client'
+export { InboundEmailClient as Inbound } from './client'
 
 // Type definitions
 export * from './types'
@@ -14,4 +15,7 @@ export * from './types'
 export * from './utils'
 
 // Version
-export const VERSION = '2.0.0' 
+export const VERSION = '2.0.0'
+
+// Default export for convenience
+export { InboundEmailClient as default } from './client' 
