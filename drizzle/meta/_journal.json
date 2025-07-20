@@ -162,6 +162,13 @@
       "when": 1752975687182,
       "tag": "0022_flimsy_black_panther",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1753055260482,
+      "tag": "0023_lush_deathbird",
+      "breakpoints": true
     }
   ]
 }

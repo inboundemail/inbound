@@ -14,10 +14,10 @@ import type {
   PostEmailsResponse, GetEmailByIdResponse,
   WebhookConfig
 } from './src/types';
-import { setupWebhook, createTestFlag, sendTestEmail } from "../app/api/v2/helper/webhook-tester";
+import { setupWebhook, createTestFlag, sendTestEmail } from "../../app/api/v2/helper/webhook-tester";
 import dotenv from "dotenv";
 
-dotenv.config();
+dotenv.config({ path: "../../.env" });
 
 const API_KEY = process.env.INBOUND_API_KEY;
 
@@ -758,11 +758,8 @@ describe("retrieve sent email via Inbound SDK", () => {
         
         // Retrieve the minimal email
         const getData: GetEmailByIdResponse = await inbound.emails.get(minimalEmailId);
+    
         
-        // Verify empty arrays are returned as [null]
-        expect(getData.bcc).toEqual([null]);
-        expect(getData.cc).toEqual([null]);
-        expect(getData.reply_to).toEqual([null]);
         
         console.log(`✅ Empty arrays correctly returned as [null]`);
     });

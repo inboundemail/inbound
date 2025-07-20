@@ -37,11 +37,11 @@ export class InboundEmailClient {
   constructor(config: InboundEmailConfigExtended | string) {
     if (typeof config === 'string') {
       this.apiKey = config
-      this.baseUrl = 'https://api.inbound.email/api/v2'
+      this.baseUrl = 'https://inbound.new/api/v2'
       this.defaultReplyFrom = undefined
     } else {
       this.apiKey = config.apiKey
-      this.baseUrl = config.baseUrl || 'https://api.inbound.email/api/v2'
+      this.baseUrl = config.baseUrl || 'https://inbound.new/api/v2'
       this.defaultReplyFrom = config.defaultReplyFrom
     }
     

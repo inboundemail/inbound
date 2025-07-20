@@ -199,7 +199,7 @@ const inbound = new Inbound('your-api-key')
 // With configuration object
 const inbound = new Inbound({
   apiKey: 'your-api-key',
-  baseUrl: 'https://api.inbound.email/api/v2' // optional
+  baseUrl: 'https://inbound.new/api/v2' // optional
 })
 
 // With default reply address for streamlined replies

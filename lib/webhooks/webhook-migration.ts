@@ -10,7 +10,7 @@
  */
 
 import { db } from '@/lib/db'
-import { webhooks, endpoints, emailGroups } from '@/lib/db/schema'
+import { webhooks, endpoints, emailGroups, user } from '@/lib/db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import type { Webhook, NewEndpoint } from '@/lib/db/schema'
@@ -28,6 +28,18 @@ export interface MigrationResult {
  */
 export async function checkWebhookMigrationNeeded(userId: string): Promise<boolean> {
   try {
+    // First check if migration has already been completed
+    const userRecord = await db
+      .select({ webhooksToEndpointsMigrated: user.webhooksToEndpointsMigrated })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+
+    if (userRecord[0]?.webhooksToEndpointsMigrated) {
+      console.log(`ℹ️ Migration already completed for user: ${userId}`)
+      return false // Migration already done
+    }
+
     // Check if user has any webhooks
     const userWebhooks = await db
       .select({ id: webhooks.id })
@@ -36,18 +48,12 @@ export async function checkWebhookMigrationNeeded(userId: string): Promise<boole
       .limit(1)
 
     if (userWebhooks.length === 0) {
+      console.log(`ℹ️ No webhooks found for user: ${userId}`)
       return false // No webhooks to migrate
     }
 
-    // Check if user already has any endpoints
-    const userEndpoints = await db
-      .select({ id: endpoints.id })
-      .from(endpoints)
-      .where(eq(endpoints.userId, userId))
-      .limit(1)
-
-    // Migration is needed if user has webhooks but no endpoints
-    return userEndpoints.length === 0
+    console.log(`🔍 Migration needed for user: ${userId} - has webhooks but migration flag not set`)
+    return true // Migration is needed
   } catch (error) {
     console.error('Error checking webhook migration status:', error)
     return false
@@ -139,6 +145,24 @@ export async function migrateUserWebhooksToEndpoints(userId: string): Promise<Mi
 
     result.success = result.errors.length === 0 || result.migratedCount > 0
     
+    // If migration was successful (either no errors or at least one migration), mark user as migrated
+    if (result.success) {
+      try {
+        await db
+          .update(user)
+          .set({ 
+            webhooksToEndpointsMigrated: true,
+            updatedAt: new Date()
+          })
+          .where(eq(user.id, userId))
+        
+        console.log(`✅ Marked user ${userId} as migrated`)
+      } catch (flagError) {
+        console.error(`⚠️ Failed to set migration flag for user ${userId}:`, flagError)
+        // Don't fail the entire migration if flag setting fails
+      }
+    }
+    
     console.log(`🏁 Migration completed for user ${userId}:`)
     console.log(`   - Migrated: ${result.migratedCount}`)
     console.log(`   - Skipped: ${result.skippedCount}`)
@@ -152,4 +176,28 @@ export async function migrateUserWebhooksToEndpoints(userId: string): Promise<Mi
     result.errors.push(errorMessage)
     return result
   }
-} 
+}
+
+/**
+ * Reset the migration flag for a user (for testing or support purposes)
+ */
+export async function resetMigrationFlag(userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await db
+      .update(user)
+      .set({ 
+        webhooksToEndpointsMigrated: false,
+        updatedAt: new Date()
+      })
+      .where(eq(user.id, userId))
+    
+    console.log(`✅ Reset migration flag for user: ${userId}`)
+    return { success: true }
+  } catch (error) {
+    console.error(`❌ Failed to reset migration flag for user ${userId}:`, error)
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    }
+  }
+}

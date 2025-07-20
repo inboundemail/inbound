@@ -12,7 +12,8 @@ export const user = pgTable("user", {
 	banned: boolean('banned'),
 	banReason: text('ban_reason'),
 	banExpires: timestamp('ban_expires'),
-	stripeCustomerId: text('stripe_customer_id')
+	stripeCustomerId: text('stripe_customer_id'),
+	webhooksToEndpointsMigrated: boolean('webhooks_to_endpoints_migrated').default(false)
 });
 
 export const session = pgTable("session", {

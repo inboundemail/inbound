@@ -7,7 +7,7 @@ import { endpoints, emailGroups, emailAddresses, emailDomains, endpointDeliverie
 import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import type { CreateEndpointData, UpdateEndpointData } from '@/features/endpoints/types'
-import { migrateUserWebhooksToEndpoints, checkWebhookMigrationNeeded } from '@/lib/webhooks/webhook-migration'
+import { migrateUserWebhooksToEndpoints, checkWebhookMigrationNeeded, resetMigrationFlag } from '@/lib/webhooks/webhook-migration'
 
 export async function createEndpoint(data: CreateEndpointData) {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -490,6 +490,38 @@ export async function migrateWebhooksToEndpoints() {
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Failed to migrate webhooks' 
+    }
+  }
+}
+
+export async function resetWebhookMigrationFlag() {
+  const session = await auth.api.getSession({
+    headers: await headers()
+  })
+
+  if (!session?.user?.id) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  try {
+    const result = await resetMigrationFlag(session.user.id)
+    
+    if (result.success) {
+      return { 
+        success: true, 
+        message: 'Migration flag reset successfully - migration can now run again'
+      }
+    } else {
+      return { 
+        success: false, 
+        error: result.error || 'Failed to reset migration flag'
+      }
+    }
+  } catch (error) {
+    console.error('Error in resetWebhookMigrationFlag:', error)
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to reset migration flag' 
     }
   }
 } 
