@@ -20,19 +20,29 @@ import type {
   // Reply API
   PostEmailReplyRequest, PostEmailReplyResponse
 } from './types'
+import type { InboundWebhookEmail } from './webhook-types'
 import { buildQueryString } from './utils'
+import { getSenderInfo } from './webhook-types'
+
+// Extended config interface for default reply settings
+export interface InboundEmailConfigExtended extends InboundEmailConfig {
+  defaultReplyFrom?: string
+}
 
 export class InboundEmailClient {
   private readonly apiKey: string
   private readonly baseUrl: string
+  private readonly defaultReplyFrom?: string
 
-  constructor(config: InboundEmailConfig | string) {
+  constructor(config: InboundEmailConfigExtended | string) {
     if (typeof config === 'string') {
       this.apiKey = config
       this.baseUrl = 'https://api.inbound.email/api/v2'
+      this.defaultReplyFrom = undefined
     } else {
       this.apiKey = config.apiKey
       this.baseUrl = config.baseUrl || 'https://api.inbound.email/api/v2'
+      this.defaultReplyFrom = config.defaultReplyFrom
     }
     
     if (!this.apiKey) {
@@ -273,6 +283,79 @@ export class InboundEmailClient {
    */
   send = async (params: PostEmailsRequest): Promise<PostEmailsResponse> => {
     return this.emails.send(params)
+  }
+
+  /**
+   * Streamlined reply method for webhook handlers
+   * Works directly with webhook email objects for better DX
+   * 
+   * Usage:
+   * - inbound.reply(email, "Thanks for your message!")
+   * - inbound.reply(email, { from: "support@domain.com", text: "Thanks!" })
+   * - inbound.reply("email-id", { from: "support@domain.com", text: "Thanks!" })
+   */
+  reply = async (
+    emailOrId: InboundWebhookEmail | string,
+    replyContent: string | {
+      from?: string
+      text?: string
+      html?: string
+      subject?: string
+      to?: string | string[]
+      cc?: string | string[]
+      bcc?: string | string[]
+      headers?: Record<string, string>
+      attachments?: Array<{
+        content: string
+        filename: string
+        path?: string
+        content_type?: string
+      }>
+      include_original?: boolean
+    }
+  ): Promise<PostEmailReplyResponse> => {
+    // Determine email ID
+    const emailId = typeof emailOrId === 'string' ? emailOrId : emailOrId.id
+
+    // Handle simple string reply
+    if (typeof replyContent === 'string') {
+      // Need a from address - check if we have a default configured
+      if (!this.defaultReplyFrom) {
+        throw new Error(
+          'To use simple string replies like inbound.reply(email, "thanks"), you need to configure a defaultReplyFrom address:\n\n' +
+          'const inbound = new Inbound({\n' +
+          '  apiKey: "your-key",\n' +
+          '  defaultReplyFrom: "support@yourdomain.com"\n' +
+          '})\n\n' +
+          'Or use the full syntax: inbound.reply(email, { from: "support@yourdomain.com", text: "thanks" })'
+        )
+      }
+
+      // Create reply with default from address
+      return this.emails.reply(emailId, {
+        from: this.defaultReplyFrom,
+        text: replyContent,
+      })
+    }
+
+    // Handle full reply object
+    const replyParams = { ...replyContent }
+    
+    // If no from address provided, use default if available
+    if (!replyParams.from && this.defaultReplyFrom) {
+      replyParams.from = this.defaultReplyFrom
+    }
+
+    // Validate that we have a from address
+    if (!replyParams.from) {
+      throw new Error(
+        'Reply requires a "from" address. Either:\n' +
+        '1. Configure defaultReplyFrom: new Inbound({ apiKey: "key", defaultReplyFrom: "support@domain.com" })\n' +
+        '2. Or provide it in the reply: inbound.reply(email, { from: "support@domain.com", text: "thanks" })'
+      )
+    }
+
+    return this.emails.reply(emailId, replyParams as PostEmailReplyRequest)
   }
 
   // Convenience aliases for better developer experience

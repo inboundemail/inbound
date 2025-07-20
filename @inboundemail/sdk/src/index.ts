@@ -7,6 +7,7 @@
 // Main SDK client
 export { InboundEmailClient } from './client'
 export { InboundEmailClient as Inbound } from './client'
+export type { InboundEmailConfigExtended } from './client'
 
 // Type definitions
 export * from './types'

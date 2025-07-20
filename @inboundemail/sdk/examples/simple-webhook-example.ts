@@ -4,12 +4,19 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { Inbound } from '@inboundemail/sdk'
 import type { 
   InboundWebhookPayload, 
   isInboundWebhook,
   getSenderInfo,
   getEmailText 
 } from '@inboundemail/sdk'
+
+// Initialize with default reply address for streamlined replies
+const inbound = new Inbound({
+  apiKey: process.env.INBOUND_API_KEY!,
+  defaultReplyFrom: 'support@yourdomain.com' // 🔥 Set this for simple replies
+})
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,24 +53,61 @@ export async function POST(request: NextRequest) {
       })
     }
     
-    // ===== YOUR BUSINESS LOGIC HERE =====
+    // ===== YOUR BUSINESS LOGIC WITH STREAMLINED REPLIES =====
     
-    // Example 1: Auto-reply to support emails
+    // 🔥 Example 1: Super simple auto-replies (uses defaultReplyFrom)
+    if (email.subject?.toLowerCase().includes('thanks')) {
+      console.log('😊 Sending thank you reply')
+      await inbound.reply(email, "You're welcome! Let us know if you need anything else.")
+    }
+    
     if (email.subject?.toLowerCase().includes('support')) {
       console.log('🤖 Detected support email - sending auto-reply')
-      // await sendAutoReply(sender.address, email.subject)
+      await inbound.reply(email, "Thanks for contacting support! We'll get back to you within 24 hours.")
     }
     
-    // Example 2: Process different email types
+    // 🔥 Example 2: Simple replies with custom from address
+    if (email.subject?.toLowerCase().includes('billing')) {
+      await inbound.reply(email, {
+        from: 'billing@yourdomain.com', // Override default
+        text: "Thanks for your billing inquiry. Our finance team will review and respond soon.",
+        cc: ['finance@yourdomain.com']
+      })
+    }
+    
+    // 🔥 Example 3: Advanced replies with HTML
     if (email.subject?.toLowerCase().includes('order')) {
       console.log('📦 Processing order email')
-      // await processOrderEmail(email)
-    } else if (email.subject?.toLowerCase().includes('invoice')) {
-      console.log('💰 Processing invoice email')
-      // await processInvoiceEmail(email)
+      await inbound.reply(email, {
+        from: 'orders@yourdomain.com',
+        subject: 'Order Confirmation Received',
+        html: `
+          <h2>Order Confirmation</h2>
+          <p>Hi ${sender.name || 'there'},</p>
+          <p>We've received your order inquiry and will process it shortly.</p>
+          <p>Order details will be sent to you within 1 business day.</p>
+          <p>Best regards,<br>The Orders Team</p>
+        `,
+        text: `Order Confirmation\n\nHi ${sender.name || 'there'},\n\nWe've received your order inquiry and will process it shortly.\n\nOrder details will be sent to you within 1 business day.\n\nBest regards,\nThe Orders Team`
+      })
     }
     
-    // Example 3: Save to database
+    // 🔥 Example 4: Conditional replies based on business hours
+    const now = new Date()
+    const isBusinessHours = isWithinBusinessHours(now)
+    
+    if (email.subject?.toLowerCase().includes('urgent') && !isBusinessHours) {
+      await inbound.reply(email, {
+        subject: 'Urgent Request Received - Out of Hours',
+        text: `Thanks for your urgent request! We're currently outside business hours (9 AM - 5 PM EST), but we'll prioritize your message first thing tomorrow morning.`,
+        headers: {
+          'X-Priority': 'High',
+          'X-Auto-Reply': 'out-of-hours'
+        }
+      })
+    }
+    
+    // Example 5: Save email to database (your implementation)
     console.log('💾 Saving email to database')
     // await saveEmailToDatabase({
     //   id: email.id,
@@ -74,7 +118,7 @@ export async function POST(request: NextRequest) {
     //   endpointName: endpoint.name
     // })
     
-    // Example 4: Send notification
+    // Example 6: Send notification (your implementation)
     console.log('🔔 Sending notification')
     // await sendSlackNotification(`New email from ${sender.address}: ${email.subject}`)
     
@@ -112,36 +156,51 @@ export async function GET() {
   })
 }
 
-// Optional: Verify webhook signature for security
-function verifyWebhookSignature(payload: string, signature: string, secret: string): boolean {
-  // Implementation depends on your webhook signature method
-  // This is just a placeholder - implement based on Inbound's webhook signature format
-  return true
+// Helper function for business hours check
+function isWithinBusinessHours(date: Date): boolean {
+  const hour = date.getHours()
+  const day = date.getDay() // 0 = Sunday, 6 = Saturday
+  
+  // Monday to Friday, 9 AM to 5 PM
+  return day >= 1 && day <= 5 && hour >= 9 && hour < 17
 }
 
 /*
+🔥 STREAMLINED REPLY EXAMPLES:
+
+// Method 1: Configure default reply address (recommended)
+const inbound = new Inbound({
+  apiKey: 'your-key',
+  defaultReplyFrom: 'support@yourdomain.com'
+})
+
+// Super simple replies
+await inbound.reply(email, "Thanks!")
+await inbound.reply(email, "Got your message, we'll respond soon.")
+
+// Method 2: Override from address when needed
+await inbound.reply(email, {
+  from: 'billing@yourdomain.com',
+  text: "Thanks for your billing inquiry."
+})
+
+// Method 3: Full control
+await inbound.reply(email, {
+  from: 'sales@yourdomain.com',
+  subject: 'Custom subject',
+  html: '<p>HTML content</p>',
+  text: 'Text content',
+  cc: ['manager@yourdomain.com'],
+  attachments: [{ ... }]
+})
+
+// Method 4: Reply by email ID (if you don't have the email object)
+await inbound.reply('email-id', {
+  from: 'support@yourdomain.com',
+  text: "Thanks!"
+})
+
 // Example helper functions you might implement:
-
-async function sendAutoReply(to: string, originalSubject: string) {
-  // Use the Inbound SDK to send a reply
-  const inbound = new Inbound(process.env.INBOUND_API_KEY!)
-  
-  await inbound.emails.send({
-    from: 'support@yourdomain.com',
-    to: to,
-    subject: `Re: ${originalSubject}`,
-    text: 'Thank you for contacting us! We will get back to you soon.',
-    html: '<p>Thank you for contacting us! We will get back to you soon.</p>'
-  })
-}
-
-async function processOrderEmail(email: InboundWebhookEmail) {
-  // Extract order information from email
-  const orderNumber = extractOrderNumber(getEmailText(email))
-  
-  // Update order status in your database
-  await updateOrderStatus(orderNumber, 'email_received')
-}
 
 async function saveEmailToDatabase(emailData: {
   id: string

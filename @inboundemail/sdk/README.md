@@ -26,6 +26,79 @@ const email = await inbound.emails.send({
 console.log(email.id)
 ```
 
+## Streamlined Webhook Replies
+
+The SDK includes a streamlined `reply()` method that makes it incredibly easy to reply to emails directly from webhook handlers:
+
+### Quick Setup
+
+```typescript
+import { Inbound, type InboundWebhookPayload, isInboundWebhook } from '@inboundemail/sdk'
+import { NextRequest, NextResponse } from 'next/server'
+
+// Configure with default reply address for super simple replies
+const inbound = new Inbound({
+  apiKey: process.env.INBOUND_API_KEY!,
+  defaultReplyFrom: 'support@yourdomain.com'
+})
+
+export async function POST(request: NextRequest) {
+  const payload: InboundWebhookPayload = await request.json()
+  
+  if (!isInboundWebhook(payload)) {
+    return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
+  }
+  
+  const { email } = payload
+  
+  // 🔥 Super simple replies!
+  if (email.subject?.includes('thanks')) {
+    await inbound.reply(email, "You're welcome!")
+  }
+  
+  if (email.subject?.includes('support')) {
+    await inbound.reply(email, "Thanks for contacting support! We'll respond within 24 hours.")
+  }
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+### Reply Methods
+
+**1. Simple String Reply (with defaultReplyFrom configured):**
+```typescript
+await inbound.reply(email, "Thanks for your message!")
+```
+
+**2. Override From Address:**
+```typescript
+await inbound.reply(email, {
+  from: 'billing@yourdomain.com',
+  text: "Thanks for your billing inquiry."
+})
+```
+
+**3. Full Control:**
+```typescript
+await inbound.reply(email, {
+  from: 'sales@yourdomain.com',
+  subject: 'Custom Subject',
+  html: '<h1>Thanks!</h1><p>We got your message.</p>',
+  text: 'Thanks! We got your message.',
+  cc: ['manager@yourdomain.com'],
+  headers: { 'X-Priority': 'High' }
+})
+```
+
+**4. Reply by Email ID:**
+```typescript
+await inbound.reply('email-id-string', {
+  from: 'support@yourdomain.com',
+  text: "Thanks!"
+})
+```
+
 ## Webhook Types for Incoming Requests
 
 The SDK includes comprehensive TypeScript types for webhook payloads that Inbound sends to your server. Use these types to add type safety to your webhook handlers:
@@ -120,13 +193,19 @@ app.post('/webhook', (req: express.Request, res: express.Response) => {
 ### Initialization
 
 ```typescript
-// With API key only (recommended)
+// Basic initialization
 const inbound = new Inbound('your-api-key')
 
 // With configuration object
 const inbound = new Inbound({
   apiKey: 'your-api-key',
   baseUrl: 'https://api.inbound.email/api/v2' // optional
+})
+
+// With default reply address for streamlined replies
+const inbound = new Inbound({
+  apiKey: 'your-api-key',
+  defaultReplyFrom: 'support@yourdomain.com' // enables simple string replies
 })
 ```
 
@@ -201,14 +280,17 @@ await inbound.mail.reply({
 ### Reply to Emails
 
 ```typescript
-// Reply to an email with automatic recipient and subject
-await inbound.emails.reply('email-id', {
+// Streamlined reply (new method - recommended)
+await inbound.reply(email, "Thanks for your message!")
+
+// Reply with options
+await inbound.reply(email, {
   from: 'support@yourdomain.com',
   text: 'Thank you for contacting us!',
   html: '<p>Thank you for contacting us!</p>'
 })
 
-// Reply with custom recipients and subject
+// Advanced reply method (via emails.reply)
 await inbound.emails.reply('email-id', {
   from: 'support@yourdomain.com',
   to: ['custom@example.com'],
@@ -331,6 +413,9 @@ inbound.emails === inbound.email
 
 // Legacy send method
 inbound.send === inbound.emails.send
+
+// Streamlined reply method
+inbound.reply // Works with webhook emails or email IDs
 ```
 
 ## TypeScript Support
@@ -342,7 +427,8 @@ import type {
   PostEmailsRequest, 
   PostEmailsResponse,
   GetMailResponse,
-  InboundWebhookPayload // For webhook handlers
+  InboundWebhookPayload, // For webhook handlers
+  InboundEmailConfigExtended // For extended config with defaultReplyFrom
 } from '@inboundemail/sdk'
 
 const emailData: PostEmailsRequest = {
