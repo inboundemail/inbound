@@ -26,6 +26,95 @@ const email = await inbound.emails.send({
 console.log(email.id)
 ```
 
+## Webhook Types for Incoming Requests
+
+The SDK includes comprehensive TypeScript types for webhook payloads that Inbound sends to your server. Use these types to add type safety to your webhook handlers:
+
+### Basic Webhook Handler
+
+```typescript
+import type { InboundWebhookPayload, isInboundWebhook } from '@inboundemail/sdk'
+import { NextRequest, NextResponse } from 'next/server'
+
+export async function POST(request: NextRequest) {
+  // Parse with type safety
+  const payload: InboundWebhookPayload = await request.json()
+  
+  // Verify it's a valid Inbound webhook
+  if (!isInboundWebhook(payload)) {
+    return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
+  }
+  
+  // Access typed email data
+  const { email, endpoint, timestamp } = payload
+  console.log(`📧 New email: ${email.subject}`)
+  console.log(`👤 From: ${email.from?.addresses[0]?.address}`)
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+### Using Helper Functions
+
+```typescript
+import { 
+  getSenderInfo, 
+  getEmailText, 
+  getEmailHtml,
+  getAttachmentInfo 
+} from '@inboundemail/sdk'
+
+// Get sender information
+const sender = getSenderInfo(email)
+console.log(`From: ${sender.name} <${sender.address}>`)
+
+// Get email content
+const textContent = getEmailText(email)
+const htmlContent = getEmailHtml(email)
+
+// Process attachments with metadata
+email.cleanedContent.attachments.forEach(attachment => {
+  const info = getAttachmentInfo(attachment)
+  console.log(`📎 ${attachment.filename} - ${info.isImage ? 'Image' : 'Document'}`)
+})
+```
+
+### Framework-Specific Examples
+
+**Next.js Pages Router:**
+```typescript
+import type { NextApiRequest, NextApiResponse } from 'next'
+import type { InboundWebhookPayload } from '@inboundemail/sdk'
+
+interface TypedRequest extends NextApiRequest {
+  body: InboundWebhookPayload
+}
+
+export default function handler(req: TypedRequest, res: NextApiResponse) {
+  const { email } = req.body
+  // Process with full type safety
+}
+```
+
+**Express.js:**
+```typescript
+import express from 'express'
+import type { InboundWebhookPayload } from '@inboundemail/sdk'
+
+app.post('/webhook', (req: express.Request, res: express.Response) => {
+  const payload = req.body as InboundWebhookPayload
+  // Handle webhook with types
+})
+```
+
+**Available Webhook Types:**
+- `InboundWebhookPayload` - Complete webhook payload
+- `InboundWebhookEmail` - Email data structure
+- `InboundWebhookHeaders` - Webhook HTTP headers
+- `InboundEmailAddress` - Email address structure
+- `InboundEmailAttachment` - Attachment metadata
+- `InboundParsedEmailData` - Complete parsed email data
+
 ## API Reference
 
 ### Initialization
@@ -252,7 +341,8 @@ The SDK is written in TypeScript and provides full type definitions:
 import type { 
   PostEmailsRequest, 
   PostEmailsResponse,
-  GetMailResponse 
+  GetMailResponse,
+  InboundWebhookPayload // For webhook handlers
 } from '@inboundemail/sdk'
 
 const emailData: PostEmailsRequest = {

@@ -11,6 +11,9 @@ export { InboundEmailClient as Inbound } from './client'
 // Type definitions
 export * from './types'
 
+// Webhook types for incoming requests
+export * from './webhook-types'
+
 // Utilities
 export * from './utils'
 
