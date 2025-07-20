@@ -77,12 +77,23 @@ async function InboundHeroSection() {
         {/* Hero image as background */}
         <div className="rounded-t-[12px] sm:rounded-t-[20px] lg:rounded-t-[30px] border-t border-l border-r border-border overflow-hidden relative">
           <div className="relative min-h-[500px] sm:min-h-[600px] lg:min-h-[700px]">
+            {/* Mobile image */}
             <Image
               src="/inbound-hero.png"
               alt="Inbound Email for AI Agents"
-              width={1080}
+              width={1300}
               height={1920}
-              className="sm:w-full sm:h-full object-cover brightness-75 animate-[scale-in_2s_ease-out_forwards] scale-110 w-[500px] h-[500px] "
+              className="lg:hidden w-[500px] h-[500px] object-cover brightness-75 animate-[scale-in_2s_ease-out_forwards] scale-110"
+              priority
+            />
+            
+            {/* Desktop image */}
+            <Image
+              src="/inbound-hero.png"
+              alt="Inbound Email for AI Agents"
+              width={1300}
+              height={1920}
+              className="hidden lg:block w-full h-full object-cover brightness-75 animate-[scale-in_2s_ease-out_forwards] scale-110"
               priority
             />
 
@@ -414,7 +425,7 @@ export default async function HomePage() {
               <span className="ml-2">nextdev.fm |</span>
               <span className="ml-2">agenda.dev |</span>
               <span className="ml-2">exon.dev |</span>
-              <span className="ml-2">neon.com |</span>
+
             </VelocityScroll>
 
             {/* Fade overlays */}
