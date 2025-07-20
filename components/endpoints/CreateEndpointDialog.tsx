@@ -327,16 +327,16 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
       }`}>
         1
       </div>
-      <div className={`w-8 h-1 ${currentStep !== 'type' ? 'bg-blue-600' : 'bg-gray-200'}`} />
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-        currentStep === 'basic' ? 'bg-blue-600 text-white' : 
-        currentStep === 'config' ? 'bg-blue-100 text-blue-600' : 'bg-gray-200 text-gray-500'
-      }`}>
+              <div className={`w-8 h-1 ${currentStep !== 'type' ? 'bg-primary' : 'bg-muted'}`} />
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+          currentStep === 'basic' ? 'bg-primary text-primary-foreground' : 
+                         currentStep === 'config' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+        }`}>
         2
       </div>
-      <div className={`w-8 h-1 ${currentStep === 'config' ? 'bg-blue-600' : 'bg-gray-200'}`} />
+              <div className={`w-8 h-1 ${currentStep === 'config' ? 'bg-primary' : 'bg-muted'}`} />
       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-        currentStep === 'config' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
+                        currentStep === 'config' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
       }`}>
         3
       </div>
@@ -578,16 +578,16 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                       onChange={(e) => setEmailConfig(prev => ({ ...prev, subjectPrefix: e.target.value }))}
                       placeholder="[Forwarded] "
                     />
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-muted-foreground">
                       Optional prefix to add to forwarded email subjects
                     </p>
                   </div>
 
                   {/* Include Attachments */}
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
                     <div>
                       <Label className="text-sm font-medium">Include Attachments</Label>
-                      <p className="text-xs text-gray-600">Forward email attachments</p>
+                      <p className="text-xs text-muted-foreground">Forward email attachments</p>
                     </div>
                     <Switch
                       checked={emailConfig.includeAttachments}
@@ -648,16 +648,16 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                     onChange={(e) => setEmailGroupConfig(prev => ({ ...prev, subjectPrefix: e.target.value }))}
                     placeholder="[Forwarded] "
                   />
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     Optional prefix to add to forwarded email subjects
                   </p>
                 </div>
 
                   {/* Include Attachments */}
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
                     <div>
                       <Label className="text-sm font-medium">Include Attachments</Label>
-                      <p className="text-xs text-gray-600">Forward email attachments</p>
+                      <p className="text-xs text-muted-foreground">Forward email attachments</p>
                     </div>
                     <Switch
                       checked={emailGroupConfig.includeAttachments}

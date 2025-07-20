@@ -6,7 +6,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useMailV2Query } from '@/features/emails/hooks'
+import { Checkbox } from '@/components/ui/checkbox'
+import { useMailV2Query, useUpdateEmailMutation, useBulkUpdateEmailsMutation } from '@/features/emails/hooks'
 import type { EmailItem } from '@/app/api/v2/mail/route'
 import Link from 'next/link'
 import Check2 from '@/components/icons/check-2'
@@ -30,6 +31,10 @@ export default function MailPage() {
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
+    // Selection state for bulk operations
+    const [selectedEmails, setSelectedEmails] = useState<string[]>([])
+    const [isSelectMode, setIsSelectMode] = useState(false)
+
     // Fetch emails using v2 API with 5-second refresh
     const {
         data: emailsResult,
@@ -44,6 +49,10 @@ export default function MailPage() {
         domain: domainFilter === 'all' ? undefined : domainFilter
     })
 
+    // Mutations for bulk operations
+    const updateEmailMutation = useUpdateEmailMutation()
+    const bulkUpdateMutation = useBulkUpdateEmailsMutation()
+
     // Set up 5-second auto-refresh
     useEffect(() => {
         const interval = setInterval(() => {
@@ -52,6 +61,60 @@ export default function MailPage() {
 
         return () => clearInterval(interval)
     }, [refetch])
+
+    // Selection handlers
+    const handleSelectEmail = (emailId: string, checked: boolean) => {
+        if (checked) {
+            setSelectedEmails(prev => [...prev, emailId])
+        } else {
+            setSelectedEmails(prev => prev.filter(id => id !== emailId))
+        }
+    }
+
+    const handleSelectAll = (checked: boolean) => {
+        if (checked && emailsResult?.emails) {
+            setSelectedEmails(emailsResult.emails.map(email => email.id))
+        } else {
+            setSelectedEmails([])
+        }
+    }
+
+    // Bulk action handlers
+    const handleBulkArchive = async () => {
+        if (selectedEmails.length === 0) return
+        
+        try {
+            await bulkUpdateMutation.mutateAsync({
+                emailIds: selectedEmails,
+                updates: { isArchived: true }
+            })
+            setSelectedEmails([])
+            setIsSelectMode(false)
+        } catch (error) {
+            console.error('Failed to archive emails:', error)
+        }
+    }
+
+    const handleBulkMarkAsRead = async () => {
+        if (selectedEmails.length === 0) return
+        
+        try {
+            await bulkUpdateMutation.mutateAsync({
+                emailIds: selectedEmails,
+                updates: { isRead: true }
+            })
+            setSelectedEmails([])
+        } catch (error) {
+            console.error('Failed to mark emails as read:', error)
+        }
+    }
+
+    // Clear selection when not in select mode
+    useEffect(() => {
+        if (!isSelectMode) {
+            setSelectedEmails([])
+        }
+    }, [isSelectMode])
 
     if (error) {
         return (
@@ -171,7 +234,46 @@ export default function MailPage() {
                             <p className="text-muted-foreground text-sm font-medium">Search and filter your received emails</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <MarkAllReadButton unreadCount={unreadCount} />
+                            {isSelectMode ? (
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setIsSelectMode(false)}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleBulkMarkAsRead}
+                                        disabled={selectedEmails.length === 0 || bulkUpdateMutation.isPending}
+                                    >
+                                        Mark Read ({selectedEmails.length})
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleBulkArchive}
+                                        disabled={selectedEmails.length === 0 || bulkUpdateMutation.isPending}
+                                        className="text-destructive hover:text-destructive"
+                                    >
+                                        Archive ({selectedEmails.length})
+                                    </Button>
+                                </>
+                            ) : (
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setIsSelectMode(true)}
+                                        disabled={!emailsResult?.emails || emailsResult.emails.length === 0}
+                                    >
+                                        Select
+                                    </Button>
+                                    <MarkAllReadButton unreadCount={unreadCount} />
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -179,6 +281,15 @@ export default function MailPage() {
                 {/* Search and Filters Form */}
                 <div className="mb-6">
                     <div className="flex items-center gap-3">
+                        {isSelectMode && (
+                            <div className="flex items-center gap-2">
+                                <Checkbox
+                                    checked={emailsResult?.emails ? selectedEmails.length === emailsResult.emails.length && emailsResult.emails.length > 0 : false}
+                                    onCheckedChange={(checked) => handleSelectAll(checked === true)}
+                                />
+                                <span className="text-sm text-muted-foreground">Select All</span>
+                            </div>
+                        )}
                         <form method="GET" className="relative flex-1">
                             <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
                             <Input
@@ -240,7 +351,13 @@ export default function MailPage() {
                 ) : (
                     <div className="divide-y divide-border">
                         {emails.map((email) => (
-                            <EmailListItem key={email.id} email={adaptEmailForListItem(email)} />
+                            <EmailListItem 
+                                key={email.id} 
+                                email={adaptEmailForListItem(email)}
+                                isSelectMode={isSelectMode}
+                                isSelected={selectedEmails.includes(email.id)}
+                                onSelect={handleSelectEmail}
+                            />
                         ))}
                     </div>
                 )}

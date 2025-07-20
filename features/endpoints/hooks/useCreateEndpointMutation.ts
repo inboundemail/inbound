@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { CreateEndpointData, Endpoint } from '../types'
 
 async function createEndpoint(data: CreateEndpointData): Promise<Endpoint> {
-  const response = await fetch('/api/v1/endpoints', {
+  const response = await fetch('/api/v2/endpoints', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -16,7 +16,7 @@ async function createEndpoint(data: CreateEndpointData): Promise<Endpoint> {
   }
   
   const result = await response.json()
-  return result.endpoint
+  return result
 }
 
 export const useCreateEndpointMutation = () => {

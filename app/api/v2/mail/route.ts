@@ -19,6 +19,7 @@ export interface GetMailRequest {
     status?: 'all' | 'processed' | 'failed'
     domain?: string
     timeRange?: '24h' | '7d' | '30d' | '90d'
+    includeArchived?: boolean
 }
 
 export interface EmailItem {
@@ -33,6 +34,8 @@ export interface EmailItem {
     receivedAt: Date
     isRead: boolean
     readAt: Date | null
+    isArchived: boolean
+    archivedAt: Date | null
     hasAttachments: boolean
     attachmentCount: number
     parseSuccess: boolean | null
@@ -77,6 +80,7 @@ export async function GET(request: NextRequest) {
         const statusFilter = searchParams.get('status') as 'all' | 'processed' | 'failed' || 'all'
         const domainFilter = searchParams.get('domain') || 'all'
         const timeRange = searchParams.get('timeRange') as '24h' | '7d' | '30d' | '90d' || '30d'
+        const includeArchived = searchParams.get('includeArchived') === 'true'
 
         console.log('📊 Query parameters:', {
             limit,
@@ -84,7 +88,8 @@ export async function GET(request: NextRequest) {
             searchQuery,
             statusFilter,
             domainFilter,
-            timeRange
+            timeRange,
+            includeArchived
         })
 
         // Validate parameters
@@ -112,7 +117,8 @@ export async function GET(request: NextRequest) {
             searchQuery,
             statusFilter,
             domainFilter,
-            timeRange
+            timeRange,
+            includeArchived
         })
 
         if (result.error) {

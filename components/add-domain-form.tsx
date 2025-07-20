@@ -175,7 +175,7 @@ export default function AddDomainForm({
   const [isProcessing, setIsProcessing] = useState(false)
   const [periodicCheckEnabled, setPeriodicCheckEnabled] = useState(false)
   const router = useRouter()
-  const [showDnsWarning, setShowDnsWarning] = useState(true)
+  const [showDnsWarning, setShowDnsWarning] = useState(false)
 
   // Memoize the DNS records to prevent unnecessary re-renders
   const memoizedPreloadedDnsRecords = useMemo(() => preloadedDnsRecords, [
@@ -1398,7 +1398,7 @@ export default function AddDomainForm({
                                                         <p className="text-sm text-green-600 dark:text-green-500">
                                                             {verificationStatus === 'verified' 
                                                                 ? "Domain is fully verified and ready to receive emails."
-                                                                : "DNS records are configured correctly. Waiting for AWS SES verification to complete."}
+                                                                : "DNS records are configured correctly. Waiting for Email status to be verified."}
                                                         </p>
                                                     </div>
                                                 </>
@@ -1585,7 +1585,7 @@ export default function AddDomainForm({
                     {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 
                     <div className="flex gap-3 mt-10">
-                        <Button
+                        {/* <Button
                             onClick={() => downloadZoneFile()}
                             variant="secondary"
                             className="w-full md:w-auto"
@@ -1593,16 +1593,16 @@ export default function AddDomainForm({
                         >
                             <Download2 width="16" height="16" className="mr-2" />
                             Download Zone File
-                        </Button>
-                        <Button
+                        </Button> */}
+                        {/* <Button
                             onClick={() => downloadZoneFile(true)}
                             variant="secondary"
                             className="w-full md:w-auto"
                             disabled={!domainName || dnsRecords.length === 0}
                         >
                             <Download2 width="16" height="16" className="mr-2" />
-                            Download Zone File (Absolute)
-                        </Button>
+                            Download Zone File
+                        </Button> */}
                     </div>
                 </div>
             )}

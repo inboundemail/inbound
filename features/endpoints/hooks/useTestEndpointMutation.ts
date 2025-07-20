@@ -8,9 +8,17 @@ type TestEndpointResponse = {
 }
 
 async function testEndpoint(id: string): Promise<TestEndpointResponse> {
-  const response = await fetch(`/api/v1/endpoints/${id}/test`, {
+  // Try v2 first, fallback to v1 if not available
+  let response = await fetch(`/api/v2/endpoints/${id}/test`, {
     method: 'POST',
   })
+  
+  // If v2 doesn't exist (404), try v1
+  if (response.status === 404) {
+    response = await fetch(`/api/v1/endpoints/${id}/test`, {
+      method: 'POST',
+    })
+  }
   
   if (!response.ok) {
     const error = await response.json()

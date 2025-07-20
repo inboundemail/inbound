@@ -2,7 +2,7 @@
 
 import { db } from '@/lib/db'
 import { structuredEmails, sesEvents } from '@/lib/db/schema'
-import { eq, and, sql, desc, gte } from 'drizzle-orm'
+import { eq, and, sql, desc, gte, inArray } from 'drizzle-orm'
 import { sanitizeHtml } from '@/lib/email-management/email-parser'
 
 // ============================================================================
@@ -19,6 +19,7 @@ export async function getAllEmails(userId: string, options?: {
     statusFilter?: 'all' | 'processed' | 'failed'
     domainFilter?: string
     timeRange?: '24h' | '7d' | '30d' | '90d'
+    includeArchived?: boolean
 }) {
     try {
         const {
@@ -27,11 +28,17 @@ export async function getAllEmails(userId: string, options?: {
             searchQuery = '',
             statusFilter = 'all',
             domainFilter = 'all',
-            timeRange = '30d'
+            timeRange = '30d',
+            includeArchived = false
         } = options || {}
 
         // Build where conditions
         let whereConditions = [eq(structuredEmails.userId, userId)]
+
+        // Exclude archived emails by default
+        if (!includeArchived) {
+            whereConditions.push(eq(structuredEmails.isArchived, false))
+        }
 
         // Add status filter
         if (statusFilter === 'failed') {
@@ -98,6 +105,8 @@ export async function getAllEmails(userId: string, options?: {
                 parseError: structuredEmails.parseError,
                 isRead: structuredEmails.isRead,
                 readAt: structuredEmails.readAt,
+                isArchived: structuredEmails.isArchived,
+                archivedAt: structuredEmails.archivedAt,
                 createdAt: structuredEmails.createdAt
             })
             .from(structuredEmails)
@@ -157,6 +166,8 @@ export async function getAllEmails(userId: string, options?: {
                 receivedAt: email.date || email.createdAt,
                 isRead: email.isRead || false,
                 readAt: email.readAt,
+                isArchived: email.isArchived || false,
+                archivedAt: email.archivedAt,
                 hasAttachments: parsedAttachments.length > 0,
                 attachmentCount: parsedAttachments.length,
                 parseSuccess: email.parseSuccess,
@@ -473,5 +484,128 @@ export async function replyToEmail(userId: string, emailId: string, replyData: {
     } catch (error) {
         console.error('Error replying to email:', error)
         return { error: 'Failed to reply to email' }
+    }
+}
+
+/**
+ * Update email properties (read status, archive status, etc.)
+ */
+export async function updateEmail(userId: string, emailId: string, updates: {
+    isRead?: boolean
+    isArchived?: boolean
+}) {
+    try {
+        console.log('📝 updateEmail - Updating email:', emailId, 'for user:', userId, 'with updates:', updates)
+
+        // Prepare update data
+        const updateData: any = {
+            updatedAt: new Date()
+        }
+
+        if (updates.isRead !== undefined) {
+            updateData.isRead = updates.isRead
+            updateData.readAt = updates.isRead ? new Date() : null
+        }
+
+        if (updates.isArchived !== undefined) {
+            updateData.isArchived = updates.isArchived
+            updateData.archivedAt = updates.isArchived ? new Date() : null
+        }
+
+        // Update the email
+        const [updatedEmail] = await db
+            .update(structuredEmails)
+            .set(updateData)
+            .where(
+                and(
+                    eq(structuredEmails.id, emailId),
+                    eq(structuredEmails.userId, userId)
+                )
+            )
+            .returning({
+                id: structuredEmails.id,
+                isRead: structuredEmails.isRead,
+                isArchived: structuredEmails.isArchived,
+                readAt: structuredEmails.readAt,
+                archivedAt: structuredEmails.archivedAt
+            })
+
+        if (!updatedEmail) {
+            return { error: 'Email not found or access denied' }
+        }
+
+        console.log('✅ updateEmail - Successfully updated email:', emailId)
+        return { 
+            success: true, 
+            data: updatedEmail
+        }
+
+    } catch (error) {
+        console.error('❌ updateEmail - Error updating email:', error)
+        return { error: 'Failed to update email' }
+    }
+}
+
+/**
+ * Bulk update emails (archive, mark as read, etc.)
+ */
+export async function bulkUpdateEmails(userId: string, emailIds: string[], updates: {
+    isRead?: boolean
+    isArchived?: boolean
+}) {
+    try {
+        console.log('📝 bulkUpdateEmails - Updating', emailIds.length, 'emails for user:', userId, 'with updates:', updates)
+
+        if (emailIds.length === 0) {
+            return { error: 'No email IDs provided' }
+        }
+
+        if (emailIds.length > 100) {
+            return { error: 'Cannot update more than 100 emails at once' }
+        }
+
+        // Prepare update data
+        const updateData: any = {
+            updatedAt: new Date()
+        }
+
+        if (updates.isRead !== undefined) {
+            updateData.isRead = updates.isRead
+            updateData.readAt = updates.isRead ? new Date() : null
+        }
+
+        if (updates.isArchived !== undefined) {
+            updateData.isArchived = updates.isArchived
+            updateData.archivedAt = updates.isArchived ? new Date() : null
+        }
+
+        // Update the emails using inArray for better type safety
+        const updatedEmails = await db
+            .update(structuredEmails)
+            .set(updateData)
+            .where(
+                and(
+                    eq(structuredEmails.userId, userId),
+                    inArray(structuredEmails.id, emailIds)
+                )
+            )
+            .returning({
+                id: structuredEmails.id,
+                isRead: structuredEmails.isRead,
+                isArchived: structuredEmails.isArchived
+            })
+
+        console.log('✅ bulkUpdateEmails - Successfully updated', updatedEmails.length, 'emails')
+        return { 
+            success: true, 
+            data: {
+                updatedCount: updatedEmails.length,
+                emails: updatedEmails
+            }
+        }
+
+    } catch (error) {
+        console.error('❌ bulkUpdateEmails - Error updating emails:', error)
+        return { error: 'Failed to update emails' }
     }
 }

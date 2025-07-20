@@ -155,6 +155,13 @@
       "when": 1752938204384,
       "tag": "0021_classy_longshot",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1752975687182,
+      "tag": "0022_flimsy_black_panther",
+      "breakpoints": true
     }
   ]
 }

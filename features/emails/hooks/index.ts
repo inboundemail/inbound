@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { markEmailAsRead, getEmailsList, getEmailDetailsFromParsed } from '@/app/actions/primary'
+import { markEmailAsRead, getEmailsList, getEmailDetailsFromParsed, getUnifiedEmailLogs } from '@/app/actions/primary'
+import type { EmailLogsOptions, EmailLogsResponse } from '../types'
 
 // Export the v2 hooks as primary exports
 export {
@@ -9,26 +10,41 @@ export {
   useUpdateEmailEndpointV2Mutation
 } from '@/features/domains/hooks/useDomainV2Hooks'
 
-export {
-  useEmailAddressesV2Query,
-  useEmailAddressV2Query,
-  useCreateEmailAddressV2Mutation,
-  useUpdateEmailAddressV2Mutation,
-  useDeleteEmailAddressV2Mutation
-} from './useEmailAddressesV2Hooks'
+export { useEmailQuery } from './useEmailQuery'
+export { useMarkEmailAsReadMutation } from './useMarkEmailAsReadMutation'
+
+// Export email address v2 hooks
+export { useEmailAddressesV2Query, useEmailAddressV2Query } from './useEmailAddressesV2Hooks'
 
 export {
   useMailV2Query,
   useMailDetailsV2Query,
+  useOutboundEmailDetailsV2Query,
   useMarkEmailAsReadV2Mutation,
   useUserEmailLogsV2Query,
-  useReplyToEmailV2Mutation
+  useReplyToEmailV2Mutation,
+  useUpdateEmailMutation,
+  useBulkUpdateEmailsMutation
 } from './useMailV2Hooks'
 
-// Legacy exports from dedicated files (keep for backward compatibility)
-export { useEmailQuery } from './useEmailQuery'
-export { useMarkEmailAsReadMutation } from './useMarkEmailAsReadMutation'
+// Legacy email logs hook (inbound only)
 export { useUserEmailLogsQuery } from './useUserEmailLogsQuery'
+
+// New unified email logs hook (inbound + outbound)
+export function useUnifiedEmailLogsQuery(options: EmailLogsOptions = {}) {
+  return useQuery({
+    queryKey: ['unified-email-logs', options],
+    queryFn: async () => {
+      const result = await getUnifiedEmailLogs(options)
+      if (!result.success) {
+        throw new Error(result.error)
+      }
+      return result.data as EmailLogsResponse
+    },
+    staleTime: 30 * 1000, // 30 seconds
+    gcTime: 5 * 60 * 1000, // 5 minutes
+  })
+}
 
 // Query keys
 export const emailKeys = {

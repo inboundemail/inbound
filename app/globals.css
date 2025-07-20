@@ -97,4 +97,13 @@
   .text-balance {
     text-wrap: balance;
   }
+  
+  @keyframes scale-in {
+    from {
+      transform: scale(1.1);
+    }
+    to {
+      transform: scale(1);
+    }
+  }
 }

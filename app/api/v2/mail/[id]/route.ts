@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth/auth'
-import { getEmail } from '@/functions/mail/primary'
+import { getEmail, updateEmail } from '@/functions/mail/primary'
 import { validateRequest } from '../../helper/main'
 
 
@@ -160,6 +160,119 @@ export async function GET(
 
     } catch (error) {
         console.error('💥 Unexpected error in GET /api/v2/mail/[id]:', error)
+        return NextResponse.json(
+            { error: 'Internal server error' },
+            { status: 500 }
+        )
+    }
+}
+
+/**
+ * PATCH /api/v2/mail/[id]
+ * Updates email properties (read status, archive status, etc.)
+ * Supports both session-based auth and API key auth
+ * Has tests? ❌
+ * Has logging? ✅
+ * Has types? ✅
+ */
+
+// PATCH /api/v2/mail/[id] types
+export interface PatchMailRequest {
+    isRead?: boolean
+    isArchived?: boolean
+}
+
+export interface PatchMailResponse {
+    id: string
+    isRead: boolean
+    isArchived: boolean
+    readAt: Date | null
+    archivedAt: Date | null
+}
+
+export async function PATCH(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    console.log('✏️ PATCH /api/v2/mail/[id] - Starting update request')
+    
+    try {
+        console.log('🔐 Validating request authentication')
+        const { userId, error } = await validateRequest(request)
+        if (!userId) {
+            console.log('❌ Authentication failed:', error)
+            return NextResponse.json(
+                { error: error },
+                { status: 401 }
+            )
+        }
+        console.log('✅ Authentication successful for userId:', userId)
+        
+        const { id } = await params
+        console.log('📨 Updating email ID:', id)
+
+        // Validate email ID
+        if (!id || typeof id !== 'string') {
+            console.log('⚠️ Invalid email ID provided:', id)
+            return NextResponse.json(
+                { error: 'Valid email ID is required' },
+                { status: 400 }
+            )
+        }
+
+        console.log('📝 Parsing request body')
+        const body = await request.json()
+        console.log('📋 Update data received:', body)
+
+        // Validate request body
+        if (typeof body.isRead !== 'undefined' && typeof body.isRead !== 'boolean') {
+            return NextResponse.json(
+                { error: 'isRead must be a boolean' },
+                { status: 400 }
+            )
+        }
+
+        if (typeof body.isArchived !== 'undefined' && typeof body.isArchived !== 'boolean') {
+            return NextResponse.json(
+                { error: 'isArchived must be a boolean' },
+                { status: 400 }
+            )
+        }
+
+        if (!body.isRead && !body.isArchived && body.isRead !== false && body.isArchived !== false) {
+            return NextResponse.json(
+                { error: 'At least one field (isRead or isArchived) must be provided' },
+                { status: 400 }
+            )
+        }
+
+        // Call the update function
+        console.log('🔄 Calling updateEmail function for userId:', userId, 'emailId:', id)
+        const result = await updateEmail(userId, id, {
+            isRead: body.isRead,
+            isArchived: body.isArchived
+        })
+
+        if (result.error) {
+            if (result.error === 'Email not found or access denied') {
+                console.log('📭 Email not found for user:', userId, 'emailId:', id)
+                return NextResponse.json(
+                    { error: 'Email not found' },
+                    { status: 404 }
+                )
+            }
+            console.log('💥 updateEmail returned error:', result.error)
+            return NextResponse.json(
+                { error: result.error },
+                { status: 500 }
+            )
+        }
+
+        console.log('✅ Successfully updated email for user:', userId, 'emailId:', id)
+        return NextResponse.json(result.data)
+
+    } catch (error) {
+        console.error('💥 Unexpected error in PATCH /api/v2/mail/[id]:', error)
         return NextResponse.json(
             { error: 'Internal server error' },
             { status: 500 }

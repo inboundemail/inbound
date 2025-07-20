@@ -12,3 +12,4 @@ Project Rules:
 - We have depricated the `receivedEmails` and `parsedEmails` schema tables and we are wanted to replace them with `structuredEmails` which has better (cleaner) information and better typing. 
 - You should NOT create duplicate type definitions, always try to find an existing type or find/extend one from a schema.
 - All icons are using nucleo via MCP. 
+- For all new functions and components you can create them in the API folder. Make sure to use the correct spec for the API.

@@ -73,6 +73,7 @@
     "framer-motion": "^12.14.0",
     "lucide-react": "^0.511.0",
     "mailparser": "^3.7.3",
+    "motion": "^12.23.6",
     "mysql2": "^3.14.1",
     "nanoid": "^5.1.5",
     "next": "^15.3.2",

@@ -17,20 +17,28 @@ export interface EmailLogDelivery {
   }
 }
 
-export interface EmailLogEntry {
+// Base interface for common email log properties
+export interface BaseEmailLogEntry {
   id: string
   emailId: string
   messageId: string
   from: string
-  recipient: string
   subject: string
-  receivedAt: string
   domain: string
   isRead: boolean
   readAt: string | null
   preview: string
   attachmentCount: number
   hasAttachments: boolean
+  createdAt: string
+  updatedAt: string | null
+}
+
+// Inbound email log entry (received emails)
+export interface InboundEmailLogEntry extends BaseEmailLogEntry {
+  type: 'inbound'
+  recipient: string
+  receivedAt: string
   parseSuccess: boolean
   parseError: string | null
   processingTimeMs: number
@@ -44,8 +52,28 @@ export interface EmailLogEntry {
   deliveries: EmailLogDelivery[]
 }
 
+// Outbound email log entry (sent emails)
+export interface OutboundEmailLogEntry extends BaseEmailLogEntry {
+  type: 'outbound'
+  to: string[] // Array of recipients
+  cc?: string[] | null
+  bcc?: string[] | null
+  replyTo?: string[] | null
+  status: 'pending' | 'sent' | 'failed'
+  provider: string
+  sentAt: string | null
+  failureReason: string | null
+  providerResponse?: any
+  idempotencyKey?: string | null
+}
+
+// Union type for all email log entries
+export type EmailLogEntry = InboundEmailLogEntry | OutboundEmailLogEntry
+
 export interface EmailLogStats {
   totalEmails: number
+  inbound: number
+  outbound: number
   delivered: number
   failed: number
   pending: number
@@ -72,6 +100,7 @@ export interface EmailLogsOptions {
   offset?: number
   searchQuery?: string
   statusFilter?: 'all' | 'delivered' | 'failed' | 'pending' | 'no_delivery' | 'parse_failed'
+  typeFilter?: 'all' | 'inbound' | 'outbound' // New filter for email type
   domainFilter?: string
   timeRange?: '24h' | '7d' | '30d' | '90d'
 } 

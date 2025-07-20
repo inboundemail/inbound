@@ -3,7 +3,7 @@ import type { UpdateEndpointData, Endpoint } from '../types'
 
 async function updateEndpoint(params: { id: string; data: UpdateEndpointData }): Promise<Endpoint> {
   const { id, data } = params
-  const response = await fetch(`/api/v1/endpoints/${id}`, {
+  const response = await fetch(`/api/v2/endpoints/${id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -17,7 +17,7 @@ async function updateEndpoint(params: { id: string; data: UpdateEndpointData }):
   }
   
   const result = await response.json()
-  return result.endpoint
+  return result
 }
 
 export const useUpdateEndpointMutation = () => {

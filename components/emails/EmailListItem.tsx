@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
 import File2 from '@/components/icons/file-2'
+import { Checkbox } from '@/components/ui/checkbox'
+import { useUpdateEmailMutation } from '@/features/emails/hooks'
 
 interface EmailListItemProps {
   email: {
@@ -19,9 +21,14 @@ interface EmailListItemProps {
       textContent?: string | null
     }
   }
+  isSelectMode?: boolean
+  isSelected?: boolean
+  onSelect?: (emailId: string, checked: boolean) => void
 }
 
-export function EmailListItem({ email }: EmailListItemProps) {
+export function EmailListItem({ email, isSelectMode = false, isSelected = false, onSelect }: EmailListItemProps) {
+  const updateEmailMutation = useUpdateEmailMutation()
+
   // Get sender name
   const senderName = email.parsedData.fromData?.addresses?.[0]?.name ||
     email.from.split('@')[0] ||
@@ -30,16 +37,36 @@ export function EmailListItem({ email }: EmailListItemProps) {
 
   const preview = email.parsedData.preview || 'No preview available'
 
-  return (
-    <Link
-      href={`/mail/${email.id}`}
-      className={`block w-full px-6 py-3 hover:bg-accent/50 transition-colors duration-200 group ${
-        !email.isRead ? 'bg-primary/5 border-l-4 border-l-primary' : ''
-      }`}
-    >
-      <div className="flex items-center gap-4 relative">
-        {/* Name Column */}
-        <div className="w-40 flex-shrink-0">
+  const handleCheckboxChange = (checked: boolean | 'indeterminate') => {
+    if (onSelect) {
+      onSelect(email.id, checked === true)
+    }
+  }
+
+  const handleEmailClick = () => {
+    // Optimistically mark as read when clicking on the email
+    if (!email.isRead) {
+      updateEmailMutation.mutate({
+        emailId: email.id,
+        updates: { isRead: true }
+      })
+    }
+  }
+
+  const content = (
+    <div className="flex items-center gap-4 relative">
+      {/* Selection checkbox */}
+      {isSelectMode && (
+        <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={handleCheckboxChange}
+          />
+        </div>
+      )}
+      
+      {/* Name Column */}
+      <div className="w-40 flex-shrink-0">
           <div className="flex items-center gap-2">
             <span className={`font-medium truncate text-foreground text-sm ${!email.isRead ? 'font-semibold' : ''}`}>
               {senderName}
@@ -72,6 +99,29 @@ export function EmailListItem({ email }: EmailListItemProps) {
           </span>
         </div>
       </div>
+    )
+
+  if (isSelectMode) {
+    return (
+      <div
+        className={`block w-full px-6 py-3 hover:bg-accent/50 transition-colors duration-200 group cursor-pointer 
+        } ${isSelected ? 'bg-accent/30' : ''}`}
+        onClick={() => handleCheckboxChange(!isSelected)}
+      >
+        {content}
+      </div>
+    )
+  }
+
+  return (
+    <Link
+      href={`/mail/${email.id}`}
+      className={`block w-full px-6 py-3 hover:bg-accent/50 transition-colors duration-200 group ${
+        !email.isRead ? 'bg-primary/5 border-l-4 border-l-primary' : ''
+      }`}
+      onClick={handleEmailClick}
+    >
+      {content}
     </Link>
   )
 } 

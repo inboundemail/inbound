@@ -299,28 +299,18 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
       <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
-              color === 'purple' ? 'bg-purple-100' :
-              color === 'blue' ? 'bg-blue-100' :
-              color === 'green' ? 'bg-green-100' :
-              'bg-gray-100'
-            }`}>
-              <DialogIcon className={`h-4 w-4 ${
-                color === 'purple' ? 'text-purple-600' :
-                color === 'blue' ? 'text-blue-600' :
-                color === 'green' ? 'text-green-600' :
-                'text-gray-600'
-              }`} />
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted">
+              <DialogIcon className="h-4 w-4 text-muted-foreground" />
             </div>
             Edit Endpoint
           </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
             <div>
               <Label className="text-sm font-medium">Status</Label>
-              <p className="text-xs text-gray-600">Enable or disable this endpoint</p>
+              <p className="text-xs text-muted-foreground">Enable or disable this endpoint</p>
             </div>
             <Switch
               checked={formData.isActive}
@@ -331,7 +321,7 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left Column - Basic Info */}
             <div className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-900 border-b pb-2">Basic Information</h3>
+              <h3 className="text-sm font-medium text-foreground border-b border-border pb-2">Basic Information</h3>
               
               <div className="space-y-2">
                 <Label htmlFor="name">Name *</Label>
@@ -374,7 +364,7 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
 
             {/* Right Column - Configuration */}
             <div className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-900 border-b pb-2">Configuration</h3>
+              <h3 className="text-sm font-medium text-foreground border-b border-border pb-2">Configuration</h3>
 
               {endpoint.type === 'webhook' && (
                 <>
@@ -388,27 +378,27 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
                           key={format}
                           className={`relative rounded-lg border p-4 transition-all ${
                             isDisabled 
-                              ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
+                              ? 'border-border bg-muted cursor-not-allowed opacity-60'
                               : webhookFormat === format
-                                ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500 cursor-pointer'
-                                : 'border-gray-200 hover:border-gray-300 cursor-pointer'
+                                ? 'border-primary bg-accent ring-1 ring-primary cursor-pointer'
+                                : 'border-border hover:border-muted-foreground cursor-pointer'
                           }`}
                           onClick={() => !isDisabled && setWebhookFormat(format as WebhookFormat)}
                         >
                           <div className="flex items-start gap-3">
                             <div className={`mt-0.5 h-4 w-4 rounded-full border-2 transition-colors ${
                               isDisabled
-                                ? 'border-gray-300 bg-gray-200'
+                                ? 'border-muted-foreground bg-muted'
                                 : webhookFormat === format
-                                  ? 'border-blue-500 bg-blue-500'
-                                  : 'border-gray-300'
+                                  ? 'border-primary bg-primary'
+                                  : 'border-muted-foreground'
                             }`}>
                               {webhookFormat === format && !isDisabled && (
                                 <div className="h-full w-full rounded-full bg-white scale-50" />
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <h4 className="font-medium text-gray-900">{config.name}</h4>
+                              <h4 className="font-medium text-foreground">{config.name}</h4>
                             </div>
                           </div>
                         </div>
@@ -511,14 +501,17 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
                   <div className="space-y-2">
                     <Label htmlFor="fromAddress">From Address</Label>
                     <Select
-                      value={emailConfig.fromAddress || ''}
-                      onValueChange={(value) => setEmailConfig(prev => ({ ...prev, fromAddress: value }))}
+                      value={emailConfig.fromAddress || 'auto-detect'}
+                      onValueChange={(value) => setEmailConfig(prev => ({ 
+                        ...prev, 
+                        fromAddress: value === 'auto-detect' ? '' : value 
+                      }))}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Auto-detect from domain" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Auto-detect from domain</SelectItem>
+                        <SelectItem value="auto-detect">Auto-detect from domain</SelectItem>
                         {verifiedDomains.map((domain) => (
                           <SelectItem key={domain.id} value={`noreply@${domain.domain}`}>
                             noreply@{domain.domain}
@@ -595,14 +588,17 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
                   <div className="space-y-2">
                     <Label htmlFor="fromAddressGroup">From Address</Label>
                     <Select
-                      value={emailGroupConfig.fromAddress || ''}
-                      onValueChange={(value) => setEmailGroupConfig(prev => ({ ...prev, fromAddress: value }))}
+                      value={emailGroupConfig.fromAddress || 'auto-detect'}
+                      onValueChange={(value) => setEmailGroupConfig(prev => ({ 
+                        ...prev, 
+                        fromAddress: value === 'auto-detect' ? '' : value 
+                      }))}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Auto-detect from domain" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Auto-detect from domain</SelectItem>
+                        <SelectItem value="auto-detect">Auto-detect from domain</SelectItem>
                         {verifiedDomains.map((domain) => (
                           <SelectItem key={domain.id} value={`noreply@${domain.domain}`}>
                             noreply@{domain.domain}
@@ -637,7 +633,7 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
         </form>
 
         <DialogFooter className="flex items-center justify-between">
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-muted-foreground">
             Press Cmd+Enter to submit
           </span>
           <div className="flex gap-2">
@@ -647,12 +643,6 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
             <Button
               onClick={handleSubmit}
               disabled={updateEndpointMutation.isPending}
-              className={`${
-                endpoint.type === 'webhook' ? 'bg-purple-600 hover:bg-purple-700' :
-                endpoint.type === 'email' ? 'bg-blue-600 hover:bg-blue-700' :
-                endpoint.type === 'email_group' ? 'bg-green-600 hover:bg-green-700' :
-                'bg-gray-600 hover:bg-gray-700'
-              }`}
             >
               {updateEndpointMutation.isPending ? 'Updating...' : 'Update Endpoint'}
             </Button>

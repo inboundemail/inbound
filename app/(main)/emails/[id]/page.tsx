@@ -161,6 +161,7 @@ export default function DomainDetailPage() {
     // Domain deletion state
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
     const [deleteConfirmText, setDeleteConfirmText] = useState('')
+    const [isDomainCopied, setIsDomainCopied] = useState(false)
 
     // Endpoint management dialog state
     const [isEndpointDialogOpen, setIsEndpointDialogOpen] = useState(false)
@@ -203,6 +204,23 @@ export default function DomainDetailPage() {
 
     const clearSelection = () => {
         setSelectedEmailIds(new Set())
+    }
+
+    const handleDomainCopy = async () => {
+        if (!domainDetailsData?.domain) return
+        
+        try {
+            await navigator.clipboard.writeText(domainDetailsData.domain)
+            setIsDomainCopied(true)
+            toast.success('Domain copied to clipboard')
+            
+            // Reset the checkmark after 2 seconds
+            setTimeout(() => {
+                setIsDomainCopied(false)
+            }, 2000)
+        } catch (error) {
+            toast.error('Failed to copy domain')
+        }
     }
 
     const refreshVerification = async () => {
@@ -258,7 +276,7 @@ export default function DomainDetailPage() {
                             toast.warning(`DNS records not verified: ${recordTypes}`)
                         }
                     } else if (sesStatus !== 'Success') {
-                        toast.info(`DNS records verified. AWS SES status: ${sesStatus}`)
+                        toast.info(`DNS records verified. Email status: ${sesStatus}`)
                     } else {
                         toast.info('Verification in progress...')
                     }
@@ -593,8 +611,8 @@ export default function DomainDetailPage() {
                                 </DialogHeader>
                                 <div className="space-y-4">
                                     <div>
-                                        <Label htmlFor="delete-confirm">
-                                            Type <strong>{domain}</strong> to confirm deletion:
+                                        <Label htmlFor="delete-confirm" >
+                                            Type <strong className="cursor-pointer hover:bg-muted px-1 py-0.5 rounded transition-colors inline-flex items-center gap-1 p-1 bg-muted" onClick={handleDomainCopy}>{domain} {isDomainCopied ? <CircleCheck width="16" height="16" className="text-green-600" /> : <Clipboard2 width="16" height="16" />}</strong> to confirm deletion:
                                         </Label>
                                         <Input
                                             id="delete-confirm"

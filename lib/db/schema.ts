@@ -265,6 +265,8 @@ export const structuredEmails = pgTable('structured_emails', {
   parseError: text('parse_error'),
   isRead: boolean('is_read').default(false),
   readAt: timestamp('read_at'), // When the email was marked as read
+  isArchived: boolean('is_archived').default(false),
+  archivedAt: timestamp('archived_at'), // When the email was archived
   
   // User and timestamps
   userId: varchar('user_id', { length: 255 }).notNull(),

@@ -4,14 +4,14 @@ import { checkMigrationNeeded, migrateWebhooksToEndpoints } from '@/app/actions/
 import type { Endpoint } from '../types'
 
 async function fetchEndpoints(): Promise<Endpoint[]> {
-  const response = await fetch('/api/v1/endpoints')
+  const response = await fetch('/api/v2/endpoints')
   
   if (!response.ok) {
     throw new Error('Failed to fetch endpoints')
   }
   
   const data = await response.json()
-  return data.endpoints || []
+  return data.data || []
 }
 
 export const useEndpointsQuery = () => {

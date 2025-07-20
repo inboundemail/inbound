@@ -104,10 +104,77 @@ export const useDeleteDomainV2Mutation = () => {
             }
             return response.json()
         },
+        onMutate: async (domainId: string) => {
+            console.log('🗑️ Starting optimistic domain deletion for:', domainId)
+            
+            // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+            await queryClient.cancelQueries({ queryKey: domainV2Keys.all })
+
+            // Snapshot the previous values for rollback
+            const previousQueriesData: Array<{ queryKey: any; data: GetDomainsResponse }> = []
+
+            // Get all cached domain list queries and update them
+            const queries = queryClient.getQueriesData<GetDomainsResponse>({ queryKey: domainV2Keys.all })
+            console.log('📊 Found', queries.length, 'cached domain queries to update')
+            
+            for (const [queryKey, queryData] of queries) {
+                // Only process queries that have the expected GetDomainsResponse structure
+                if (queryData && 
+                    Array.isArray(queryData.data) && 
+                    typeof queryData.meta === 'object' && 
+                    queryData.meta !== null) {
+                    
+                    console.log('✅ Updating query with', queryData.data.length, 'domains, totalCount:', queryData.meta.totalCount)
+                    
+                    // Store previous data for rollback
+                    previousQueriesData.push({ queryKey, data: queryData })
+
+                    // Optimistically update by removing the domain
+                    const updatedDomains: GetDomainsResponse = {
+                        ...queryData,
+                        data: queryData.data.filter(domain => domain.id !== domainId),
+                        meta: {
+                            ...queryData.meta,
+                            totalCount: Math.max((queryData.meta?.totalCount || 0) - 1, 0)
+                        }
+                    }
+                    queryClient.setQueryData(queryKey, updatedDomains)
+                    
+                    console.log('✅ Updated query - new count:', updatedDomains.data.length, 'totalCount:', updatedDomains.meta.totalCount)
+                } else {
+                    console.warn('⚠️ Skipping invalid query data:', { 
+                        hasData: !!queryData,
+                        isDataArray: queryData ? Array.isArray(queryData.data) : false,
+                        hasMeta: queryData ? typeof queryData.meta === 'object' && queryData.meta !== null : false
+                    })
+                }
+            }
+
+            console.log('✅ Optimistic update complete - updated', previousQueriesData.length, 'queries')
+            
+            // Return a context object with the snapshotted values
+            return { previousQueriesData }
+        },
+        onError: (err, domainId, context) => {
+            console.error('❌ Domain deletion failed, rolling back optimistic updates:', err.message)
+            
+            // If the mutation fails, use the context returned from onMutate to roll back
+            if (context?.previousQueriesData) {
+                console.log('🔄 Rolling back', context.previousQueriesData.length, 'queries')
+                for (const { queryKey, data } of context.previousQueriesData) {
+                    queryClient.setQueryData(queryKey, data)
+                }
+                console.log('✅ Rollback complete')
+            }
+        },
         onSuccess: (_, domainId) => {
             // Remove domain from cache and invalidate related queries
             queryClient.removeQueries({ queryKey: domainV2Keys.detail(domainId) })
             queryClient.invalidateQueries({ queryKey: domainV2Keys.all })
+            
+            // Also invalidate legacy domain stats queries for backward compatibility
+            queryClient.invalidateQueries({ queryKey: ['domains'] })
+            queryClient.invalidateQueries({ queryKey: ['domainStats'] })
         },
     })
 }
