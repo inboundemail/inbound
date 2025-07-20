@@ -18,7 +18,6 @@ import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { MarkAllReadButton } from '@/components/mark-all-read-button'
 import { DomainFilterSelect } from '@/components/domain-filter-select'
 import { EmailListItem } from '@/components/emails/EmailListItem'
-import { PreviewToggle } from '@/components/emails/PreviewToggle'
 
 export default function MailPage() {
     const searchParams = useSearchParams()
@@ -172,7 +171,6 @@ export default function MailPage() {
                             <p className="text-muted-foreground text-sm font-medium">Search and filter your received emails</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <PreviewToggle />
                             <MarkAllReadButton unreadCount={unreadCount} />
                         </div>
                     </div>
