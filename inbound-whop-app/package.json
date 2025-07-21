@@ -9,6 +9,7 @@
 		"lint": "next lint"
 	},
 	"dependencies": {
+		"@inboundemail/sdk": "^2.0.1",
 		"@neondatabase/serverless": "^1.0.1",
 		"@radix-ui/react-slot": "^1.2.3",
 		"@vercel/functions": "^2.0.3",
