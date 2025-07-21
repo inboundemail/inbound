@@ -358,11 +358,12 @@ export default function AddDomainForm({
       const addResult: PostDomainsResponse | { error: string } = await addResponse.json()
 
       if (!addResponse.ok) {
-        const errorResult = addResult as { error: string }
+        const errorResult = addResult as { error: string; code?: string }
         
         // Check for specific error types
         if (addResponse.status === 409) {
-          setError('This domain already exists in your account.')
+          // Use the specific error message from the API for better UX
+          setError(errorResult.error || 'This domain already exists.')
         } else if (addResponse.status === 403) {
           setError(errorResult.error || 'Domain limit reached. Please upgrade your plan.')
         } else if (addResponse.status === 400 && errorResult.error?.includes('conflicting DNS records')) {
@@ -739,7 +740,7 @@ export default function AddDomainForm({
               ...prev,
               [domainName]: {
                 status: 'exists',
-                message: 'Domain already exists in your account'
+                message: errorMessage // Use the specific error message from the API
               }
             }))
           } else if (addResponse.status === 403) {

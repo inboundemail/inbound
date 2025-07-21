@@ -517,23 +517,38 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        // Check if domain already exists for this user
-        console.log('🔍 Checking if domain already exists')
-        const existingDomain = await db
-            .select()
+        // Check if domain already exists on the platform (for any user)
+        console.log('🔍 Checking if domain already exists on platform')
+        const existingDomainAnyUser = await db
+            .select({
+                id: emailDomains.id,
+                userId: emailDomains.userId,
+                status: emailDomains.status,
+                createdAt: emailDomains.createdAt
+            })
             .from(emailDomains)
-            .where(and(
-                eq(emailDomains.domain, domain),
-                eq(emailDomains.userId, userId)
-            ))
+            .where(eq(emailDomains.domain, domain))
             .limit(1)
 
-        if (existingDomain[0]) {
-            console.log('❌ Domain already exists:', domain)
-            return NextResponse.json(
-                { error: 'Domain already exists' },
-                { status: 409 }
-            )
+        if (existingDomainAnyUser[0]) {
+            const isOwnDomain = existingDomainAnyUser[0].userId === userId
+            
+            if (isOwnDomain) {
+                console.log('❌ Domain already exists for current user:', domain)
+                return NextResponse.json(
+                    { error: 'You have already added this domain to your account' },
+                    { status: 409 }
+                )
+            } else {
+                console.log('❌ Domain already registered by another user:', domain)
+                return NextResponse.json(
+                    { 
+                        error: 'This domain is already registered on our platform. If you believe this is an error or you need to transfer ownership, please contact our support team.',
+                        code: 'DOMAIN_ALREADY_REGISTERED'
+                    },
+                    { status: 409 }
+                )
+            }
         }
 
         // Check Autumn domain limits
