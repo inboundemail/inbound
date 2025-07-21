@@ -39,14 +39,15 @@ export const useEndpointsQuery = () => {
         !migrationChecked &&
         !migrationInProgress
       ) {
-        setMigrationInProgress(true)
-        
         try {
           console.log('🔍 Checking if webhook migration is needed...')
           
           const migrationCheck = await checkMigrationNeeded()
           
           if (migrationCheck.success && migrationCheck.migrationNeeded) {
+            // Only set migration in progress if we actually need to migrate
+            setMigrationInProgress(true)
+            
             console.log('🚀 Starting automatic webhook migration...')
             
             const migrationResult = await migrateWebhooksToEndpoints()
