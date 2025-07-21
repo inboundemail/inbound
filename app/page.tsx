@@ -140,8 +140,8 @@ async function InboundHeroSection() {
                   <HeroVideoDialog
                     className="max-w-2xl w-full"
                     animationStyle="from-center"
-                    videoSrc="/inbound-hero-video.mp4"
-                    thumbnailSrc="/inbound-hero.png"
+                    videoSrc="https://www.youtube.com/embed/2L-N-kwzK9M?si=s45SfDVH80CaYoP4"
+                    thumbnailSrc="/inbound-thumb.png"
                     thumbnailAlt="How to use Inbound - Email for AI Agents"
                   />
                 </div>
