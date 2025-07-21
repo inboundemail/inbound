@@ -24,6 +24,7 @@ import {
 import { TeamSwitcher } from "./ui/team-switcher"
 import { useSession } from "@/lib/auth/auth-client"
 import { navigationConfig, isUserAdmin } from "@/lib/navigation"
+import Book2 from "./icons/book-2"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: session } = useSession()
@@ -83,6 +84,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarGroup className={`${data.navSecondary.length > 0 ? 'mt-4' : 'mt-auto'}`}>
           <SidebarGroupContent>
             <SidebarMenu>
+            <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Docs" asChild>
+                  <a href="https://docs.inbound.new" target="_blank" rel="noopener noreferrer">
+                    <Book2 className="h-4 w-4" />
+                    <span>Docs</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               <SidebarMenuItem>
                 <FeedbackDialog />
               </SidebarMenuItem>
