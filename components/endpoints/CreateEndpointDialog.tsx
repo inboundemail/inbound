@@ -295,17 +295,17 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
   const getDialogIcon = () => {
     switch (selectedType) {
       case 'webhook':
-        return { icon: BoltLightning, color: 'purple' }
+        return { icon: BoltLightning, variant: 'webhook' }
       case 'email':
-        return { icon: Envelope2, color: 'blue' }
+        return { icon: Envelope2, variant: 'email' }
       case 'email_group':
-        return { icon: UserGroup, color: 'green' }
+        return { icon: UserGroup, variant: 'email_group' }
       default:
-        return { icon: CirclePlus, color: 'gray' }
+        return { icon: CirclePlus, variant: 'default' }
     }
   }
 
-  const { icon: DialogIcon, color } = getDialogIcon()
+  const { icon: DialogIcon, variant } = getDialogIcon()
 
   const getStepTitle = () => {
     switch (currentStep) {
@@ -323,20 +323,20 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
   const renderStepIndicator = () => (
     <div className="flex items-center justify-center space-x-2 mb-6">
       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-        currentStep === 'type' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-600'
+        currentStep === 'type' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
       }`}>
         1
       </div>
-              <div className={`w-8 h-1 ${currentStep !== 'type' ? 'bg-primary' : 'bg-muted'}`} />
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-          currentStep === 'basic' ? 'bg-primary text-primary-foreground' : 
-                         currentStep === 'config' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
-        }`}>
+      <div className={`w-8 h-1 ${currentStep !== 'type' ? 'bg-primary' : 'bg-muted'}`} />
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+        currentStep === 'basic' ? 'bg-primary text-primary-foreground' : 
+        currentStep === 'config' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+      }`}>
         2
       </div>
-              <div className={`w-8 h-1 ${currentStep === 'config' ? 'bg-primary' : 'bg-muted'}`} />
+      <div className={`w-8 h-1 ${currentStep === 'config' ? 'bg-primary' : 'bg-muted'}`} />
       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                        currentStep === 'config' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+        currentStep === 'config' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
       }`}>
         3
       </div>
@@ -349,16 +349,16 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
-              color === 'purple' ? 'bg-purple-100' :
-              color === 'blue' ? 'bg-blue-100' :
-              color === 'green' ? 'bg-green-100' :
-              'bg-gray-100'
+              variant === 'webhook' ? 'bg-purple-100 dark:bg-purple-900/20' :
+              variant === 'email' ? 'bg-blue-100 dark:bg-blue-900/20' :
+              variant === 'email_group' ? 'bg-green-100 dark:bg-green-900/20' :
+              'bg-muted'
             }`}>
               <DialogIcon className={`h-4 w-4 ${
-                color === 'purple' ? 'text-purple-600' :
-                color === 'blue' ? 'text-blue-600' :
-                color === 'green' ? 'text-green-600' :
-                'text-gray-600'
+                variant === 'webhook' ? 'text-purple-600 dark:text-purple-400' :
+                variant === 'email' ? 'text-blue-600 dark:text-blue-400' :
+                variant === 'email_group' ? 'text-green-600 dark:text-green-400' :
+                'text-muted-foreground'
               }`} />
             </div>
             {getStepTitle()}
@@ -437,41 +437,41 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                           key={format}
                           className={`relative rounded-lg border p-4 transition-all ${
                             isDisabled 
-                              ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
+                              ? 'border-border bg-muted cursor-not-allowed opacity-60'
                               : webhookFormat === format
-                                ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500 cursor-pointer'
-                                : 'border-gray-200 hover:border-gray-300 cursor-pointer'
+                                ? 'border-primary bg-primary/5 ring-1 ring-primary cursor-pointer'
+                                : 'border-border hover:border-border/80 cursor-pointer'
                           }`}
                           onClick={() => !isDisabled && setWebhookFormat(format as WebhookFormat)}
                         >
                           <div className="flex items-start gap-3">
-                                                         <div className={`mt-0.5 h-4 w-4 rounded-full border-2 transition-colors ${
+                            <div className={`mt-0.5 h-4 w-4 rounded-full border-2 transition-colors ${
                                isDisabled
-                                 ? 'border-gray-300 bg-gray-200'
+                                 ? 'border-muted-foreground bg-muted'
                                  : webhookFormat === format
-                                   ? 'border-blue-500 bg-blue-500'
-                                   : 'border-gray-300'
+                                   ? 'border-primary bg-primary'
+                                   : 'border-muted-foreground'
                              }`}>
-                                                             {webhookFormat === format && !isDisabled && (
-                                 <div className="h-full w-full rounded-full bg-white scale-50" />
+                              {webhookFormat === format && !isDisabled && (
+                                 <div className="h-full w-full rounded-full bg-background scale-50" />
                                )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <h4 className="font-medium text-gray-900">{config.name}</h4>
-                              <p className="text-sm text-gray-600 mt-1">{config.description}</p>
+                              <h4 className="font-medium text-foreground">{config.name}</h4>
+                              <p className="text-sm text-muted-foreground mt-1">{config.description}</p>
                               {format === 'discord' && (
-                                <div className="mt-2 text-xs text-gray-500">
+                                <div className="mt-2 text-xs text-muted-foreground">
                                   Perfect for Discord channels with rich embeds
                                 </div>
                               )}
                               {format === 'slack' && (
-                                <div className="mt-2 text-xs text-gray-500">
+                                <div className="mt-2 text-xs text-muted-foreground">
                                   Coming soon - Slack-compatible format
                                 </div>
                               )}
                             </div>
-                                                     </div>
-                         </div>
+                          </div>
+                        </div>
                        )
                        })}
                     </div>
@@ -687,12 +687,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
               <Button
                 onClick={handleSubmit}
                 disabled={createEndpointMutation.isPending || !selectedType}
-                className={`${
-                  selectedType === 'webhook' ? 'bg-purple-600 hover:bg-purple-700' :
-                  selectedType === 'email' ? 'bg-blue-600 hover:bg-blue-700' :
-                  selectedType === 'email_group' ? 'bg-green-600 hover:bg-green-700' :
-                  'bg-gray-600 hover:bg-gray-700'
-                }`}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 {createEndpointMutation.isPending ? 'Creating...' : 'Create Endpoint'}
               </Button>

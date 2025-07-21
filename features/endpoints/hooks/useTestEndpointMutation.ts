@@ -1,24 +1,34 @@
 import { useMutation } from '@tanstack/react-query'
 
-type TestEndpointResponse = {
-  success: boolean
-  message: string
-  responseTime?: number
-  statusCode?: number
+export type WebhookFormat = 'inbound' | 'discord' | 'slack'
+
+export type TestEndpointRequest = {
+  id: string
+  webhookFormat?: WebhookFormat
 }
 
-async function testEndpoint(id: string): Promise<TestEndpointResponse> {
-  // Try v2 first, fallback to v1 if not available
-  let response = await fetch(`/api/v2/endpoints/${id}/test`, {
-    method: 'POST',
-  })
+export type TestEndpointResponse = {
+  success: boolean
+  message: string
+  responseTime: number
+  statusCode?: number
+  responseBody?: string
+  error?: string
+  testPayload?: any
+  webhookFormat?: WebhookFormat
+}
+
+async function testEndpoint(params: TestEndpointRequest): Promise<TestEndpointResponse> {
+  const { id, webhookFormat } = params
   
-  // If v2 doesn't exist (404), try v1
-  if (response.status === 404) {
-    response = await fetch(`/api/v1/endpoints/${id}/test`, {
-      method: 'POST',
-    })
-  }
+  // Use v2 API endpoint
+  const response = await fetch(`/api/v2/endpoints/${id}/test`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: webhookFormat ? JSON.stringify({ webhookFormat }) : undefined,
+  })
   
   if (!response.ok) {
     const error = await response.json()
