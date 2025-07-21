@@ -367,7 +367,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
 
         {renderStepIndicator()}
 
-        <div className="min-h-[300px]">
+        <form id="endpoint-form" onSubmit={handleSubmit} className="min-h-[300px]">
           {/* Step 1: Type Selection */}
           {currentStep === 'type' && (
             <div className="space-y-4">
@@ -668,26 +668,29 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
               )}
             </div>
           )}
-        </div>
+        </form>
 
         <DialogFooter className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {currentStep !== 'type' && (
-              <Button variant="secondary" onClick={handlePrevious}>
+              <Button variant="secondary" onClick={handlePrevious} tabIndex={0}>
                 <ArrowBoldLeft className="h-4 w-4 mr-1" />
                 Previous
               </Button>
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={handleClose}>
+            <Button variant="secondary" onClick={handleClose} tabIndex={0}>
               Cancel
             </Button>
             {currentStep === 'config' ? (
               <Button
+                type="submit"
+                form="endpoint-form"
                 onClick={handleSubmit}
                 disabled={createEndpointMutation.isPending || !selectedType}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                variant="primary"
+                tabIndex={0}
               >
                 {createEndpointMutation.isPending ? 'Creating...' : 'Create Endpoint'}
               </Button>
@@ -695,6 +698,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
               <Button
                 onClick={handleNext}
                 disabled={!canProceedToNextStep()}
+                tabIndex={0}
               >
                 Next
                 <ArrowBoldRight className="h-4 w-4 ml-1" />

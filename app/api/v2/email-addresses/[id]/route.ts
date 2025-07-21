@@ -307,14 +307,8 @@ export async function PUT(
             }
         }
 
-        // If endpointId is provided, clear webhookId
-        if (endpointId !== undefined) {
-            webhookId = null
-        }
-        // If webhookId is provided, clear endpointId
-        if (webhookId !== undefined) {
-            endpointId = null
-        }
+        // NOTE: We should NOT modify the input values here!
+        // The logic below will handle what to update in the database
 
         // Validate endpoint if provided
         if (endpointId) {

@@ -234,7 +234,12 @@ export const useUpdateEmailEndpointV2Mutation = () => {
     const queryClient = useQueryClient()
 
     return useMutation<PutEmailAddressByIdResponse, Error, PutEmailAddressByIdRequest & { emailAddressId: string; domainId: string }>({
-        mutationFn: async ({ emailAddressId, ...data }) => {
+        mutationFn: async ({ emailAddressId, domainId, ...data }) => {
+            console.log('🚀 Sending update request:', {
+                url: `/api/v2/email-addresses/${emailAddressId}`,
+                body: data
+            })
+            
             const response = await fetch(`/api/v2/email-addresses/${emailAddressId}`, {
                 method: 'PUT',
                 headers: {
@@ -246,7 +251,9 @@ export const useUpdateEmailEndpointV2Mutation = () => {
                 const error = await response.json()
                 throw new Error(error.error || 'Failed to update endpoint')
             }
-            return response.json()
+            const result = await response.json()
+            console.log('📥 Update response:', result)
+            return result
         },
         onSuccess: (_, { domainId }) => {
             // Invalidate domain details to refresh email addresses

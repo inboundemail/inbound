@@ -57,3 +57,5 @@ scripts/email-parsing/emails/
 
 email-processor.js
 email-processor.d.ts
+
+remail/

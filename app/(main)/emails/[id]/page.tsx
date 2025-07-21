@@ -373,18 +373,31 @@ export default function DomainDetailPage() {
     const updateEmailEndpointHandler = async () => {
         if (!selectedEmailForEndpoint) return
 
+        console.log('🔄 Updating email endpoint:', {
+            emailId: selectedEmailForEndpoint.id,
+            currentEndpointId: selectedEmailForEndpoint.endpointId,
+            newEndpointId: endpointDialogSelectedId === 'none' ? null : endpointDialogSelectedId,
+            domainId: domainId
+        })
+
         try {
-            await updateEmailWebhookMutation.mutateAsync({
+            const result = await updateEmailWebhookMutation.mutateAsync({
                 emailAddressId: selectedEmailForEndpoint.id,
                 endpointId: endpointDialogSelectedId === 'none' ? null : endpointDialogSelectedId,
                 domainId: domainId
             })
 
+            console.log('✅ Update result:', result)
+
             toast.success('Endpoint updated successfully')
             setIsEndpointDialogOpen(false)
             setSelectedEmailForEndpoint(null)
             setEndpointDialogSelectedId('none')
+            
+            // Force refetch to ensure UI updates
+            await refetchEmailAddresses()
         } catch (error) {
+            console.error('❌ Update failed:', error)
             toast.error(error instanceof Error ? error.message : 'Failed to update endpoint')
         }
     }
@@ -848,6 +861,7 @@ export default function DomainDetailPage() {
                                                     <div className="flex items-center gap-2">
                                                         <div className="text-sm text-muted-foreground">
                                                             {(() => {
+                                                                console.log('🔍 Routing:', email.routing)
                                                                 // Use the routing information from the email
                                                                 const routing = email.routing
 
