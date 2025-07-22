@@ -10,7 +10,7 @@ import { generateVipPaymentRequestEmail } from '@/emails/vip-payment-request-pre
 
 const inbound = new Inbound({
   apiKey: process.env.INBOUND_API_KEY!,
-  defaultReplyFrom: 'noreply@inbound.email'
+  defaultReplyFrom: 'noreply@inbound.new'
 })
 
 // Default Stripe instance for Inbound
@@ -200,7 +200,7 @@ export async function POST(request: NextRequest) {
     })
     
     await inbound.reply(email, {
-      from: 'payments@inbound.email',
+      from: 'payments@inbound.new',
       subject: `Payment Required: ${email.subject}`,
       html: emailHtml,
       text: `Payment Required to Deliver Your Email

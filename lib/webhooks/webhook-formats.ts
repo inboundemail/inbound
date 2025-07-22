@@ -173,7 +173,7 @@ export const WEBHOOK_FORMAT_CONFIGS: Record<WebhookFormat, WebhookFormatConfig> 
         timestamp: data.timestamp,
         footer: {
           text: 'Inbound Email Service - Test',
-          icon_url: 'https://inbound.email/favicon.ico'
+          icon_url: 'https://inbound.new/favicon.ico'
         },
         fields: [
           {
@@ -203,7 +203,7 @@ export const WEBHOOK_FORMAT_CONFIGS: Record<WebhookFormat, WebhookFormatConfig> 
         timestamp: data.timestamp,
         footer: {
           text: 'Inbound Email Service',
-          icon_url: 'https://inbound.email/favicon.ico'
+          icon_url: 'https://inbound.new/favicon.ico'
         },
         fields: [
           {
@@ -237,7 +237,7 @@ export const WEBHOOK_FORMAT_CONFIGS: Record<WebhookFormat, WebhookFormatConfig> 
     testPayload: (data: BaseEmailData): SlackWebhookPayload => ({
       text: `📧 *Test Email Received*`,
       username: 'Inbound Email',
-      icon_url: 'https://inbound.email/favicon.ico',
+      icon_url: 'https://inbound.new/favicon.ico',
       attachments: [{
         fallback: `Test email: ${data.subject}`,
         color: 'good',
@@ -267,7 +267,7 @@ export const WEBHOOK_FORMAT_CONFIGS: Record<WebhookFormat, WebhookFormatConfig> 
     realPayload: (data: BaseEmailData): SlackWebhookPayload => ({
       text: `📧 *New Email Received*`,
       username: 'Inbound Email',
-      icon_url: 'https://inbound.email/favicon.ico',
+      icon_url: 'https://inbound.new/favicon.ico',
       attachments: [{
         fallback: `New email: ${data.subject}`,
         color: '#0099ff',

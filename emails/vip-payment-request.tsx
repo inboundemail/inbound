@@ -97,7 +97,7 @@ export const VipPaymentRequestEmail = ({
           
           <Text style={footer}>
             Powered by{' '}
-            <Link href="https://inbound.email" style={link}>
+            <Link href="https://inbound.new" style={link}>
               Inbound
             </Link>
             {' '}• VIP Email Protection

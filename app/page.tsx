@@ -53,7 +53,7 @@ async function InboundHeroSection() {
           <div className="hidden md:flex items-center gap-4 text-sm lg:text-base text-muted-foreground">
             <a href="/docs" className="hover:text-foreground transition-colors">docs</a>
             <a href="#pricing" className="hover:text-foreground transition-colors">pricing</a>
-            <a href="mailto:support@inbound.email" className="hover:text-foreground transition-colors">help</a>
+            <a href="mailto:support@inbound.new" className="hover:text-foreground transition-colors">help</a>
           </div>
           { session?.user ? (
             <Button size="default" className="text-sm sm:text-base" asChild>
@@ -823,7 +823,7 @@ export default async function HomePage() {
               <a href="/docs" className="hover:text-foreground transition-colors hidden sm:inline">
                 Docs
               </a>
-              <a href="mailto:support@inbound.email" className="hover:text-foreground transition-colors">
+              <a href="mailto:support@inbound.new" className="hover:text-foreground transition-colors">
                 Support
               </a>
             </div>

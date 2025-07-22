@@ -45,13 +45,13 @@ import { InboundClient, createInboundClient } from 'exon-inbound'
 // Option 1: Using factory function (recommended)
 const inbound = createInboundClient({
   apiKey: 'your_api_key',
-  baseUrl: 'https://api.inbound.email/api/v1' // optional
+  baseUrl: 'https://inbound.new/api/v1' // optional
 })
 
 // Option 2: Direct instantiation
 const inbound = new InboundClient({
   apiKey: 'your_api_key',
-  baseUrl: 'https://api.inbound.email/api/v1' // optional
+  baseUrl: 'https://inbound.new/api/v1' // optional
 })
 ```
 
@@ -363,4 +363,4 @@ MIT
 For issues and questions:
 - GitHub Issues: [https://github.com/your-org/inbound-sdk/issues](https://github.com/your-org/inbound-sdk/issues)
 - Documentation: [https://docs.inbound.email](https://docs.inbound.email)
-- API Reference: [https://api.inbound.email/v1](https://api.inbound.email/v1) 
+- API Reference: [https://inbound.new/v1](https://inbound.new/v1) 

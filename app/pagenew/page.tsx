@@ -241,7 +241,7 @@ export default async function AIAgentLandingPage() {
                   <Card className="bg-neutral-900 border-neutral-700 mb-4">
                     <CardContent className="p-4 font-mono text-sm">
                       <div className="text-pink-400">POST</div>
-                      <div className="text-green-300">https://api.inbound.email/v2/send</div>
+                      <div className="text-green-300">https://inbound.new/v2/send</div>
                       <div className="text-gray-400 mt-2">{`{`}</div>
                       <div className="ml-4 text-gray-300">
                         <div>to: <span className="text-green-300">"customer@example.com"</span>,</div>
@@ -409,7 +409,7 @@ export default async function AIAgentLandingPage() {
                   <CardContent className="p-3 sm:p-4 text-left overflow-x-auto">
                     <code className="text-xs sm:text-sm font-mono block whitespace-nowrap">
                       <div className="text-pink-400">POST</div>
-                      <div className="text-green-300">https://api.inbound.email/v2/send</div>
+                      <div className="text-green-300">https://inbound.new/v2/send</div>
                       <br />
                       <div className="text-gray-400">{`{`}</div>
                       <div className="ml-4">
@@ -440,7 +440,7 @@ export default async function AIAgentLandingPage() {
                   <CardContent className="p-3 sm:p-4 text-left overflow-x-auto">
                     <code className="text-xs sm:text-sm font-mono block">
                       <div className="text-pink-400 inline">GET</div>{" "}
-                      <div className="text-green-300 inline break-all">https://api.inbound.email/v2/mailbox/emails</div>
+                      <div className="text-green-300 inline break-all">https://inbound.new/v2/mailbox/emails</div>
                       <br /><br />
                       <div className="text-gray-400">// Query parameters</div>
                       <div className="text-blue-400">?mailboxId=</div><span className="text-yellow-300">agent_123</span>
@@ -509,7 +509,7 @@ export default async function AIAgentLandingPage() {
               <a href="/terms" className="hover:text-foreground transition-colors">
                 Terms
               </a>
-              <a href="mailto:support@inbound.email" className="hover:text-foreground transition-colors">
+              <a href="mailto:support@inbound.new" className="hover:text-foreground transition-colors">
                 Support
               </a>
             </div>

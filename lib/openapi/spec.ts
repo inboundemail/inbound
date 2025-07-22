@@ -9,7 +9,7 @@ export async function getOpenAPISpec(): Promise<OpenAPIV3.Document> {
       version: '1.0.0',
       contact: {
         name: 'API Support',
-        email: 'support@inbound.email',
+        email: 'support@inbound.new',
       },
       license: {
         name: 'MIT',

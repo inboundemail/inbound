@@ -12,7 +12,7 @@ import { Inbound } from '@inboundemail/sdk'
 
 const inbound = new Inbound({
   apiKey: process.env.INBOUND_API_KEY!,
-  defaultReplyFrom: 'noreply@inbound.email'
+  defaultReplyFrom: 'noreply@inbound.new'
 })
 
 async function processPaymentSuccess(sessionId: string) {
