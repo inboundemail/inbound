@@ -2,19 +2,37 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Inbound, isInboundWebhook } from '@inboundemail/sdk'
 import type { InboundWebhookPayload } from '@inboundemail/sdk'
 import { db } from '@/lib/db'
-import { emailAddresses, vipConfigs, vipAllowedSenders, vipPaymentSessions, vipEmailAttempts, userAccounts, structuredEmails } from '@/lib/db/schema'
+import { emailAddresses, vipConfigs, vipAllowedSenders, vipPaymentSessions, vipEmailAttempts, userAccounts, structuredEmails, apikey } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import Stripe from 'stripe'
 import { generateVipPaymentRequestEmail } from '@/emails/vip-payment-request-preview'
 
-const inbound = new Inbound({
-  apiKey: process.env.INBOUND_API_KEY!,
-  defaultReplyFrom: 'noreply@inbound.new'
-})
-
 // Default Stripe instance for Inbound
 const defaultStripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+
+/**
+ * Get user's API key for Inbound SDK operations
+ */
+async function getUserApiKey(userId: string): Promise<string | null> {
+  try {
+    const userApiKey = await db
+      .select({ key: apikey.key })
+      .from(apikey)
+      .where(
+        and(
+          eq(apikey.userId, userId),
+          eq(apikey.enabled, true)
+        )
+      )
+      .limit(1)
+
+    return userApiKey[0]?.key || null
+  } catch (error) {
+    console.error('Error retrieving user API key:', error)
+    return null
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -103,6 +121,22 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true })
       }
     }
+
+    // Get user's API key for Inbound SDK
+    const userApiKey = await getUserApiKey(vipConfig[0].userId)
+    if (!userApiKey) {
+      console.error('No API key found for user:', vipConfig[0].userId)
+      return NextResponse.json(
+        { error: 'User API key not found' },
+        { status: 500 }
+      )
+    }
+
+    // Create user-specific Inbound client
+    const inbound = new Inbound({
+      apiKey: userApiKey,
+      defaultReplyFrom: 'payments@inbound.new'
+    })
 
     // Get user's account-level Stripe key
     const userAccount = await db

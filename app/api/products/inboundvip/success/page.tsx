@@ -8,12 +8,6 @@ import Envelope2 from '@/components/icons/envelope-2'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { nanoid } from 'nanoid'
-import { Inbound } from '@inboundemail/sdk'
-
-const inbound = new Inbound({
-  apiKey: process.env.INBOUND_API_KEY!,
-  defaultReplyFrom: 'noreply@inbound.new'
-})
 
 async function processPaymentSuccess(sessionId: string) {
   // Get payment session
