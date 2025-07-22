@@ -46,10 +46,12 @@ export function NavMain({
                   <SidebarMenuButton 
                     tooltip={item.title} 
                     isActive={true}
-                    className="cursor-default"
+                    asChild
                   >
-                    {item.icon && <item.icon className="h-4 w-4" />}
-                    <span>{item.title}</span>
+                    <Link href={item.url}>
+                      {item.icon && <item.icon className="h-4 w-4" />}
+                      <span>{item.title}</span>
+                    </Link>
                   </SidebarMenuButton>
                 ) : (
                   <SidebarMenuButton 
