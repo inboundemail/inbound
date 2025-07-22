@@ -13,7 +13,9 @@ export const user = pgTable("user", {
 	banReason: text('ban_reason'),
 	banExpires: timestamp('ban_expires'),
 	stripeCustomerId: text('stripe_customer_id'),
-	webhooksToEndpointsMigrated: boolean('webhooks_to_endpoints_migrated').default(false)
+	webhooksToEndpointsMigrated: boolean('webhooks_to_endpoints_migrated').default(false),
+	// Feature flags - array of enabled feature flags
+	featureFlags: text('feature_flags') // JSON array of feature flag strings
 });
 
 export const session = pgTable("session", {

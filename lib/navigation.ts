@@ -27,6 +27,7 @@ export interface NavigationItem {
   icon?: React.ComponentType<any>
   description?: string
   customTailwind?: string
+  requiresFeatureFlag?: string // Optional feature flag requirement
 }
 
 export interface NavigationConfig {
@@ -78,7 +79,8 @@ export const navigationConfig: NavigationConfig = {
       url: "/vip",
       icon: Crown,
       description: "Manage your VIP email addresses",
-      customTailwind: "text-yellow-500"
+      customTailwind: "text-yellow-500",
+      requiresFeatureFlag: "vip"
     }
   ],
   secondary: [],
@@ -192,4 +194,41 @@ export function isNavigationItemActive(itemUrl: string, currentPath: string): bo
  */
 export function isUserAdmin(role?: string): boolean {
   return role === 'admin'
+}
+
+/**
+ * Check if user has a specific feature flag enabled
+ */
+export function hasFeatureFlag(flagName: string, featureFlags?: string | null): boolean {
+  if (!featureFlags) return false
+  
+  try {
+    const flags = JSON.parse(featureFlags) as string[]
+    return Array.isArray(flags) && flags.includes(flagName)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Check if user has VIP access
+ */
+export function hasUserVipAccess(featureFlags?: string | null): boolean {
+  return hasFeatureFlag('vip', featureFlags)
+}
+
+/**
+ * Filter navigation items based on user's feature flags
+ */
+export function filterNavigationByFeatureFlags(
+  items: NavigationItem[], 
+  featureFlags?: string | null
+): NavigationItem[] {
+  return items.filter(item => {
+    // If no feature flag is required, show the item
+    if (!item.requiresFeatureFlag) return true
+    
+    // Check if user has the required feature flag
+    return hasFeatureFlag(item.requiresFeatureFlag, featureFlags)
+  })
 } 

@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/sidebar"
 import { TeamSwitcher } from "./ui/team-switcher"
 import { useSession } from "@/lib/auth/auth-client"
-import { navigationConfig, isUserAdmin } from "@/lib/navigation"
+import { navigationConfig, isUserAdmin, filterNavigationByFeatureFlags } from "@/lib/navigation"
 import Book2 from "./icons/book-2"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -43,10 +43,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   // Check if user is admin
   const userIsAdmin = isUserAdmin(session.user.role || "user")
+  
+  // Filter navigation items based on user's feature flags
+  const filteredMainNav = filterNavigationByFeatureFlags(
+    navigationConfig.main, 
+    (session.user as any).featureFlags || null
+  )
 
   const data = {
     user: userData,
-    navMain: navigationConfig.main,
+    navMain: filteredMainNav,
     navSecondary: navigationConfig.secondary,
     navAdmin: userIsAdmin ? navigationConfig.admin : [],
   }

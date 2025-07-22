@@ -1,3 +1,5 @@
+'use server'
+
 import { auth } from "@/lib/auth/auth"
 import { headers } from "next/headers"
 
@@ -23,7 +25,7 @@ export async function isCurrentUserAdmin(): Promise<boolean> {
  * @param role - The user role to check
  * @returns boolean - true if role is admin, false otherwise
  */
-export function isAdminRole(role: string | null | undefined): boolean {
+export async function isAdminRole(role: string | null | undefined): Promise<boolean> {
   return role === 'admin'
 }
 

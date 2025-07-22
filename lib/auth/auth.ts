@@ -37,6 +37,19 @@ export const auth = betterAuth({
             })
         },
     },
+    session: {
+        updateAge: 24 * 60 * 60, // 24 hours
+        expiresIn: 60 * 60 * 24 * 7, // 7 days
+    },
+    user: {
+        additionalFields: {
+            featureFlags: {
+                type: "string",
+                required: false,
+                defaultValue: null
+            }
+        }
+    },
     plugins: [
         oAuthProxy({
             productionURL: process.env.BETTER_AUTH_URL || "http://localhost:3000"

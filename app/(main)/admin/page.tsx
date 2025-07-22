@@ -47,7 +47,9 @@ import ShieldCheck from "@/components/icons/shield-check"
 import Trash2 from "@/components/icons/trash-2"
 import CircleUser from "@/components/icons/circle-user"
 import UserGroup from "@/components/icons/user-group"
+import Crown from "@/components/icons/crown"
 import { getAllDomainsForAdmin, getDomainEmailAddressesForAdmin } from "@/app/actions/primary"
+import { addFeatureFlag, removeFeatureFlag, getUserFeatureFlags } from "@/app/actions/feature-flags"
 
 
 // Auth client with admin functions is imported above
@@ -120,6 +122,18 @@ export default function AdminPage() {
   const [isLoadingEmailAddresses, setIsLoadingEmailAddresses] = useState(false)
   const [isEmailAddressesDialogOpen, setIsEmailAddressesDialogOpen] = useState(false)
 
+  // Feature flag management state
+  const [selectedUserForFlags, setSelectedUserForFlags] = useState<User | null>(null)
+  const [isFeatureFlagDialogOpen, setIsFeatureFlagDialogOpen] = useState(false)
+  const [userFeatureFlags, setUserFeatureFlags] = useState<string[]>([])
+  const [isLoadingFeatureFlags, setIsLoadingFeatureFlags] = useState(false)
+  const [newFeatureFlag, setNewFeatureFlag] = useState("")
+  
+  // Current user feature flags state
+  const [currentUserFlags, setCurrentUserFlags] = useState<string[]>([])
+  const [isLoadingCurrentUserFlags, setIsLoadingCurrentUserFlags] = useState(false)
+  const [newCurrentUserFlag, setNewCurrentUserFlag] = useState("")
+
   const pageSize = 10
 
   useEffect(() => {
@@ -141,6 +155,7 @@ export default function AdminPage() {
       // Load initial data
       loadUsers()
       loadDomains()
+      loadCurrentUserFlags()
     }
   }, [session, isPending, router])
 
@@ -248,6 +263,111 @@ export default function AdminPage() {
       loadUsers(currentPage, searchQuery)
     } catch (error) {
       console.error("Failed to update role:", error)
+    }
+  }
+
+  // Feature flag management functions
+  const handleManageFeatureFlags = async (user: User) => {
+    setSelectedUserForFlags(user)
+    setIsFeatureFlagDialogOpen(true)
+    setIsLoadingFeatureFlags(true)
+    
+    try {
+      const response = await getUserFeatureFlags(user.id)
+      if (response.success) {
+        setUserFeatureFlags(response.flags || [])
+      } else {
+        console.error("Failed to load feature flags:", response.error)
+        setUserFeatureFlags([])
+      }
+    } catch (error) {
+      console.error("Failed to load feature flags:", error)
+      setUserFeatureFlags([])
+    } finally {
+      setIsLoadingFeatureFlags(false)
+    }
+  }
+
+  const handleAddFeatureFlag = async () => {
+    if (!selectedUserForFlags || !newFeatureFlag.trim()) return
+    
+    try {
+      const response = await addFeatureFlag(selectedUserForFlags.id, newFeatureFlag.trim())
+      if (response.success) {
+        setUserFeatureFlags(response.flags || [])
+        setNewFeatureFlag("")
+      } else {
+        console.error("Failed to add feature flag:", response.error)
+      }
+    } catch (error) {
+      console.error("Failed to add feature flag:", error)
+    }
+  }
+
+  const handleRemoveFeatureFlag = async (flagName: string) => {
+    if (!selectedUserForFlags) return
+    
+    try {
+      const response = await removeFeatureFlag(selectedUserForFlags.id, flagName)
+      if (response.success) {
+        setUserFeatureFlags(response.flags || [])
+      } else {
+        console.error("Failed to remove feature flag:", response.error)
+      }
+    } catch (error) {
+      console.error("Failed to remove feature flag:", error)
+    }
+  }
+
+  // Current user feature flag management functions
+  const loadCurrentUserFlags = async () => {
+    if (!session?.user?.id) return
+    
+    setIsLoadingCurrentUserFlags(true)
+    try {
+      const response = await getUserFeatureFlags() // No userId means current user
+      if (response.success) {
+        setCurrentUserFlags(response.flags || [])
+      } else {
+        console.error("Failed to load current user feature flags:", response.error)
+        setCurrentUserFlags([])
+      }
+    } catch (error) {
+      console.error("Failed to load current user feature flags:", error)
+      setCurrentUserFlags([])
+    } finally {
+      setIsLoadingCurrentUserFlags(false)
+    }
+  }
+
+  const handleAddCurrentUserFeatureFlag = async () => {
+    if (!session?.user?.id || !newCurrentUserFlag.trim()) return
+    
+    try {
+      const response = await addFeatureFlag(session.user.id, newCurrentUserFlag.trim())
+      if (response.success) {
+        setCurrentUserFlags(response.flags || [])
+        setNewCurrentUserFlag("")
+      } else {
+        console.error("Failed to add current user feature flag:", response.error)
+      }
+    } catch (error) {
+      console.error("Failed to add current user feature flag:", error)
+    }
+  }
+
+  const handleRemoveCurrentUserFeatureFlag = async (flagName: string) => {
+    if (!session?.user?.id) return
+    
+    try {
+      const response = await removeFeatureFlag(session.user.id, flagName)
+      if (response.success) {
+        setCurrentUserFlags(response.flags || [])
+      } else {
+        console.error("Failed to remove current user feature flag:", response.error)
+      }
+    } catch (error) {
+      console.error("Failed to remove current user feature flag:", error)
     }
   }
 
@@ -579,6 +699,14 @@ export default function AdminPage() {
                                  <span className="text-xs text-muted-foreground px-2">Current User</span>
                                ) : (
                                  <>
+                                   <Button
+                                     size="sm"
+                                     variant="secondary"
+                                     onClick={() => handleManageFeatureFlags(user)}
+                                     title="Manage feature flags"
+                                   >
+                                     <Crown className="h-3 w-3" />
+                                   </Button>
                                    {user.banned ? (
                                      <Button
                                        size="sm"
@@ -923,10 +1051,217 @@ export default function AdminPage() {
               </div>
             </DialogContent>
           </Dialog>
+
+          {/* Feature Flags Dialog */}
+          <Dialog open={isFeatureFlagDialogOpen} onOpenChange={setIsFeatureFlagDialogOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Crown className="h-5 w-5 text-yellow-500" />
+                  Feature Flags for {selectedUserForFlags?.name}
+                </DialogTitle>
+                <DialogDescription>
+                  Manage feature flags for {selectedUserForFlags?.email}
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4">
+                {/* Add new feature flag */}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter feature flag name (e.g., vip, beta, advanced)"
+                    value={newFeatureFlag}
+                    onChange={(e) => setNewFeatureFlag(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddFeatureFlag()}
+                  />
+                  <Button onClick={handleAddFeatureFlag} disabled={!newFeatureFlag.trim()}>
+                    <CirclePlus className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {/* Current feature flags */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Current Feature Flags</Label>
+                  {isLoadingFeatureFlags ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Refresh2 className="h-6 w-6 animate-spin" />
+                    </div>
+                  ) : userFeatureFlags.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No feature flags assigned to this user
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {userFeatureFlags.map((flag) => (
+                        <div key={flag} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Crown className="h-4 w-4 text-yellow-500" />
+                            <span className="font-medium">{flag}</span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleRemoveFeatureFlag(flag)}
+                            title="Remove feature flag"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Common feature flags for quick access */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Quick Add Common Flags</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {['vip', 'beta', 'advanced', 'admin', 'premium'].map((commonFlag) => (
+                      <Button
+                        key={commonFlag}
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          if (!selectedUserForFlags || userFeatureFlags.includes(commonFlag)) return
+                          try {
+                            const response = await addFeatureFlag(selectedUserForFlags.id, commonFlag)
+                            if (response.success) {
+                              setUserFeatureFlags(response.flags || [])
+                            }
+                          } catch (error) {
+                            console.error("Failed to add feature flag:", error)
+                          }
+                        }}
+                        disabled={userFeatureFlags.includes(commonFlag)}
+                        className="text-xs"
+                      >
+                        {commonFlag}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* Development Tab */}
         <TabsContent value="development" className="space-y-6">
+          {/* Current User Feature Flags */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Crown className="h-5 w-5 text-yellow-500" />
+                    My Feature Flags
+                  </CardTitle>
+                  <CardDescription>
+                    Manage your own feature flags for testing purposes
+                  </CardDescription>
+                </div>
+                <Button onClick={loadCurrentUserFlags} variant="secondary" className="flex items-center gap-2">
+                  <Refresh2 className="h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Add new feature flag for current user */}
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Enter feature flag name (e.g., vip, beta, advanced)"
+                  value={newCurrentUserFlag}
+                  onChange={(e) => setNewCurrentUserFlag(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddCurrentUserFeatureFlag()}
+                />
+                <Button onClick={handleAddCurrentUserFeatureFlag} disabled={!newCurrentUserFlag.trim()}>
+                  <CirclePlus className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Current feature flags */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Active Feature Flags</Label>
+                {isLoadingCurrentUserFlags ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Refresh2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : currentUserFlags.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No feature flags assigned to your account
+                  </div>
+                ) : (
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {currentUserFlags.map((flag) => (
+                      <div key={flag} className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
+                        <div className="flex items-center gap-2">
+                          <Crown className="h-4 w-4 text-yellow-500" />
+                          <span className="font-medium">{flag}</span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleRemoveCurrentUserFeatureFlag(flag)}
+                          title="Remove feature flag"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Quick add common flags */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Quick Add Common Flags</Label>
+                <div className="flex flex-wrap gap-2">
+                  {['vip', 'beta', 'advanced', 'premium', 'debug'].map((commonFlag) => (
+                    <Button
+                      key={commonFlag}
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        if (!session?.user?.id || currentUserFlags.includes(commonFlag)) return
+                        try {
+                          const response = await addFeatureFlag(session.user.id, commonFlag)
+                          if (response.success) {
+                            setCurrentUserFlags(response.flags || [])
+                          }
+                        } catch (error) {
+                          console.error("Failed to add feature flag:", error)
+                        }
+                      }}
+                      disabled={currentUserFlags.includes(commonFlag)}
+                      className="text-xs"
+                    >
+                      {commonFlag}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Info about feature flags */}
+              <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <CircleWarning2 className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium text-blue-900 dark:text-blue-100">About Feature Flags</p>
+                    <p className="text-blue-700 dark:text-blue-300 mt-1">
+                      Feature flags control access to experimental features and UI elements. 
+                      The <strong>vip</strong> flag enables the VIP tab in navigation. 
+                      Changes take effect immediately without requiring a page refresh.
+                    </p>
+                    <p className="text-blue-700 dark:text-blue-300 mt-2 text-xs">
+                      <strong>Security:</strong> Only admins can modify other users' feature flags. 
+                      Regular users can only manage their own flags for testing.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
