@@ -58,8 +58,8 @@ export function NavMain({
                     isActive={false}
                   >
                     <Link href={item.url}>
-                      {item.icon && <item.icon className="h-4 w-4" />}
-                      <span>{item.title}</span>
+                      {item.icon && <item.icon className={`h-4 w-4 ${item.customTailwind}`} />}
+                      <span className={item.customTailwind}>{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
                 )}

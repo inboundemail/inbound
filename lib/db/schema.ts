@@ -19,6 +19,14 @@ export const subscriptions = pgTable('subscriptions', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+export const userAccounts = pgTable('user_accounts', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull(),
+  stripeRestrictedKey: text('stripe_restricted_key'), // Account-level Stripe key for VIP BYOK
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // User onboarding tracking table
 export const userOnboarding = pgTable('user_onboarding', {
   id: varchar('id', { length: 255 }).primaryKey(),
@@ -61,6 +69,9 @@ export const emailAddresses = pgTable('email_addresses', {
   isActive: boolean('is_active').default(true),
   isReceiptRuleConfigured: boolean('is_receipt_rule_configured').default(false),
   receiptRuleName: varchar('receipt_rule_name', { length: 255 }),
+  // VIP fields
+  isVipEnabled: boolean('is_vip_enabled').default(false),
+  vipConfigId: varchar('vip_config_id', { length: 255 }), // Link to vipConfigs table
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
   userId: varchar('user_id', { length: 255 }).notNull(),
@@ -484,7 +495,77 @@ export const WEBHOOK_FORMATS = {
 
 export const DELIVERY_TYPES = {
   WEBHOOK: 'webhook',
-  EMAIL_FORWARD: 'email_forward'
+  EMAIL: 'email',
+  EMAILGROUP: 'emailgroup'
+} as const;
+
+// VIP Configurations table
+export const vipConfigs = pgTable('vip_configs', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  emailAddressId: varchar('email_address_id', { length: 255 }).notNull().unique(), // Link to emailAddresses
+  userId: varchar('user_id', { length: 255 }).notNull(),
+  priceInCents: integer('price_in_cents').notNull().default(100), // Default $1.00
+  allowAfterPayment: boolean('allow_after_payment').default(false), // false = single email, true = allow all future
+  customMessage: text('custom_message'), // Custom message in payment email
+  paymentLinkExpirationHours: integer('payment_link_expiration_hours').default(24),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// VIP Payment Sessions table - tracks payment links and their status
+export const vipPaymentSessions = pgTable('vip_payment_sessions', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  vipConfigId: varchar('vip_config_id', { length: 255 }).notNull(),
+  senderEmail: varchar('sender_email', { length: 255 }).notNull(),
+  originalEmailId: varchar('original_email_id', { length: 255 }).notNull(), // Reference to structuredEmails
+  stripePaymentLinkId: varchar('stripe_payment_link_id', { length: 255 }),
+  stripePaymentLinkUrl: text('stripe_payment_link_url'),
+  stripeSessionId: varchar('stripe_session_id', { length: 255 }),
+  status: varchar('status', { length: 50 }).notNull().default('pending'), // pending, paid, expired, cancelled
+  paidAt: timestamp('paid_at'),
+  expiresAt: timestamp('expires_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// VIP Allowed Senders - tracks who can send without payment
+export const vipAllowedSenders = pgTable('vip_allowed_senders', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  vipConfigId: varchar('vip_config_id', { length: 255 }).notNull(),
+  senderEmail: varchar('sender_email', { length: 255 }).notNull(),
+  allowedAt: timestamp('allowed_at').defaultNow(),
+  allowedUntil: timestamp('allowed_until'), // Optional expiration
+  paymentSessionId: varchar('payment_session_id', { length: 255 }), // Reference to the payment that allowed them
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// VIP Email Attempts - tracks all emails that hit VIP protection
+export const vipEmailAttempts = pgTable('vip_email_attempts', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  vipConfigId: varchar('vip_config_id', { length: 255 }).notNull(),
+  senderEmail: varchar('sender_email', { length: 255 }).notNull(),
+  recipientEmail: varchar('recipient_email', { length: 255 }).notNull(),
+  originalEmailId: varchar('original_email_id', { length: 255 }).notNull(), // Reference to structuredEmails
+  emailSubject: text('email_subject'),
+  status: varchar('status', { length: 50 }).notNull().default('payment_required'), // payment_required, allowed, blocked
+  paymentSessionId: varchar('payment_session_id', { length: 255 }), // Reference to payment session if payment required
+  allowedReason: varchar('allowed_reason', { length: 100 }), // 'previous_payment', 'whitelisted', etc.
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Create index for faster lookups
+// Note: These would be created in migration files
+// CREATE INDEX idx_vip_allowed_sender ON vip_allowed_senders(vip_config_id, sender_email);
+// CREATE INDEX idx_vip_payment_session_status ON vip_payment_sessions(status);
+
+// VIP Status enum
+export const VIP_PAYMENT_STATUS = {
+  PENDING: 'pending',
+  PAID: 'paid',
+  EXPIRED: 'expired',
+  CANCELLED: 'cancelled'
 } as const;
 
 export const DELIVERY_STATUS = {
@@ -510,3 +591,4 @@ export type WebhookFormat = typeof WEBHOOK_FORMATS[keyof typeof WEBHOOK_FORMATS]
 export type DeliveryType = typeof DELIVERY_TYPES[keyof typeof DELIVERY_TYPES];
 export type DeliveryStatus = typeof DELIVERY_STATUS[keyof typeof DELIVERY_STATUS];
 export type SentEmailStatus = typeof SENT_EMAIL_STATUS[keyof typeof SENT_EMAIL_STATUS];
+export type VipPaymentStatus = typeof VIP_PAYMENT_STATUS[keyof typeof VIP_PAYMENT_STATUS];

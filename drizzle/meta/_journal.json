@@ -169,6 +169,34 @@
       "when": 1753055260482,
       "tag": "0023_lush_deathbird",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1753196161290,
+      "tag": "0024_brainy_rumiko_fujikawa",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1753196991583,
+      "tag": "0025_medical_lilith",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1753197171873,
+      "tag": "0026_gifted_lethal_legion",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1753199107766,
+      "tag": "0027_acoustic_warpath",
+      "breakpoints": true
     }
   ]
 }

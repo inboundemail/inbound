@@ -19,12 +19,14 @@ import Envelope2 from "@/components/icons/envelope-2"
 import Cloud2 from "@/components/icons/cloud-2"
 import Code2 from "@/components/icons/code-2"
 import Database2 from "@/components/icons/database-2"
+import Crown from "@/components/icons/crown"
 
 export interface NavigationItem {
   title: string
   url: string
   icon?: React.ComponentType<any>
   description?: string
+  customTailwind?: string
 }
 
 export interface NavigationConfig {
@@ -71,6 +73,13 @@ export const navigationConfig: NavigationConfig = {
       icon: Gear2,
       description: "Account and app settings"
     },
+    {
+      title: "Inbound VIP",
+      url: "/vip",
+      icon: Crown,
+      description: "Manage your VIP email addresses",
+      customTailwind: "text-yellow-500"
+    }
   ],
   secondary: [],
   admin: [
