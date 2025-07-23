@@ -6,7 +6,7 @@
  */
 
 import { db } from '@/lib/db'
-import { structuredEmails, emailAddresses, endpoints, endpointDeliveries, emailDomains } from '@/lib/db/schema'
+import { structuredEmails, emailAddresses, endpoints, endpointDeliveries, emailDomains, vipConfigs, vipAllowedSenders, vipPaymentSessions, vipEmailAttempts, userAccounts, apikey } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { triggerEmailAction } from '@/app/api/inbound/webhook/route'
 import { EmailForwarder } from './email-forwarder'
@@ -14,6 +14,281 @@ import { nanoid } from 'nanoid'
 import type { ParsedEmailData } from './email-parser'
 import { sanitizeHtml } from './email-parser'
 import type { Endpoint } from '@/features/endpoints/types'
+import { Inbound } from '@inboundemail/sdk'
+import Stripe from 'stripe'
+import { generateVipPaymentRequestEmail } from '@/emails/vip-payment-request-preview'
+
+// Default Stripe instance for VIP payments
+const defaultStripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+
+/**
+ * VIP Status Check Result
+ */
+interface VipStatusResult {
+  isVipEnabled: boolean
+  requiresPayment: boolean
+  isAllowed: boolean
+  config?: any
+  reason?: string
+}
+
+/**
+ * Check if an email requires VIP payment
+ */
+async function checkVipStatus(recipientEmail: string, senderEmail: string): Promise<VipStatusResult> {
+  try {
+    console.log(`🔍 VIP Check - Checking ${senderEmail} → ${recipientEmail}`)
+
+    // Check if this email address has VIP enabled
+    const emailAddressRecord = await db
+      .select()
+      .from(emailAddresses)
+      .where(eq(emailAddresses.address, recipientEmail))
+      .limit(1)
+
+    if (!emailAddressRecord[0]?.isVipEnabled || !emailAddressRecord[0]?.vipConfigId) {
+      console.log(`✅ VIP Check - ${recipientEmail} is not VIP-enabled`)
+      return {
+        isVipEnabled: false,
+        requiresPayment: false,
+        isAllowed: true,
+        reason: 'not_vip_enabled'
+      }
+    }
+
+    // Get VIP config
+    const vipConfig = await db
+      .select()
+      .from(vipConfigs)
+      .where(eq(vipConfigs.id, emailAddressRecord[0].vipConfigId))
+      .limit(1)
+
+    if (!vipConfig[0] || !vipConfig[0].isActive) {
+      console.log(`✅ VIP Check - VIP config not found or inactive for ${recipientEmail}`)
+      return {
+        isVipEnabled: false,
+        requiresPayment: false,
+        isAllowed: true,
+        reason: 'vip_config_inactive'
+      }
+    }
+
+    // Check if sender is already allowed
+    const allowedSender = await db
+      .select()
+      .from(vipAllowedSenders)
+      .where(
+        and(
+          eq(vipAllowedSenders.vipConfigId, vipConfig[0].id),
+          eq(vipAllowedSenders.senderEmail, senderEmail)
+        )
+      )
+      .limit(1)
+
+    if (allowedSender[0]) {
+      // Check if still valid (not expired)
+      if (!allowedSender[0].allowedUntil || new Date(allowedSender[0].allowedUntil) > new Date()) {
+        console.log(`✅ VIP Check - ${senderEmail} is already allowed for ${recipientEmail}`)
+        return {
+          isVipEnabled: true,
+          requiresPayment: false,
+          isAllowed: true,
+          config: vipConfig[0],
+          reason: 'previously_allowed'
+        }
+      }
+    }
+
+    console.log(`💰 VIP Check - Payment required for ${senderEmail} → ${recipientEmail}`)
+    return {
+      isVipEnabled: true,
+      requiresPayment: true,
+      isAllowed: false,
+      config: vipConfig[0],
+      reason: 'payment_required'
+    }
+
+  } catch (error) {
+    console.error('❌ VIP Check - Error checking VIP status:', error)
+    // On error, allow email to proceed normally
+    return {
+      isVipEnabled: false,
+      requiresPayment: false,
+      isAllowed: true,
+      reason: 'error_checking_vip'
+    }
+  }
+}
+
+/**
+ * Get user's API key for Inbound SDK operations
+ */
+async function getUserApiKey(userId: string): Promise<string | null> {
+  try {
+    const userApiKey = await db
+      .select({ key: apikey.key })
+      .from(apikey)
+      .where(
+        and(
+          eq(apikey.userId, userId),
+          eq(apikey.enabled, true)
+        )
+      )
+      .limit(1)
+
+    return userApiKey[0]?.key || null
+  } catch (error) {
+    console.error('Error retrieving user API key:', error)
+    return null
+  }
+}
+
+/**
+ * Handle VIP payment request - creates payment session and sends payment email
+ */
+async function handleVipPaymentRequest(emailData: any, vipConfig: any, originalEmailId: string): Promise<void> {
+  try {
+    console.log(`💳 VIP Payment - Creating payment request for ${emailData.senderEmail} → ${emailData.recipient}`)
+
+    // Get user's API key for Inbound SDK
+    const userApiKey = await getUserApiKey(vipConfig.userId)
+    if (!userApiKey) {
+      console.error('No API key found for user:', vipConfig.userId)
+      throw new Error('User API key not found')
+    }
+
+    // Create user-specific Inbound client
+    const inbound = new Inbound({
+      apiKey: userApiKey,
+      defaultReplyFrom: 'payments@inbound.new'
+    })
+
+    // Get user's account-level Stripe key
+    const userAccount = await db
+      .select()
+      .from(userAccounts)
+      .where(eq(userAccounts.userId, vipConfig.userId))
+      .limit(1)
+
+    // Determine which Stripe instance to use
+    const stripe = userAccount[0]?.stripeRestrictedKey 
+      ? new Stripe(userAccount[0].stripeRestrictedKey)
+      : defaultStripe
+
+    // Create payment session
+    const sessionId = nanoid()
+    const expiresAt = new Date()
+    expiresAt.setHours(expiresAt.getHours() + (vipConfig.paymentLinkExpirationHours || 24))
+
+    // Create Stripe checkout session
+    const checkoutSession = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: `Email delivery to ${emailData.recipient}`,
+            description: vipConfig.customMessage || 
+              `Pay to deliver your email to ${emailData.recipient}. ${
+                vipConfig.allowAfterPayment 
+                  ? 'After payment, all your future emails will be delivered automatically.' 
+                  : 'This payment covers delivery of your current email only.'
+              }`
+          },
+          unit_amount: vipConfig.priceInCents,
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      metadata: {
+        sessionId,
+        vipConfigId: vipConfig.id,
+        senderEmail: emailData.senderEmail,
+        recipientEmail: emailData.recipient,
+        emailId: originalEmailId,
+      },
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/products/inboundvip/success?session_id=${sessionId}`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/products/inboundvip/cancelled`,
+      expires_at: Math.floor(expiresAt.getTime() / 1000),
+    })
+
+    // Store payment session
+    await db.insert(vipPaymentSessions).values({
+      id: sessionId,
+      vipConfigId: vipConfig.id,
+      senderEmail: emailData.senderEmail,
+      originalEmailId: originalEmailId,
+      stripePaymentLinkId: checkoutSession.id,
+      stripePaymentLinkUrl: checkoutSession.url,
+      stripeSessionId: checkoutSession.id,
+      status: 'pending',
+      expiresAt,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+
+    // Log the payment required attempt
+    await db.insert(vipEmailAttempts).values({
+      id: nanoid(),
+      vipConfigId: vipConfig.id,
+      senderEmail: emailData.senderEmail,
+      recipientEmail: emailData.recipient,
+      originalEmailId: originalEmailId,
+      emailSubject: emailData.subject,
+      status: 'payment_required',
+      paymentSessionId: sessionId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+
+    // Send payment request email
+    const recipientName = emailData.recipient.split('@')[0]
+    const senderName = emailData.senderEmail.split('@')[0]
+    
+    const emailHtml = await generateVipPaymentRequestEmail({
+      senderName,
+      senderEmail: emailData.senderEmail,
+      recipientName,
+      recipientEmail: emailData.recipient,
+      emailSubject: emailData.subject || 'No subject',
+      priceInCents: vipConfig.priceInCents,
+      customMessage: vipConfig.customMessage || undefined,
+      paymentUrl: checkoutSession.url!,
+      allowAfterPayment: vipConfig.allowAfterPayment || false,
+      expirationHours: vipConfig.paymentLinkExpirationHours || 24,
+    })
+    
+    // Reply using the original email ID directly
+    await inbound.reply(originalEmailId, {
+      from: 'payments@inbound.new',
+      subject: `Payment Required: ${emailData.subject}`,
+      html: emailHtml,
+      text: `Payment Required to Deliver Your Email
+
+Hi ${senderName},
+
+You're trying to reach ${recipientName} at ${emailData.recipient}, but they require a payment of $${(vipConfig.priceInCents / 100).toFixed(2)} to receive emails from new senders.
+
+${vipConfig.customMessage || ''}
+
+Your email subject: ${emailData.subject}
+
+Pay here: ${checkoutSession.url}
+
+${vipConfig.allowAfterPayment 
+  ? 'After payment, all your future emails to this address will be delivered automatically.' 
+  : 'This payment covers delivery of your current email only.'}
+
+This payment link expires in ${vipConfig.paymentLinkExpirationHours} hours.`
+    })
+
+    console.log(`✅ VIP Payment - Payment request sent to ${emailData.senderEmail}`)
+
+  } catch (error) {
+    console.error('❌ VIP Payment - Error creating payment request:', error)
+    throw error
+  }
+}
 
 /**
  * Main email routing function - routes emails to appropriate endpoints
@@ -31,6 +306,33 @@ export async function routeEmail(emailId: string): Promise<void> {
     // Find associated endpoint for this email
     if (!emailData.recipient) {
       throw new Error('Email recipient not found')
+    }
+
+    // NEW: Check VIP status before routing
+    if (emailData.senderEmail) {
+      const vipResult = await checkVipStatus(emailData.recipient, emailData.senderEmail)
+      if (vipResult.requiresPayment) {
+        console.log(`💰 VIP payment required for ${emailData.senderEmail} → ${emailData.recipient}`)
+        await handleVipPaymentRequest(emailData, vipResult.config, emailId)
+        return // Don't route to endpoint yet - wait for payment
+      }
+      
+      if (vipResult.isVipEnabled && vipResult.isAllowed) {
+        // Log allowed VIP attempt
+        await db.insert(vipEmailAttempts).values({
+          id: nanoid(),
+          vipConfigId: vipResult.config.id,
+          senderEmail: emailData.senderEmail,
+          recipientEmail: emailData.recipient,
+          originalEmailId: emailId,
+          emailSubject: emailData.subject,
+          status: 'allowed',
+          allowedReason: vipResult.reason || 'unknown',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        console.log(`✅ VIP allowed - ${emailData.senderEmail} → ${emailData.recipient}`)
+      }
     }
     
     // Pass userId to findEndpointForEmail to ensure proper filtering
@@ -92,12 +394,16 @@ async function getEmailWithStructuredData(emailId: string) {
   // Get the recipient from receivedEmails table
   const { receivedEmails } = await import('@/lib/db/schema')
   const recipientRecord = await db
-    .select({ recipient: receivedEmails.recipient })
+    .select({ 
+      recipient: receivedEmails.recipient,
+      from: receivedEmails.from 
+    })
     .from(receivedEmails)
     .where(eq(receivedEmails.id, emailId))
     .limit(1)
 
   const recipient = recipientRecord[0]?.recipient
+  const senderEmail = recipientRecord[0]?.from
 
   // Now get the full structured email data
   const emailWithStructuredData = await db
@@ -131,15 +437,15 @@ async function getEmailWithStructuredData(emailId: string) {
     .where(eq(structuredEmails.emailId, emailId))
     .limit(1)
 
-  const result = emailWithStructuredData[0]
-  if (result) {
-    return {
-      ...result,
-      recipient: recipient || null
-    }
+  if (!emailWithStructuredData[0]) {
+    return null
   }
 
-  return null
+  return {
+    ...emailWithStructuredData[0],
+    recipient,
+    senderEmail
+  }
 }
 
 /**
@@ -405,8 +711,6 @@ async function handleWebhookEndpoint(emailId: string, endpoint: Endpoint): Promi
   }
 }
 
-
-
 /**
  * Handle email forwarding endpoints (email and email_group types)
  */
@@ -505,41 +809,6 @@ function reconstructParsedEmailData(emailData: any): ParsedEmailData {
 }
 
 /**
- * Get default from address using verified domain
- */
-async function getDefaultFromAddress(recipient: string): Promise<string> {
-  try {
-    const domain = recipient.split('@')[1]
-    if (!domain) {
-      throw new Error('Invalid recipient email format')
-    }
-
-    // Look up verified domain
-    const domainRecord = await db
-      .select({ domain: emailDomains.domain })
-      .from(emailDomains)
-      .where(and(
-        eq(emailDomains.domain, domain),
-        eq(emailDomains.status, 'verified'),
-        eq(emailDomains.canReceiveEmails, true)
-      ))
-      .limit(1)
-
-    if (domainRecord[0]) {
-      return `noreply@${domainRecord[0].domain}`
-    }
-
-    // Fallback to recipient domain if not found in our records
-    return `noreply@${domain}`
-
-  } catch (error) {
-    console.error('❌ getDefaultFromAddress - Error getting default from address:', error)
-    // Ultimate fallback
-    return 'noreply@example.com'
-  }
-}
-
-/**
  * Track endpoint delivery in the unified deliveries table
  */
 async function trackEndpointDelivery(
@@ -570,4 +839,4 @@ async function trackEndpointDelivery(
     console.error('❌ trackEndpointDelivery - Error tracking delivery:', error)
     // Don't throw here as this is just tracking
   }
-} 
+}

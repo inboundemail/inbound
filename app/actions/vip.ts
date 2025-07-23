@@ -31,20 +31,41 @@ export async function toggleVipStatus(emailAddressId: string, isEnabled: boolean
     }
 
     if (isEnabled) {
-      // Create VIP config if enabling
-      const vipConfigId = nanoid()
-      
-      await db.insert(vipConfigs).values({
-        id: vipConfigId,
-        emailAddressId: emailAddressId,
-        userId: session.user.id,
-        priceInCents: 100, // Default $1.00
-        allowAfterPayment: false,
-        paymentLinkExpirationHours: 24,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
+      // Check if VIP config already exists
+      const existingConfig = await db
+        .select()
+        .from(vipConfigs)
+        .where(eq(vipConfigs.emailAddressId, emailAddressId))
+        .limit(1)
+
+      let vipConfigId: string
+
+      if (existingConfig[0]) {
+        // Reactivate existing config
+        vipConfigId = existingConfig[0].id
+        await db
+          .update(vipConfigs)
+          .set({
+            isActive: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(vipConfigs.id, vipConfigId))
+      } else {
+        // Create new VIP config
+        vipConfigId = nanoid()
+        
+        await db.insert(vipConfigs).values({
+          id: vipConfigId,
+          emailAddressId: emailAddressId,
+          userId: session.user.id,
+          priceInCents: 100, // Default $1.00
+          allowAfterPayment: false,
+          paymentLinkExpirationHours: 24,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+      }
 
       await db
         .update(emailAddresses)
@@ -55,12 +76,21 @@ export async function toggleVipStatus(emailAddressId: string, isEnabled: boolean
         })
         .where(eq(emailAddresses.id, emailAddressId))
     } else {
-      // Disable VIP
+      // Disable VIP - deactivate the config instead of deleting reference
+      if (emailAddress[0].vipConfigId) {
+        await db
+          .update(vipConfigs)
+          .set({
+            isActive: false,
+            updatedAt: new Date(),
+          })
+          .where(eq(vipConfigs.id, emailAddress[0].vipConfigId))
+      }
+
       await db
         .update(emailAddresses)
         .set({
           isVipEnabled: false,
-          vipConfigId: null,
           updatedAt: new Date(),
         })
         .where(eq(emailAddresses.id, emailAddressId))

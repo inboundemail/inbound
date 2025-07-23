@@ -8,6 +8,7 @@ import Envelope2 from '@/components/icons/envelope-2'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { nanoid } from 'nanoid'
+import { routeEmail } from '@/lib/email-management/email-router'
 
 async function processPaymentSuccess(sessionId: string) {
   // Get payment session
@@ -80,12 +81,45 @@ async function processPaymentSuccess(sessionId: string) {
     .limit(1)
 
   if (originalEmail[0]) {
-    // Deliver the original email
-    // This would typically trigger your normal email delivery flow
-    console.log('Delivering original email:', originalEmail[0].id)
+    console.log('💰 VIP Payment Success - Delivering original email after payment:', originalEmail[0].id)
     
-    // You might want to send a notification to the recipient
-    // or trigger your normal email processing flow here
+    try {
+      // Get the receivedEmails record ID that corresponds to this structured email
+      const { receivedEmails } = await import('@/lib/db/schema')
+      const originalEmailRecord = await db
+        .select({ 
+          id: receivedEmails.id,
+          recipient: receivedEmails.recipient 
+        })
+        .from(receivedEmails)
+        .where(eq(receivedEmails.id, originalEmail[0].emailId))
+        .limit(1)
+      
+      if (originalEmailRecord[0]) {
+        // Route the email through the normal system
+        await routeEmail(originalEmailRecord[0].id)
+        console.log('✅ VIP email delivered successfully after payment')
+        
+        // Update delivery status
+        await db.insert(vipEmailAttempts).values({
+          id: nanoid(),
+          vipConfigId: vipConfig[0].id,
+          senderEmail: paymentSession[0].senderEmail,
+          recipientEmail: originalEmailRecord[0].recipient || 'unknown',
+          originalEmailId: originalEmail[0].id,
+          emailSubject: originalEmail[0].subject,
+          status: 'delivered_after_payment',
+          allowedReason: 'payment_completed',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+      } else {
+        console.error('❌ Could not find receivedEmails record for structured email:', originalEmail[0].emailId)
+      }
+    } catch (error) {
+      console.error('❌ Failed to deliver VIP email after payment:', error)
+      // Could implement retry logic here
+    }
   }
 
   return { 
