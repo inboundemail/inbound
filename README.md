@@ -45,37 +45,46 @@ Pay-per-email premium routing for high-value communications. Skip the noise, get
 ### 🛠️ **Inbound Support**
 Built-in ticketing and customer support workflows. Turn any email address into a support center with automatic ticket creation, assignment, and tracking.
 
-### 📧 **ReEmail in SDK**
+### 📧 **Remail in SDK**
 Send emails directly through the same infrastructure. One API for both sending and receiving emails, with automatic reply-to handling and conversation threading.
 
 ## Quick Start
 
-### 1. Get your API key
+### 1. Install the SDK
 ```bash
-# Sign up at inbound.exon.dev and grab your API key
-export INBOUND_API_KEY="your-api-key-here"
+npm install @inboundemail/sdk
+# or
+bun add @inboundemail/sdk
 ```
 
-### 2. Add a domain
-```bash
-curl -X POST "https://inbound.exon.dev/api/v2/domains" \
-  -H "Authorization: Bearer $INBOUND_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"domain": "yourdomain.com"}'
+### 2. Initialize with your API key
+```javascript
+import { Inbound } from '@inboundemail/sdk'
+
+// Get your API key from inbound.new
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
 ```
 
-### 3. Create an email address
-```bash
-curl -X POST "https://inbound.exon.dev/api/v2/email-addresses" \
-  -H "Authorization: Bearer $INBOUND_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "address": "hello@yourdomain.com",
-    "webhookUrl": "https://yourapp.com/webhook/email"
-  }'
+### 3. Add a domain
+```javascript
+const domain = await inbound.domains.create({
+  domain: "yourdomain.com"
+})
+
+console.log("Domain added:", domain.domain)
 ```
 
-### 4. Start receiving emails
+### 4. Create an email address
+```javascript
+const emailAddress = await inbound.emailAddresses.create({
+  address: "hello@yourdomain.com",
+  webhookUrl: "https://yourapp.com/webhook/email"
+})
+
+console.log("Email address created:", emailAddress.address)
+```
+
+### 5. Start receiving emails
 Send an email to `hello@yourdomain.com` and watch your webhook fire with the parsed content.
 
 ## Local Development
@@ -129,15 +138,6 @@ await inbound.mail.reply(emailId, {
 - **Domain verification** and DNS management
 - **Usage tracking** and billing integration
 
-## Architecture
-
-Built on AWS with SES for email receiving, Lambda for processing, and S3 for storage. The Next.js dashboard gives you full control over your email infrastructure.
-
-```
-Email → AWS SES → Lambda → Your Webhook
-                     ↓
-               Dashboard & API
-```
 
 ## Deployment
 
@@ -159,4 +159,4 @@ We're building email infrastructure that doesn't suck. Want to help?
 
 ---
 
-**Ready to ditch your email provider? [Get started →](https://inbound.exon.dev)**
+**Ready to ditch your email provider? [Get started →](https://inbound.new)**

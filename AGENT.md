@@ -26,3 +26,6 @@
 - **API**: Create new functions/components in `app/api/` folder following OpenAPI spec & the v2-api spec
 - **No Comments**: Don't add code comments unless explicitly requested
 - **Don't Create useless readme files**: If a file is self-explanatory, don't create a readme file for it
+
+## Application and Business Logic
+- **Website & Docs** - the official website is inbound.new, the API is inbound.new/api/v2, and the docs are at docs.inbound.new
