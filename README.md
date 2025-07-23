@@ -1,4 +1,5 @@
 # 📬 Inbound - Email Infrastructure Made Simple
+<img width="2912" height="1363" alt="Frame 2" src="https://github.com/user-attachments/assets/a9ca6121-869c-4a00-84fb-24e5c08207bc" />
 
 **Stop juggling email providers. Start building.**
 
