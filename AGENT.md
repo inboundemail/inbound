@@ -7,6 +7,7 @@
 - `bun run test-api` - Run API tests (`bun run app/api/v2/api.test.ts`)
 - `bun run test-sdk` - Run SDK tests (`bun run app/api/v2/sdk.test.ts`)
 - Single test: `bun test app/api/v2/testing.test.ts` (use bun test for individual files)
+- `bun run inbound-webhook-test` - Simulate SES email webhook for local testing
 
 ## Architecture & Structure
 - **Next.js 15** app with turbopack, AWS infrastructure (SES, Lambda, S3, CDK)
