@@ -94,7 +94,7 @@ export interface InboundParsedEmailData {
 
 // Email data structure in webhook
 export interface InboundWebhookEmail {
-  id: string
+  id: string // Structured email ID (compatible with v2 API reply endpoint)
   messageId: string | null
   from: InboundEmailAddress | null
   to: InboundEmailAddress | null
