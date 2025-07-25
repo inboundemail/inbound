@@ -490,7 +490,7 @@ export async function triggerEmailAction(emailId: string): Promise<{ success: bo
       event: 'email.received',
       timestamp: new Date().toISOString(),
       email: {
-        id: emailData.emailId,
+        id: emailData.structuredId, // Use structured email ID for v2 API compatibility
         messageId: emailData.messageId,
         from: emailData.from,
         to: JSON.parse(emailData.to),
@@ -534,7 +534,7 @@ export async function triggerEmailAction(emailId: string): Promise<{ success: bo
       'X-Webhook-Event': 'email.received',
       'X-Webhook-ID': webhook.id,
       'X-Webhook-Timestamp': webhookPayload.timestamp,
-      'X-Email-ID': emailData.emailId,
+      'X-Email-ID': emailData.structuredId, // Use structured email ID for v2 API compatibility
       'X-Message-ID': emailData.messageId,
     }
 

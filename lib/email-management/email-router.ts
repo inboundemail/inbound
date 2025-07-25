@@ -295,7 +295,7 @@ async function handleWebhookEndpoint(emailId: string, endpoint: Endpoint): Promi
       event: 'email.received',
       timestamp: new Date().toISOString(),
       email: {
-        id: emailData.emailId,
+        id: emailData.structuredId, // Use structured email ID for v2 API compatibility
         messageId: emailData.messageId,
         from: emailData.fromData ? JSON.parse(emailData.fromData) : null,
         to: emailData.toData ? JSON.parse(emailData.toData) : null,
@@ -332,7 +332,7 @@ async function handleWebhookEndpoint(emailId: string, endpoint: Endpoint): Promi
       'X-Webhook-Event': 'email.received',
       'X-Endpoint-ID': endpoint.id,
       'X-Webhook-Timestamp': webhookPayload.timestamp,
-      'X-Email-ID': emailData.emailId,
+      'X-Email-ID': emailData.structuredId, // Use structured email ID for v2 API compatibility
       'X-Message-ID': emailData.messageId || '',
       ...customHeaders
     }

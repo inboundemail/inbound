@@ -5,6 +5,10 @@
 
 Inbound gives you programmable email addresses that automatically process incoming messages and trigger webhooks in your app. Think of it as email infrastructure that actually works the way you'd want it to.
 
+<a href="https://vercel.com/oss?utm_source=inbound&utm_medium=referral&utm_campaign=oss">
+  <img alt="Vercel OSS Program" src="https://vercel.com/oss/program-badge.svg" />
+</a>
+
 ## What does it do?
 
 ### 📨 **Receive Emails Programmatically**
