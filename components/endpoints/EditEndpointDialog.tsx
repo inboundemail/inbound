@@ -88,7 +88,8 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
   }, [open, updateEndpointMutation.isPending, endpoint, formData, webhookConfig, emailConfig, emailGroupConfig])
 
   useEffect(() => {
-    if (endpoint) {
+    if (endpoint && open) {
+      // Reset form data when endpoint changes and dialog is open
       setFormData({
         name: endpoint.name,
         description: endpoint.description || '',
@@ -106,6 +107,7 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
           parsedConfig = JSON.parse(endpoint.config)
         } catch (e) {
           console.error('Failed to parse endpoint config:', e)
+          parsedConfig = {}
         }
       }
 
@@ -131,8 +133,11 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
           fromAddress: (parsedConfig as EmailGroupConfig).fromAddress || ''
         })
       }
+      
+      // Clear any previous errors
+      setErrors({})
     }
-  }, [endpoint])
+  }, [endpoint, open])
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
@@ -226,6 +231,7 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
   }
 
   const handleClose = () => {
+    // Only clear temporary input fields, not the main form data
     setHeaderKey('')
     setHeaderValue('')
     setNewEmail('')
