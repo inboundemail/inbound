@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, FormEvent } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
+import { track } from '@vercel/analytics'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -376,6 +377,12 @@ export default function AddDomainForm({
 
       const successResult = addResult as PostDomainsResponse
       console.log("Domain added successfully:", successResult)
+
+      // Track domain addition
+      track('Domain Added', {
+        domain: domainName,
+        domainId: successResult.id
+      })
 
       // Call success callback if provided
       if (onSuccess) {

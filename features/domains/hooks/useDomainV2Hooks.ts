@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { track } from '@vercel/analytics'
 import type { 
     GetDomainsResponse,
     GetDomainsRequest,
@@ -199,6 +200,13 @@ export const useAddEmailAddressV2Mutation = () => {
             return response.json()
         },
         onSuccess: (data) => {
+            // Track email address addition
+            track('Email Address Added', {
+                address: data.address,
+                domainId: data.domainId,
+                emailAddressId: data.id
+            })
+            
             // Invalidate domain details to refresh email addresses
             queryClient.invalidateQueries({ queryKey: domainV2Keys.detail(data.domainId) })
             queryClient.invalidateQueries({ queryKey: domainV2Keys.emailAddresses(data.domainId) })
@@ -282,7 +290,13 @@ export const useUpdateDomainCatchAllV2Mutation = () => {
             }
             return response.json()
         },
-        onSuccess: (_, { domainId }) => {
+        onSuccess: (_, { domainId, isCatchAllEnabled, catchAllEndpointId }) => {
+            // Track catch-all toggle
+            track(isCatchAllEnabled ? 'Catch All Enabled' : 'Catch All Disabled', {
+                domainId: domainId,
+                endpointId: catchAllEndpointId || null
+            })
+            
             // Invalidate domain details to refresh catch-all status
             queryClient.invalidateQueries({ queryKey: domainV2Keys.detail(domainId) })
         },

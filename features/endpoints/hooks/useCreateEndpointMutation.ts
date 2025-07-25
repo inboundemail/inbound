@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { track } from '@vercel/analytics'
 import type { CreateEndpointData, Endpoint } from '../types'
 
 async function createEndpoint(data: CreateEndpointData): Promise<Endpoint> {
@@ -24,7 +25,14 @@ export const useCreateEndpointMutation = () => {
   
   return useMutation({
     mutationFn: createEndpoint,
-    onSuccess: () => {
+    onSuccess: (endpoint) => {
+      // Track endpoint creation
+      track('Endpoint Created', {
+        endpointType: endpoint.type,
+        endpointName: endpoint.name,
+        endpointId: endpoint.id
+      })
+      
       // Invalidate and refetch endpoints list
       queryClient.invalidateQueries({ queryKey: ['endpoints'] })
     },

@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { track } from '@vercel/analytics'
 import { createWebhook } from '@/app/actions/webhooks'
 import { CreateWebhookData } from '@/features/webhooks/types'
 
@@ -14,6 +15,13 @@ export const useCreateWebhookMutation = () => {
       return result.webhook
     },
     onSuccess: (newWebhook) => {
+      // Track webhook creation
+      track('Webhook Created', {
+        webhookName: newWebhook.name,
+        webhookId: newWebhook.id,
+        webhookUrl: newWebhook.url
+      })
+      
       // Invalidate and refetch webhooks
       queryClient.invalidateQueries({ queryKey: ['webhooks'] })
       

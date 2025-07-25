@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { track } from '@vercel/analytics'
 import { deleteWebhook } from '@/app/actions/webhooks'
 
 export const useDeleteWebhookMutation = () => {
@@ -10,6 +11,12 @@ export const useDeleteWebhookMutation = () => {
       if (!result.success) {
         throw new Error(result.error)
       }
+      
+      // Track webhook deletion
+      track('Webhook Deleted', {
+        webhookId: id
+      })
+      
       return result
     },
     onMutate: async (id) => {
