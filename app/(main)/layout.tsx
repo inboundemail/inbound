@@ -5,7 +5,7 @@ import SiteHeader from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { NavigationProvider } from "@/contexts/navigation-context"
-import { ViewTransitions } from "next-view-transitions"
+
 import { EnhancedPageTransition } from "@/components/page-transition"
 import { useSession } from "@/lib/auth/auth-client"
 import { useRouter, usePathname } from "next/navigation"
@@ -57,18 +57,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <ViewTransitions>
-      <NavigationProvider>
-        <SidebarProvider>
-          <AppSidebar variant="sidebar" />
-          <SidebarInset>
-            <EnhancedPageTransition direction="horizontal" className="h-full">
-              {children}
-            </EnhancedPageTransition>
-          </SidebarInset>
-        </SidebarProvider>
-      </NavigationProvider>
+    <NavigationProvider>
+      <SidebarProvider>
+        <AppSidebar variant="sidebar" />
+        <SidebarInset>
+          <EnhancedPageTransition direction="horizontal" className="h-full">
+            {children}
+          </EnhancedPageTransition>
+        </SidebarInset>
+      </SidebarProvider>
       <Toaster />
-    </ViewTransitions>
+    </NavigationProvider>
   )
 }
