@@ -1,0 +1,139 @@
+---
+title: SDK v2 - Comprehensive API Coverage & Streamlined Replies
+date: 2025-01-20
+version: 2.0.0
+summary: Major SDK overhaul with expanded API coverage, improved developer experience, streamlined reply functionality, and robust TypeScript support.
+---
+
+## Overview
+
+We're excited to announce SDK v2, a complete overhaul of the `@inboundemail/sdk` that brings comprehensive API coverage, an improved developer experience, and powerful new features for handling email workflows.
+
+## Key Features
+
+### 🚀 New Client Structure
+The SDK now uses a cleaner, more intuitive structure:
+
+```javascript
+import { Inbound } from '@inboundemail/sdk'
+
+const inbound = new Inbound('your-api-key')
+```
+
+### 📧 Streamlined Email Replies
+Replying to emails has never been easier, especially from webhook handlers:
+
+```javascript
+// Simple reply with default settings
+await inbound.reply(webhookEmail, "Thanks for your message!")
+
+// Reply with custom from address
+await inbound.reply(webhookEmail, {
+  from: "support@company.com",
+  text: "Thanks for reaching out!"
+})
+
+// Full control over the reply
+await inbound.reply(webhookEmail, {
+  from: "support@company.com",
+  subject: "Re: Your inquiry",
+  html: "<p>Thanks for your message!</p>",
+  attachments: [...]
+})
+```
+
+### 🛠️ Comprehensive API Coverage
+
+#### Emails API (Sending)
+```javascript
+// Send emails
+const email = await inbound.emails.send({
+  from: "hello@example.com",
+  to: "recipient@example.com",
+  subject: "Hello!",
+  html: "<p>Email content</p>"
+})
+
+// Get email details
+const details = await inbound.emails.get(emailId)
+```
+
+#### Mail API (Received Emails)
+```javascript
+// List received emails
+const emails = await inbound.mail.list()
+
+// Get specific email
+const email = await inbound.mail.get(emailId)
+```
+
+#### Endpoints API
+Full CRUD operations for webhook endpoints:
+```javascript
+const endpoint = await inbound.endpoints.create({
+  url: "https://your-app.com/webhook",
+  description: "Production webhook"
+})
+
+await inbound.endpoints.update(endpointId, { url: newUrl })
+await inbound.endpoints.delete(endpointId)
+```
+
+#### Domains API
+Complete domain management:
+```javascript
+const domains = await inbound.domains.list()
+const domain = await inbound.domains.create({ domain: "example.com" })
+await inbound.domains.updateCatchAll(domainId, { enabled: true })
+```
+
+### 🔒 Enhanced TypeScript Support
+All methods are fully typed with comprehensive TypeScript definitions:
+
+```typescript
+import type { 
+  InboundWebhookPayload,
+  InboundWebhookEmail,
+  CreateEndpointParams,
+  Domain
+} from '@inboundemail/sdk'
+```
+
+### 🪝 Webhook Helpers
+New utilities for processing webhook data:
+
+```javascript
+import { isInboundWebhook, getSenderInfo, getEmailText } from '@inboundemail/sdk'
+
+// Validate webhook payload
+if (isInboundWebhook(payload)) {
+  const sender = getSenderInfo(payload.email)
+  const text = getEmailText(payload.email)
+}
+```
+
+## Migration Guide
+
+Upgrading from v1? Here's what changed:
+
+1. **Client initialization**: `InboundEmailClient` → `Inbound`
+2. **Email sending**: `client.sendEmail()` → `inbound.emails.send()`
+3. **New features**: Reply functionality, mail retrieval, endpoint management
+
+## What's Next
+
+We're continuously improving the SDK. Coming soon:
+- Batch operations support
+- Advanced filtering for email lists
+- Webhook signature verification helpers
+
+## Get Started
+
+Install the latest version:
+```bash
+npm install @inboundemail/sdk@latest
+# or
+bun add @inboundemail/sdk@latest
+```
+
+Check out our [updated documentation](https://docs.inbound.email) and [example projects](https://github.com/inbound/sdk-examples) to get started! 

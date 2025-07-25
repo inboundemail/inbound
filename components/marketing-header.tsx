@@ -4,11 +4,13 @@ import BoltLightning from "@/components/icons/bolt-lightning"
 import Envelope2 from "@/components/icons/envelope-2"
 import ShieldCheck from "@/components/icons/shield-check"
 import Code2 from "@/components/icons/code-2"
+import File2 from "@/components/icons/file-2"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { auth } from "@/lib/auth/auth"
 import { headers } from "next/headers"
@@ -98,8 +100,24 @@ export default async function MarketingHeader() {
                       <ShieldCheck className="w-4 h-4 text-red-600 group-hover:text-red-700" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 text-sm group-hover:text-red-900">Add to Blocklist</div>
-                      <div className="text-xs text-gray-500 mt-1 group-hover:text-red-600">Block unwanted senders with one-click protection</div>
+                      <div className="font-medium text-gray-900 text-sm group-hover:text-red-900">Block Spam</div>
+                      <div className="text-xs text-gray-500 mt-1 group-hover:text-red-600">Advanced spam filtering and email blocking</div>
+                    </div>
+                  </div>
+                </a>
+              </DropdownMenuItem>
+              
+              <DropdownMenuSeparator className="my-2" />
+              
+              <DropdownMenuItem asChild className="p-0">
+                <a href="/changelog" className="w-full cursor-pointer p-4 rounded-lg hover:bg-purple-50 hover:border-purple-200 border border-transparent transition-all duration-200 group">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-purple-200 transition-colors">
+                      <File2 className="w-4 h-4 text-purple-600 group-hover:text-purple-700" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900 text-sm group-hover:text-purple-900">Changelog</div>
+                      <div className="text-xs text-gray-500 mt-1 group-hover:text-purple-600">Latest updates and improvements</div>
                     </div>
                   </div>
                 </a>

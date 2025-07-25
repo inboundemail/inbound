@@ -1,30 +1,37 @@
-# AGENT.md - Inbound Email System
+# AGENT.md - Development Guide for Inbound Email System
 
 ## Build/Test Commands
-- `bun run dev` - Start Next.js development server with turbopack
-- `bun run build` - Build Next.js application with turbopack
+- `bun run dev` - Start Next.js dev server (turbopack enabled) **requires approval**
+- `bun run build` - Build Next.js app (turbopack enabled) **requires approval**  
 - `bun run lint` - Run Next.js linting
-- `bun run app/api/v1/sdk/tests/run-tests.ts` - Run all tests
-- `bun run app/api/v1/sdk/tests/run-tests.ts unit` - Run unit tests only
-- `bun run app/api/v1/sdk/tests/run-tests.ts integration` - Run integration tests only
+- `bun run test-api` - Run API tests (`bun run app/api/v2/api.test.ts`)
+- `bun run test-sdk` - Run SDK tests (`bun run app/api/v2/sdk.test.ts`)
+- Single test: `bun test app/api/v2/testing.test.ts` (use bun test for individual files)
+- `bun run inbound-webhook-test` - Comprehensive SES email webhook simulator with templates
+- `bun run inbound-webhook` - Simple webhook tester with customizable sender/recipient
 
-## Architecture
-- **Next.js 15** app with App Router (app/ directory)
-- **Database**: PostgreSQL with Drizzle ORM (lib/db/schema.ts)
-- **Auth**: better-auth (lib/auth.ts)
-- **Email System**: AWS SES + Lambda + S3 for email processing
-- **Billing**: Stripe integration with autumn-js for usage tracking
-- **Styling**: Tailwind CSS with radix-ui components
-- **API**: RESTful endpoints in app/api/ with OpenAPI schema
+## Architecture & Structure
+- **Next.js 15** app with turbopack, AWS infrastructure (SES, Lambda, S3, CDK)
+- **Database**: Drizzle ORM with schema in `lib/db/schema.ts`, uses `structuredEmails` (NOT deprecated `receivedEmails`/`parsedEmails`) do not write raw sql queries, always use the ORM.
+- **Key Modules**: `lib/email-management/` (routing, parsing), `features/` (domain logic), `app/api/v2/` (REST API)
+- **AWS**: CDK stack in `aws/cdk/`, Lambda processors in `lambda/`, deployment scripts in `scripts/`
+- **Frontend**: React 19, TanStack Query, Radix UI, Tailwind CSS, Framer Motion
 
-## Code Style
-- **TypeScript**: Strict mode enabled, ES2017 target
-- **Imports**: Use `@/` alias for root imports
-- **Server Actions**: `"use server"` directive for server actions (app/actions/)
-- **Database**: Drizzle ORM with schema in lib/db/schema.ts
-- **Error Handling**: Return objects with `{ success: boolean, error?: string }`
-- **Async/Await**: Use async/await over promises
-- **Logging**: Console.log with emoji prefixes (🚀, ✅, ❌, 🔍, etc.)
-- **Authentication**: Use `auth.api.getSession()` for protected routes
-- **Validation**: Zod for runtime validation
-- **File Structure**: Group by feature (actions, components, lib)
+## Code Style & Conventions
+- **Package Manager**: Only use `bun` (never npm/yarn)
+- **Types**: Find existing types in schemas, don't create duplicates
+- **Imports**: Use `@/` path alias, group external → local → types
+- **Error Handling**: try/catch with proper propagation, React Query patterns for client errors
+- **Async/Await**: Prefer async/await over .then() chains
+- **Icons**: Use Nucleo icons via MCP
+- **API**: Create new functions/components in `app/api/` folder following OpenAPI spec & the v2-api spec
+- **No Comments**: Don't add code comments unless explicitly requested
+- **Don't Create useless readme files**: If a file is self-explanatory, don't create a readme file for it
+- **Never run bunx dizzle-kit generate/push** - I will manually do that just prompt me to do so.
+
+## Recent Changes
+- **VIP System Security Fixes Applied** - Critical security vulnerabilities have been fixed in the VIP payment system
+- **Database Schema Updated** - Added unique constraints and indexes for VIP tables (requires migration) 
+
+## Application and Business Logic
+- **Website & Docs** - the official website is inbound.new, the API is inbound.new/api/v2, and the docs are at docs.inbound.new

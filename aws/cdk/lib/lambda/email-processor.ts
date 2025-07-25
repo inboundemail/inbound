@@ -209,33 +209,59 @@ export const handler = async (event: any, context: any) => {
         const messageId = sesData.mail.messageId;
         const subject = sesData.mail.commonHeaders?.subject || 'No Subject';
 
-        // Extract domain from recipient email
-        const recipients = sesData.mail.destination || [];
-        const recipientEmail = recipients[0] || '';
-        const domain = recipientEmail.split('@')[1] || '';
+        // Extract ALL recipient emails (destination includes To, CC, and BCC)
+        const allRecipients = sesData.mail.destination || [];
+        
+        // Also check commonHeaders for additional recipients if needed
+        const toRecipients = sesData.mail.commonHeaders?.to || [];
+        const ccRecipients = sesData.mail.commonHeaders?.cc || [];
+        const bccRecipients = sesData.mail.commonHeaders?.bcc || [];
+        
+        // Combine all recipients and extract unique domains
+        const allEmails = [...new Set([
+          ...allRecipients,
+          ...toRecipients.map((r: any) => typeof r === 'string' ? r : r.address).filter(Boolean),
+          ...ccRecipients.map((r: any) => typeof r === 'string' ? r : r.address).filter(Boolean),
+          ...bccRecipients.map((r: any) => typeof r === 'string' ? r : r.address).filter(Boolean)
+        ])];
+        
+        // Extract unique domains from all recipients
+        const domains = [...new Set(
+          allEmails
+            .map(email => {
+              const match = email.match(/@([^@\s]+)$/);
+              return match ? match[1] : null;
+            })
+            .filter(Boolean)
+        )];
+        
+        console.log(`📨 ${requestId}|Lambda - Processing email: ${messageId}`);
+        console.log(`📧 EMAIL_RECIPIENTS|${requestId}|Found ${allEmails.length} recipients across ${domains.length} domains`);
+        console.log(`🔍 ${requestId}|Lambda - Recipients:`, allEmails);
+        console.log(`🔍 ${requestId}|Lambda - Domains:`, domains);
         
         // Try to get S3 object key from SES receipt action first
         let objectKey = sesData.receipt?.action?.objectKey;
         let s3Bucket = sesData.receipt?.action?.bucketName || s3BucketName;
 
-        console.log(`📨 ${requestId}|Lambda - Processing email: ${messageId}`);
-        console.log(`📧 EMAIL_TARGET|${requestId}|${recipientEmail}|Processing email for ${recipientEmail}`);
         console.log(`🔍 ${requestId}|Lambda - SES provided object key: ${objectKey || 'NOT PROVIDED'}`);
 
         // If SES didn't provide the object key, we need to determine the correct location
-        // Check both individual and catch-all locations
         let emailContent = null;
         
         if (!objectKey) {
-          console.log(`⚠️ ${requestId}|Lambda - No S3 object key in SES event, will check both possible locations`);
+          console.log(`⚠️ ${requestId}|Lambda - No S3 object key in SES event, will check multiple locations`);
           
-          // Possible locations for the email:
-          // 1. Individual email rule: emails/{domain}/{messageId}
-          // 2. Catch-all rule: emails/{domain}/catchall/{messageId}
-          const possibleKeys = [
-            `emails/${domain}/${messageId}`,           // Individual rule location
-            `emails/${domain}/catchall/${messageId}`   // Catch-all rule location
-          ];
+          // Build list of possible locations across all domains
+          const possibleKeys: string[] = [];
+          
+          // For each domain, check both individual and catch-all locations
+          for (const domain of domains) {
+            possibleKeys.push(
+              `emails/${domain}/${messageId}`,           // Individual rule location
+              `emails/${domain}/catchall/${messageId}`   // Catch-all rule location
+            );
+          }
 
           console.log(`🔍 ${requestId}|Lambda - Will check these S3 locations:`, possibleKeys);
 
@@ -255,6 +281,7 @@ export const handler = async (event: any, context: any) => {
           if (!foundKey) {
             console.error(`❌ ${requestId}|Lambda - Email not found in any expected location for message ${messageId}`);
             console.error(`❌ ${requestId}|Lambda - Checked locations:`, possibleKeys.map(key => `${s3Bucket}/${key}`));
+            console.error(`❌ ${requestId}|Lambda - Recipients were:`, allEmails);
             throw new Error(`Email content not found in S3 for message ${messageId}`);
           }
 
@@ -275,8 +302,8 @@ export const handler = async (event: any, context: any) => {
         // Log processing details for debugging
         console.log(`🔍 ${requestId}|Processing email details:`, {
           messageId,
-          recipientEmail,
-          domain,
+          recipientCount: allEmails.length,
+          domains: domains,
           objectKey,
           s3BucketFromReceipt: sesData.receipt?.action?.bucketName,
           s3BucketFromEnv: s3BucketName,

@@ -1,0 +1,54 @@
+---
+title: Lambda Multi-Recipient Email Processing Fix
+date: 2025-01-23
+version: 2.1.0
+summary: Fixed an issue where emails sent to multiple recipients (CC/BCC) were not being found in S3 storage due to incorrect domain detection logic.
+---
+
+## The Problem
+
+Our Lambda function was failing to process emails when they were sent to multiple recipients across different domains. The function would only check the first recipient's domain when searching for emails in S3, causing failures for BCC'd emails or emails sent to multiple domains.
+
+## What Changed
+
+### Enhanced Domain Detection
+The Lambda now considers **all recipients** when determining where to search for emails:
+- Extracts recipients from To, CC, and BCC fields
+- Identifies all unique domains across recipients
+- Searches all possible S3 locations until the email is found
+
+### Improved Error Handling
+- Better logging shows all recipients and domains being checked
+- More descriptive error messages when emails can't be found
+- Includes recipient information in error logs for easier debugging
+
+## Technical Details
+
+Previously, the Lambda used this logic:
+```javascript
+const recipientEmail = recipients[0] || '';
+const domain = recipientEmail.split('@')[1] || '';
+```
+
+Now it uses comprehensive recipient detection:
+```javascript
+const allEmails = [...new Set([
+  ...allRecipients,
+  ...toRecipients.map(r => typeof r === 'string' ? r : r.address),
+  ...ccRecipients.map(r => typeof r === 'string' ? r : r.address),
+  ...bccRecipients.map(r => typeof r === 'string' ? r : r.address)
+])];
+
+const domains = [...new Set(
+  allEmails.map(email => email.match(/@([^@\s]+)$/)?.[1]).filter(Boolean)
+)];
+```
+
+## Impact
+
+This fix ensures that:
+- Emails sent as BCC are properly processed
+- Multi-domain email scenarios work correctly
+- Email forwarding is more reliable across complex recipient configurations
+
+No action is required from users - this fix is automatically deployed to all Lambda functions. 

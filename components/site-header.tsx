@@ -96,6 +96,12 @@ export default function SiteHeader() {
                       Docs
                     </a>
                   </div>
+                  <div>
+                    <a href="/changelog" className="flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-gray-100 rounded-md transition-colors">
+                      <BoltLightning className="w-4 h-4" />
+                      Changelog
+                    </a>
+                  </div>
                 </div>
                 
                 {/* Emails as Webhook Card */}
