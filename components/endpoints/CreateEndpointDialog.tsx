@@ -114,6 +114,15 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
       if (!formData.name.trim()) {
         newErrors.name = 'Name is required'
       }
+      
+      // For email forwards, validate email in basic step
+      if (selectedType === 'email') {
+        if (!emailConfig.forwardTo.trim()) {
+          newErrors.forwardTo = 'Forward to email is required'
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailConfig.forwardTo)) {
+          newErrors.forwardTo = 'Please enter a valid email address'
+        }
+      }
     }
 
     if (currentStep === 'config' && selectedType) {
@@ -158,7 +167,14 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
 
   const canProceedToNextStep = (): boolean => {
     if (currentStep === 'type') return selectedType !== null
-    if (currentStep === 'basic') return formData.name.trim() !== ''
+    if (currentStep === 'basic') {
+      const hasName = formData.name.trim() !== ''
+      if (selectedType === 'email') {
+        const hasValidEmail = emailConfig.forwardTo.trim() !== '' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailConfig.forwardTo)
+        return hasName && hasValidEmail
+      }
+      return hasName
+    }
     return false
   }
 
@@ -312,9 +328,9 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
       case 'type':
         return 'Choose Endpoint Type'
       case 'basic':
-        return 'Basic Information'
+        return selectedType === 'email' ? 'Email Forward Setup' : 'Basic Information'
       case 'config':
-        return `Configure ${selectedType === 'webhook' ? 'Webhook' : selectedType === 'email' ? 'Email Forward' : 'Email Group'}`
+        return selectedType === 'email' ? 'Review & Create' : `Configure ${selectedType === 'webhook' ? 'Webhook' : 'Email Group'}`
       default:
         return 'Create New Endpoint'
     }
@@ -382,15 +398,39 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
           {/* Step 2: Basic Information */}
           {currentStep === 'basic' && (
             <div className="space-y-4">
+              {/* For email forwards, show email field first */}
+              {selectedType === 'email' && (
+                <div className="space-y-2">
+                  <Label htmlFor="forwardToBasic">Forward To Email *</Label>
+                  <Input
+                    id="forwardToBasic"
+                    type="email"
+                    value={emailConfig.forwardTo}
+                    onChange={(e) => {
+                      const email = e.target.value
+                      setEmailConfig(prev => ({ ...prev, forwardTo: email }))
+                      // Auto-populate name field if it's empty or matches the previous email
+                      if (!formData.name.trim() || formData.name === emailConfig.forwardTo) {
+                        setFormData(prev => ({ ...prev, name: email }))
+                      }
+                    }}
+                    placeholder="support@yourcompany.com"
+                    className={errors.forwardTo ? 'border-red-500' : ''}
+                    autoFocus
+                  />
+                  {errors.forwardTo && <p className="text-sm text-red-500">{errors.forwardTo}</p>}
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="name">Name *</Label>
                 <Input
                   id="name"
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder={`${selectedType === 'webhook' ? 'Production Webhook' : selectedType === 'email' ? 'Support Email Forward' : 'Team Email Group'}`}
+                  placeholder={`${selectedType === 'webhook' ? 'Production Webhook' : selectedType === 'email' ? 'Auto-filled from email above' : 'Team Email Group'}`}
                   className={errors.name ? 'border-red-500' : ''}
-                  autoFocus
+                  autoFocus={selectedType !== 'email'}
                 />
                 {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
               </div>
@@ -405,6 +445,35 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                   rows={3}
                 />
               </div>
+
+              {/* For email forwards, show additional config options */}
+              {selectedType === 'email' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="subjectPrefixBasic">Subject Prefix</Label>
+                    <Input
+                      id="subjectPrefixBasic"
+                      value={emailConfig.subjectPrefix}
+                      onChange={(e) => setEmailConfig(prev => ({ ...prev, subjectPrefix: e.target.value }))}
+                      placeholder="[Forwarded] "
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Optional prefix to add to forwarded email subjects
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                    <div>
+                      <Label className="text-sm font-medium">Include Attachments</Label>
+                      <p className="text-xs text-muted-foreground">Forward email attachments</p>
+                    </div>
+                    <Switch
+                      checked={emailConfig.includeAttachments}
+                      onCheckedChange={(checked) => setEmailConfig(prev => ({ ...prev, includeAttachments: checked }))}
+                    />
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -554,47 +623,43 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
               )}
 
               {selectedType === 'email' && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="forwardTo">Forward To *</Label>
-                    <Input
-                      id="forwardTo"
-                      type="email"
-                      value={emailConfig.forwardTo}
-                      onChange={(e) => setEmailConfig(prev => ({ ...prev, forwardTo: e.target.value }))}
-                      placeholder="recipient@example.com"
-                      className={errors.forwardTo ? 'border-red-500' : ''}
-                      autoFocus
-                    />
-                    {errors.forwardTo && <p className="text-sm text-red-500">{errors.forwardTo}</p>}
+                <div className="text-center py-8">
+                  <div className="flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/20 mx-auto mb-4">
+                    <Envelope2 className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                   </div>
-
-                  {/* Subject Prefix */}
-                  <div className="space-y-2">
-                    <Label htmlFor="subjectPrefix">Subject Prefix</Label>
-                    <Input
-                      id="subjectPrefix"
-                      value={emailConfig.subjectPrefix}
-                      onChange={(e) => setEmailConfig(prev => ({ ...prev, subjectPrefix: e.target.value }))}
-                      placeholder="[Forwarded] "
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Optional prefix to add to forwarded email subjects
-                    </p>
-                  </div>
-
-                  {/* Include Attachments */}
-                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                    <div>
-                      <Label className="text-sm font-medium">Include Attachments</Label>
-                      <p className="text-xs text-muted-foreground">Forward email attachments</p>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">Email Forward Ready</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Your email forward is configured and ready to create.
+                  </p>
+                  <div className="bg-muted rounded-lg p-4 text-left">
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm font-medium">Forward to:</span>
+                        <span className="text-sm font-mono">{emailConfig.forwardTo}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm font-medium">Name:</span>
+                        <span className="text-sm">{formData.name}</span>
+                      </div>
+                      {formData.description && (
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium">Description:</span>
+                          <span className="text-sm">{formData.description}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-sm font-medium">Include attachments:</span>
+                        <span className="text-sm">{emailConfig.includeAttachments ? 'Yes' : 'No'}</span>
+                      </div>
+                      {emailConfig.subjectPrefix && (
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium">Subject prefix:</span>
+                          <span className="text-sm font-mono">{emailConfig.subjectPrefix}</span>
+                        </div>
+                      )}
                     </div>
-                    <Switch
-                      checked={emailConfig.includeAttachments}
-                      onCheckedChange={(checked) => setEmailConfig(prev => ({ ...prev, includeAttachments: checked }))}
-                    />
                   </div>
-                </>
+                </div>
               )}
 
               {selectedType === 'email_group' && (

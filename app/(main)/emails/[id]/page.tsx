@@ -56,6 +56,7 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import AddDomainForm from '@/components/add-domain-form'
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 
 // React Query hooks for v2 API
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -170,6 +171,9 @@ export default function DomainDetailPage() {
 
     // Catch-all state
     const [catchAllEndpointId, setCatchAllEndpointId] = useState<string>('none')
+
+    // Email deletion confirmation state
+    const [emailToDelete, setEmailToDelete] = useState<{ id: string; address: string } | null>(null)
 
     // Set catch-all endpoint ID when data loads
     useState(() => {
@@ -318,15 +322,16 @@ export default function DomainDetailPage() {
         }
     }
 
-    const deleteEmailAddressHandler = async (emailAddressId: string, emailAddress: string) => {
-        if (!domainDetailsData) return
+    const deleteEmailAddressHandler = (emailAddressId: string, emailAddress: string) => {
+        setEmailToDelete({ id: emailAddressId, address: emailAddress })
+    }
 
-        if (!confirm(`Are you sure you want to delete ${emailAddress}?`)) {
-            return
-        }
+    const confirmDeleteEmail = async () => {
+        if (!emailToDelete || !domainDetailsData) return
 
         try {
-            await deleteEmailMutation.mutateAsync({ emailAddressId, domainId })
+            await deleteEmailMutation.mutateAsync({ emailAddressId: emailToDelete.id, domainId })
+            setEmailToDelete(null)
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to delete email address')
         }
@@ -1120,6 +1125,17 @@ export default function DomainDetailPage() {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+
+                {/* Email Delete Confirmation Dialog */}
+                <DeleteConfirmationDialog
+                    open={!!emailToDelete}
+                    onOpenChange={(open) => !open && setEmailToDelete(null)}
+                    onConfirm={confirmDeleteEmail}
+                    title="Delete Email Address"
+                    itemName={emailToDelete?.address}
+                    itemType="email address"
+                    isLoading={deleteEmailMutation.isPending}
+                />
             </div>
         </div>
     )

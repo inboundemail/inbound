@@ -1228,7 +1228,7 @@ export default function AddDomainForm({
                         setDomainName(e.target.value)
                         if (error) setError("")
                       }}
-                      placeholder="0.email"
+                      placeholder="example.com"
                       className="mb-2 w-full font-mono text-sm"
                       aria-label="Domain Name"
                       disabled={isLoading || !!preloadedDomain} // Disable if preloaded
