@@ -36,6 +36,11 @@ import Trash2 from "@/components/icons/trash-2"
 import { formatDistanceToNow } from 'date-fns'
 import { PricingTable } from '@/components/autumn/pricing-table-format'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Globe2 from '@/components/icons/globe-2'
+import Archive from '@/components/icons/archive-export'
+import Envelope2 from '@/components/icons/envelope-2'
+import Send from '@/components/icons/share-right-2'
+import X from '@/components/icons/tab-close'
 
 
 
@@ -247,6 +252,8 @@ export default function SettingsPage() {
   const domainsFeature = customerData?.features?.['domains']
   const inboundTriggersFeature = customerData?.features?.['inbound_triggers']
   const emailRetentionFeature = customerData?.features?.['email_retention']
+  const vipByokFeature = customerData?.features?.['vip_byok']
+  const emailsSentFeature = customerData?.features?.['emails_sent']
 
   // For domains, use actual domain count from domain stats
   const currentDomainCount = domainStats?.totalDomains || 0
@@ -423,8 +430,153 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Features Overview */}
+        {customerData && (
+          <Card className="border-none">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ChartTrendUp width="20" height="20" className="text-purple-600" />
+                Features Overview
+              </CardTitle>
+              <CardDescription>
+                Your current plan features and usage limits
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {/* VIP BYOK */}
+                {vipByokFeature && (
+                  <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-slate-900 dark:text-slate-100">VIP BYOK</h4>
+                      <div 
+                        className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                          (vipByokFeature.unlimited || vipByokFeature.balance)
+                            ? 'bg-green-500/20 text-green-500' 
+                            : 'bg-slate-500/20 text-slate-500'
+                        }`}
+                      >
+                        {(vipByokFeature.unlimited || vipByokFeature.balance) ? (
+                          <CircleCheck className="w-4 h-4" />
+                        ) : (
+                          <X className="w-4 h-4" />
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      {(vipByokFeature.unlimited || vipByokFeature.balance) ? 'Enabled' : 'Disabled'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Domains */}
+                {domainsFeature && (
+                  <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-slate-900 dark:text-slate-100">Domains</h4>
+                      <Globe2 className="w-5 h-5 text-blue-500" />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                          {currentDomainCount}
+                        </span>
+                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                          / {domainsFeature.unlimited ? '∞' : domainsFeature.balance}
+                        </span>
+                      </div>
+                      {!domainsFeature.unlimited && domainsFeature.balance && (
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                          <div 
+                            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.min((currentDomainCount / domainsFeature.balance) * 100, 100)}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Email Retention */}
+                {emailRetentionFeature && (
+                  <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-slate-900 dark:text-slate-100">Email Retention</h4>
+                      <Archive className="w-5 h-5 text-amber-500" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                        {emailRetentionFeature.unlimited ? 'Unlimited' : `${emailRetentionFeature.balance} days`}
+                      </p>
+                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                        {emailRetentionFeature.unlimited ? 'Never expires' : 'Retention period'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Emails Received */}
+                {inboundTriggersFeature && (
+                  <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-slate-900 dark:text-slate-100">Emails Received</h4>
+                      <Envelope2 className="w-5 h-5 text-green-500" />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                          {inboundTriggersFeature.usage || 0}
+                        </span>
+                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                          / {inboundTriggersFeature.unlimited ? '∞' : inboundTriggersFeature.balance}
+                        </span>
+                      </div>
+                      {!inboundTriggersFeature.unlimited && inboundTriggersFeature.balance && inboundTriggersFeature.balance > 0 && (
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                          <div 
+                            className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.min(((inboundTriggersFeature.usage || 0) / inboundTriggersFeature.balance) * 100, 100)}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Emails Sent */}
+                {emailsSentFeature && (
+                  <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-slate-900 dark:text-slate-100">Emails Sent</h4>
+                      <Send className="w-5 h-5 text-purple-500" />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                          {emailsSentFeature.usage || 0}
+                        </span>
+                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                          / {emailsSentFeature.unlimited ? '∞' : emailsSentFeature.balance}
+                        </span>
+                      </div>
+                      {!emailsSentFeature.unlimited && emailsSentFeature.balance && emailsSentFeature.balance > 0 && (
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                          <div 
+                            className="bg-purple-500 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.min(((emailsSentFeature.usage || 0) / emailsSentFeature.balance) * 100, 100)}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* API Keys Management */}
-        <Card>
+        <Card className="border-none">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
@@ -606,7 +758,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-none">
           <CardHeader>
             <CardTitle>Profile Information</CardTitle>
             <CardDescription>
@@ -637,7 +789,7 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <Label htmlFor="image">Profile Image URL</Label>
                 <Input 
                   id="image" 
@@ -646,7 +798,7 @@ export default function SettingsPage() {
                   defaultValue={session.user.image || ''} 
                   placeholder="https://example.com/avatar.jpg"
                 />
-              </div>
+              </div> */}
               <Button type="submit" disabled={isLoading}>
                 {isLoading ? 'Updating...' : 'Update Profile'}
               </Button>
@@ -654,7 +806,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-none">
           <CardHeader>
             <CardTitle>Account Status</CardTitle>
             <CardDescription>
