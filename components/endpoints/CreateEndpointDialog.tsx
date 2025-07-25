@@ -406,7 +406,14 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                     id="forwardToBasic"
                     type="email"
                     value={emailConfig.forwardTo}
-                    onChange={(e) => setEmailConfig(prev => ({ ...prev, forwardTo: e.target.value }))}
+                    onChange={(e) => {
+                      const email = e.target.value
+                      setEmailConfig(prev => ({ ...prev, forwardTo: email }))
+                      // Auto-populate name field if it's empty or matches the previous email
+                      if (!formData.name.trim() || formData.name === emailConfig.forwardTo) {
+                        setFormData(prev => ({ ...prev, name: email }))
+                      }
+                    }}
                     placeholder="support@yourcompany.com"
                     className={errors.forwardTo ? 'border-red-500' : ''}
                     autoFocus
@@ -421,7 +428,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                   id="name"
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder={`${selectedType === 'webhook' ? 'Production Webhook' : selectedType === 'email' ? 'Support Email Forward' : 'Team Email Group'}`}
+                  placeholder={`${selectedType === 'webhook' ? 'Production Webhook' : selectedType === 'email' ? 'Auto-filled from email above' : 'Team Email Group'}`}
                   className={errors.name ? 'border-red-500' : ''}
                   autoFocus={selectedType !== 'email'}
                 />
