@@ -1,0 +1,56 @@
+---
+title: Settings Page Features Overview
+date: 2025-01-24
+version: 1.3.0
+summary: Added comprehensive features overview to the settings page, displaying all Autumn subscription features with improved visual design
+---
+
+## Overview
+
+We've enhanced the settings page with a new Features Overview section that provides a clear, visual representation of all your subscription features and usage limits.
+
+## What's New
+
+### 📊 Features Overview Section
+A new dedicated section that displays all your plan features in an easy-to-scan card layout:
+
+- **VIP BYOK** - Shows enabled/disabled status with visual indicator
+- **Domains** - Displays current usage vs. limit with progress bar
+- **Email Retention** - Shows retention period (days or unlimited)
+- **Emails Received** - Tracks inbound email usage with visual progress
+- **Emails Sent** - Monitors outbound email usage with progress indicator
+
+### 🎨 Design Improvements
+
+- **Card-based layout**: Each feature gets its own card with generous spacing
+- **Responsive grid**: Adapts from 2 columns on tablets to 4 columns on desktop
+- **Visual indicators**: Color-coded icons and progress bars for quick scanning
+- **Dark mode support**: Seamless integration with the app's theme system
+
+### 💡 User Experience
+
+- **At-a-glance monitoring**: See all your feature usage in one place
+- **Progress visualization**: Instantly understand your usage vs. limits
+- **Clean hierarchy**: Important numbers are prominently displayed
+- **Consistent styling**: Matches the app's modern design language
+
+## Technical Details
+
+The features are pulled directly from your Autumn subscription data:
+```typescript
+const vipByokFeature = customerData?.features?.['vip-byok']
+const domainsFeature = customerData?.features?.['domains']
+const emailRetentionFeature = customerData?.features?.['email_retention']
+const inboundTriggersFeature = customerData?.features?.['inbound_triggers']
+const emailsSentFeature = customerData?.features?.['emails_sent']
+```
+
+Each feature card includes:
+- Feature name and icon
+- Current usage (where applicable)
+- Maximum limit or unlimited indicator
+- Visual progress bar for usage-based features
+
+## Impact
+
+This update provides better visibility into your subscription features without requiring navigation to external billing portals. All existing functionality remains unchanged - this is purely an additive improvement to help you better understand and monitor your plan limits. 
