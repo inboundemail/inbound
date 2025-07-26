@@ -5,11 +5,49 @@ import { format } from 'date-fns'
 import Link from 'next/link'
 import { MDXRemote } from 'next-mdx-remote/rsc'
 import { notFound } from 'next/navigation'
+import type { Metadata } from 'next'
 
 interface Props {
   params: Promise<{
     slug: string
   }>
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params
+  const entry = await getChangelogEntry(slug)
+  
+  if (!entry) {
+    return {
+      title: 'Entry Not Found - Changelog - Inbound',
+    }
+  }
+  
+  const title = `${entry.title} - Changelog - Inbound`
+  const description = entry.summary || `${entry.title} - Version ${entry.version}`
+  
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      images: [
+        {
+          url: `/changelog/${slug}/opengraph-image`,
+          width: 1200,
+          height: 630,
+          alt: `${entry.title} - v${entry.version}`,
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: [`/changelog/${slug}/opengraph-image`],
+    },
+  }
 }
 
 async function getChangelogEntry(slug: string) {

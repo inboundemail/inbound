@@ -3,6 +3,7 @@ import path from 'path'
 import matter from 'gray-matter'
 import { format } from 'date-fns'
 import Link from 'next/link'
+import type { Metadata } from 'next'
 
 interface ChangelogEntry {
   slug: string
@@ -11,6 +12,29 @@ interface ChangelogEntry {
   version: string
   content: string
   summary?: string
+}
+
+export const metadata: Metadata = {
+  title: 'Changelog - Inbound',
+  description: 'All the latest updates, improvements, and fixes to Inbound',
+  openGraph: {
+    title: 'Changelog - Inbound',
+    description: 'All the latest updates, improvements, and fixes to Inbound',
+    images: [
+      {
+        url: '/changelog/opengraph-image',
+        width: 1200,
+        height: 630,
+        alt: 'Inbound Changelog - All the latest updates, improvements, and fixes',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Changelog - Inbound',
+    description: 'All the latest updates, improvements, and fixes to Inbound',
+    images: ['/changelog/opengraph-image'],
+  },
 }
 
 async function getChangelogEntries(): Promise<ChangelogEntry[]> {
