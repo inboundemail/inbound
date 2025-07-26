@@ -450,11 +450,17 @@ export async function POST(
         // Create sent email record
         const replyEmailId = nanoid()
         
-        // Check if a custom Message-ID is provided
+        // Check if a custom Message-ID is provided (case-insensitive)
         let messageId = `${replyEmailId}@${fromDomain}`
-        if (body.headers && body.headers['Message-ID']) {
-            // Extract the Message-ID value (remove angle brackets if present)
-            messageId = body.headers['Message-ID'].replace(/^<|>$/g, '')
+        if (body.headers) {
+            // Find Message-ID header case-insensitively
+            const messageIdKey = Object.keys(body.headers).find(
+                key => key.toLowerCase() === 'message-id'
+            )
+            if (messageIdKey && body.headers[messageIdKey]) {
+                // Extract the Message-ID value (remove angle brackets if present)
+                messageId = body.headers[messageIdKey].replace(/^<|>$/g, '')
+            }
         }
         
         console.log('💾 Creating sent email record:', replyEmailId)
