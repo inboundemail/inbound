@@ -15,6 +15,13 @@ const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const auth = betterAuth({
+    baseURL: process.env.NODE_ENV === 'development'
+        ? "http://localhost:3000"
+        : process.env.VERCEL_URL
+            ? `https://${process.env.VERCEL_URL}`
+            : process.env.VERCEL_BRANCH_URL
+                ? `https://${process.env.VERCEL_BRANCH_URL}`
+                : "https://inbound.new",
     trustedOrigins: process.env.NODE_ENV === 'development' 
         ? ["http://localhost:3000"] 
         : [
@@ -31,25 +38,15 @@ export const auth = betterAuth({
         github: {
             clientId: process.env.GITHUB_CLIENT_ID as string,
             clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
-            redirectURI: process.env.NODE_ENV === 'development' 
-                ? "http://localhost:3000/api/auth/callback/github"
-                : process.env.VERCEL_URL 
-                    ? `https://${process.env.VERCEL_URL}/api/auth/callback/github`
-                    : process.env.VERCEL_BRANCH_URL 
-                        ? `https://${process.env.VERCEL_BRANCH_URL}/api/auth/callback/github`
-                        : "https://inbound.new/api/auth/callback/github"
+            // Always use production URL for OAuth proxy to work properly
+            redirectURI: "https://inbound.new/api/auth/callback/github"
         },
         google: { 
             prompt: "select_account", 
             clientId: process.env.GOOGLE_CLIENT_ID as string, 
             clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-            redirectURI: process.env.NODE_ENV === 'development' 
-                ? "http://localhost:3000/api/auth/callback/google"
-                : process.env.VERCEL_URL 
-                    ? `https://${process.env.VERCEL_URL}/api/auth/callback/google`
-                    : process.env.VERCEL_BRANCH_URL 
-                        ? `https://${process.env.VERCEL_BRANCH_URL}/api/auth/callback/google`
-                        : "https://inbound.new/api/auth/callback/google"
+            // Always use production URL for OAuth proxy to work properly
+            redirectURI: "https://inbound.new/api/auth/callback/google"
         },
     },
     session: {
