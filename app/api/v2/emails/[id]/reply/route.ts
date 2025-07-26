@@ -118,6 +118,10 @@ function buildRawEmailMessage(params: {
 }): string {
     const boundary = `----=_Part_${nanoid()}`
     
+    // Check if Message-ID is provided in custom headers
+    const hasCustomMessageId = params.customHeaders && 
+        Object.keys(params.customHeaders).some(key => key.toLowerCase() === 'message-id')
+    
     // Build headers
     let headers = [
         `From: ${params.from}`,
@@ -125,7 +129,8 @@ function buildRawEmailMessage(params: {
         params.cc && params.cc.length > 0 ? `Cc: ${params.cc.join(', ')}` : null,
         params.replyTo && params.replyTo.length > 0 ? `Reply-To: ${params.replyTo.join(', ')}` : null,
         `Subject: ${params.subject}`,
-        `Message-ID: <${params.messageId}@${extractDomain(params.from)}>`,
+        // Only add Message-ID if not provided in custom headers
+        !hasCustomMessageId ? `Message-ID: <${params.messageId}@${extractDomain(params.from)}>` : null,
         params.inReplyTo ? `In-Reply-To: ${params.inReplyTo}` : null,
         params.references && params.references.length > 0 ? `References: ${params.references.join(' ')}` : null,
         `Date: ${formatEmailDate(params.date)}`,
@@ -444,7 +449,19 @@ export async function POST(
 
         // Create sent email record
         const replyEmailId = nanoid()
-        const messageId = `${replyEmailId}@${fromDomain}`
+        
+        // Check if a custom Message-ID is provided (case-insensitive)
+        let messageId = `${replyEmailId}@${fromDomain}`
+        if (body.headers) {
+            // Find Message-ID header case-insensitively
+            const messageIdKey = Object.keys(body.headers).find(
+                key => key.toLowerCase() === 'message-id'
+            )
+            if (messageIdKey && body.headers[messageIdKey]) {
+                // Extract the Message-ID value (remove angle brackets if present)
+                messageId = body.headers[messageIdKey].replace(/^<|>$/g, '')
+            }
+        }
         
         console.log('💾 Creating sent email record:', replyEmailId)
         
