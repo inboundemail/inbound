@@ -17,7 +17,12 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 export const auth = betterAuth({
     trustedOrigins: process.env.NODE_ENV === 'development' 
         ? ["http://localhost:3000"] 
-        : [process.env.VERCEL_URL || "https://inbound.new"].filter(Boolean),
+        : [
+            "https://inbound.new",
+            process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "",
+            process.env.VERCEL_BRANCH_URL ? `https://${process.env.VERCEL_BRANCH_URL}` : "",
+            process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : ""
+        ].filter(Boolean),
     database: drizzleAdapter(db, {
         provider: "pg",
         schema: schema
@@ -28,7 +33,11 @@ export const auth = betterAuth({
             clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
             redirectURI: process.env.NODE_ENV === 'development' 
                 ? "http://localhost:3000/api/auth/callback/github"
-                : "https://inbound.new/api/auth/callback/github"
+                : process.env.VERCEL_URL 
+                    ? `https://${process.env.VERCEL_URL}/api/auth/callback/github`
+                    : process.env.VERCEL_BRANCH_URL 
+                        ? `https://${process.env.VERCEL_BRANCH_URL}/api/auth/callback/github`
+                        : "https://inbound.new/api/auth/callback/github"
         },
         google: { 
             prompt: "select_account", 
@@ -36,7 +45,11 @@ export const auth = betterAuth({
             clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
             redirectURI: process.env.NODE_ENV === 'development' 
                 ? "http://localhost:3000/api/auth/callback/google"
-                : "https://inbound.new/api/auth/callback/google"
+                : process.env.VERCEL_URL 
+                    ? `https://${process.env.VERCEL_URL}/api/auth/callback/google`
+                    : process.env.VERCEL_BRANCH_URL 
+                        ? `https://${process.env.VERCEL_BRANCH_URL}/api/auth/callback/google`
+                        : "https://inbound.new/api/auth/callback/google"
         },
     },
     session: {
@@ -55,7 +68,13 @@ export const auth = betterAuth({
     plugins: [
         oAuthProxy({
             productionURL: process.env.BETTER_AUTH_URL || "https://inbound.new",
-            currentURL: process.env.NODE_ENV === 'development' ? "http://localhost:3000" : undefined
+            currentURL: process.env.NODE_ENV === 'development' 
+                ? "http://localhost:3000" 
+                : process.env.VERCEL_URL 
+                    ? `https://${process.env.VERCEL_URL}` 
+                    : process.env.VERCEL_BRANCH_URL 
+                        ? `https://${process.env.VERCEL_BRANCH_URL}` 
+                        : undefined
         }),
         apiKey(
             {
