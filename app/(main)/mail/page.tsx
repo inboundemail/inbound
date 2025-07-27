@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
-import { useMailV2Query, useUpdateEmailMutation, useBulkUpdateEmailsMutation } from '@/features/emails/hooks'
+import { useMailV2Query, useUpdateEmailMutation, useBulkUpdateEmailsMutation, useEmailThreadCountsV2Query } from '@/features/emails/hooks'
 import type { EmailItem } from '@/app/api/v2/mail/route'
 import Link from 'next/link'
 import Check2 from '@/components/icons/check-2'
@@ -52,6 +52,12 @@ export default function MailPage() {
     // Mutations for bulk operations
     const updateEmailMutation = useUpdateEmailMutation()
     const bulkUpdateMutation = useBulkUpdateEmailsMutation()
+
+    // Get thread counts for all emails in current page
+    const emailIds = emailsResult?.emails?.map(email => email.id) || []
+    const {
+        data: threadCountsResult
+    } = useEmailThreadCountsV2Query(emailIds)
 
     // Set up 5-second auto-refresh
     useEffect(() => {
@@ -159,6 +165,13 @@ export default function MailPage() {
 
     const { emails, pagination, filters = { uniqueDomains: [] } } = emailsResult
     const unreadCount = emails.filter(email => !email.isRead).length
+
+    // Function to get thread count for a specific email
+    const getThreadCountForEmail = (emailId: string): number | undefined => {
+        if (!threadCountsResult?.success) return undefined
+        const threadData = threadCountsResult.data.find(t => t.emailId === emailId)
+        return threadData?.threadCount
+    }
 
     // Adapter function to convert v2 EmailItem to EmailListItem format
     const adaptEmailForListItem = (email: EmailItem) => ({
@@ -357,6 +370,7 @@ export default function MailPage() {
                                 isSelectMode={isSelectMode}
                                 isSelected={selectedEmails.includes(email.id)}
                                 onSelect={handleSelectEmail}
+                                threadCount={getThreadCountForEmail(email.id)}
                             />
                         ))}
                     </div>

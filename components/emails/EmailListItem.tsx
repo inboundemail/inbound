@@ -24,9 +24,10 @@ interface EmailListItemProps {
   isSelectMode?: boolean
   isSelected?: boolean
   onSelect?: (emailId: string, checked: boolean) => void
+  threadCount?: number
 }
 
-export function EmailListItem({ email, isSelectMode = false, isSelected = false, onSelect }: EmailListItemProps) {
+export function EmailListItem({ email, isSelectMode = false, isSelected = false, onSelect, threadCount }: EmailListItemProps) {
   const updateEmailMutation = useUpdateEmailMutation()
 
   // Get sender name
@@ -80,9 +81,16 @@ export function EmailListItem({ email, isSelectMode = false, isSelected = false,
         {/* Subject + Preview (flowing) */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 text-sm">
-            <span className={`font-medium flex-shrink-0 text-foreground ${!email.isRead ? 'font-semibold' : ''}`}>
-              {email.subject}
-            </span>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className={`font-medium text-foreground ${!email.isRead ? 'font-semibold' : ''}`}>
+                {email.subject}
+              </span>
+              {threadCount && threadCount > 1 && (
+                <span className="bg-muted-foreground/20 text-muted-foreground text-xs px-1.5 py-0.5 rounded-md font-medium">
+                  {threadCount}
+                </span>
+              )}
+            </div>
             <span className="text-muted-foreground/80 truncate">
               — {preview}
             </span>

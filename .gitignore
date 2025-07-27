@@ -15,6 +15,7 @@ dist
 
 # testing
 /coverage
+/localdev
 
 # next.js
 /.next/
