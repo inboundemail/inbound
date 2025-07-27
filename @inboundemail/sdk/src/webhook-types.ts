@@ -29,7 +29,7 @@ export interface InboundEmailHeaders extends Record<string, any> {
     text?: string
     params?: Record<string, string>
   }
-  'received'?: string
+  'received'?: string | string[]
   'received-spf'?: string
   'authentication-results'?: string
   'x-ses-receipt'?: string
