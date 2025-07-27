@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateRequest } from '../helper/main'
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses'
 import { db } from '@/lib/db'
-import { sentEmails, emailDomains, SENT_EMAIL_STATUS } from '@/lib/db/schema'
+import { sentEmails, emailDomains, user, SENT_EMAIL_STATUS } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { Autumn as autumn } from 'autumn-js'
 import { nanoid } from 'nanoid'
@@ -33,6 +33,7 @@ export interface PostEmailsRequest {
         path?: string
         content_type?: string
     }>
+    sender_name?: string // Optional custom sender name - if not provided, defaults to user's name
 }
 
 export interface PostEmailsResponse {
@@ -50,6 +51,20 @@ function extractDomain(email: string): string {
     const address = extractEmailAddress(email)
     const parts = address.split('@')
     return parts.length === 2 ? parts[1] : ''
+}
+
+// Helper function to format sender with proper quoted name
+function formatSenderWithName(senderName: string, emailAddress: string): string {
+    // If name contains special characters or spaces, wrap in quotes
+    const needsQuotes = /[,@<>"\\]/.test(senderName) || senderName.includes(' ')
+    
+    if (needsQuotes) {
+        // Escape any existing quotes in the name
+        const escapedName = senderName.replace(/"/g, '\\"')
+        return `"${escapedName}" <${emailAddress}>`
+    } else {
+        return `${senderName} <${emailAddress}>`
+    }
 }
 
 // Helper function to convert string or array to array
@@ -166,6 +181,34 @@ export async function POST(request: NextRequest) {
 
         console.log('✅ Domain ownership verified')
 
+        // Determine sender name - use provided sender_name or fetch user's name
+        let senderName = body.sender_name
+        if (!senderName) {
+            console.log('📝 No sender name provided, fetching user name from database')
+            const userData = await db
+                .select({ name: user.name })
+                .from(user)
+                .where(eq(user.id, userId))
+                .limit(1)
+            
+            if (userData.length > 0) {
+                senderName = userData[0].name
+                console.log('✅ Using user name as sender:', senderName)
+            } else {
+                console.log('⚠️ User not found, using email address only')
+                senderName = undefined
+            }
+        } else {
+            console.log('✅ Using provided sender name:', senderName)
+        }
+
+        // Format the sender with proper name and quotes
+        const formattedSender = senderName 
+            ? formatSenderWithName(senderName, fromAddress)
+            : fromAddress
+        
+        console.log('📧 Formatted sender:', formattedSender)
+
         // Convert recipients to arrays
         const toAddresses = toArray(body.to)
         const ccAddresses = toArray(body.cc)
@@ -218,7 +261,7 @@ export async function POST(request: NextRequest) {
         
         const sentEmailRecord = await db.insert(sentEmails).values({
             id: emailId,
-            from: body.from,
+            from: formattedSender,
             fromAddress,
             fromDomain,
             to: JSON.stringify(toAddresses),
@@ -262,7 +305,7 @@ export async function POST(request: NextRequest) {
             
             // Build SES email command
             const sesCommand = new SendEmailCommand({
-                Source: body.from,
+                Source: formattedSender,
                 Destination: {
                     ToAddresses: toAddresses.map(extractEmailAddress),
                     CcAddresses: ccAddresses.map(extractEmailAddress),

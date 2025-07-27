@@ -437,6 +437,7 @@ export interface PostEmailsRequest {
     path?: string
     content_type?: string
   }>
+  sender_name?: string // Optional custom sender name - if not provided, defaults to user's name
 }
 
 export interface PostEmailsResponse {
@@ -475,6 +476,7 @@ export interface PostEmailReplyRequest {
     content_type?: string
   }>
   include_original?: boolean
+  sender_name?: string // Optional custom sender name - if not provided, defaults to user's name
 }
 
 export interface PostEmailReplyResponse {
