@@ -17,8 +17,7 @@
     "test:deployment": "bun run scripts/test-deployment.ts",
     "email": "bun run scripts/sending/resend.ts",
     "email-verified": "bun run scripts/test-domain-verification.ts",
-    "preview-email": "bun run scripts/preview-domain-email.ts",
-    "postinstall": "fumadocs-mdx"
+    "preview-email": "bun run scripts/preview-domain-email.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.22",
