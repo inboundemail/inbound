@@ -58,7 +58,7 @@ interface ParsedEmailData {
   }>
   headers: Record<string, any> & {
     'return-path'?: ParsedEmailHeaderValue
-    'received'?: string
+    'received'?: string | string[]
     'received-spf'?: string
     'authentication-results'?: string
     'x-ses-receipt'?: string
