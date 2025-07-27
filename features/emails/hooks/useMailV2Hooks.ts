@@ -16,6 +16,9 @@ import type {
     PostMailBulkRequest,
     PostMailBulkResponse
 } from '@/app/api/v2/mail/bulk/route'
+import type {
+    GetThreadResponse
+} from '@/app/api/v2/mail/[id]/thread/route'
 
 // Query keys for v2 mail API
 export const mailV2Keys = {
@@ -326,5 +329,54 @@ export const useReplyToEmailV2Mutation = () => {
             // Also invalidate the specific email detail
             queryClient.invalidateQueries({ queryKey: mailV2Keys.detail(emailId) })
         },
+    })
+} 
+
+// Hook for getting email thread/conversation
+export const useEmailThreadV2Query = (emailId: string) => {
+    return useQuery<GetThreadResponse>({
+        queryKey: [...mailV2Keys.detail(emailId), 'thread'],
+        queryFn: async () => {
+            const response = await fetch(`/api/v2/mail/${emailId}/thread`)
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.error || `HTTP error! status: ${response.status}`)
+            }
+            return response.json()
+        },
+        enabled: !!emailId,
+        staleTime: 60 * 1000, // 1 minute
+        gcTime: 10 * 60 * 1000, // 10 minutes
+    })
+}
+
+// Hook for getting thread counts for multiple emails (for inbox listing)
+export const useEmailThreadCountsV2Query = (emailIds: string[]) => {
+    return useQuery<{
+        success: boolean
+        data: Array<{
+            emailId: string
+            threadCount: number
+            hasThread: boolean
+        }>
+    }>({
+        queryKey: ['mail-v2', 'thread-counts', ...emailIds.sort()],
+        queryFn: async () => {
+            const response = await fetch('/api/v2/mail/thread-counts', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ emailIds })
+            })
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.error || `HTTP error! status: ${response.status}`)
+            }
+            return response.json()
+        },
+        enabled: emailIds.length > 0,
+        staleTime: 2 * 60 * 1000, // 2 minutes (thread counts don't change often)
+        gcTime: 10 * 60 * 1000, // 10 minutes
     })
 } 

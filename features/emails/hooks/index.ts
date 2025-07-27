@@ -24,7 +24,9 @@ export {
   useUserEmailLogsV2Query,
   useReplyToEmailV2Mutation,
   useUpdateEmailMutation,
-  useBulkUpdateEmailsMutation
+  useBulkUpdateEmailsMutation,
+  useEmailThreadV2Query,
+  useEmailThreadCountsV2Query
 } from './useMailV2Hooks'
 
 // Legacy email logs hook (inbound only)

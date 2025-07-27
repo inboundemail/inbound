@@ -18,8 +18,129 @@ import ArrowUpRight2 from '@/components/icons/arrow-up-right-2'
 import { format } from 'date-fns'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { EmailAttachments } from '@/components/email-attachments'
-import { useMailDetailsV2Query, useMarkEmailAsReadV2Mutation, useReplyToEmailV2Mutation, useDomainsListV2Query } from '@/features/emails/hooks'
+import { useEmailThreadV2Query, useMarkEmailAsReadV2Mutation, useReplyToEmailV2Mutation, useDomainsListV2Query } from '@/features/emails/hooks'
 import { toast } from 'sonner'
+import { extractNewContent } from '@/lib/email-management/email-thread-parser'
+import type { ThreadMessage } from '@/app/api/v2/mail/[id]/thread/route'
+
+interface ThreadMessageProps {
+  message: ThreadMessage
+  isLatest?: boolean
+  showAttachments?: boolean
+}
+
+function ThreadMessageItem({ message, isLatest = false, showAttachments = true }: ThreadMessageProps) {
+  // Extract initials for avatar
+  const getInitials = (name: string) => {
+    const words = name.trim().split(/\s+/)
+    if (words.length >= 2) {
+      return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase()
+    } else {
+      return name.slice(0, 2).toUpperCase()
+    }
+  }
+
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      '#6366f1', '#8b5cf6', '#06b6d4', '#10b981', 
+      '#f59e0b', '#ef4444', '#ec4899', '#84cc16'
+    ]
+    const hash = name.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0)
+      return a & a
+    }, 0)
+    return colors[Math.abs(hash) % colors.length]
+  }
+
+  const senderName = message.fromName || message.from.split('<')[0].trim() || message.from.split('@')[0]
+  const initials = getInitials(senderName)
+  const avatarColor = getAvatarColor(senderName)
+  const displayDate = message.receivedAt || message.sentAt
+
+  // For threaded view, extract only the new content (not quoted content)
+  const displayContent = message.content.htmlBody 
+    ? extractNewContent(message.content.htmlBody) || message.content.htmlBody
+    : extractNewContent(message.content.textBody || '') || message.content.textBody
+
+  return (
+    <div className={`border-l-2 pl-4 pb-6 ${
+      message.type === 'outbound' 
+        ? 'border-l-blue-200 bg-blue-50/30' 
+        : 'border-l-gray-200'
+    }`}>
+      <div className="flex items-start gap-3 mb-3">
+        <CustomInboundIcon 
+          text={initials}
+          size={32} 
+          backgroundColor={avatarColor} 
+        />
+        <div className="flex-1">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-foreground text-sm">
+                {senderName}
+              </span>
+              <span className="text-muted-foreground text-xs">
+                &lt;{message.addresses.from?.addresses?.[0]?.address || message.from}&gt;
+              </span>
+              {message.type === 'outbound' && (
+                <Badge className="bg-blue-500 text-white rounded-full px-2 py-0.5 text-xs">
+                  Sent
+                </Badge>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {displayDate ? format(new Date(displayDate), 'MMM d, h:mm a') : 'Unknown date'}
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground mt-1">
+            to {message.to}
+          </div>
+        </div>
+      </div>
+
+      <div className="ml-8">
+        {displayContent ? (
+          message.content.htmlBody ? (
+            <div 
+              className="prose prose-sm max-w-none rounded-lg"
+              style={{ 
+                fontFamily: 'Inter, system-ui, sans-serif',
+                textAlign: 'left'
+              }}
+              dangerouslySetInnerHTML={{ __html: displayContent }}
+            />
+          ) : (
+            <div 
+              className="whitespace-pre-wrap text-foreground leading-relaxed text-sm"
+              style={{ 
+                fontFamily: 'Inter, system-ui, sans-serif',
+                textAlign: 'left'
+              }}
+            >
+              {displayContent}
+            </div>
+          )
+        ) : (
+          <div className="text-center py-4 text-muted-foreground text-sm">
+            <Envelope2 className="h-4 w-4 mx-auto mb-1" />
+            <p>No content available</p>
+          </div>
+        )}
+
+        {/* Attachments for the latest message or if explicitly requested */}
+        {showAttachments && message.content.attachments && message.content.attachments.length > 0 && (
+          <div className="mt-4">
+            <EmailAttachments 
+              emailId={message.id} 
+              attachments={message.content.attachments} 
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function EmailViewPage() {
   const params = useParams()
@@ -33,13 +154,13 @@ export default function EmailViewPage() {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [customFromAddress, setCustomFromAddress] = useState('')
 
-  // Use v2 hooks for data fetching
+  // Use thread query instead of single email query
   const {
-    data: emailDetails,
+    data: threadData,
     isLoading,
-    error: emailError,
+    error: threadError,
     refetch
-  } = useMailDetailsV2Query(emailId)
+  } = useEmailThreadV2Query(emailId)
 
   const markAsReadMutation = useMarkEmailAsReadV2Mutation()
   const replyMutation = useReplyToEmailV2Mutation()
@@ -54,20 +175,30 @@ export default function EmailViewPage() {
     }
   }, [session, router])
 
-  // Auto-mark email as read when viewing
+  // Auto-mark original email as read when viewing
   useEffect(() => {
-    if (emailDetails && !emailDetails.isRead) {
-      markAsReadMutation.mutate(emailId)
+    if (threadData?.messages) {
+      const originalMessage = threadData.messages.find(m => m.id === emailId)
+      if (originalMessage && !originalMessage.isRead && originalMessage.type === 'inbound') {
+        markAsReadMutation.mutate(emailId)
+      }
     }
-  }, [emailDetails, emailId, markAsReadMutation])
+  }, [threadData, emailId, markAsReadMutation])
   
-  // Set default from address when domains are loaded
+  // Set default from address when thread data is loaded
   useEffect(() => {
-    if (emailDetails && !selectedFromAddress && !showAdvanced) {
-      // Use the recipient email address as the default from address
-      setSelectedFromAddress(emailDetails.recipient)
+    if (threadData?.messages && !selectedFromAddress && !showAdvanced) {
+      // Use the recipient email address from the latest inbound message
+      const latestInbound = threadData.messages
+        .filter(m => m.type === 'inbound')
+        .sort((a, b) => new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime())[0]
+      
+      if (latestInbound) {
+        const recipientAddress = latestInbound.addresses.to?.addresses?.[0]?.address || latestInbound.to
+        setSelectedFromAddress(recipientAddress)
+      }
     }
-  }, [emailDetails, selectedFromAddress, showAdvanced])
+  }, [threadData, selectedFromAddress, showAdvanced])
 
   // Validate custom email address domain
   const isCustomAddressValid = () => {
@@ -98,11 +229,15 @@ export default function EmailViewPage() {
       return
     }
     
-    // Extract the original sender's email address
-    const originalSenderAddress = emailDetails?.addresses.from?.addresses?.[0]?.address || 
-                                 (emailDetails?.from.includes('<') ? 
-                                  emailDetails.from.split('<')[1].replace('>', '') : 
-                                  emailDetails?.from)
+    // Extract the original sender's email address from the latest inbound message
+    const latestInbound = threadData?.messages
+      ?.filter(m => m.type === 'inbound')
+      ?.sort((a, b) => new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime())[0]
+    
+    const originalSenderAddress = latestInbound?.addresses.from?.addresses?.[0]?.address || 
+                                 (latestInbound?.from.includes('<') ? 
+                                  latestInbound.from.split('<')[1].replace('>', '') : 
+                                  latestInbound?.from)
     
     try {
       await replyMutation.mutateAsync({
@@ -117,6 +252,9 @@ export default function EmailViewPage() {
       setReplyText('')
       setCustomFromAddress('')
       setShowAdvanced(false)
+      
+      // Refetch the thread to show the new reply
+      refetch()
     } catch (error) {
       console.error('Failed to send reply:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to send reply')
@@ -128,14 +266,14 @@ export default function EmailViewPage() {
       <div className="p-4 font-outfit">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-center py-12">
-            <div className="text-muted-foreground">Loading email...</div>
+            <div className="text-muted-foreground">Loading conversation...</div>
           </div>
         </div>
       </div>
     )
   }
 
-  if (emailError || !emailDetails) {
+  if (threadError || !threadData) {
     return (
       <div className="p-4 font-outfit">
         <div className="max-w-6xl mx-auto">
@@ -152,7 +290,7 @@ export default function EmailViewPage() {
             <CardContent className="p-6">
               <div className="flex items-center gap-2 text-destructive">
                 <Envelope2 className="h-4 w-4" />
-                <span>{emailError?.message || 'Failed to load email'}</span>
+                <span>{threadError?.message || 'Failed to load conversation'}</span>
               </div>
             </CardContent>
           </Card>
@@ -161,43 +299,9 @@ export default function EmailViewPage() {
     )
   }
 
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-  }
-
-  // Use v2 API data structure
-  const displayFrom = emailDetails.addresses.from?.text || emailDetails.from
-  const displaySubject = emailDetails.subject || 'No Subject'
-
-  // Extract initials for avatar
-  const getInitials = (name: string) => {
-    const words = name.trim().split(/\s+/)
-    if (words.length >= 2) {
-      return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase()
-    } else {
-      return name.slice(0, 2).toUpperCase()
-    }
-  }
-
-  const getAvatarColor = (name: string) => {
-    const colors = [
-      '#6366f1', '#8b5cf6', '#06b6d4', '#10b981', 
-      '#f59e0b', '#ef4444', '#ec4899', '#84cc16'
-    ]
-    const hash = name.split('').reduce((a, b) => {
-      a = ((a << 5) - a) + b.charCodeAt(0)
-      return a & a
-    }, 0)
-    return colors[Math.abs(hash) % colors.length]
-  }
-
-  const senderName = emailDetails.fromName || emailDetails.addresses.from?.addresses?.[0]?.name || displayFrom.split('<')[0].trim() || displayFrom.split('@')[0]
-  const initials = getInitials(senderName)
-  const avatarColor = getAvatarColor(senderName)
+  // Get the subject from the first message
+  const conversationSubject = threadData.messages[0]?.subject || 'No Subject'
+  const messageCount = threadData.messages.length
 
   return (
     <div className="p-4 font-outfit">
@@ -212,119 +316,41 @@ export default function EmailViewPage() {
           </Link>
         </div>
 
-        {/* Email Content Card */}
+        {/* Conversation Header */}
+        <Card className="rounded-xl overflow-hidden mb-4">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-semibold text-foreground mb-2 tracking-tight">
+                  {conversationSubject}
+                </h1>
+                <div className="text-sm text-muted-foreground">
+                  {messageCount} message{messageCount !== 1 ? 's' : ''} in conversation
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className="bg-blue-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium">
+                  <Envelope2 className="w-3 h-3 mr-1" />
+                  Thread
+                </Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Conversation Thread */}
         <Card className="rounded-xl overflow-hidden">
           <CardContent className="p-6">
-            {/* Email Header */}
-            <div className="mb-6">
-              <h1 className="text-2xl font-semibold text-foreground mb-4 tracking-tight">{displaySubject}</h1>
-
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-start gap-3">
-                  <CustomInboundIcon 
-                    text={initials}
-                    size={40} 
-                    backgroundColor={avatarColor} 
-                  />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-foreground">
-                        {senderName}
-                      </span>
-                      <span className="text-muted-foreground text-sm">
-                        &lt;{emailDetails.addresses.from?.addresses?.[0]?.address || (displayFrom.includes('<') ? displayFrom.split('<')[1].replace('>', '') : displayFrom)}&gt;
-                      </span>
-                    </div>
-                    <div className="text-sm text-muted-foreground mt-1">
-                      to {emailDetails.recipient}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <div className="text-sm text-muted-foreground">
-                    {format(
-                      emailDetails.receivedAt 
-                        ? new Date(emailDetails.receivedAt) 
-                        : new Date(), 
-                      'MMM d, yyyy, h:mm a'
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    {emailDetails.isRead && (
-                      <Badge className="bg-emerald-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-                        <CircleCheck className="w-3 h-3 mr-1" />
-                        Read
-                      </Badge>
-                    )}
-                    {emailDetails.metadata.hasAttachments && (
-                      <Badge className="bg-blue-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-                        <File2 className="w-3 h-3 mr-1" />
-                        {emailDetails.metadata.attachmentCount}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Email Body */}
-            <div className="border-t border-border pt-6">
-              {emailDetails.content.htmlBody ? (
-                <div 
-                  className="prose prose-sm max-w-none rounded-lg new-thing"
-                  style={{ 
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    textAlign: 'left'
-                  }}
-                  dangerouslySetInnerHTML={{ __html: emailDetails.content.htmlBody }}
+            <div className="space-y-0">
+              {threadData.messages.map((message, index) => (
+                <ThreadMessageItem
+                  key={message.id}
+                  message={message}
+                  isLatest={index === threadData.messages.length - 1}
+                  showAttachments={index === threadData.messages.length - 1} // Only show attachments on latest
                 />
-              ) : emailDetails.content.textBody ? (
-                <div 
-                  className="whitespace-pre-wrap text-foreground leading-relaxed"
-                  style={{ 
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    textAlign: 'left'
-                  }}
-                >
-                  {emailDetails.content.textBody}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <CustomInboundIcon 
-                    text="EM"
-                    size={32} 
-                    backgroundColor="#6b7280" 
-                    className="mx-auto mb-2"
-                  />
-                  <p>No email content available</p>
-                </div>
-              )}
+              ))}
             </div>
-
-            {/* Attachments */}
-            <EmailAttachments 
-              emailId={emailDetails.id} 
-              attachments={emailDetails.content.attachments || []} 
-            />
-
-            {/* Debug Info (only in development) */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="mt-6 pt-6 border-t border-border">
-                <details className="text-xs text-muted-foreground">
-                  <summary className="cursor-pointer font-medium">Debug Info</summary>
-                  <div className="mt-2 space-y-2">
-                    <div><strong>Parse Success:</strong> {emailDetails.metadata.parseSuccess ? 'Yes' : 'No'}</div>
-                    {emailDetails.metadata.parseError && (
-                      <div><strong>Parse Error:</strong> {emailDetails.metadata.parseError}</div>
-                    )}
-                    <div><strong>Message ID:</strong> {emailDetails.messageId}</div>
-                    <div><strong>Has Text Body:</strong> {emailDetails.metadata.hasTextBody ? 'Yes' : 'No'}</div>
-                    <div><strong>Has HTML Body:</strong> {emailDetails.metadata.hasHtmlBody ? 'Yes' : 'No'}</div>
-                  </div>
-                </details>
-              </div>
-            )}
           </CardContent>
         </Card>
 
@@ -434,7 +460,7 @@ export default function EmailViewPage() {
 
               {/* Info Text */}
               <p className="text-xs text-muted-foreground">
-                Your reply will include the original message quoted below your response.
+                Your reply will be added to this conversation thread.
               </p>
             </div>
           </CardContent>

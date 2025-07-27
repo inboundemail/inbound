@@ -90,14 +90,30 @@ function quoteMessage(originalEmail: any, includeOriginal: boolean = true): stri
     const fromText = fromData?.text || 'Unknown Sender'
     const dateStr = originalEmail.date ? formatEmailDate(new Date(originalEmail.date)) : 'Unknown Date'
     
-    // Create the quote header
-    const quoteHeader = `\n\nOn ${dateStr}, ${fromText} wrote:\n\n`
+    // Create the quote header in standard email format
+    const quoteHeader = `\n\nOn ${dateStr}, ${fromText} wrote:\n`
     
     // Quote the original message with > prefix
     const originalText = originalEmail.textBody || ''
-    const quotedLines = originalText.split('\n').map((line: string) => `> ${line}`).join('\n')
     
-    return quoteHeader + quotedLines
+    // Split into lines and process each line properly
+    const lines = originalText.split('\n')
+    const quotedLines = lines.map((line: string) => {
+        // If line is empty or only whitespace, keep it empty (no > prefix)
+        if (line.trim() === '') {
+            return ''
+        }
+        
+        // If line already starts with '>', add another level of quoting
+        if (line.startsWith('>')) {
+            return `>${line}`
+        }
+        
+        // Otherwise, add single level quote
+        return `> ${line}`
+    })
+    
+    return quoteHeader + quotedLines.join('\n')
 }
 
 // Build raw email message
@@ -429,15 +445,15 @@ export async function POST(
         // Add quoted original message to HTML body
         let finalHtmlBody = body.html || ''
         if (includeOriginal && body.html && original.htmlBody) {
-            // Simple HTML quoting - wrap in blockquote
+            // HTML quoting with proper email client styling
             const fromText = originalFromData?.text || 'Unknown Sender'
-            const dateStr = original.date ? new Date(original.date).toLocaleString() : 'Unknown Date'
+            const dateStr = original.date ? formatEmailDate(new Date(original.date)) : 'Unknown Date'
             
             finalHtmlBody += `
                 <br><br>
-                <div style="border-left: 2px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666;">
-                    <p>On ${dateStr}, ${fromText} wrote:</p>
-                    ${original.htmlBody}
+                <div style="border-left: 2px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666; font-size: 13px;">
+                    <p style="margin: 0 0 10px 0; font-weight: normal;">On ${dateStr}, ${fromText} wrote:</p>
+                    <div style="margin: 0;">${original.htmlBody}</div>
                 </div>
             `
         }
