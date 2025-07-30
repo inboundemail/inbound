@@ -142,7 +142,7 @@ async function InboundHeroSection() {
                     className="max-w-2xl w-full"
                     animationStyle="from-center"
                     videoSrc="https://www.youtube.com/embed/2L-N-kwzK9M?si=s45SfDVH80CaYoP4"
-                    thumbnailSrc="/inbound-thumb.png"
+                    thumbnailSrc="/inboundhero.png"
                     thumbnailAlt="How to use Inbound - Email for AI Agents"
                   />
                 </div>
