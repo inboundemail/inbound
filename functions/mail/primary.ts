@@ -1,8 +1,10 @@
 "use server"
 
+import { getAllEmails, getEmailsCount } from './queries'
 import { db } from '@/lib/db'
-import { structuredEmails, sesEvents } from '@/lib/db/schema'
-import { eq, and, sql, desc, gte, inArray } from 'drizzle-orm'
+import { structuredEmails, attachments, endpoints, emailAddresses, sesEvents } from '@/lib/db/schema'
+import { eq, and, desc, or, like, sql, inArray, gte } from 'drizzle-orm'
+import { sendEmail, formatEmailDate } from '@/lib/email-services/send-email'
 import { sanitizeHtml } from '@/lib/email-management/email-parser'
 
 // ============================================================================
@@ -416,11 +418,12 @@ export async function getEmail(userId: string, emailId: string) {
 }
 
 /**
- * Reply to an email (planned feature - placeholder implementation)
+ * Reply to an email
  */
 export async function replyToEmail(userId: string, emailId: string, replyData: {
-    to: string
-    subject: string
+    from: string  // The sender address for the reply (must be a verified domain)
+    to?: string   // Optional override for recipient (defaults to original sender)
+    subject?: string  // Optional override for subject (defaults to "Re: original subject")
     textBody?: string
     htmlBody?: string
     attachments?: Array<{
@@ -428,6 +431,7 @@ export async function replyToEmail(userId: string, emailId: string, replyData: {
         contentType: string
         content: string // base64 encoded
     }>
+    includeOriginal?: boolean  // Whether to quote the original message (default: true)
 }) {
     try {
         if (!emailId) {
@@ -441,7 +445,11 @@ export async function replyToEmail(userId: string, emailId: string, replyData: {
                 messageId: structuredEmails.messageId,
                 subject: structuredEmails.subject,
                 fromData: structuredEmails.fromData,
-                toData: structuredEmails.toData
+                toData: structuredEmails.toData,
+                textBody: structuredEmails.textBody,
+                htmlBody: structuredEmails.htmlBody,
+                date: structuredEmails.date,
+                references: structuredEmails.references
             })
             .from(structuredEmails)
             .where(
@@ -456,28 +464,118 @@ export async function replyToEmail(userId: string, emailId: string, replyData: {
             return { error: 'Original email not found' }
         }
 
-        // TODO: Implement email sending functionality
-        // This would typically involve:
-        // 1. Setting up SMTP configuration
-        // 2. Constructing the reply email with proper headers
-        // 3. Setting In-Reply-To and References headers
-        // 4. Sending the email using a service like AWS SES, SendGrid, etc.
-        // 5. Logging the sent email in a separate table
+        const original = originalEmail[0]
 
-        // For now, return a placeholder response
+        // Parse original from data to get sender address
+        let originalFromData = null
+        if (original.fromData) {
+            try {
+                originalFromData = JSON.parse(original.fromData)
+            } catch (e) {
+                console.error('Failed to parse original fromData:', e)
+            }
+        }
+
+        // Determine reply recipient (use the original sender or override)
+        const originalSenderAddress = originalFromData?.addresses?.[0]?.address
+        if (!originalSenderAddress && !replyData.to) {
+            return { error: 'Cannot determine original sender address and no recipient provided' }
+        }
+
+        const replyTo = replyData.to || originalSenderAddress
+        const includeOriginal = replyData.includeOriginal !== false  // Default to true
+
+        // Build subject (add "Re: " prefix if not present)
+        let subject = replyData.subject
+        if (!subject) {
+            const originalSubject = original.subject || 'No Subject'
+            subject = originalSubject.startsWith('Re: ') ? originalSubject : `Re: ${originalSubject}`
+        } else if (!subject.startsWith('Re: ')) {
+            subject = `Re: ${subject}`
+        }
+
+        // Build threading headers
+        const inReplyTo = original.messageId ? `<${original.messageId}>` : undefined
+        let references: string[] = []
+        
+        // Parse existing references
+        if (original.references) {
+            try {
+                const parsedRefs = JSON.parse(original.references)
+                if (Array.isArray(parsedRefs)) {
+                    references = parsedRefs
+                }
+            } catch (e) {
+                console.error('Failed to parse references:', e)
+            }
+        }
+        
+        // Add the original message ID to references
+        if (original.messageId) {
+            references.push(`<${original.messageId}>`)
+        }
+
+        // Build quoted content
+        let finalTextBody = replyData.textBody || ''
+        let finalHtmlBody = replyData.htmlBody || ''
+
+        if (includeOriginal) {
+            // Add quoted original message to text body
+            if (original.textBody) {
+                const fromText = originalFromData?.text || 'Unknown Sender'
+                const dateStr = original.date ? formatEmailDate(new Date(original.date)) : 'Unknown Date'
+                const quoteHeader = `\n\nOn ${dateStr}, ${fromText} wrote:\n`
+                const quotedLines = original.textBody.split('\n').map((line: string) => {
+                    return line.trim() === '' ? '' : `> ${line}`
+                })
+                finalTextBody += quoteHeader + quotedLines.join('\n')
+            }
+
+            // Add quoted original message to HTML body
+            if (original.htmlBody && finalHtmlBody) {
+                const fromText = originalFromData?.text || 'Unknown Sender'
+                const dateStr = original.date ? formatEmailDate(new Date(original.date)) : 'Unknown Date'
+                
+                finalHtmlBody += `
+                    <br><br>
+                    <div style="border-left: 2px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666; font-size: 13px;">
+                        <p style="margin: 0 0 10px 0; font-weight: normal;">On ${dateStr}, ${fromText} wrote:</p>
+                        <div style="margin: 0;">${original.htmlBody}</div>
+                    </div>
+                `
+            }
+        }
+
+        // Send the email using the shared service
+        const result = await sendEmail({
+            userId,
+            from: replyData.from,
+            to: replyTo,
+            subject,
+            textBody: finalTextBody,
+            htmlBody: finalHtmlBody,
+            attachments: replyData.attachments,
+            inReplyTo,
+            references
+        })
+
+        if (!result.success) {
+            return { error: result.error }
+        }
+
         return {
             success: true,
             data: {
-                message: 'Reply functionality is not yet implemented',
+                id: result.data?.id,
+                messageId: result.data?.messageId,
                 originalEmailId: emailId,
-                replyData: {
-                    to: replyData.to,
-                    subject: replyData.subject,
-                    hasTextBody: !!replyData.textBody,
-                    hasHtmlBody: !!replyData.htmlBody,
-                    attachmentCount: replyData.attachments?.length || 0
+                replyTo,
+                subject,
+                threading: {
+                    inReplyTo,
+                    references
                 },
-                status: 'pending_implementation'
+                includeOriginal
             }
         }
 
