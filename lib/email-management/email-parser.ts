@@ -223,16 +223,50 @@ function processInlineImages(html: string, attachments: Attachment[]): string {
 export function sanitizeHtml(html: string): string {
   if (!html) return ''
   
-  // Basic HTML sanitization - remove script tags and dangerous attributes
-  // Allow data: URLs for images but be restrictive about other uses
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/on\w+="[^"]*"/gi, '')
-    .replace(/on\w+='[^']*'/gi, '')
-    .replace(/javascript:/gi, '')
-    .replace(/vbscript:/gi, '')
-    // Only remove data: URLs that are NOT for images
-    .replace(/(?<!src=["'])data:(?!image\/)/gi, '')
+  // Comprehensive HTML sanitization to prevent XSS attacks
+  let sanitized = html
+  
+  // Remove all script tags and their content
+  sanitized = sanitized.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+  
+  // Remove all style tags and their content (can be used for CSS injection)
+  sanitized = sanitized.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+  
+  // Remove all event handlers (onclick, onload, etc.)
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '')
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*[^\s>]*/gi, '')
+  
+  // Remove javascript: protocol
+  sanitized = sanitized.replace(/javascript\s*:/gi, '')
+  
+  // Remove vbscript: protocol
+  sanitized = sanitized.replace(/vbscript\s*:/gi, '')
+  
+  // Remove data: URLs except for images
+  sanitized = sanitized.replace(/(<(?!img)[^>]+\s+(?:src|href)\s*=\s*["']?)data:(?!image\/)/gi, '$1')
+  
+  // Remove form tags to prevent form injection
+  sanitized = sanitized.replace(/<\/?form[^>]*>/gi, '')
+  
+  // Remove iframe, embed, and object tags
+  sanitized = sanitized.replace(/<\/?(?:iframe|embed|object)[^>]*>/gi, '')
+  
+  // Remove meta tags
+  sanitized = sanitized.replace(/<\/?meta[^>]*>/gi, '')
+  
+  // Remove link tags that could inject stylesheets
+  sanitized = sanitized.replace(/<link[^>]*>/gi, '')
+  
+  // Clean up any remaining dangerous attributes
+  sanitized = sanitized.replace(/\s*(?:xmlns|xml)[^=]*="[^"]*"/gi, '')
+  
+  // Remove any base tags that could hijack URLs
+  sanitized = sanitized.replace(/<\/?base[^>]*>/gi, '')
+  
+  // Ensure no HTML comments with potential payloads
+  sanitized = sanitized.replace(/<!--[\s\S]*?-->/g, '')
+  
+  return sanitized
 }
 
 export function extractEmailDomain(email: string): string {
