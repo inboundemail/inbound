@@ -1,5 +1,4 @@
 # Exclude the separate inbound-whop-app from main app deployment
-inbound-whop-app/
 
 # Other common exclusions
 aws/
