@@ -358,7 +358,7 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
                   <Input
                     id="url"
                     type="url"
-                    value={webhookConfig.url}
+                    value={webhookConfig.url || ''}
                     onChange={(e) => setWebhookConfig(prev => ({ ...prev, url: e.target.value }))}
                     placeholder="https://your-app.com/webhooks/inbound"
                     className={errors.url ? 'border-red-500' : ''}
@@ -496,7 +496,7 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
                     <Input
                       id="forwardTo"
                       type="email"
-                      value={emailConfig.forwardTo}
+                      value={emailConfig.forwardTo || ''}
                       onChange={(e) => setEmailConfig(prev => ({ ...prev, forwardTo: e.target.value }))}
                       placeholder="support@yourcompany.com"
                       className={errors.forwardTo ? 'border-red-500' : ''}
