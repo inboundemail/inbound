@@ -396,25 +396,6 @@ function ActualFeaturesSection() {
 }
 
 export default async function HomePage() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  const isLoggedIn = !!session?.user
-  
-  // Check if this is a .new domain to comply with .new domain policy
-  // const headersList = await headers()
-  // const host = headersList.get('host') || ''
-  // const isNewDomain = host.endsWith('.new')
-  
-  // // .new domain policy compliance:
-  // // - Logged out users must go directly to sign in
-  // // - Logged in users must go directly to action creation flow
-  // if (isNewDomain) {
-  //   if (!isLoggedIn) {
-  //     redirect('/login')
-  //   } else {
-  //     // Redirect to main action flow (mail page)
-  //     redirect('/mail')
-  //   }
-  // }
 
   return (
     <div className="bg-background">
