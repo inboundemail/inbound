@@ -116,21 +116,55 @@ async function InboundHeroSection() {
                 {/* Left column - Text content */}
                 <div className="space-y-4 sm:space-y-6 text-center sm:text-left">
                   <h1 className="text-5xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight tracking-tight">
-                    email for<br />
-                    ai agents
+                    email APIs for<br />
+                    developers
                   </h1>
                   <p className="text-white/90 text-sm sm:text-base lg:text-lg xl:text-xl leading-relaxed max-w-lg mx-auto lg:mx-0">
-                    give your AI agents the power to send, receive, and manage emails programmatically with our simple API.
+                    Build email functionality into your apps with our simple REST API. Send, receive, and manage emails programmatically.
                   </p>
+                  
+                  {/* Code snippet preview */}
+                  <div className="bg-neutral-900/80 backdrop-blur-sm rounded-lg p-4 text-left max-w-lg mx-auto lg:mx-0 border border-white/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                      <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                      <span className="text-white/60 text-xs ml-2">Quick Start</span>
+                    </div>
+                    <code className="text-xs font-mono text-white/90 block">
+                      <div className="text-gray-400">// Create email endpoint</div>
+                      <div className="text-blue-300">const</div> <span className="text-white">response</span> = <span className="text-blue-300">await</span> <span className="text-yellow-300">fetch</span>(<span className="text-green-300">'https://api.inbound.new/emails'</span>, {`{`}
+                      <div className="ml-2">
+                        <span className="text-orange-300">method:</span> <span className="text-green-300">'POST'</span>,
+                      </div>
+                      <div className="ml-2">
+                        <span className="text-orange-300">body:</span> <span className="text-yellow-300">JSON</span>.<span className="text-blue-300">stringify</span>({`{`}
+                      </div>
+                      <div className="ml-4">
+                        <span className="text-orange-300">address:</span> <span className="text-green-300">'hello@yourdomain.com'</span>,
+                      </div>
+                      <div className="ml-4">
+                        <span className="text-orange-300">webhook:</span> <span className="text-green-300">'https://yourapp.com/webhook'</span>
+                      </div>
+                      <div className="ml-2">{`})`}</div>
+                      <div>{`})`}</div>
+                    </code>
+                  </div>
+
                   <div className="flex flex-col sm:flex-row items-center lg:items-start gap-3 sm:gap-4 pt-2 sm:pt-4 justify-center lg:justify-start">
                     <Link href="/login">
                       <Button size="lg" className="w-full sm:w-auto min-w-[160px]">
-                        get started now
+                        Start Building
                       </Button>
                     </Link>
                     <Link href="https://docs.inbound.new" target="_blank"> 
                       <Button variant="ghost" size="lg" className="w-full sm:w-auto min-w-[140px] bg-white/10 border-white/20 text-white hover:bg-white/20">
-                        go to the docs →
+                        View API Docs →
+                      </Button>
+                    </Link>
+                    <Link href="https://github.com/R44VC0RP/inbound" target="_blank"> 
+                      <Button variant="ghost" size="lg" className="w-full sm:w-auto min-w-[120px] bg-white/10 border-white/20 text-white hover:bg-white/20">
+                        GitHub →
                       </Button>
                     </Link>
                   </div>
@@ -159,9 +193,9 @@ function ActualFeaturesSection() {
   return (
     <AnimatedSection className="px-4 sm:px-6 max-w-6xl mx-auto py-6 pb-7">
       <div className="text-center mb-6 xs:mb-8 sm:mb-12">
-        <h2 className="text-2xl xs:text-3xl sm:text-4xl font-medium mb-2 xs:mb-3 sm:mb-4 text-foreground">built for AI agents</h2>
+        <h2 className="text-2xl xs:text-3xl sm:text-4xl font-medium mb-2 xs:mb-3 sm:mb-4 text-foreground">powerful developer APIs</h2>
         <p className="text-muted-foreground text-xs xs:text-sm sm:text-base px-2 xs:px-4">
-          Simple APIs that make email integration effortless for your AI applications
+          REST APIs, webhooks, and SDKs designed for modern development workflows
         </p>
       </div>
 
@@ -194,25 +228,25 @@ function ActualFeaturesSection() {
             {/* Content */}
             <div className="space-y-4">
               <h3 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">
-                Email to Webhooks
+                Webhook Endpoints
               </h3>
               <p className="text-muted-foreground text-sm sm:text-base leading-relaxed max-w-xs mx-auto">
-                Instantly convert incoming emails into structured webhook payloads
+                REST API creates email addresses that POST structured JSON to your endpoints
               </p>
 
               {/* Features */}
               <div className="space-y-2 text-left max-w-xs mx-auto">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CircleCheck width="16" height="16" className="text-green-500 flex-shrink-0" />
-                  <span>Real-time delivery</span>
+                  <span>Real-time HTTP POST</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CircleCheck width="16" height="16" className="text-green-500 flex-shrink-0" />
-                  <span>Structured JSON</span>
+                  <span>Structured JSON payload</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CircleCheck width="16" height="16" className="text-green-500 flex-shrink-0" />
-                  <span>Full parsing</span>
+                  <span>Signature verification</span>
                 </div>
               </div>
             </div>
@@ -252,25 +286,25 @@ function ActualFeaturesSection() {
             {/* Content */}
             <div className="space-y-4">
               <h3 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">
-                SDK Control
+                TypeScript SDK
               </h3>
               <p className="text-muted-foreground text-sm sm:text-base leading-relaxed max-w-xs mx-auto">
-                Full programmatic control over email sending and management
+                Full-featured SDK with type safety and async/await support for all operations
               </p>
 
               {/* Features */}
               <div className="space-y-2 text-left max-w-xs mx-auto">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CircleCheck width="16" height="16" className="text-green-500 flex-shrink-0" />
-                  <span>Send programmatically</span>
+                  <span>TypeScript definitions</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CircleCheck width="16" height="16" className="text-green-500 flex-shrink-0" />
-                  <span>Reply to messages</span>
+                  <span>Promise-based API</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CircleCheck width="16" height="16" className="text-green-500 flex-shrink-0" />
-                  <span>TypeScript SDK</span>
+                  <span>Error handling built-in</span>
                 </div>
               </div>
             </div>
@@ -310,25 +344,25 @@ function ActualFeaturesSection() {
             {/* Content */}
             <div className="space-y-4">
               <h3 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">
-                Domain Aggregation
+                Domain Management
               </h3>
               <p className="text-muted-foreground text-sm sm:text-base leading-relaxed max-w-xs mx-auto">
-                Route multiple domains to single endpoints for centralized processing
+                REST API for DNS verification, SPF/DKIM setup, and multi-domain routing
               </p>
 
               {/* Features */}
               <div className="space-y-2 text-left max-w-xs mx-auto">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CircleCheck width="16" height="16" className="text-green-500 flex-shrink-0" />
-                  <span>Multi-domain support</span>
+                  <span>DNS record automation</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CircleCheck width="16" height="16" className="text-green-500 flex-shrink-0" />
-                  <span>Unified routing</span>
+                  <span>SPF/DKIM configuration</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CircleCheck width="16" height="16" className="text-green-500 flex-shrink-0" />
-                  <span>Domain-aware data</span>
+                  <span>Multi-tenant support</span>
                 </div>
               </div>
             </div>
@@ -366,25 +400,25 @@ function ActualFeaturesSection() {
             {/* Content */}
             <div className="space-y-4">
               <h3 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">
-                Email Routing
+                Smart Routing
               </h3>
               <p className="text-muted-foreground text-sm sm:text-base leading-relaxed max-w-xs mx-auto">
-                Smart routing to distribution lists and multiple AI agents
+                Rule-based routing engine with regex patterns and conditional logic
               </p>
 
               {/* Features */}
               <div className="space-y-2 text-left max-w-xs mx-auto">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CircleCheck width="16" height="16" className="text-green-500 flex-shrink-0" />
-                  <span>Distribution lists</span>
+                  <span>Regex pattern matching</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CircleCheck width="16" height="16" className="text-green-500 flex-shrink-0" />
-                  <span>Rule-based forwarding</span>
+                  <span>Conditional forwarding</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CircleCheck width="16" height="16" className="text-green-500 flex-shrink-0" />
-                  <span>Multi-agent coordination</span>
+                  <span>Priority-based rules</span>
                 </div>
               </div>
             </div>
@@ -683,9 +717,9 @@ export default async function HomePage() {
 
         {/* AI Agent Examples Section */}
         <AnimatedSection className="py-8 xs:py-12 sm:py-16 px-4 xs:px-6 sm:px-16 lg:px-32 w-full m-2 xs:m-4 sm:m-12 text-center bg-gradient-to-b from-muted/10 to-background rounded-[20px] xs:rounded-[30px] sm:rounded-[50px] my-8 xs:my-12 sm:my-20">
-          <h2 className="text-2xl xs:text-3xl sm:text-4xl font-medium mb-3 xs:mb-4 sm:mb-6 text-foreground">simple for AI agents</h2>
+          <h2 className="text-2xl xs:text-3xl sm:text-4xl font-medium mb-3 xs:mb-4 sm:mb-6 text-foreground">simple for developers</h2>
           <p className="text-muted-foreground text-xs xs:text-base sm:text-lg mb-4 xs:mb-6 sm:mb-8 leading-relaxed px-2 xs:px-4 sm:px-16 lg:px-56">
-            Your AI agents can send, receive, and manage emails with just a few lines of code. No complex setup required.
+            Integrate email functionality into your applications with minimal code. Built for modern development workflows and frameworks.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 mt-8 sm:mt-12">
@@ -698,10 +732,10 @@ export default async function HomePage() {
                     Icon={Envelope2}
                     backgroundColor="#3b82f6"
                   />
-                  <span className="font-semibold text-base sm:text-lg text-foreground">Receive Emails</span>
+                  <span className="font-semibold text-base sm:text-lg text-foreground">Receive Webhooks</span>
                 </div>
                 <p className="text-muted-foreground mb-3 sm:mb-4 text-left text-sm sm:text-base">
-                  Set up a webhook endpoint and start receiving structured email data instantly.
+                  Configure webhook endpoints to receive structured email data in real-time with JSON payloads.
                 </p>
                 <Card className="bg-neutral-900 border-neutral-700">
                   <CardContent className="p-3 sm:p-4 text-left overflow-x-auto">
@@ -715,7 +749,8 @@ export default async function HomePage() {
                       <div className="text-blue-400 ml-4">"text": <span className="text-green-300">"Email content..."</span>,</div>
                       <div className="text-blue-400 ml-4">"html": <span className="text-green-300">"&lt;p&gt;Email content...&lt;/p&gt;"</span></div>
                       <div className="text-white ml-2">{`},`}</div>
-                      <div className="text-blue-400 ml-2">"attachments": <span className="text-yellow-400">[...]</span></div>
+                      <div className="text-blue-400 ml-2">"attachments": <span className="text-yellow-400">[...]</span>,</div>
+                      <div className="text-blue-400 ml-2">"headers": <span className="text-yellow-400">{`{...}`}</span></div>
                       <div className="text-white">{`}`}</div>
                     </code>
                   </CardContent>
@@ -739,22 +774,22 @@ export default async function HomePage() {
                     Icon={Code2}
                     backgroundColor="#10b981"
                   />
-                  <span className="font-semibold text-base sm:text-lg text-foreground">Send & Reply</span>
+                  <span className="font-semibold text-base sm:text-lg text-foreground">Send via API</span>
                 </div>
                 <p className="text-muted-foreground mb-3 sm:mb-4 text-left text-sm sm:text-base">
-                  Your AI agents can send emails and reply to conversations programmatically.
+                  Send emails programmatically using our REST API or TypeScript SDK with full async/await support.
                 </p>
                 <Card className="bg-neutral-900 border-neutral-700">
                   <CardContent className="p-3 sm:p-4 text-left overflow-x-auto">
                     <code className="text-xs sm:text-sm font-mono block">
-                      <div><span className="text-blue-400">import</span> <span className="text-yellow-300">{`{ InboundClient }`}</span> <span className="text-blue-400">from</span> <span className="text-green-300">'@inbound/sdk'</span></div>
-                      <div className="mt-2"><span className="text-blue-400">const</span> <span className="text-white">client</span> <span className="text-pink-400">=</span> <span className="text-blue-400">new</span> <span className="text-yellow-300">InboundClient</span><span className="text-white">(apiKey)</span></div>
-                      <div className="mt-4 text-gray-400">// Send email</div>
+                      <div><span className="text-blue-400">import</span> <span className="text-yellow-300">{`{ Inbound }`}</span> <span className="text-blue-400">from</span> <span className="text-green-300">'@inboundemail/sdk'</span></div>
+                      <div className="mt-2"><span className="text-blue-400">const</span> <span className="text-white">client</span> <span className="text-pink-400">=</span> <span className="text-blue-400">new</span> <span className="text-yellow-300">Inbound</span><span className="text-white">(process.env.INBOUND_API_KEY)</span></div>
+                      <div className="mt-4 text-gray-400">// Send email via API</div>
                       <div className="mt-2"><span className="text-blue-400">await</span> <span className="text-white">client.emails.</span><span className="text-yellow-300">send</span><span className="text-white">({`{`}</span></div>
-                      <div className="text-blue-400 ml-2">from: <span className="text-green-300">'agent@yourdomain.com'</span>,</div>
+                      <div className="text-blue-400 ml-2">from: <span className="text-green-300">'noreply@yourdomain.com'</span>,</div>
                       <div className="text-blue-400 ml-2">to: <span className="text-green-300">'user@company.com'</span>,</div>
-                      <div className="text-blue-400 ml-2">subject: <span className="text-green-300">'AI Response'</span>,</div>
-                      <div className="text-blue-400 ml-2">body: <span className="text-green-300">'Here is your answer...'</span></div>
+                      <div className="text-blue-400 ml-2">subject: <span className="text-green-300">'Welcome to our app'</span>,</div>
+                      <div className="text-blue-400 ml-2">html: <span className="text-green-300">'&lt;h1&gt;Welcome!&lt;/h1&gt;'</span></div>
                       <div className="text-white">{`})`}</div>
                     </code>
                   </CardContent>
@@ -786,6 +821,164 @@ export default async function HomePage() {
             <PricingTable />
           </div>
         </AnimatedSection>
+
+        {/* Developer Resources Section */}
+        <AnimatedSection className="px-4 sm:px-6 max-w-6xl mx-auto py-8 sm:py-12 lg:py-16">
+          <div className="text-center mb-8 sm:mb-12">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-medium mb-2 sm:mb-4 text-foreground">developer resources</h2>
+            <p className="text-muted-foreground text-sm sm:text-base">
+              Everything you need to get started building with Inbound
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+            {/* API Documentation */}
+            <AnimatedCard
+              className="bg-card rounded-2xl p-6 sm:p-8 text-center border border-border hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
+              delay={100}
+              direction="up"
+            >
+              <div className="flex items-center justify-center mb-4">
+                <CustomInboundIcon
+                  size={48}
+                  Icon={Code2}
+                  backgroundColor="#3b82f6"
+                />
+              </div>
+              <h3 className="text-lg sm:text-xl font-semibold mb-2 text-foreground">API Documentation</h3>
+              <p className="text-muted-foreground text-sm mb-4">
+                Complete REST API reference with examples and interactive playground
+              </p>
+              <Button variant="outline" className="w-full" asChild>
+                <a href="https://docs.inbound.new" target="_blank" rel="noopener noreferrer">
+                  View API Docs
+                </a>
+              </Button>
+            </AnimatedCard>
+
+            {/* SDK & Libraries */}
+            <AnimatedCard
+              className="bg-card rounded-2xl p-6 sm:p-8 text-center border border-border hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
+              delay={200}
+              direction="up"
+            >
+              <div className="flex items-center justify-center mb-4">
+                <CustomInboundIcon
+                  size={48}
+                  Icon={Database2}
+                  backgroundColor="#10b981"
+                />
+              </div>
+              <h3 className="text-lg sm:text-xl font-semibold mb-2 text-foreground">SDK & Libraries</h3>
+              <p className="text-muted-foreground text-sm mb-4">
+                TypeScript SDK, npm packages, and code examples for quick integration
+              </p>
+              <Button variant="outline" className="w-full" asChild>
+                <a href="https://www.npmjs.com/package/@inboundemail/sdk" target="_blank" rel="noopener noreferrer">
+                  Install SDK
+                </a>
+              </Button>
+            </AnimatedCard>
+
+            {/* GitHub & Source */}
+            <AnimatedCard
+              className="bg-card rounded-2xl p-6 sm:p-8 text-center border border-border hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
+              delay={300}
+              direction="up"
+            >
+              <div className="flex items-center justify-center mb-4">
+                <CustomInboundIcon
+                  size={48}
+                  Icon={Globe2}
+                  backgroundColor="#8b5cf6"
+                />
+              </div>
+              <h3 className="text-lg sm:text-xl font-semibold mb-2 text-foreground">GitHub & Source</h3>
+              <p className="text-muted-foreground text-sm mb-4">
+                Open source codebase, examples, and community contributions
+              </p>
+              <Button variant="outline" className="w-full" asChild>
+                <a href="https://github.com/R44VC0RP/inbound" target="_blank" rel="noopener noreferrer">
+                  View on GitHub
+                </a>
+              </Button>
+            </AnimatedCard>
+          </div>
+
+          {/* Code Examples Section */}
+          <div className="mt-12 sm:mt-16">
+            <h3 className="text-xl sm:text-2xl font-medium text-center mb-8 text-foreground">Quick Start Examples</h3>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+              
+              {/* cURL Example */}
+              <AnimatedCard
+                className="bg-neutral-900 rounded-2xl p-6 sm:p-8 border border-border"
+                delay={100}
+                direction="left"
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                  <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                  <span className="text-white/60 text-sm ml-2">cURL</span>
+                </div>
+                <code className="text-sm font-mono text-white/90 block overflow-x-auto">
+                  <div className="text-gray-400"># Create an email address</div>
+                  <div className="text-blue-300">curl</div> <span className="text-green-300">-X POST</span> <span className="text-yellow-300">'https://api.inbound.new/emails'</span> \
+                  <div className="ml-2">
+                    <span className="text-orange-300">-H</span> <span className="text-green-300">'Authorization: Bearer YOUR_API_KEY'</span> \
+                  </div>
+                  <div className="ml-2">
+                    <span className="text-orange-300">-H</span> <span className="text-green-300">'Content-Type: application/json'</span> \
+                  </div>
+                  <div className="ml-2">
+                    <span className="text-orange-300">-d</span> <span className="text-green-300">'{`{`}</span>
+                  </div>
+                  <div className="ml-4">
+                    <span className="text-blue-300">"address":</span> <span className="text-green-300">"hello@yourdomain.com"</span>,
+                  </div>
+                  <div className="ml-4">
+                    <span className="text-blue-300">"webhook":</span> <span className="text-green-300">"https://yourapp.com/webhook"</span>
+                  </div>
+                  <div className="ml-2">
+                    <span className="text-green-300">{`}`}'</span>
+                  </div>
+                </code>
+              </AnimatedCard>
+
+              {/* Node.js Example */}
+              <AnimatedCard
+                className="bg-neutral-900 rounded-2xl p-6 sm:p-8 border border-border"
+                delay={200}
+                direction="right"
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                  <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                  <span className="text-white/60 text-sm ml-2">Node.js</span>
+                </div>
+                <code className="text-sm font-mono text-white/90 block overflow-x-auto">
+                  <div className="text-gray-400">// Install: npm i @inboundemail/sdk</div>
+                  <div className="text-blue-300">import</div> <span className="text-yellow-300">{`{ Inbound }`}</span> <span className="text-blue-300">from</span> <span className="text-green-300">'@inboundemail/sdk'</span>
+                  <div className="mt-2">
+                    <span className="text-blue-300">const</span> <span className="text-white">inbound</span> = <span className="text-blue-300">new</span> <span className="text-yellow-300">Inbound</span>(<span className="text-green-300">'YOUR_API_KEY'</span>)
+                  </div>
+                  <div className="mt-2">
+                    <span className="text-blue-300">const</span> <span className="text-white">email</span> = <span className="text-blue-300">await</span> <span className="text-white">inbound.emails.</span><span className="text-yellow-300">create</span>({`{`}
+                  </div>
+                  <div className="ml-2">
+                    <span className="text-orange-300">address:</span> <span className="text-green-300">'hello@yourdomain.com'</span>,
+                  </div>
+                  <div className="ml-2">
+                    <span className="text-orange-300">webhook:</span> <span className="text-green-300">'https://yourapp.com/webhook'</span>
+                  </div>
+                  <div>{`})`}</div>
+                </code>
+              </AnimatedCard>
+            </div>
+          </div>
+        </AnimatedSection>
       </div>
 
       {/* Footer */}
@@ -803,6 +996,15 @@ export default async function HomePage() {
               <span className="font-semibold text-sm xs:text-base sm:text-lg text-foreground">inbound</span>
             </div>
             <div className="flex flex-wrap items-center gap-3 xs:gap-4 sm:gap-6 text-[11px] xs:text-xs sm:text-sm text-muted-foreground justify-center md:justify-end">
+              <a href="https://docs.inbound.new" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+                API Docs
+              </a>
+              <a href="https://github.com/R44VC0RP/inbound" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+                GitHub
+              </a>
+              <a href="https://www.npmjs.com/package/@inboundemail/sdk" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+                npm Package
+              </a>
               <a href="https://twitter.com/inbound_email" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
                 Contact us on 𝕏
               </a>
@@ -817,9 +1019,6 @@ export default async function HomePage() {
               </a>
               <a href="/terms" className="hover:text-foreground transition-colors">
                 Terms
-              </a>
-              <a href="/docs" className="hover:text-foreground transition-colors hidden sm:inline">
-                Docs
               </a>
               <a href="mailto:support@inbound.new" className="hover:text-foreground transition-colors">
                 Support
