@@ -1,3 +1,0 @@
-{
-  "/api/inbound/webhook/sns/route": "app/api/inbound/webhook/sns/route.js"
-}

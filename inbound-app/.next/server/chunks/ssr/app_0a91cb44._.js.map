@@ -1,1 +1,0 @@
-{"version":3,"sources":["turbopack:///[project]/app/opengraph-image.png.mjs (structured image object)"],"sourcesContent":["import src from \"IMAGE\";\nexport default { src, width: 1200, height: 630 }\n"],"names":[],"mappings":"sLACe,CAAE,IADjB,AACiB,EADjB,CAAA,CAAA,QACiB,OAAG,CAAE,MAAO,KAAM,OAAQ,CAA1B,EAA8B"}
