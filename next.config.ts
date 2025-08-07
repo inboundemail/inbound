@@ -45,14 +45,39 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // Ignore SDK directory during build
+  // Ignore SDK directory and whop app during build
   webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
-    // Ignore the SDK directory from webpack processing
+    // Ignore the SDK directory and whop app from webpack processing
     config.watchOptions = {
       ...config.watchOptions,
-      ignored: ['**/node_modules/**', '**/@inboundemail/**']
+      ignored: [
+        '**/node_modules/**', 
+        '**/@inboundemail/**',
+        '**/inbound-whop-app/**'
+      ]
     };
+    
+    // Exclude whop app from module resolution
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      // Prevent accidental imports from whop app
+      '@whop': false,
+    };
+    
     return config;
+  },
+  
+  // Exclude whop app from page compilation
+  experimental: {
+    externalDir: true,
+    outputFileTracingExcludes: {
+      '*': [
+        './inbound-whop-app/**/*',
+        './aws/**/*',
+        './scripts/**/*',
+        './@inboundemail/**/*'
+      ]
+    }
   },
 };
 
