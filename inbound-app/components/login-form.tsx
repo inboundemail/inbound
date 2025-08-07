@@ -24,7 +24,7 @@ export function LoginForm({
     try {
       await authClient.signIn.social({
         provider: "github",
-        callbackURL: "/mail", // Main layout will handle onboarding redirect
+        callbackURL: "/logs", // Main layout will handle onboarding redirect
         errorCallbackURL: "/login?error=auth_failed",
       });
       // Don't reset loading state here as we'll be redirecting
@@ -39,7 +39,7 @@ export function LoginForm({
     try {
       await authClient.signIn.social({
         provider: "google",
-        callbackURL: "/mail", // Main layout will handle onboarding redirect
+        callbackURL: "/logs", // Main layout will handle onboarding redirect
         errorCallbackURL: "/login?error=auth_failed",
       });
       // Don't reset loading state here as we'll be redirecting
@@ -66,7 +66,7 @@ export function LoginForm({
     try {
       const { data, error } = await authClient.signIn.magicLink({
         email: email.trim(),
-        callbackURL: "/mail", // Main layout will handle onboarding redirect
+        callbackURL: "/logs", // Main layout will handle onboarding redirect
       });
 
       if (error) {

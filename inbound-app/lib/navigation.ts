@@ -15,10 +15,9 @@ import ChartActivity2 from "@/components/icons/chart-activity-2"
 import Gear2 from "@/components/icons/gear-2"
 import Shield2 from "@/components/icons/shield-2"
 import Globe2 from "@/components/icons/globe-2"
-import Envelope2 from "@/components/icons/envelope-2"
 import Cloud2 from "@/components/icons/cloud-2"
 import Code2 from "@/components/icons/code-2"
-import Database2 from "@/components/icons/database-2"
+import StackPerspective2 from "@/components/icons/stack-perspective-2"
 import Crown from "@/components/icons/crown"
 
 export interface NavigationItem {
@@ -39,10 +38,10 @@ export interface NavigationConfig {
 export const navigationConfig: NavigationConfig = {
   main: [
     {
-      title: "Mail",
-      url: "/mail",
-      icon: Envelope2,
-      description: "View and manage your received emails"
+      title: "Email Flow",
+      url: "/logs",
+      icon: StackPerspective2,
+      description: "View email flow, delivery status, and routing details"
     },
     {
       title: "Domains and Addresses",
@@ -61,12 +60,6 @@ export const navigationConfig: NavigationConfig = {
       url: "/analytics",
       icon: ChartActivity2,
       description: "View detailed analytics"
-    },
-    {
-      title: "Logs",
-      url: "/logs",
-      icon: Database2,
-      description: "View email delivery logs and status"
     },
     {
       title: "Settings",

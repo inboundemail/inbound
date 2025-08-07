@@ -37,7 +37,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const userData = {
     name: session.user.name || "User",
     email: session.user.email,
-    avatar: session.user.image || "/avatars/default.jpg",
+    avatar: session.user.image || "https://avatar.vercel.sh/" + session.user.name + ".svg?text=" + session.user.name.charAt(0) + "&size=128",
     plan: "Pro" // You can get this from subscription data later
   }
 

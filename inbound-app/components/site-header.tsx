@@ -142,9 +142,9 @@ export default function SiteHeader() {
           {/* Conditionally show Sign In or Go to Dashboard based on auth state */}
           {session ? (
             <Button variant="primary" asChild className="text-sm px-3 py-2">
-              <a href="/mail">
-                <span className="hidden sm:inline">Go to Mail</span>
-                <span className="sm:hidden">Mail</span>
+              <a href="/logs">
+                <span className="hidden sm:inline">Go to Email Flow</span>
+                <span className="sm:hidden">Flow</span>
               </a>
             </Button>
           ) : (

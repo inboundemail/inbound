@@ -18,10 +18,12 @@ import ArrowUpRight2 from '@/components/icons/arrow-up-right-2'
 import { format } from 'date-fns'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { EmailAttachments } from '@/components/email-attachments'
-import { useEmailThreadV2Query, useMarkEmailAsReadV2Mutation, useReplyToEmailV2Mutation, useDomainsListV2Query } from '@/features/emails/hooks'
+import { useOptimizedEmailThreadV2 } from '@/features/emails/hooks/useOptimizedEmailThreadV2'
+import { useReplyToEmailV2Mutation, useDomainsListV2Query } from '@/features/emails/hooks'
 import { toast } from 'sonner'
 import { extractNewContent } from '@/lib/email-management/email-thread-parser'
-import type { ThreadMessage } from '@/app/api/v2/mail/[id]/thread/route'
+import SandboxedEmailViewer from '@/components/emails/SandboxedEmailViewer'
+import type { ThreadMessage } from '@/lib/email-management/improved-threading'
 
 interface ThreadMessageProps {
   message: ThreadMessage
@@ -101,26 +103,19 @@ function ThreadMessageItem({ message, isLatest = false, showAttachments = true }
 
       <div className="ml-8">
         {displayContent ? (
-          message.content.htmlBody ? (
-            <div 
-              className="prose prose-sm max-w-none rounded-lg"
-              style={{ 
-                fontFamily: 'Inter, system-ui, sans-serif',
-                textAlign: 'left'
-              }}
-              dangerouslySetInnerHTML={{ __html: displayContent }}
-            />
-          ) : (
-            <div 
-              className="whitespace-pre-wrap text-foreground leading-relaxed text-sm"
-              style={{ 
-                fontFamily: 'Inter, system-ui, sans-serif',
-                textAlign: 'left'
-              }}
-            >
-              {displayContent}
-            </div>
-          )
+          <SandboxedEmailViewer
+            htmlContent={message.content.htmlBody ? displayContent : null}
+            textContent={!message.content.htmlBody ? displayContent : null}
+            className="rounded-lg border border-gray-200"
+            minHeight={100}
+            maxHeight={600}
+            onContentLoad={() => {
+              // Optional: Track email content load for analytics
+            }}
+            onContentError={(error) => {
+              console.error('Email content error:', error)
+            }}
+          />
         ) : (
           <div className="text-center py-4 text-muted-foreground text-sm">
             <Envelope2 className="h-4 w-4 mx-auto mb-1" />
@@ -154,15 +149,26 @@ export default function EmailViewPage() {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [customFromAddress, setCustomFromAddress] = useState('')
 
-  // Use thread query instead of single email query
+  // Use optimized thread query with advanced caching and performance features
   const {
     data: threadData,
+    messages,
     isLoading,
+    isError,
     error: threadError,
-    refetch
-  } = useEmailThreadV2Query(emailId)
-
-  const markAsReadMutation = useMarkEmailAsReadV2Mutation()
+    confidence,
+    threadingMethod,
+    unreadMessages,
+    hasUnread,
+    markAsRead,
+    refetch,
+    performance
+  } = useOptimizedEmailThreadV2(emailId, {
+    enableBackgroundRefetch: true,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    enableOptimisticUpdates: true,
+    includeRead: true
+  })
   const replyMutation = useReplyToEmailV2Mutation()
   
   // Get user's verified domains for the from dropdown
@@ -175,21 +181,23 @@ export default function EmailViewPage() {
     }
   }, [session, router])
 
-  // Auto-mark original email as read when viewing
+  // Auto-mark original email as read when viewing (using optimized mutation)
   useEffect(() => {
-    if (threadData?.messages) {
-      const originalMessage = threadData.messages.find(m => m.id === emailId)
+    if (messages.length > 0) {
+      const originalMessage = messages.find(m => m.id === emailId)
       if (originalMessage && !originalMessage.isRead && originalMessage.type === 'inbound') {
-        markAsReadMutation.mutate(emailId)
+        markAsRead(emailId).catch(error => {
+          console.error('Failed to mark email as read:', error)
+        })
       }
     }
-  }, [threadData, emailId, markAsReadMutation])
+  }, [messages, emailId, markAsRead])
   
   // Set default from address when thread data is loaded
   useEffect(() => {
-    if (threadData?.messages && !selectedFromAddress && !showAdvanced) {
+    if (messages.length > 0 && !selectedFromAddress && !showAdvanced) {
       // Use the recipient email address from the latest inbound message
-      const latestInbound = threadData.messages
+      const latestInbound = messages
         .filter(m => m.type === 'inbound')
         .sort((a, b) => new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime())[0]
       
@@ -198,7 +206,7 @@ export default function EmailViewPage() {
         setSelectedFromAddress(recipientAddress)
       }
     }
-  }, [threadData, selectedFromAddress, showAdvanced])
+  }, [messages, selectedFromAddress, showAdvanced])
 
   // Validate custom email address domain
   const isCustomAddressValid = () => {
@@ -230,9 +238,9 @@ export default function EmailViewPage() {
     }
     
     // Extract the original sender's email address from the latest inbound message
-    const latestInbound = threadData?.messages
-      ?.filter(m => m.type === 'inbound')
-      ?.sort((a, b) => new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime())[0]
+    const latestInbound = messages
+      .filter(m => m.type === 'inbound')
+      .sort((a, b) => new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime())[0]
     
     const originalSenderAddress = latestInbound?.addresses.from?.addresses?.[0]?.address || 
                                  (latestInbound?.from.includes('<') ? 
@@ -273,7 +281,7 @@ export default function EmailViewPage() {
     )
   }
 
-  if (threadError || !threadData) {
+  if (isError || !threadData) {
     return (
       <div className="p-4 font-outfit">
         <div className="max-w-6xl mx-auto">
@@ -300,8 +308,8 @@ export default function EmailViewPage() {
   }
 
   // Get the subject from the first message
-  const conversationSubject = threadData.messages[0]?.subject || 'No Subject'
-  const messageCount = threadData.messages.length
+  const conversationSubject = messages[0]?.subject || 'No Subject'
+  const messageCount = messages.length
 
   return (
     <div className="p-4 font-outfit">
@@ -324,14 +332,30 @@ export default function EmailViewPage() {
                 <h1 className="text-2xl font-semibold text-foreground mb-2 tracking-tight">
                   {conversationSubject}
                 </h1>
-                <div className="text-sm text-muted-foreground">
-                  {messageCount} message{messageCount !== 1 ? 's' : ''} in conversation
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <span>{messageCount} message{messageCount !== 1 ? 's' : ''} in conversation</span>
+                  {hasUnread && (
+                    <span className="text-blue-600 font-medium">
+                      {unreadMessages.length} unread
+                    </span>
+                  )}
+                  {performance && (
+                    <span className="text-xs">
+                      Threading: {confidence} confidence via {threadingMethod}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Badge className="bg-blue-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium">
+                <Badge 
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                    confidence === 'high' ? 'bg-green-500 text-white' :
+                    confidence === 'medium' ? 'bg-yellow-500 text-white' :
+                    'bg-gray-500 text-white'
+                  }`}
+                >
                   <Envelope2 className="w-3 h-3 mr-1" />
-                  Thread
+                  {confidence} Thread
                 </Badge>
               </div>
             </div>
@@ -342,12 +366,12 @@ export default function EmailViewPage() {
         <Card className="rounded-xl overflow-hidden">
           <CardContent className="p-6">
             <div className="space-y-0">
-              {threadData.messages.map((message, index) => (
+              {messages.map((message, index) => (
                 <ThreadMessageItem
                   key={message.id}
                   message={message}
-                  isLatest={index === threadData.messages.length - 1}
-                  showAttachments={index === threadData.messages.length - 1} // Only show attachments on latest
+                  isLatest={index === messages.length - 1}
+                  showAttachments={index === messages.length - 1} // Only show attachments on latest
                 />
               ))}
             </div>

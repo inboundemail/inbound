@@ -56,9 +56,9 @@ async function InboundHeroSection() {
             <a href="#pricing" className="hover:text-foreground transition-colors">pricing</a>
             <a href="mailto:support@inbound.new" className="hover:text-foreground transition-colors">help</a>
           </div>
-          { session?.user ? (
+            { session?.user ? (
             <Button size="default" className="text-sm sm:text-base" asChild>
-              <Link href="/mail">
+              <Link href="/logs">
                 <span className="hidden sm:inline">hey {session.user.name.toLowerCase()} 👋</span>
                 <span className="sm:hidden">dashboard</span>
               </Link>
