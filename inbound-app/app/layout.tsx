@@ -21,11 +21,12 @@ export const metadata: Metadata = {
   title: "inbound",
   description: "inbound email management platform",
   metadataBase: new URL(process.env.BETTER_AUTH_URL || 'http://localhost:3000'),
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-  },
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({

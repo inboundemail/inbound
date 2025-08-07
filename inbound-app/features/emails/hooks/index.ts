@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { markEmailAsRead, getEmailsList, getEmailDetailsFromParsed, getUnifiedEmailLogs } from '@/app/actions/primary'
 import type { EmailLogsOptions, EmailLogsResponse } from '../types'
 
@@ -43,8 +43,9 @@ export function useUnifiedEmailLogsQuery(options: EmailLogsOptions = {}) {
       }
       return result.data as EmailLogsResponse
     },
-    staleTime: 30 * 1000, // 30 seconds
-    gcTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
+    placeholderData: (prev) => prev,
   })
 }
 
@@ -55,6 +56,34 @@ export const emailKeys = {
   list: (filters: Record<string, any>) => [...emailKeys.lists(), filters] as const,
   details: () => [...emailKeys.all, 'detail'] as const,
   detail: (id: string) => [...emailKeys.details(), id] as const,
+}
+
+// Infinite unified logs (client-side pagination)
+export function useInfiniteUnifiedEmailLogsQuery(options: Omit<EmailLogsOptions, 'offset'> = {}) {
+  return useInfiniteQuery<EmailLogsResponse>({
+    queryKey: ['unified-email-logs-infinite', options],
+    queryFn: async ({ pageParam }) => {
+      const result = await getUnifiedEmailLogs({
+        ...options,
+        limit: options.limit ?? 50,
+        offset: typeof pageParam === 'number' ? pageParam : 0,
+      })
+      if (!result.success) {
+        throw new Error(result.error)
+      }
+      return result.data as EmailLogsResponse
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _pages) => {
+      if (lastPage.pagination.hasMore) {
+        return (lastPage.pagination.offset ?? 0) + (lastPage.pagination.limit ?? 50)
+      }
+      return undefined
+    },
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
+    placeholderData: (prev) => prev,
+  })
 }
 
 // Legacy hook for listing emails (kept for backward compatibility)

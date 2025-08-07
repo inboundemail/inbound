@@ -1,11 +1,11 @@
 "use client"
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+// Sheet removed in favor of dedicated details page
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
@@ -15,7 +15,6 @@ import Link from 'next/link'
 // Import Nucleo icons
 import Clock2 from '@/components/icons/clock-2'
 import Database2 from '@/components/icons/database-2'
-import CircleWarning2 from '@/components/icons/circle-warning-2'
 import Eye2 from '@/components/icons/eye-2'
 import Filter2 from '@/components/icons/filter-2'
 import Refresh2 from '@/components/icons/refresh-2'
@@ -28,16 +27,14 @@ import CircleDots from '@/components/icons/circle-dots'
 import Hashtag2 from '@/components/icons/hashtag-2'
 import ShieldCheck from '@/components/icons/shield-check'
 import Ban2 from '@/components/icons/ban-2'
-import Copy2 from '@/components/icons/copy-2'
 import ArrowUpRight2 from '@/components/icons/arrow-up-right-2'
 import ArchiveDownload from '@/components/icons/archive-download'
 import ArchiveExport from '@/components/icons/archive-export'
 
-import { useUnifiedEmailLogsQuery, useMailDetailsV2Query, useOutboundEmailDetailsV2Query } from '@/features/emails/hooks'
-import type { EmailLogsOptions, EmailLogEntry, EmailLogDelivery, InboundEmailLogEntry, OutboundEmailLogEntry } from '@/features/emails/types'
-import type { GetMailByIdResponse } from '@/app/api/v2/mail/[id]/route'
-import type { GetEmailByIdResponse } from '@/app/api/v2/emails/[id]/route'
-import { toast } from 'sonner'
+import { useInfiniteUnifiedEmailLogsQuery } from '@/features/emails/hooks'
+import { useIntersectionObserver } from '@/hooks/useIntersectionObserver'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import type { EmailLogsOptions, EmailLogEntry, InboundEmailLogEntry, OutboundEmailLogEntry } from '@/features/emails/types'
 
 function getTypeIcon(email: EmailLogEntry) {
   if (email.type === 'inbound') {
@@ -89,9 +86,9 @@ function LogDetailSheet({ log, isOpen, onClose }: { log: EmailLogEntry | null, i
   const copyToClipboard = async (text: string, label: string) => {
     try {
       await navigator.clipboard.writeText(text)
-      toast.success(`${label} copied to clipboard`)
+      // noop
     } catch (err) {
-      toast.error('Failed to copy to clipboard')
+      // noop
     }
   }
 
@@ -101,20 +98,16 @@ function LogDetailSheet({ log, isOpen, onClose }: { log: EmailLogEntry | null, i
   const inboundLog = isInbound ? log as InboundEmailLogEntry : null
   const outboundLog = !isInbound ? log as OutboundEmailLogEntry : null
 
-  // Fetch email content based on type
-  const inboundEmailQuery = useMailDetailsV2Query(isInbound ? log.id : '')
-  const outboundEmailQuery = useOutboundEmailDetailsV2Query(!isInbound ? log.emailId : '')
-
-  const inboundEmailContent = isInbound ? inboundEmailQuery.data : null
-  const outboundEmailContent = !isInbound ? outboundEmailQuery.data : null
-  const isLoadingContent = isInbound ? inboundEmailQuery.isLoading : outboundEmailQuery.isLoading
-  const contentError = isInbound ? inboundEmailQuery.error : outboundEmailQuery.error
+  // Removed fetching; detail page will handle content
+  const inboundEmailContent: any = null
+  const outboundEmailContent: any = null
+  const isLoadingContent = false
+  const contentError: any = null
 
   return (
-    <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent side="bottom" className="h-[85vh] sm:max-w-none">
-        <SheetHeader className="pb-4">
-          <SheetTitle className="flex items-center gap-2">
+    <div hidden={!isOpen}>
+      <div className="pb-4">
+          <div className="flex items-center gap-2">
             <div className="relative">
               {getTypeIcon(log)}
               <div className="absolute -top-1 -right-1">
@@ -123,11 +116,11 @@ function LogDetailSheet({ log, isOpen, onClose }: { log: EmailLogEntry | null, i
             </div>
             {isInbound ? 'Inbound' : 'Outbound'} Email Log Details
             {isLoadingContent && <span className="text-xs text-muted-foreground ml-2">(Loading...)</span>}
-          </SheetTitle>
-          <SheetDescription>
+          </div>
+          <div>
             Message ID: {log.messageId}
-          </SheetDescription>
-        </SheetHeader>
+          </div>
+      </div>
 
         <ScrollArea className="h-[calc(85vh-120px)]">
           <div className="space-y-6 pb-6">
@@ -231,7 +224,6 @@ function LogDetailSheet({ log, isOpen, onClose }: { log: EmailLogEntry | null, i
               ) : contentError ? (
                 <div className="p-4 bg-destructive/10 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
-                    <CircleWarning2 width="16" height="16" className="text-destructive" />
                     <span className="font-medium text-destructive">Failed to Load Content</span>
                   </div>
                   <p className="text-sm text-destructive">{contentError.message}</p>
@@ -248,16 +240,7 @@ function LogDetailSheet({ log, isOpen, onClose }: { log: EmailLogEntry | null, i
                        <div className="space-y-2">
                          <div className="flex items-center justify-between">
                            <span className="text-xs text-muted-foreground">HTML Content:</span>
-                           <Button
-                             variant="ghost"
-                             size="sm"
-                             onClick={() => copyToClipboard(
-                               isInbound ? inboundEmailContent?.content?.htmlBody || '' : outboundEmailContent?.html || '', 
-                               'HTML content'
-                             )}
-                           >
-                             <Copy2 width="12" height="12" />
-                           </Button>
+                            
                          </div>
                          <div className="border rounded-lg p-4 bg-muted/20 max-h-96 overflow-auto">
                            <iframe
@@ -303,16 +286,7 @@ function LogDetailSheet({ log, isOpen, onClose }: { log: EmailLogEntry | null, i
                        <div className="space-y-2">
                          <div className="flex items-center justify-between">
                            <span className="text-xs text-muted-foreground">Text Content:</span>
-                           <Button
-                             variant="ghost"
-                             size="sm"
-                             onClick={() => copyToClipboard(
-                               isInbound ? inboundEmailContent?.content?.textBody || '' : outboundEmailContent?.text || '', 
-                               'Text content'
-                             )}
-                           >
-                             <Copy2 width="12" height="12" />
-                           </Button>
+                            
                          </div>
                          <pre className="text-sm bg-muted p-4 rounded-lg overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto">
                            {isInbound ? inboundEmailContent?.content?.textBody : outboundEmailContent?.text}
@@ -327,13 +301,7 @@ function LogDetailSheet({ log, isOpen, onClose }: { log: EmailLogEntry | null, i
                        <div className="space-y-2">
                          <div className="flex items-center justify-between">
                            <span className="text-xs text-muted-foreground">Raw Email Content:</span>
-                           <Button
-                             variant="ghost"
-                             size="sm"
-                             onClick={() => copyToClipboard(inboundEmailContent?.content?.rawContent || '', 'Raw content')}
-                           >
-                             <Copy2 width="12" height="12" />
-                           </Button>
+                            
                          </div>
                          <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto font-mono max-h-96 overflow-y-auto">
                            {inboundEmailContent?.content?.rawContent}
@@ -616,13 +584,7 @@ function LogDetailSheet({ log, isOpen, onClose }: { log: EmailLogEntry | null, i
                               <div className="mt-2">
                                 <div className="flex items-center justify-between mb-1">
                                   <span className="text-muted-foreground">Response Data:</span>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => copyToClipboard(JSON.stringify(delivery.responseData, null, 2), 'Response data')}
-                                  >
-                                    <Copy2 width="12" height="12" />
-                                  </Button>
+                                  
                                 </div>
                                 <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
                                   {JSON.stringify(delivery.responseData, null, 2)}
@@ -656,13 +618,7 @@ function LogDetailSheet({ log, isOpen, onClose }: { log: EmailLogEntry | null, i
                       <div className="mt-3">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-muted-foreground text-xs">Provider Response:</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => copyToClipboard(JSON.stringify(outboundLog.providerResponse, null, 2), 'Provider response')}
-                          >
-                            <Copy2 width="12" height="12" />
-                          </Button>
+                          
                         </div>
                         <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
                           {JSON.stringify(outboundLog.providerResponse, null, 2)}
@@ -686,8 +642,7 @@ function LogDetailSheet({ log, isOpen, onClose }: { log: EmailLogEntry | null, i
             </div>
           </div>
         </ScrollArea>
-      </SheetContent>
-    </Sheet>
+      </div>
   )
 }
 
@@ -699,17 +654,42 @@ export default function LogsPage() {
   const [timeRange, setTimeRange] = useState<string>('7d')
   const [selectedLog, setSelectedLog] = useState<EmailLogEntry | null>(null)
 
-  const queryOptions: EmailLogsOptions = {
-    searchQuery,
-    statusFilter: statusFilter as any,
-    typeFilter: typeFilter as any,
-    domainFilter,
-    timeRange: timeRange as any,
+  // Debounce inputs to cut request volume
+  const debouncedSearch = useDebouncedValue(searchQuery, 300)
+  const debouncedStatus = useDebouncedValue(statusFilter, 150)
+  const debouncedType = useDebouncedValue(typeFilter, 150)
+  const debouncedDomain = useDebouncedValue(domainFilter, 150)
+  const debouncedTime = useDebouncedValue(timeRange, 150)
+
+  const infiniteOptions: Omit<EmailLogsOptions, 'offset'> = {
+    searchQuery: debouncedSearch,
+    statusFilter: debouncedStatus as any,
+    typeFilter: debouncedType as any,
+    domainFilter: debouncedDomain,
+    timeRange: debouncedTime as any,
     limit: 100,
-    offset: 0
   }
 
-  const { data, isLoading, error, refetch } = useUnifiedEmailLogsQuery(queryOptions)
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useInfiniteUnifiedEmailLogsQuery(infiniteOptions)
+
+  const firstPage = data?.pages?.[0]
+  const stats = firstPage?.stats
+  const filtersUniqueDomains = firstPage?.filters?.uniqueDomains ?? []
+
+  const { ref: sentinelRef, hasIntersected } = useIntersectionObserver({ rootMargin: '400px' })
+  useEffect(() => {
+    if (hasIntersected && hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage()
+    }
+  }, [hasIntersected, hasNextPage, isFetchingNextPage, fetchNextPage])
 
   if (error) {
     return (
@@ -737,10 +717,10 @@ export default function LogsPage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-semibold text-foreground mb-1 tracking-tight">
-                Logs
+                Email Flow
               </h2>
               <p className="text-muted-foreground text-sm font-medium">
-                {data?.stats.totalEmails || 0} total logs found ({data?.stats.inbound || 0} inbound, {data?.stats.outbound || 0} outbound)
+                {stats?.totalEmails || 0} total logs found ({stats?.inbound || 0} inbound, {stats?.outbound || 0} outbound)
               </p>
             </div>
             <Button
@@ -799,7 +779,7 @@ export default function LogsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Domains</SelectItem>
-                {data?.filters.uniqueDomains.map(domain => (
+                {filtersUniqueDomains.map((domain: string) => (
                   <SelectItem key={domain} value={domain}>{domain}</SelectItem>
                 ))}
               </SelectContent>
@@ -838,43 +818,43 @@ export default function LogsPage() {
         </div>
 
         {/* Stats Bar */}
-        {data && (
-          <div className="mb-6 bg-muted/30 rounded-xl p-3">
+        {stats && (
+            <div className="mb-6 bg-muted/30 rounded-xl p-3">
             <div className="flex items-center gap-6 text-sm flex-wrap">
               <div className="flex items-center gap-2">
                 <ArchiveDownload width="14" height="14" className="text-purple-600" />
                 <span className="text-muted-foreground">Inbound:</span>
-                <span className="font-medium text-foreground">{data.stats.inbound}</span>
+                <span className="font-medium text-foreground">{stats.inbound}</span>
               </div>
               <div className="flex items-center gap-2">
                 <ArchiveExport width="14" height="14" className="text-blue-600" />
                 <span className="text-muted-foreground">Outbound:</span>
-                <span className="font-medium text-foreground">{data.stats.outbound}</span>
+                <span className="font-medium text-foreground">{stats.outbound}</span>
               </div>
               <div className="flex items-center gap-2">
                 <CircleCheck width="14" height="14" className="text-green-600" />
                 <span className="text-muted-foreground">Delivered:</span>
-                <span className="font-medium text-foreground">{data.stats.delivered}</span>
+                <span className="font-medium text-foreground">{stats.delivered}</span>
               </div>
               <div className="flex items-center gap-2">
                 <TabClose width="14" height="14" className="text-destructive" />
                 <span className="text-muted-foreground">Failed:</span>
-                <span className="font-medium text-foreground">{data.stats.failed}</span>
+                <span className="font-medium text-foreground">{stats.failed}</span>
               </div>
               <div className="flex items-center gap-2">
                 <CirclePlay width="14" height="14" className="text-yellow-600" />
                 <span className="text-muted-foreground">Pending:</span>
-                <span className="font-medium text-foreground">{data.stats.pending}</span>
+                <span className="font-medium text-foreground">{stats.pending}</span>
               </div>
               <div className="flex items-center gap-2">
                 <CircleDots width="14" height="14" className="text-muted-foreground" />
                 <span className="text-muted-foreground">No Delivery:</span>
-                <span className="font-medium text-foreground">{data.stats.noDelivery}</span>
+                <span className="font-medium text-foreground">{stats.noDelivery}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Clock2 width="14" height="14" className="text-muted-foreground" />
                 <span className="text-muted-foreground">Avg Processing:</span>
-                <span className="font-medium text-foreground">{Math.round(data.stats.avgProcessingTime)}ms</span>
+                <span className="font-medium text-foreground">{Math.round(stats.avgProcessingTime)}ms</span>
               </div>
             </div>
           </div>
@@ -887,7 +867,7 @@ export default function LogsPage() {
           <div className="flex items-center justify-center py-20">
             <div className="text-muted-foreground">Loading logs...</div>
           </div>
-        ) : !data?.emails.length ? (
+        ) : !((data?.pages?.flatMap(p => p.emails) || []).length) ? (
           <div className="max-w-6xl mx-auto p-4">
             <div className="bg-card border-border rounded-xl p-8">
               <div className="text-center">
@@ -903,16 +883,15 @@ export default function LogsPage() {
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {data.emails.map((log) => {
+            {(data?.pages ?? []).flatMap(p => p.emails).map((log) => {
               const isInbound = log.type === 'inbound'
               const inboundLog = isInbound ? log as InboundEmailLogEntry : null
               const outboundLog = !isInbound ? log as OutboundEmailLogEntry : null
               
               return (
-                                 <div 
+                 <div 
                    key={log.id}
-                   className="flex items-center gap-4 px-6 py-3 hover:bg-muted/50 cursor-pointer transition-colors"
-                   onClick={() => setSelectedLog(log)}
+                   className="flex items-center gap-4 px-6 py-3 hover:bg-muted/50 transition-colors"
                  >
                    {/* Type Icon with Status Dot */}
                    <div className="flex-shrink-0">
@@ -1015,31 +994,24 @@ export default function LogsPage() {
                     }
                   </div>
 
-                  {/* View button */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 flex-shrink-0"
-                    asChild
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Link href={`/mail/${log.id}`}>
-                      <ArrowUpRight2 width="12" height="12" />
-                    </Link>
-                  </Button>
+                  {/* View link for prefetch */}
+                  <Link href={`/logs/${log.id}`} className="h-6 w-6 p-0 flex-shrink-0 inline-flex items-center justify-center rounded hover:bg-accent">
+                    <ArrowUpRight2 width="12" height="12" />
+                  </Link>
                 </div>
               )
             })}
+            {/* Infinite scroll sentinel */}
+            <div ref={sentinelRef as any} className="h-12 flex items-center justify-center">
+              {isFetchingNextPage && (
+                <div className="text-muted-foreground text-sm">Loading more…</div>
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Log Detail Sheet */}
-      <LogDetailSheet 
-        log={selectedLog} 
-        isOpen={!!selectedLog} 
-        onClose={() => setSelectedLog(null)} 
-      />
+      {/* Detail sheet removed. */}
     </div>
   )
 } 
