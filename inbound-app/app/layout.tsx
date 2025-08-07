@@ -4,6 +4,7 @@ import "./globals.css";
 import { Analytics } from "@vercel/analytics/next"
 import { AutumnProvider } from "autumn-js/react";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -48,6 +49,7 @@ export default function RootLayout({
           <AutumnProvider backendUrl={process.env.BETTER_AUTH_URL || ""}>
             {children}
             <Analytics />
+            <SpeedInsights />
           </AutumnProvider>
         </QueryProvider>
       </body>

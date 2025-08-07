@@ -63,6 +63,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@tsparticles/react": "^3.0.0",
     "@vercel/analytics": "^1.5.0",
+    "@vercel/speed-insights": "^1.2.0",
     "ai": "^4.3.16",
     "async_hooks": "^1.0.0",
     "autumn-js": "^0.0.47",
