@@ -1,0 +1,11 @@
+const CHUNK_PUBLIC_PATH = "server/app/robots.txt/route.js";
+const runtime = require("../../chunks/[turbopack]_runtime.js");
+runtime.loadChunk("server/chunks/[root-of-the-server]__fbcd3d46._.js");
+runtime.loadChunk("server/chunks/node_modules_next_dist_7abf68f2._.js");
+runtime.loadChunk("server/chunks/[root-of-the-server]__9aae88a2._.js");
+runtime.loadChunk("server/chunks/node_modules_next_dist_esm_eac5e51d._.js");
+runtime.loadChunk("server/chunks/node_modules_next_5e40458d._.js");
+runtime.loadChunk("server/chunks/node_modules_next_dist_compiled_@opentelemetry_api_index_2ce3e4cf.js");
+runtime.getOrInstantiateRuntimeModule(899053, CHUNK_PUBLIC_PATH);
+runtime.getOrInstantiateRuntimeModule(771643, CHUNK_PUBLIC_PATH);
+module.exports = runtime.getOrInstantiateRuntimeModule(771643, CHUNK_PUBLIC_PATH).exports;

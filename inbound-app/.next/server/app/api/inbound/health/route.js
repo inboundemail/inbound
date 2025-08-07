@@ -1,0 +1,15 @@
+const CHUNK_PUBLIC_PATH = "server/app/api/inbound/health/route.js";
+const runtime = require("../../../../chunks/[turbopack]_runtime.js");
+runtime.loadChunk("server/chunks/node_modules_@react-email_a30a3f78._.js");
+runtime.loadChunk("server/chunks/[root-of-the-server]__10708ed4._.js");
+runtime.loadChunk("server/chunks/lib_db_schema_ts_f87cda84._.js");
+runtime.loadChunk("server/chunks/node_modules_next_dist_00357f9a._.js");
+runtime.loadChunk("server/chunks/[root-of-the-server]__27674dec._.js");
+runtime.loadChunk("server/chunks/_d6f64c03._.js");
+runtime.loadChunk("server/chunks/node_modules_next_b6a2a6a3._.js");
+runtime.loadChunk("server/chunks/_bc97ceea._.js");
+runtime.loadChunk("server/chunks/node_modules_next_dist_7598a3f7._.js");
+runtime.loadChunk("server/chunks/node_modules_10ae7a2d._.js");
+runtime.getOrInstantiateRuntimeModule(690688, CHUNK_PUBLIC_PATH);
+runtime.getOrInstantiateRuntimeModule(690763, CHUNK_PUBLIC_PATH);
+module.exports = runtime.getOrInstantiateRuntimeModule(690763, CHUNK_PUBLIC_PATH).exports;

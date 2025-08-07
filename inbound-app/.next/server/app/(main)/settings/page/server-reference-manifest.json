@@ -1,0 +1,60 @@
+{
+  "node": {
+    "00bd5c39d59f2c9e83dce14d93d44f40e9d2c4f1ae": {
+      "workers": {
+        "app/(main)/settings/page": {
+          "moduleId": "937367",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/settings/page": "action-browser"
+      }
+    },
+    "4001b46509619c2e0fe09e06802ee8157c6226ec8c": {
+      "workers": {
+        "app/(main)/settings/page": {
+          "moduleId": "937367",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/settings/page": "action-browser"
+      }
+    },
+    "00faa09f01a5256e987f59d5eb3348cc00f9bf9491": {
+      "workers": {
+        "app/(main)/settings/page": {
+          "moduleId": "937367",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/settings/page": "action-browser"
+      }
+    },
+    "00282b3a5eacbbc918f95ec4473b7dc09d0e5ffcf8": {
+      "workers": {
+        "app/(main)/settings/page": {
+          "moduleId": "937367",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/settings/page": "action-browser"
+      }
+    },
+    "40d22d6e027abaab42994fd38d69f454c777a42914": {
+      "workers": {
+        "app/(main)/settings/page": {
+          "moduleId": "937367",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/settings/page": "action-browser"
+      }
+    }
+  },
+  "edge": {}
+}

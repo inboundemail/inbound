@@ -1,0 +1,3 @@
+{
+  "/(content)/email-as-webhook/page": "app/(content)/email-as-webhook/page.js"
+}

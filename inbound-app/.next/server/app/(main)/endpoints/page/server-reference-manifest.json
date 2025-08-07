@@ -1,0 +1,93 @@
+{
+  "node": {
+    "00bd5c39d59f2c9e83dce14d93d44f40e9d2c4f1ae": {
+      "workers": {
+        "app/(main)/endpoints/page": {
+          "moduleId": "443308",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/endpoints/page": "action-browser"
+      }
+    },
+    "4001b46509619c2e0fe09e06802ee8157c6226ec8c": {
+      "workers": {
+        "app/(main)/endpoints/page": {
+          "moduleId": "443308",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/endpoints/page": "action-browser"
+      }
+    },
+    "00faa09f01a5256e987f59d5eb3348cc00f9bf9491": {
+      "workers": {
+        "app/(main)/endpoints/page": {
+          "moduleId": "443308",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/endpoints/page": "action-browser"
+      }
+    },
+    "00282b3a5eacbbc918f95ec4473b7dc09d0e5ffcf8": {
+      "workers": {
+        "app/(main)/endpoints/page": {
+          "moduleId": "443308",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/endpoints/page": "action-browser"
+      }
+    },
+    "40d22d6e027abaab42994fd38d69f454c777a42914": {
+      "workers": {
+        "app/(main)/endpoints/page": {
+          "moduleId": "443308",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/endpoints/page": "action-browser"
+      }
+    },
+    "009bc667e4551b976ae0c15e50cbf919762c4f6f91": {
+      "workers": {
+        "app/(main)/endpoints/page": {
+          "moduleId": "443308",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/endpoints/page": "action-browser"
+      }
+    },
+    "00a849d61ace5e9280f8827e33dcb81c884d88af53": {
+      "workers": {
+        "app/(main)/endpoints/page": {
+          "moduleId": "443308",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/endpoints/page": "action-browser"
+      }
+    },
+    "40515f2a1a45eae61cc5c66b637f7b7f5d38b98ad9": {
+      "workers": {
+        "app/(main)/endpoints/page": {
+          "moduleId": "443308",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/endpoints/page": "action-browser"
+      }
+    }
+  },
+  "edge": {}
+}

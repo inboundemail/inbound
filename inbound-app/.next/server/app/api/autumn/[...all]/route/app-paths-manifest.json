@@ -1,0 +1,3 @@
+{
+  "/api/autumn/[...all]/route": "app/api/autumn/[...all]/route.js"
+}

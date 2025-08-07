@@ -1,0 +1,18 @@
+const CHUNK_PUBLIC_PATH = "server/app/api/v2/endpoints/[id]/route.js";
+const runtime = require("../../../../../chunks/[turbopack]_runtime.js");
+runtime.loadChunk("server/chunks/[root-of-the-server]__ee00980d._.js");
+runtime.loadChunk("server/chunks/lib_db_schema_ts_f87cda84._.js");
+runtime.loadChunk("server/chunks/[root-of-the-server]__da0ebeb6._.js");
+runtime.loadChunk("server/chunks/node_modules_next_d81ba465._.js");
+runtime.loadChunk("server/chunks/node_modules_next_dist_00357f9a._.js");
+runtime.loadChunk("server/chunks/_b0b50c01._.js");
+runtime.loadChunk("server/chunks/[root-of-the-server]__9edd19d9._.js");
+runtime.loadChunk("server/chunks/_a16d99f6._.js");
+runtime.loadChunk("server/chunks/node_modules_next_b6a2a6a3._.js");
+runtime.loadChunk("server/chunks/_d6f64c03._.js");
+runtime.loadChunk("server/chunks/node_modules_next_dist_7598a3f7._.js");
+runtime.loadChunk("server/chunks/_bc97ceea._.js");
+runtime.loadChunk("server/chunks/node_modules_5e64a46a._.js");
+runtime.getOrInstantiateRuntimeModule(335772, CHUNK_PUBLIC_PATH);
+runtime.getOrInstantiateRuntimeModule(539143, CHUNK_PUBLIC_PATH);
+module.exports = runtime.getOrInstantiateRuntimeModule(539143, CHUNK_PUBLIC_PATH).exports;

@@ -1,0 +1,3 @@
+{
+  "/api/inbound/check-dns-records/route": "app/api/inbound/check-dns-records/route.js"
+}

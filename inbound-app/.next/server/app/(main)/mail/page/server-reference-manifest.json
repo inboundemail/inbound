@@ -1,0 +1,137 @@
+{
+  "node": {
+    "00bd5c39d59f2c9e83dce14d93d44f40e9d2c4f1ae": {
+      "workers": {
+        "app/(main)/mail/page": {
+          "moduleId": "287751",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/mail/page": "action-browser"
+      }
+    },
+    "4001b46509619c2e0fe09e06802ee8157c6226ec8c": {
+      "workers": {
+        "app/(main)/mail/page": {
+          "moduleId": "287751",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/mail/page": "action-browser"
+      }
+    },
+    "00faa09f01a5256e987f59d5eb3348cc00f9bf9491": {
+      "workers": {
+        "app/(main)/mail/page": {
+          "moduleId": "287751",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/mail/page": "action-browser"
+      }
+    },
+    "00282b3a5eacbbc918f95ec4473b7dc09d0e5ffcf8": {
+      "workers": {
+        "app/(main)/mail/page": {
+          "moduleId": "287751",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/mail/page": "action-browser"
+      }
+    },
+    "40d22d6e027abaab42994fd38d69f454c777a42914": {
+      "workers": {
+        "app/(main)/mail/page": {
+          "moduleId": "287751",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/mail/page": "action-browser"
+      }
+    },
+    "40ccd8d8e26d5a0a7819f93603cecd1770ab9afb12": {
+      "workers": {
+        "app/(main)/mail/page": {
+          "moduleId": "287751",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/mail/page": "action-browser"
+      }
+    },
+    "400e0c4e16c3c0c54c42073a20508c7d05f4dd64fa": {
+      "workers": {
+        "app/(main)/mail/page": {
+          "moduleId": "287751",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/mail/page": "action-browser"
+      }
+    },
+    "4036a927bdcc185c7cd5221062f42afb70733d159f": {
+      "workers": {
+        "app/(main)/mail/page": {
+          "moduleId": "287751",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/mail/page": "action-browser"
+      }
+    },
+    "4062391b8b9fea3dab173568dc243176dcda35bc73": {
+      "workers": {
+        "app/(main)/mail/page": {
+          "moduleId": "287751",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/mail/page": "action-browser"
+      }
+    },
+    "40134f515b8fe5278d31a536a3a223c156ec6b61af": {
+      "workers": {
+        "app/(main)/mail/page": {
+          "moduleId": "287751",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/mail/page": "action-browser"
+      }
+    },
+    "40f4308e9524f900b328889cf8d5095aa19d019d23": {
+      "workers": {
+        "app/(main)/mail/page": {
+          "moduleId": "287751",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/mail/page": "action-browser"
+      }
+    },
+    "00b110dd3c06704b76c3b03d988a4765d56aaab563": {
+      "workers": {
+        "app/(main)/mail/page": {
+          "moduleId": "287751",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/(main)/mail/page": "action-browser"
+      }
+    }
+  },
+  "edge": {}
+}

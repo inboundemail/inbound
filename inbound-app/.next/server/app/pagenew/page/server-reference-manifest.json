@@ -1,0 +1,16 @@
+{
+  "node": {
+    "00efd03bd5dda938d92925962f9cfe42c127085479": {
+      "workers": {
+        "app/pagenew/page": {
+          "moduleId": "292443",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/pagenew/page": "rsc"
+      }
+    }
+  },
+  "edge": {}
+}
