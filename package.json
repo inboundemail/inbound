@@ -6,6 +6,10 @@
   "devDependencies": {
     "@types/bun": "latest"
   },
+  "scripts": {
+    "dev:inbound": "cd inbound-app && bun run dev",
+    "dev:whop": "cd inbound-whop-app && bun run dev"
+  },
   "peerDependencies": {
     "typescript": "^5"
   }
