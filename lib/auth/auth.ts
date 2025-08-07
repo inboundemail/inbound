@@ -39,14 +39,14 @@ export const auth = betterAuth({
             clientId: process.env.GITHUB_CLIENT_ID as string,
             clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
             // Always use production URL for OAuth proxy to work properly
-            redirectURI: "https://inbound.new/api/auth/callback/github"
+            // redirectURI: "https://inbound.new/api/auth/callback/github"
         },
         google: { 
             prompt: "select_account", 
             clientId: process.env.GOOGLE_CLIENT_ID as string, 
             clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
             // Always use production URL for OAuth proxy to work properly
-            redirectURI: "https://inbound.new/api/auth/callback/google"
+            // redirectURI: "https://inbound.new/api/auth/callback/google"
         },
     },
     session: {
@@ -63,16 +63,16 @@ export const auth = betterAuth({
         }
     },
     plugins: [
-        oAuthProxy({
-            productionURL: process.env.BETTER_AUTH_URL || "https://inbound.new",
-            currentURL: process.env.NODE_ENV === 'development' 
-                ? "http://localhost:3000" 
-                : process.env.VERCEL_URL 
-                    ? `https://${process.env.VERCEL_URL}` 
-                    : process.env.VERCEL_BRANCH_URL 
-                        ? `https://${process.env.VERCEL_BRANCH_URL}` 
-                        : undefined
-        }),
+        // ...(process.env.NODE_ENV === 'production' ? [
+        //     oAuthProxy({
+        //         productionURL: process.env.BETTER_AUTH_URL || "https://inbound.new",
+        //         currentURL: process.env.VERCEL_URL 
+        //             ? `https://${process.env.VERCEL_URL}` 
+        //             : process.env.VERCEL_BRANCH_URL 
+        //                 ? `https://${process.env.VERCEL_BRANCH_URL}` 
+        //                 : undefined
+        //     })
+        // ] : []),
         apiKey(
             {
                 rateLimit: {
