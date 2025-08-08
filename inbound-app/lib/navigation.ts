@@ -32,6 +32,7 @@ export interface NavigationItem {
 export interface NavigationConfig {
   main: NavigationItem[]
   secondary: NavigationItem[]
+  features: NavigationItem[]
   admin: NavigationItem[]
 }
 
@@ -67,6 +68,9 @@ export const navigationConfig: NavigationConfig = {
       icon: Gear2,
       description: "Account and app settings"
     },
+  ],
+  secondary: [],
+  features: [
     {
       title: "Inbound VIP",
       url: "/vip",
@@ -76,7 +80,6 @@ export const navigationConfig: NavigationConfig = {
       requiresFeatureFlag: "vip"
     }
   ],
-  secondary: [],
   admin: [
     {
       title: "Admin Panel",
@@ -117,6 +120,12 @@ export function getPageTitleFromUrl(pathname: string): string {
   )
   if (adminItem) return adminItem.title
 
+  // Check features navigation items
+  const featuresItem = navigationConfig.features.find(item => 
+    item.url === pathname || item.url === `/${firstSegment}`
+  )
+  if (featuresItem) return featuresItem.title
+
   // Check secondary navigation items
   const secondaryItem = navigationConfig.secondary.find(item => 
     item.url === pathname || item.url === `/${firstSegment}`
@@ -155,6 +164,12 @@ export function getNavigationItemFromUrl(pathname: string): NavigationItem | nul
     item.url === pathname || item.url === `/${firstSegment}`
   )
   if (adminItem) return adminItem
+
+  // Check features navigation items
+  const featuresItem = navigationConfig.features.find(item => 
+    item.url === pathname || item.url === `/${firstSegment}`
+  )
+  if (featuresItem) return featuresItem
 
   // Check secondary navigation items
   const secondaryItem = navigationConfig.secondary.find(item => 

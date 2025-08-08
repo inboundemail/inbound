@@ -50,9 +50,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     (session.user as any).featureFlags || null
   )
 
+  const filteredFeaturesNav = filterNavigationByFeatureFlags(
+    navigationConfig.features,
+    (session.user as any).featureFlags || null
+  )
+
   const data = {
     user: userData,
     navMain: filteredMainNav,
+    navFeatures: filteredFeaturesNav,
     navSecondary: navigationConfig.secondary,
     navAdmin: userIsAdmin ? navigationConfig.admin : [],
   }
@@ -75,6 +81,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
+        {data.navFeatures.length > 0 && (
+          <div className="mt-4">
+            <span className="text-sm text-muted-foreground ml-2">Features</span>
+            <NavSecondary items={data.navFeatures} />
+          </div>
+        )}
         {data.navAdmin.length > 0 && (
           <div className="mt-4">
             <span className="text-sm text-muted-foreground ml-2">Admin</span>

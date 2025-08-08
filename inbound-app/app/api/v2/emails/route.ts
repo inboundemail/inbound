@@ -6,6 +6,7 @@ import { sentEmails, emailDomains, SENT_EMAIL_STATUS } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { Autumn as autumn } from 'autumn-js'
 import { nanoid } from 'nanoid'
+import { canUserSendFromEmail, extractEmailAddress, extractDomain } from '@/lib/email-management/agent-email-helper'
 
 /**
  * POST /api/v2/emails
@@ -39,18 +40,7 @@ export interface PostEmailsResponse {
     id: string
 }
 
-// Helper function to extract email address from "Name <email@domain.com>" format
-function extractEmailAddress(email: string): string {
-    const match = email.match(/<(.+)>/)
-    return match ? match[1] : email.trim()
-}
-
-// Helper function to extract domain from email address
-function extractDomain(email: string): string {
-    const address = extractEmailAddress(email)
-    const parts = address.split('@')
-    return parts.length === 2 ? parts[1] : ''
-}
+// Helper functions moved to @/lib/email-management/agent-email-helper
 
 // Helper function to convert string or array to array
 function toArray(value: string | string[] | undefined): string[] {
@@ -245,29 +235,36 @@ export async function POST(request: NextRequest) {
         
         console.log('📧 Sender details:', { from: body.from, address: fromAddress, domain: fromDomain })
 
-        // Verify sender domain ownership
-        console.log('🔍 Verifying domain ownership for:', fromDomain)
-        const userDomain = await db
-            .select()
-            .from(emailDomains)
-            .where(
-                and(
-                    eq(emailDomains.userId, userId),
-                    eq(emailDomains.domain, fromDomain),
-                    eq(emailDomains.status, 'verified')
+        // Check if this is the special agent@inbnd.dev email (allowed for all users)
+        const { isAgentEmail } = canUserSendFromEmail(body.from)
+        
+        if (isAgentEmail) {
+            console.log('✅ Using agent@inbnd.dev - allowed for all users')
+        } else {
+            // Verify sender domain ownership for non-agent emails
+            console.log('🔍 Verifying domain ownership for:', fromDomain)
+            const userDomain = await db
+                .select()
+                .from(emailDomains)
+                .where(
+                    and(
+                        eq(emailDomains.userId, userId),
+                        eq(emailDomains.domain, fromDomain),
+                        eq(emailDomains.status, 'verified')
+                    )
                 )
-            )
-            .limit(1)
+                .limit(1)
 
-        if (userDomain.length === 0) {
-            console.log('❌ User does not own the sender domain:', fromDomain)
-            return NextResponse.json(
-                { error: `You don't have permission to send from domain: ${fromDomain}` },
-                { status: 403 }
-            )
+            if (userDomain.length === 0) {
+                console.log('❌ User does not own the sender domain:', fromDomain)
+                return NextResponse.json(
+                    { error: `You don't have permission to send from domain: ${fromDomain}` },
+                    { status: 403 }
+                )
+            }
+
+            console.log('✅ Domain ownership verified')
         }
-
-        console.log('✅ Domain ownership verified')
 
         // Convert recipients to arrays
         const toAddresses = toArray(body.to)

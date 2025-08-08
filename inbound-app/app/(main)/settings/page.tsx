@@ -24,7 +24,6 @@ import {
   DomainStatsResponse,
   ApiKey,
   CreateApiKeyForm,
-  CircularProgressProps
 } from '@/features/settings/types'
 import CreditCard2 from "@/components/icons/credit-card-2"
 import ChartTrendUp from "@/components/icons/chart-trend-up"
@@ -36,62 +35,8 @@ import Trash2 from "@/components/icons/trash-2"
 import { formatDistanceToNow } from 'date-fns'
 import { PricingTable } from '@/components/autumn/pricing-table-format'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Globe2 from '@/components/icons/globe-2'
-import Archive from '@/components/icons/archive-export'
-import Envelope2 from '@/components/icons/envelope-2'
-import Send from '@/components/icons/share-right-2'
-import X from '@/components/icons/tab-close'
-
-
-
-
+// removed unused feature icons after layout merge
 // Types are now imported from @/features/settings/types
-
-function CircularProgress({ value, max, size = 60, strokeWidth = 6, className = "", children }: CircularProgressProps) {
-  const radius = (size - strokeWidth) / 2
-  const circumference = radius * 2 * Math.PI
-  const percentage = max > 0 ? (value / max) * 100 : 0
-  const strokeDashoffset = circumference - (percentage / 100) * circumference
-
-  return (
-    <div className={`relative inline-flex items-center justify-center ${className}`}>
-      <svg
-        width={size}
-        height={size}
-        className="transform -rotate-90"
-      >
-        {/* Background circle */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke="currentColor"
-          strokeWidth={strokeWidth}
-          fill="none"
-          className="text-slate-700"
-        />
-        {/* Progress circle */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke="currentColor"
-          strokeWidth={strokeWidth}
-          fill="none"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-          className="text-purple-400 transition-all duration-300 ease-in-out"
-        />
-      </svg>
-      {children && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          {children}
-        </div>
-      )}
-    </div>
-  )
-}
 
 export default function SettingsPage() {
   const { data: session, isPending } = useSession()
@@ -230,22 +175,19 @@ export default function SettingsPage() {
 
   if (isPending) {
     return (
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        <div className="flex items-center justify-center">
-          <div className="text-muted-foreground">Loading...</div>
+      <div className="min-h-screen p-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-center py-20">
+            <div className="text-muted-foreground">Loading...</div>
+          </div>
         </div>
       </div>
     )
   }
 
   if (!session) {
-    return (
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        <div className="flex items-center justify-center">
-          <div className="text-muted-foreground">Please sign in to access settings</div>
-        </div>
-      </div>
-    )
+    router.push('/login')
+    return null
   }
 
   const activeProduct = customerData?.products?.find(p => p.status === 'active')
@@ -268,50 +210,89 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 pt-10">
-      <div className="space-y-6">
+    <div className="min-h-screen">
+      <div className="max-w-6xl mx-auto p-4">
+        {/* Header */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-foreground mb-1 tracking-tight">
+                Settings
+              </h2>
+              <p className="text-muted-foreground text-sm font-medium">
+                Manage your account, billing, API keys, and preferences
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleManageBilling}
+                disabled={!customerData || billingPortalMutation.isPending}
+              >
+                {billingPortalMutation.isPending ? 'Loading…' : 'Manage Billing'}
+              </Button>
+              {showUpgradeButton && (
+                <Button 
+                  size="sm"
+                  onClick={handleOpenUpgrade}
+                  variant="primary"
+                >
+                  <ChartTrendUp width="16" height="16" className="mr-2" />
+                  Upgrade
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        
+        <div className="space-y-6">
+        <div className="h-4 border-b border-slate-800"></div>
         {/* Subscription Management */}
-        <Card className="bg-slate-900 text-white border-slate-800">
-          <CardContent className="p-6">
+        <Card className="border-none p-0 w-full">
+          <CardContent className="p-0">
             {isLoadingCustomer ? (
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <Skeleton className="h-6 w-32 bg-slate-800 mb-2" />
-                  <Skeleton className="h-4 w-64 bg-slate-800" />
+                  <Skeleton className="h-6 w-32 mb-2" />
+                  <Skeleton className="h-4 w-64" />
                 </div>
                 <div className="space-y-3">
-                  <Skeleton className="h-12 w-32 bg-slate-800" />
-                  <Skeleton className="h-12 w-32 bg-slate-800" />
+                  <Skeleton className="h-12 w-32" />
+                  <Skeleton className="h-12 w-32" />
                 </div>
               </div>
             ) : customerData ? (
-              <div className="flex items-center justify-between">
-                {/* Left side - Plan Info */}
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-xl font-semibold">
-                      {activeProduct?.name || 'Free'}
-                    </h3>
-                    <Badge 
-                      variant={activeProduct?.status === 'active' ? 'default' : 'secondary'}
-                      className="capitalize bg-slate-700 text-slate-200"
-                    >
-                      {activeProduct?.status || 'Inactive'}
-                    </Badge>
+              <div>
+                {/* Plan Info */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="text-xl font-semibold">
+                        {activeProduct?.name || 'Free'}
+                      </h3>
+                      <Badge 
+                        variant={activeProduct?.status === 'active' ? 'default' : 'secondary'}
+                        className="capitalize"
+                      >
+                        {activeProduct?.status || 'Inactive'}
+                      </Badge>
+                    </div>
+                    <p className="text-muted-foreground text-sm max-w-md">
+                      {activeProduct?.name === 'Pro' 
+                        ? 'Advanced email processing with unlimited triggers and extended retention.'
+                        : activeProduct?.name === 'Scale'
+                        ? 'Enterprise-grade email infrastructure with maximum limits and priority support.'
+                        : 'Get started with basic email forwarding and domain management.'}
+                    </p>
                   </div>
-                  <p className="text-slate-300 text-sm mb-4 max-w-md">
-                    {activeProduct?.name === 'Pro' 
-                      ? 'Advanced email processing with unlimited triggers and extended retention.'
-                      : activeProduct?.name === 'Scale'
-                      ? 'Enterprise-grade email infrastructure with maximum limits and priority support.'
-                      : 'Get started with basic email forwarding and domain management.'}
-                  </p>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <Button 
-                      variant="secondary" 
+                      variant="outline" 
                       onClick={handleManageBilling}
                       disabled={!customerData || billingPortalMutation.isPending}
-                      className='bg-slate-800 hover:bg-slate-700 text-white border-slate-600'
                     >
                       {billingPortalMutation.isPending ? 'Loading...' : 'Manage'}
                     </Button>
@@ -327,79 +308,79 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* Right side - Usage Metrics */}
-                <div className="space-y-4">
-                  {/* Domains */}
+                {/* Features & Usage */}
+                <div className="mt-6 space-y-4">
                   {domainsFeature && (
-                    <div className="flex items-center gap-3">
-                      <CircularProgress 
-                        value={currentDomainCount} 
-                        max={domainsFeature.unlimited ? 100 : maxDomains}
-                        size={40}
-                        strokeWidth={4}
-                      />
-                      <div>
-                        <div className="text-sm font-medium text-white">Domains</div>
-                        <div className="text-xs text-slate-400">
-                          {domainsFeature.unlimited ? (
-                            'unlimited'
-                          ) : (
-                            `${currentDomainCount} / ${maxDomains.toLocaleString()}`
-                          )}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="text-sm font-medium">Domains</div>
+                        <div className="text-xs text-muted-foreground">
+                          {domainsFeature.unlimited ? 'unlimited' : `${currentDomainCount} / ${maxDomains.toLocaleString()}`}
                         </div>
                       </div>
+                      {!domainsFeature.unlimited && maxDomains > 0 && (
+                        <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-1.5 rounded-full bg-blue-500"
+                            style={{ width: `${Math.min((currentDomainCount / maxDomains) * 100, 100)}%` }}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Inbound Triggers */}
                   {inboundTriggersFeature && (
-                    <div className="flex items-center gap-3">
-                      <CircularProgress 
-                        value={inboundTriggersFeature.unlimited ? 0 : inboundTriggersFeature.usage || 0} 
-                        max={inboundTriggersFeature.unlimited ? 100 : inboundTriggersFeature.balance || 0}
-                        size={40}
-                        strokeWidth={4}
-                      />
-                      <div>
-                        <div className="text-sm font-medium text-white">Triggers</div>
-                        <div className="text-xs text-slate-400">
-                          {inboundTriggersFeature.unlimited ? (
-                            'unlimited'
-                          ) : (
-                            `${inboundTriggersFeature.usage?.toLocaleString()} / ${inboundTriggersFeature.balance?.toLocaleString()}`
-                          )}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="text-sm font-medium">Emails Received</div>
+                        <div className="text-xs text-muted-foreground">
+                          {inboundTriggersFeature.unlimited ? 'unlimited' : `${(inboundTriggersFeature.usage || 0).toLocaleString()} / ${(inboundTriggersFeature.balance || 0).toLocaleString()}`}
                         </div>
+                      </div>
+                      {!inboundTriggersFeature.unlimited && (inboundTriggersFeature.balance || 0) > 0 && (
+                        <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-1.5 rounded-full bg-green-500"
+                            style={{ width: `${Math.min((((inboundTriggersFeature.usage || 0) / (inboundTriggersFeature.balance || 0)) * 100), 100)}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {emailsSentFeature && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="text-sm font-medium">Emails Sent</div>
+                        <div className="text-xs text-muted-foreground">
+                          {emailsSentFeature.unlimited ? 'unlimited' : `${(emailsSentFeature.usage || 0).toLocaleString()} / ${(emailsSentFeature.balance || 0).toLocaleString()}`}
+                        </div>
+                      </div>
+                      {!emailsSentFeature.unlimited && (emailsSentFeature.balance || 0) > 0 && (
+                        <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-1.5 rounded-full bg-purple-500"
+                            style={{ width: `${Math.min((((emailsSentFeature.usage || 0) / (emailsSentFeature.balance || 0)) * 100), 100)}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {emailRetentionFeature && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="text-sm font-medium">Email Retention</div>
+                        <div className="text-xs text-muted-foreground">{emailRetentionFeature.unlimited ? 'unlimited' : `${emailRetentionFeature.balance?.toLocaleString()} days`}</div>
                       </div>
                     </div>
                   )}
 
-                  {/* Email Retention */}
-                  {emailRetentionFeature && (
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className={`w-10 h-10 rounded-full border-2 flex items-center justify-center ${
-                          emailRetentionFeature.balance && emailRetentionFeature.balance >= 30 
-                            ? 'border-green-500 bg-green-500/10' 
-                            : emailRetentionFeature.balance && emailRetentionFeature.balance >= 8
-                            ? 'border-yellow-500 bg-yellow-500/10'
-                            : 'border-red-500 bg-red-500/10'
-                        }`}
-                      >
-                        <div 
-                          className={`w-2 h-2 rounded-full ${
-                            emailRetentionFeature.balance && emailRetentionFeature.balance >= 30 
-                              ? 'bg-green-500' 
-                              : emailRetentionFeature.balance && emailRetentionFeature.balance >= 8
-                              ? 'bg-yellow-500'
-                              : 'bg-red-500'
-                          }`}
-                        ></div>
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-white">Retention</div>
-                        <div className="text-xs text-slate-400">
-                          {emailRetentionFeature.balance?.toLocaleString()} days
-                        </div>
+                  {vipByokFeature && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="text-sm font-medium">VIP BYOK</div>
+                        <div className="text-xs text-muted-foreground">{(vipByokFeature.unlimited || vipByokFeature.balance) ? 'Enabled' : 'Disabled'}</div>
                       </div>
                     </div>
                   )}
@@ -413,7 +394,7 @@ export default function SettingsPage() {
                   {customerError instanceof Error ? customerError.message : 'Unknown error'}
                 </p>
                 <Button 
-                  variant="secondary" 
+                  variant="outline" 
                   size="sm" 
                   onClick={() => refetchCustomer()}
                   className="mt-2"
@@ -430,154 +411,11 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Features Overview */}
-        {customerData && (
-          <Card className="border-none">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ChartTrendUp width="20" height="20" className="text-purple-600" />
-                Features Overview
-              </CardTitle>
-              <CardDescription>
-                Your current plan features and usage limits
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                {/* VIP BYOK */}
-                {vipByokFeature && (
-                  <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-slate-900 dark:text-slate-100">VIP BYOK</h4>
-                      <div 
-                        className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                          (vipByokFeature.unlimited || vipByokFeature.balance)
-                            ? 'bg-green-500/20 text-green-500' 
-                            : 'bg-slate-500/20 text-slate-500'
-                        }`}
-                      >
-                        {(vipByokFeature.unlimited || vipByokFeature.balance) ? (
-                          <CircleCheck className="w-4 h-4" />
-                        ) : (
-                          <X className="w-4 h-4" />
-                        )}
-                      </div>
-                    </div>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                      {(vipByokFeature.unlimited || vipByokFeature.balance) ? 'Enabled' : 'Disabled'}
-                    </p>
-                  </div>
-                )}
-
-                {/* Domains */}
-                {domainsFeature && (
-                  <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-slate-900 dark:text-slate-100">Domains</h4>
-                      <Globe2 className="w-5 h-5 text-blue-500" />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-baseline">
-                        <span className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                          {currentDomainCount}
-                        </span>
-                        <span className="text-sm text-slate-600 dark:text-slate-400">
-                          / {domainsFeature.unlimited ? '∞' : domainsFeature.balance}
-                        </span>
-                      </div>
-                      {!domainsFeature.unlimited && domainsFeature.balance && (
-                        <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                          <div 
-                            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${Math.min((currentDomainCount / domainsFeature.balance) * 100, 100)}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Email Retention */}
-                {emailRetentionFeature && (
-                  <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-slate-900 dark:text-slate-100">Email Retention</h4>
-                      <Archive className="w-5 h-5 text-amber-500" />
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                        {emailRetentionFeature.unlimited ? 'Unlimited' : `${emailRetentionFeature.balance} days`}
-                      </p>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">
-                        {emailRetentionFeature.unlimited ? 'Never expires' : 'Retention period'}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Emails Received */}
-                {inboundTriggersFeature && (
-                  <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-slate-900 dark:text-slate-100">Emails Received</h4>
-                      <Envelope2 className="w-5 h-5 text-green-500" />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-baseline">
-                        <span className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                          {inboundTriggersFeature.usage || 0}
-                        </span>
-                        <span className="text-sm text-slate-600 dark:text-slate-400">
-                          / {inboundTriggersFeature.unlimited ? '∞' : inboundTriggersFeature.balance}
-                        </span>
-                      </div>
-                      {!inboundTriggersFeature.unlimited && inboundTriggersFeature.balance && inboundTriggersFeature.balance > 0 && (
-                        <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                          <div 
-                            className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${Math.min(((inboundTriggersFeature.usage || 0) / inboundTriggersFeature.balance) * 100, 100)}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Emails Sent */}
-                {emailsSentFeature && (
-                  <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-slate-900 dark:text-slate-100">Emails Sent</h4>
-                      <Send className="w-5 h-5 text-purple-500" />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-baseline">
-                        <span className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                          {emailsSentFeature.usage || 0}
-                        </span>
-                        <span className="text-sm text-slate-600 dark:text-slate-400">
-                          / {emailsSentFeature.unlimited ? '∞' : emailsSentFeature.balance}
-                        </span>
-                      </div>
-                      {!emailsSentFeature.unlimited && emailsSentFeature.balance && emailsSentFeature.balance > 0 && (
-                        <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                          <div 
-                            className="bg-purple-500 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${Math.min(((emailsSentFeature.usage || 0) / emailsSentFeature.balance) * 100, 100)}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <div className="h-4 border-b border-slate-800"></div>
 
         {/* API Keys Management */}
         <Card className="border-none">
-          <CardHeader>
+          <CardHeader className="p-0">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
@@ -648,7 +486,7 @@ export default function SettingsPage() {
               </Dialog>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {apiKeysError ? (
               <div className="text-center py-8">
                 <Key2 width="32" height="32" className="text-red-500 mx-auto mb-2" />
@@ -758,14 +596,16 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        <div className="h-4 border-b border-slate-800"></div>
+
         <Card className="border-none">
-          <CardHeader>
+          <CardHeader className="p-0">
             <CardTitle>Profile Information</CardTitle>
             <CardDescription>
               Update your profile details and personal information
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 p-0">
             <form action={handleUpdateProfile} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -806,14 +646,16 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        <div className="h-4 border-b border-slate-800"></div>
+
         <Card className="border-none">
-          <CardHeader>
+          <CardHeader className="p-0">
             <CardTitle>Account Status</CardTitle>
             <CardDescription>
               Your account verification and status information
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 p-0">
             <div className="flex items-center justify-between">
               <span>Email Verification</span>
               <Badge variant={session.user.emailVerified ? "default" : "destructive"}>
@@ -834,6 +676,7 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
 
       {/* Delete Confirmation Dialog */}
@@ -966,4 +809,4 @@ export default function SettingsPage() {
       </Dialog>
     </div>
   )
-} 
+}
