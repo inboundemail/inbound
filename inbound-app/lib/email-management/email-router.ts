@@ -442,7 +442,8 @@ async function handleEmailForwardEndpoint(
       {
         subjectPrefix: config.subjectPrefix,
         includeAttachments: config.includeAttachments,
-        recipientEmail: emailData.recipient
+        recipientEmail: emailData.recipient,
+        senderName: config.senderName // Pass custom sender name if configured
       }
     )
     

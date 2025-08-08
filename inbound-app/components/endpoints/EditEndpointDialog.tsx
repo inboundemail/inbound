@@ -528,6 +528,19 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
                   </div>
 
                   <div className="space-y-2">
+                    <Label htmlFor="senderName">Sender Name</Label>
+                    <Input
+                      id="senderName"
+                      value={emailConfig.senderName || ''}
+                      onChange={(e) => setEmailConfig(prev => ({ ...prev, senderName: e.target.value }))}
+                      placeholder="Support Team (leave empty for 'Original Sender via Inbound')"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Custom display name for forwarded emails. If empty, will use "Original Sender via Inbound" format.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label htmlFor="subjectPrefix">Subject Prefix</Label>
                     <Input
                       id="subjectPrefix"
@@ -612,6 +625,19 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="senderNameGroup">Sender Name</Label>
+                    <Input
+                      id="senderNameGroup"
+                      value={emailGroupConfig.senderName || ''}
+                      onChange={(e) => setEmailGroupConfig(prev => ({ ...prev, senderName: e.target.value }))}
+                      placeholder="Team Support (leave empty for 'Original Sender via Inbound')"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Custom display name for forwarded emails. If empty, will use "Original Sender via Inbound" format.
+                    </p>
                   </div>
 
                   <div className="space-y-2">

@@ -19,6 +19,7 @@ export class EmailForwarder {
       subjectPrefix?: string
       includeAttachments?: boolean
       recipientEmail?: string // The original recipient email (e.g., user@domain.com)
+      senderName?: string // Custom sender name for the from field
     }
   ): Promise<void> {
     console.log(`📨 EmailForwarder - Forwarding email from ${fromAddress} to ${toAddresses.length} recipients`)
@@ -28,9 +29,20 @@ export class EmailForwarder {
       ? `${options.subjectPrefix}${originalEmail.subject || 'No Subject'}`
       : originalEmail.subject || 'No Subject'
 
+    // Construct the "via Inbound" from address format
+    const originalSenderName = originalEmail.from?.addresses?.[0]?.name || 
+                               originalEmail.from?.text?.split('<')[0]?.trim() ||
+                               originalEmail.from?.addresses?.[0]?.address?.split('@')[0] || 'Unknown'
+    
+    // Create display name in format: "Original Sender via Inbound" or custom sender name
+    const displayName = options?.senderName || `${originalSenderName} via Inbound`
+    const fromAddressWithName = `${displayName} <${fromAddress}>`
+
+    console.log(`📧 EmailForwarder - Using from address: ${fromAddressWithName}`)
+
     // Create raw email message maintaining original structure
     const rawMessage = await this.buildRawEmailMessage({
-      from: fromAddress,
+      from: fromAddressWithName,
       to: toAddresses,
       replyTo: originalEmail.from?.addresses?.[0]?.address || fromAddress,
       subject,
@@ -45,7 +57,7 @@ export class EmailForwarder {
       RawMessage: {
         Data: Buffer.from(rawMessage)
       },
-      Source: fromAddress,
+      Source: fromAddress, // SES Source must be just the email address
       Destinations: toAddresses
     })
 
