@@ -41,6 +41,9 @@ export default function OnboardingPage() {
   const [isRunningDemo, setIsRunningDemo] = useState(false)
   const [demoOutput, setDemoOutput] = useState<string | null>(null)
   const [isListeningForReply, setIsListeningForReply] = useState(false)
+  const [pollTimeLeft, setPollTimeLeft] = useState(0)
+  const [showManualCheck, setShowManualCheck] = useState(false)
+  const [isManualChecking, setIsManualChecking] = useState(false)
   const [replyReceived, setReplyReceived] = useState<{
     from: string
     subject: string
@@ -62,13 +65,7 @@ export default function OnboardingPage() {
     }
   }, [session, isPending, router])
 
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      console.log('🧹 [CLEANUP] Component unmounting - stopping reply polling')
-      setIsListeningForReply(false)
-    }
-  }, [])
+  // No cleanup on unmount - user needs to navigate away to reply!
 
   const handleCreateApiKey = async () => {
     try {
@@ -129,13 +126,31 @@ export default function OnboardingPage() {
   }
 
   const startListeningForReply = () => {
-    console.log('🎯 [ONBOARDING] Starting reply listener - will poll every 3 seconds')
+    console.log('🎯 [ONBOARDING] Starting reply listener - will poll for 30 seconds')
     console.log('🎯 [ONBOARDING] User email:', session?.user?.email)
     console.log('🎯 [ONBOARDING] Demo email sent to:', demoEmail)
     
+    setIsListeningForReply(true)
+    setPollTimeLeft(30)
+    setShowManualCheck(false)
+    
+    // Countdown timer
+    const countdownInterval = setInterval(() => {
+      setPollTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(countdownInterval)
+          setIsListeningForReply(false)
+          setShowManualCheck(true)
+          console.log('⏰ [POLLING] 30 seconds elapsed - stopping automatic polling')
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    
     const checkForReply = async () => {
       console.log('🔄 [POLLING] Checking for reply...', new Date().toISOString())
-      console.log('🔄 [POLLING] isListeningForReply state:', isListeningForReply)
+      console.log('🔄 [POLLING] Time left:', pollTimeLeft, 'seconds')
       
       try {
         const response = await fetch('/api/v2/onboarding/check-reply')
@@ -155,6 +170,9 @@ export default function OnboardingPage() {
             
             setReplyReceived(data.reply)
             setIsListeningForReply(false)
+            setShowManualCheck(false)
+            clearInterval(countdownInterval)
+            setPollTimeLeft(0)
             setDemoOutput(prev => `${prev}\n\n🎉 Reply received!\nFrom: ${data.reply.from}\nSubject: ${data.reply.subject}`)
             console.log('✅ [POLLING] Stopping polling - reply received and processed')
             return
@@ -172,18 +190,49 @@ export default function OnboardingPage() {
         })
       }
       
-      // Continue polling if no reply yet
-      if (isListeningForReply) {
+      // Continue polling if still listening and time left
+      if (isListeningForReply && pollTimeLeft > 0) {
         console.log('⏰ [POLLING] Scheduling next check in 3 seconds...')
         setTimeout(checkForReply, 3000) // Poll every 3 seconds
       } else {
-        console.log('🛑 [POLLING] Stopping polling - isListeningForReply is false')
+        console.log('🛑 [POLLING] Stopping polling - time elapsed or reply found')
       }
     }
     
     // Start the first check
     console.log('🚀 [POLLING] Starting first reply check...')
     checkForReply()
+  }
+
+  const handleManualCheck = async () => {
+    console.log('🔍 [MANUAL] Manual check for reply triggered')
+    setIsManualChecking(true)
+    
+    try {
+      const response = await fetch('/api/v2/onboarding/check-reply')
+      console.log('📡 [MANUAL] Response status:', response.status, response.statusText)
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('📋 [MANUAL] Response data:', JSON.stringify(data, null, 2))
+        
+        if (data.hasReply && data.reply) {
+          console.log('🎉 [MANUAL] Reply found!')
+          setReplyReceived(data.reply)
+          setShowManualCheck(false)
+          setDemoOutput(prev => `${prev}\n\n🎉 Reply received!\nFrom: ${data.reply.from}\nSubject: ${data.reply.subject}`)
+        } else {
+          console.log('📭 [MANUAL] No reply found yet')
+          setDemoOutput(prev => `${prev}\n\n📭 No reply yet - check again after replying to the email`)
+        }
+      } else {
+        console.error('❌ [MANUAL] API error:', response.status, response.statusText)
+      }
+    } catch (error) {
+      console.error('❌ [MANUAL] Error checking for reply:', error)
+    } finally {
+      setIsManualChecking(false)
+    }
   }
 
   const handleCompleteOnboarding = async () => {
@@ -350,7 +399,20 @@ export default function OnboardingPage() {
             {isListeningForReply && (
               <div className="flex items-center gap-2 mt-2">
                 <div className="animate-pulse w-2 h-2 bg-yellow-400 rounded-full"></div>
-                <span className="text-yellow-400">Listening for reply...</span>
+                <span className="text-yellow-400">Listening for reply... ({pollTimeLeft}s remaining)</span>
+              </div>
+            )}
+            {showManualCheck && !replyReceived && (
+              <div className="mt-2">
+                <Button
+                  onClick={handleManualCheck}
+                  disabled={isManualChecking}
+                  size="sm"
+                  variant="outline"
+                  className="text-xs"
+                >
+                  {isManualChecking ? 'Checking...' : 'Check for Reply'}
+                </Button>
               </div>
             )}
             {replyReceived && (
