@@ -889,9 +889,10 @@ export default function LogsPage() {
               const outboundLog = !isInbound ? log as OutboundEmailLogEntry : null
               
               return (
-                 <div 
+                 <Link 
                    key={log.id}
-                   className="flex items-center gap-4 px-6 py-3 hover:bg-muted/50 transition-colors"
+                   href={`/logs/${log.id}`}
+                   className="flex items-center gap-4 px-6 py-3 hover:bg-muted/50 transition-colors cursor-pointer"
                  >
                    {/* Type Icon with Status Dot */}
                    <div className="flex-shrink-0">
@@ -994,11 +995,11 @@ export default function LogsPage() {
                     }
                   </div>
 
-                  {/* View link for prefetch */}
-                  <Link href={`/logs/${log.id}`} className="h-6 w-6 p-0 flex-shrink-0 inline-flex items-center justify-center rounded hover:bg-accent">
-                    <ArrowUpRight2 width="12" height="12" />
-                  </Link>
-                </div>
+                  {/* Visual indicator for clickable row */}
+                  <div className="flex-shrink-0">
+                    <ArrowUpRight2 width="12" height="12" className="text-muted-foreground" />
+                  </div>
+                </Link>
               )
             })}
             {/* Infinite scroll sentinel */}

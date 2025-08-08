@@ -27,6 +27,9 @@ import { format } from 'date-fns'
 import type { GetMailByIdResponse } from '@/app/api/v2/mail/[id]/route'
 import type { GetEmailByIdResponse } from '@/app/api/v2/emails/[id]/route'
 
+// Import the attachment list component
+import { AttachmentList } from '@/components/logs/attachment-list'
+
 export default async function LogDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const session = await auth.api.getSession({ headers: await headers() })
@@ -523,22 +526,10 @@ export default async function LogDetailPage({ params }: { params: Promise<{ id: 
               <Card className="rounded-xl overflow-hidden">
                 <CardContent className="p-6">
                   <h3 className="text-sm font-semibold mb-3">Attachments ({inboundDetails.content.attachments.length})</h3>
-                  <div className="space-y-2">
-                    {inboundDetails.content.attachments.map((att: any, idx: number) => (
-                      <div key={idx} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <Hashtag2 width="16" height="16" className="text-muted-foreground" />
-                          <div>
-                            <p className="font-medium text-sm">{att.filename}</p>
-                            <p className="text-xs text-muted-foreground">{att.contentType} • {att.size ? `${Math.round(att.size / 1024)}KB` : 'Unknown size'}</p>
-                          </div>
-                        </div>
-                        {att.contentId && (
-                          <Badge variant="outline" className="text-xs">Inline</Badge>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  <AttachmentList 
+                    emailId={inboundDetails.id} 
+                    attachments={inboundDetails.content.attachments}
+                  />
                 </CardContent>
               </Card>
             )}
