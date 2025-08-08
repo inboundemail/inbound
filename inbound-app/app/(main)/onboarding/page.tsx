@@ -123,7 +123,7 @@ export default function OnboardingPage() {
           userEmail: session?.user?.email
         })
         
-        setDemoOutput(`✅ Success!\nEmail sent to ${demoEmail} with ID: ${result.id}, check your inbox!\n\n🎯 Waiting for your reply...`)
+        setDemoOutput(`✅ Success!\nEmail sent to ${demoEmail} with ID: ${result.id}, check your inbox!\n\n🎯 Waiting for your reply...\n\n$ inbound.emails.awaitReply( {demoEmail} )`)
         setIsListeningForReply(true)
         
         console.log('🎯 [DEMO] Starting reply polling system...')
@@ -217,7 +217,7 @@ export default function OnboardingPage() {
             setShowManualCheck(false)
             setPollEndTime(null)
             setPollTimeLeft(0)
-            setDemoOutput(prev => `${prev}\n\n🎉 Reply received!\nFrom: ${data.reply.from}\nSubject: ${data.reply.subject}`)
+            setDemoOutput(prev => `${prev}\n\n🎉 Reply received!\n\nIt looks like you like the ${data.reply.body} mail client! \n\n`)
             console.log('✅ [POLLING] Stopping polling - reply received and processed')
             return
           } else {
@@ -382,7 +382,7 @@ export default function OnboardingPage() {
 
         {/* Code block with Run button */}
         <div className={`mt-4 relative transition-opacity ${!apiKeyPlain ? 'opacity-50' : ''}`}>
-          <pre className="bg-[#272822] text-[#F8F8F2] p-4 rounded-md overflow-x-auto text-xs border font-mono">
+          <pre className="bg-[#272822] text-[#F8F8F2] p-4 rounded-md overflow-x-auto text-xs border font-mono shadow-lg-bottom" >
             <code>
               <span className="text-[#75715E]">// Now you can send your first email!</span>
               {'\n'}
@@ -440,8 +440,8 @@ export default function OnboardingPage() {
 
         {/* Terminal output */}
         {demoOutput && (
-          <div className="bg-black text-green-400 p-4 rounded-md font-mono text-xs mt-4 border border-[#49483E]">
-            <div className="text-muted-foreground mb-1">$ node demo.js</div>
+          <div className="bg-[#272822] text-white-400 p-4 rounded-md rounded-t-none font-mono text-xs border border-t-0 -mt-4">
+            <div className="text-muted-foreground mb-1 mt-3">$ inbound.emails.send( {demoEmail} )</div>
             <div className="whitespace-pre-wrap">{demoOutput}</div>
             {isListeningForReply && (
               <div className="flex items-center gap-2 mt-2">
@@ -463,14 +463,27 @@ export default function OnboardingPage() {
               </div>
             )}
             {replyReceived && (
-              <div className="mt-3 p-3 bg-gray-800 rounded border-l-4 border-green-400">
-                <div className="text-green-400 font-bold mb-1">📧 Reply Details:</div>
-                <div className="text-gray-300 text-xs space-y-1">
-                  <div><span className="text-blue-300">From:</span> {replyReceived.from}</div>
-                  <div><span className="text-blue-300">Subject:</span> {replyReceived.subject}</div>
-                  <div><span className="text-blue-300">Body:</span> {replyReceived.body.substring(0, 200)}{replyReceived.body.length > 200 ? '...' : ''}</div>
-                </div>
-              </div>
+                             <div className="mt-3 bg-[#272822] border border-[#49483E] rounded p-3 font-mono">
+                 <div className="text-[#A6E22E] text-xs font-bold mb-2 flex items-center gap-2">
+                   📧 Reply Details
+                 </div>
+                 <div className="text-[#F8F8F2] text-xs space-y-1">
+                   <div className="flex gap-2">
+                     <span className="text-[#66D9EF] font-medium min-w-[50px]">From:</span>
+                     <span className="text-[#E6DB74]">{replyReceived.from}</span>
+                   </div>
+                   <div className="flex gap-2">
+                     <span className="text-[#66D9EF] font-medium min-w-[50px]">Subject:</span>
+                     <span className="text-[#E6DB74]">{replyReceived.subject}</span>
+                   </div>
+                   <div className="flex gap-2">
+                     <span className="text-[#66D9EF] font-medium min-w-[50px]">Body:</span>
+                     <span className="text-[#F8F8F2] break-words">
+                       {replyReceived.body.split('\n\n').slice(0, 5).join('\n\n')}
+                     </span>
+                   </div>
+                 </div>
+               </div>
             )}
           </div>
         )}

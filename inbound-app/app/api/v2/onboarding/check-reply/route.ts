@@ -48,13 +48,15 @@ export async function GET(request: NextRequest) {
     if (replies.length > 0) {
       const reply = replies[0]
       console.log('📨 Found reply for user:', userId)
+
+      console.log('🔍 Reply:', reply.replyBody?.split('\n\n')[0])
       
       const response: CheckReplyResponse = {
         hasReply: true,
         reply: {
           from: reply.replyFrom || '',
           subject: reply.replySubject || '',
-          body: reply.replyBody || '',
+          body: reply.replyBody?.split('\n\n')[0] || '',
           receivedAt: reply.replyReceivedAt?.toISOString() || ''
         }
       }
