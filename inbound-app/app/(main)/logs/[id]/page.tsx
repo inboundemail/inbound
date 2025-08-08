@@ -29,6 +29,7 @@ import type { GetEmailByIdResponse } from '@/app/api/v2/emails/[id]/route'
 
 // Import the attachment list component
 import { AttachmentList } from '@/components/logs/attachment-list'
+import { CopyEmailId } from '@/components/logs/copy-email-id'
 
 export default async function LogDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -439,7 +440,21 @@ export default async function LogDetailPage({ params }: { params: Promise<{ id: 
             <Card className="rounded-xl overflow-hidden">
               <CardContent className="p-6">
                 <h3 className="text-sm font-semibold mb-3">Details</h3>
-                <div className="space-y-2 text-sm">
+                <div className="space-y-4 text-sm">
+                  {/* Email ID - prominently displayed at the top */}
+                  <div className="pb-2 border-b border-border space-y-3">
+                    <CopyEmailId 
+                      emailId={id} 
+                      label={isInbound ? "Inbound Email ID" : "Outbound Email ID"}
+                    />
+                    {((isInbound && inboundDetails?.messageId) || (outboundDetails && 'id' in outboundDetails)) && (
+                      <CopyEmailId 
+                        emailId={isInbound ? inboundDetails?.messageId || '' : outboundDetails?.id || ''} 
+                        label="Message ID"
+                      />
+                    )}
+                  </div>
+                  
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <span className="text-muted-foreground">From:</span>
