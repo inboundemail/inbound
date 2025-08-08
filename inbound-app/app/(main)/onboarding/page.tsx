@@ -126,12 +126,12 @@ export default function OnboardingPage() {
   }
 
   const startListeningForReply = () => {
-    console.log('🎯 [ONBOARDING] Starting reply listener - will poll for 30 seconds')
+    console.log('🎯 [ONBOARDING] Starting reply listener - will poll for 60 seconds')
     console.log('🎯 [ONBOARDING] User email:', session?.user?.email)
     console.log('🎯 [ONBOARDING] Demo email sent to:', demoEmail)
     
     setIsListeningForReply(true)
-    setPollTimeLeft(30)
+    setPollTimeLeft(60)
     setShowManualCheck(false)
     
     // Countdown timer
@@ -141,7 +141,7 @@ export default function OnboardingPage() {
           clearInterval(countdownInterval)
           setIsListeningForReply(false)
           setShowManualCheck(true)
-          console.log('⏰ [POLLING] 30 seconds elapsed - stopping automatic polling')
+          console.log('⏰ [POLLING] 60 seconds elapsed - stopping automatic polling')
           return 0
         }
         return prev - 1
