@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Inbound } from '@inboundemail/sdk'
 import { validateRequest } from '../../../v2/helper/main'
 import { db } from '@/lib/db'
-import { onboardingDemoEmails } from '@/lib/db/schema'
+import { onboardingDemoEmails, sentEmails } from '@/lib/db/schema'
 import { nanoid } from 'nanoid'
+import { eq } from 'drizzle-orm'
 
 /**
  * POST /api/v2/onboarding/demo
@@ -71,17 +72,38 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Demo email sent successfully:', id)
 
+    // Get the messageId from the sent email record for proper reply matching
+    console.log('🔍 Fetching messageId from sent email record...')
+    let messageId: string | null = null
+    
+    // Wait a moment for the email to be processed and messageId to be set
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    const sentEmailRecord = await db
+      .select({ messageId: sentEmails.messageId })
+      .from(sentEmails)
+      .where(eq(sentEmails.id, id))
+      .limit(1)
+
+    if (sentEmailRecord.length > 0 && sentEmailRecord[0].messageId) {
+      messageId = sentEmailRecord[0].messageId
+      console.log('📧 Found messageId for reply matching:', messageId)
+    } else {
+      console.log('⚠️ No messageId found yet, will rely on email matching as fallback')
+    }
+
     // Track the demo email for reply matching
     const demoEmailId = nanoid()
     await db.insert(onboardingDemoEmails).values({
       id: demoEmailId,
       userId,
       emailId: id,
+      messageId,
       recipientEmail: body.to,
       sentAt: new Date()
     })
 
-    console.log('📝 Tracked demo email for reply matching:', demoEmailId)
+    console.log('📝 Tracked demo email for reply matching:', { demoEmailId, messageId })
     return NextResponse.json({ id }, { status: 200 })
 
   } catch (error) {

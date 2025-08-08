@@ -43,6 +43,7 @@ export const onboardingDemoEmails = pgTable('onboarding_demo_emails', {
   id: varchar('id', { length: 255 }).primaryKey(),
   userId: varchar('user_id', { length: 255 }).notNull(),
   emailId: varchar('email_id', { length: 255 }).notNull(), // From the sent email
+  messageId: varchar('message_id', { length: 255 }), // SES Message-ID for reply matching
   recipientEmail: varchar('recipient_email', { length: 255 }).notNull(),
   sentAt: timestamp('sent_at').defaultNow(),
   replyReceived: boolean('reply_received').default(false),

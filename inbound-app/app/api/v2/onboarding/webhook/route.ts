@@ -32,17 +32,67 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
-    // Look for matching demo email by recipient email
-    const demoEmail = await db
-      .select()
-      .from(onboardingDemoEmails)
-      .where(
-        and(
-          eq(onboardingDemoEmails.recipientEmail, fromEmail),
-          eq(onboardingDemoEmails.replyReceived, false)
+    console.log('🔍 Checking for demo email reply match...')
+    console.log('📧 Reply headers:', {
+      inReplyTo: email.parsedData?.inReplyTo,
+      references: email.parsedData?.references,
+      fromEmail
+    })
+
+    // Look for matching demo email using proper reply headers first
+    let demoEmail: any[] = []
+    
+    // Method 1: Match by In-Reply-To header (most reliable)
+    if (email.parsedData?.inReplyTo) {
+      console.log('🎯 Trying to match by In-Reply-To:', email.parsedData.inReplyTo)
+      demoEmail = await db
+        .select()
+        .from(onboardingDemoEmails)
+        .where(
+          and(
+            eq(onboardingDemoEmails.messageId, email.parsedData.inReplyTo),
+            eq(onboardingDemoEmails.replyReceived, false)
+          )
         )
-      )
-      .limit(1)
+        .limit(1)
+    }
+    
+    // Method 2: Match by References header if In-Reply-To didn't work
+    if (demoEmail.length === 0 && email.parsedData?.references?.length) {
+      console.log('🎯 Trying to match by References:', email.parsedData.references)
+      for (const ref of email.parsedData.references) {
+        demoEmail = await db
+          .select()
+          .from(onboardingDemoEmails)
+          .where(
+            and(
+              eq(onboardingDemoEmails.messageId, ref),
+              eq(onboardingDemoEmails.replyReceived, false)
+            )
+          )
+          .limit(1)
+        
+        if (demoEmail.length > 0) {
+          console.log('✅ Found match in references:', ref)
+          break
+        }
+      }
+    }
+    
+    // Method 3: Fallback to sender email matching (less secure but better than nothing)
+    if (demoEmail.length === 0) {
+      console.log('🔄 Falling back to sender email matching:', fromEmail)
+      demoEmail = await db
+        .select()
+        .from(onboardingDemoEmails)
+        .where(
+          and(
+            eq(onboardingDemoEmails.recipientEmail, fromEmail),
+            eq(onboardingDemoEmails.replyReceived, false)
+          )
+        )
+        .limit(1)
+    }
 
     if (demoEmail.length > 0) {
       const demo = demoEmail[0]
