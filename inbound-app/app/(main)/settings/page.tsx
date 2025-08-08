@@ -59,10 +59,15 @@ export default function SettingsPage() {
   } = useDomainStatsQuery()
   
   const { 
-    data: apiKeys = [], 
+    data: apiKeysData = [], 
     isLoading: isLoadingApiKeys,
     error: apiKeysError
   } = useApiKeysQuery()
+
+  // Sort API keys by creation date (newest first)
+  const apiKeys = [...apiKeysData].sort((a, b) => 
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )
   
   // Mutations
   const createApiKeyMutation = useCreateApiKeyMutation()
