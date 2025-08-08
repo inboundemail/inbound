@@ -38,6 +38,22 @@ export const userOnboarding = pgTable('user_onboarding', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+// Demo email tracking for onboarding
+export const onboardingDemoEmails = pgTable('onboarding_demo_emails', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull(),
+  emailId: varchar('email_id', { length: 255 }).notNull(), // From the sent email
+  recipientEmail: varchar('recipient_email', { length: 255 }).notNull(),
+  sentAt: timestamp('sent_at').defaultNow(),
+  replyReceived: boolean('reply_received').default(false),
+  replyFrom: varchar('reply_from', { length: 255 }),
+  replySubject: varchar('reply_subject', { length: 500 }),
+  replyBody: text('reply_body'),
+  replyReceivedAt: timestamp('reply_received_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // You can add more app-specific tables here
 export const emailDomains = pgTable('email_domains', {
   id: varchar('id', { length: 255 }).primaryKey(),
@@ -312,6 +328,8 @@ export const domainDnsRecords = pgTable('domain_dns_records', {
   isVerified: boolean('is_verified').default(false),
   lastChecked: timestamp('last_checked'),
   createdAt: timestamp('created_at').defaultNow(),
+  priority: integer('priority'), // For MX records
+  description: text('description'), // Human-readable description of the record purpose
 });
 
 // Endpoints table - unified system for webhooks, email forwards, and email groups

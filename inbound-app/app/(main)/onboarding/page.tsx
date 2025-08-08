@@ -6,32 +6,54 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import Envelope2 from '@/components/icons/envelope-2'
-import Globe2 from '@/components/icons/globe-2'
-import BoltLightning from '@/components/icons/bolt-lightning'
-import CircleCheck from '@/components/icons/circle-check'
 import ArrowBoldRight from '@/components/icons/arrow-bold-right'
-import CirclePlus from '@/components/icons/circle-plus'
-import { CustomInboundIcon } from '@/components/icons/customInbound'
-import { useCreateEndpointMutation, useEndpointsQuery } from '@/features/endpoints/hooks'
-import type { CreateEndpointData } from '@/features/endpoints/types'
+import CircleCheck from '@/components/icons/circle-check'
+import Key2 from '@/components/icons/key-2'
+import View from '@/components/icons/view'
+import Hide from '@/components/icons/hide'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { useCreateApiKeyMutation } from '@/features/settings/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { completeOnboarding } from '@/app/actions/onboarding'
+import Copy2 from '@/components/icons/copy-2'
+import Code2 from '@/components/icons/code-2'
+import CirclePlay from '@/components/icons/circle-play'
+import ChevronDown from '@/components/icons/chevron-down'
 
 export default function OnboardingPage() {
   const { data: session, isPending } = useSession()
   const router = useRouter()
   const queryClient = useQueryClient()
   const [isCompleting, setIsCompleting] = useState(false)
-  const [isCreatingEndpoint, setIsCreatingEndpoint] = useState(false)
-  const [endpointCreated, setEndpointCreated] = useState(false)
-  
-  const createEndpointMutation = useCreateEndpointMutation()
-  const { data: endpoints = [], isLoading: endpointsLoading } = useEndpointsQuery()
-  
-  // Check if user already has endpoints
-  const hasExistingEndpoints = endpoints.length > 0
+
+  // Step state
+  const [activeStep, setActiveStep] = useState<1 | 2>(1)
+
+  // API key creation state
+  const createApiKeyMutation = useCreateApiKeyMutation()
+  const [apiKeyPlain, setApiKeyPlain] = useState<string | null>(null)
+  const [showApiKey, setShowApiKey] = useState(false)
+
+  // Demo email state
+  const [demoEmail, setDemoEmail] = useState('')
+  const [isRunningDemo, setIsRunningDemo] = useState(false)
+  const [demoOutput, setDemoOutput] = useState<string | null>(null)
+  const [isListeningForReply, setIsListeningForReply] = useState(false)
+  const [replyReceived, setReplyReceived] = useState<{
+    from: string
+    subject: string
+    body: string
+    receivedAt: string
+  } | null>(null)
+
+  // Set default demo email when session loads
+  useEffect(() => {
+    if (session?.user?.email && !demoEmail) {
+      setDemoEmail(session.user.email)
+    }
+  }, [session?.user?.email, demoEmail])
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -40,32 +62,86 @@ export default function OnboardingPage() {
     }
   }, [session, isPending, router])
 
-  const handleCreateEndpoint = async () => {
-    if (!session?.user?.email) return
-
-    setIsCreatingEndpoint(true)
-    try {
-      const userName = session.user.name || session.user.email.split('@')[0] || 'User'
-      const endpointData: CreateEndpointData = {
-        name: `${userName} Email Endpoint`,
-        type: 'email',
-        description: 'Default email forwarding endpoint created during onboarding',
-        config: {
-          forwardTo: session.user.email,
-          includeAttachments: true,
-          subjectPrefix: ''
-        }
-      }
-
-      await createEndpointMutation.mutateAsync(endpointData)
-      setEndpointCreated(true)
-      toast.success('Email endpoint created successfully!')
-    } catch (error) {
-      console.error('Error creating endpoint:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to create endpoint')
-    } finally {
-      setIsCreatingEndpoint(false)
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      setIsListeningForReply(false)
     }
+  }, [])
+
+  const handleCreateApiKey = async () => {
+    try {
+      const result = await createApiKeyMutation.mutateAsync({})
+      if (result?.key) {
+        setApiKeyPlain(result.key)
+        setShowApiKey(false)
+        toast.success('API key created')
+        setActiveStep(2)
+      } else {
+        toast.error('Failed to create API key')
+      }
+    } catch (error) {
+      console.error('Error creating API key:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to create API key')
+    }
+  }
+
+  const handleRunDemo = async () => {
+    if (!apiKeyPlain || !demoEmail) return
+
+    setIsRunningDemo(true)
+    setDemoOutput('Running demo...')
+
+    try {
+      const response = await fetch('/api/v2/onboarding/demo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: apiKeyPlain,
+          to: demoEmail
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setDemoOutput(`✅ Success!\nEmail sent to ${demoEmail} with ID: ${result.id}, check your inbox!\n\n🎯 Waiting for your reply...`)
+        setIsListeningForReply(true)
+        startListeningForReply()
+      } else {
+        setDemoOutput(`❌ Error: ${result.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      setDemoOutput(`❌ Network error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsRunningDemo(false)
+    }
+  }
+
+  const startListeningForReply = () => {
+    const checkForReply = async () => {
+      try {
+        const response = await fetch('/api/v2/onboarding/check-reply')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.hasReply && data.reply) {
+            setReplyReceived(data.reply)
+            setIsListeningForReply(false)
+            setDemoOutput(prev => `${prev}\n\n🎉 Reply received!\nFrom: ${data.reply.from}\nSubject: ${data.reply.subject}`)
+            return
+          }
+        }
+      } catch (error) {
+        console.error('Error checking for reply:', error)
+      }
+      
+      // Continue polling if no reply yet
+      if (isListeningForReply) {
+        setTimeout(checkForReply, 3000) // Poll every 3 seconds
+      }
+    }
+    
+    checkForReply()
   }
 
   const handleCompleteOnboarding = async () => {
@@ -74,14 +150,14 @@ export default function OnboardingPage() {
     setIsCompleting(true)
     try {
       const result = await completeOnboarding(session.user.id)
-      
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to complete onboarding')
       }
-      
+
       // Invalidate onboarding status to update the cache
       queryClient.invalidateQueries({ queryKey: ['onboarding-status'] })
-      
+
       toast.success('Welcome to Inbound! 🎉')
       router.push('/add?onboarding=true')
     } catch (error) {
@@ -95,7 +171,7 @@ export default function OnboardingPage() {
   if (isPending) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     )
   }
@@ -106,124 +182,154 @@ export default function OnboardingPage() {
 
   return (
     <div className="min-h-screen p-4 font-outfit">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto mt-10">
         {/* Header */}
         <div className="mb-6">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-1 tracking-tight">
+          <h2 className="text-2xl font-semibold text-foreground mb-1 tracking-tight">
             Welcome to Inbound, {session.user.name || session.user.email?.split('@')[0]}!
           </h2>
-          <p className="text-gray-600 text-sm font-medium">Transform any domain into a powerful email infrastructure</p>
+          <p className="text-muted-foreground text-sm font-medium">Follow these quick steps to send your first email.</p>
         </div>
 
-        {/* How it Works */}
-        <Card className="bg-blue-500/10 border-blue-500/30 rounded-xl mb-6">
-          <CardContent className="p-6">
-            <h3 className="font-semibold text-blue-300 mb-3">How Inbound Works</h3>
-            <div className="space-y-2 text-sm text-blue-200">
-              <p>• <strong>Add your domain</strong> - Connect any domain you own (example.com)</p>
-              <p>• <strong>Configure DNS</strong> - Simple DNS setup to route emails to Inbound</p>
-              <p>• <strong>Create endpoints</strong> - Set up email forwarding, webhooks, or groups</p>
-              <p>• <strong>Receive emails</strong> - Get emails at any address @yourdomain.com</p>
-            </div>
+        {/* Step 1: Create an API key */}
+        <Card className="rounded-xl mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <Key2 width="20" height="20" />
+              Create an API Key
+            </CardTitle>
+            <CardDescription>Generate a key to authenticate API requests.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!apiKeyPlain ? (
+              <Button
+                onClick={handleCreateApiKey}
+                disabled={createApiKeyMutation.isPending}
+              >
+                {createApiKeyMutation.isPending ? 'Creating…' : 'Create API Key'}
+              </Button>
+            ) : (
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Badge variant="secondary"><CircleCheck className="h-3 w-3 mr-1" /> Created</Badge>
+                  <span>This key is shown only once. Store it securely.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={apiKeyPlain}
+                    readOnly
+                    className="font-mono"
+                  />
+                  <Button variant="secondary" onClick={() => setShowApiKey(v => !v)}>
+                    {showApiKey ? <Hide width="16" height="16" /> : <View width="16" height="16" />}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={async () => { if (apiKeyPlain) { await navigator.clipboard.writeText(apiKeyPlain); toast.success('Copied'); } }}
+                  >
+                    <Copy2 width="16" height="16" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Steps Cards */}
-        <div className="grid md:grid-cols-3 gap-4 mb-6">
-          {/* Add Domain */}
-          <Card className="bg-card border-border rounded-xl">
-            <CardContent className="p-6 text-center">
-              <CustomInboundIcon 
-                Icon={Globe2} 
-                size={40} 
-                backgroundColor="#3b82f6" 
-                className="mx-auto mb-3" 
-              />
-              <h3 className="font-semibold text-foreground mb-2">Add Domain</h3>
-              <p className="text-sm text-muted-foreground">Connect your domain to start receiving emails</p>
-            </CardContent>
-          </Card>
+        {/* Step 2: Send an email (JS) */}
 
-          {/* Create Endpoint */}
-          <Card className="bg-card border-border rounded-xl">
-            <CardContent className="p-6 text-center">
-              <CustomInboundIcon 
-                Icon={Envelope2} 
-                size={40} 
-                backgroundColor="#10b981" 
-                className="mx-auto mb-3" 
-              />
-                             <h3 className="font-semibold text-foreground mb-2">Create Endpoint</h3>
-               <p className="text-sm text-muted-foreground mb-3">Set up email forwarding or webhooks</p>
-               {hasExistingEndpoints || endpointCreated ? (
-                 <Badge className="bg-green-100 text-green-800">
-                   <CircleCheck className="h-3 w-3 mr-1" />
-                   {hasExistingEndpoints ? 'Already Created' : 'Created'}
-                 </Badge>
-               ) : (
-                 <Button 
-                   onClick={handleCreateEndpoint}
-                   disabled={isCreatingEndpoint || endpointsLoading}
-                   size="sm"
-                   className="bg-blue-600 hover:bg-blue-700 text-white"
-                 >
-                   <CirclePlus className="h-3 w-3 mr-1" />
-                   {isCreatingEndpoint ? 'Creating...' : 'Create'}
-                 </Button>
-               )}
-            </CardContent>
-          </Card>
-
-          {/* Advanced */}
-          <Card className="bg-card border-border rounded-xl">
-            <CardContent className="p-6 text-center">
-              <CustomInboundIcon 
-                Icon={BoltLightning} 
-                size={40} 
-                backgroundColor="#8b5cf6" 
-                className="mx-auto mb-3" 
-              />
-              <h3 className="font-semibold text-foreground mb-2">Advanced</h3>
-              <p className="text-sm text-muted-foreground">Webhooks, groups, and integrations</p>
-            </CardContent>
-          </Card>
+        <div className="flex justify-center">
+          <ChevronDown width="20" height="20" className="text-muted-foreground" />
         </div>
 
-        {/* Next Steps */}
-        <Card className="bg-card border-border rounded-xl mb-6">
-          <CardContent className="p-6">
-            <h3 className="font-semibold text-foreground mb-3">Next Steps</h3>
-            <div className="space-y-2 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${hasExistingEndpoints || endpointCreated ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                <span className={hasExistingEndpoints || endpointCreated ? 'line-through text-muted-foreground/60' : ''}>
-                  Create your first endpoint above
-                </span>
-                {(hasExistingEndpoints || endpointCreated) && <span className="text-green-500 text-xs">✓ Done</span>}
+        {/* Code block with Run button */}
+        <div className={`mt-4 relative transition-opacity ${!apiKeyPlain ? 'opacity-50' : ''}`}>
+          <pre className="bg-[#272822] text-[#F8F8F2] p-4 rounded-md overflow-x-auto text-xs border font-mono">
+            <code>
+              <span className="text-[#75715E]">// Now you can send your first email!</span>
+              {'\n'}
+              <span className="text-[#75715E]">// Just click the run button below!</span>
+              {'\n\n'}
+              <span className="text-[#F92672]">import</span> <span className="text-[#F8F8F2]">{'{'}</span> <span className="text-[#66D9EF]">Inbound</span> <span className="text-[#F8F8F2]">{'}'}</span> <span className="text-[#F92672]">from</span> <span className="text-[#E6DB74]">'@inboundemail/sdk'</span>
+              {'\n\n'}
+              <span className="text-[#F92672]">const</span> <span className="text-[#F8F8F2]">inbound</span> <span className="text-[#F92672]">=</span> <span className="text-[#F92672]">new</span> <span className="text-[#A6E22E]">Inbound</span><span className="text-[#F8F8F2]">({'{'}</span> <span className="text-[#F8F8F2]">apiKey</span><span className="text-[#F92672]">:</span> <span className="text-[#E6DB74]">'{apiKeyPlain ? apiKeyPlain.slice(0, 8) + '...' : 'process.env.INBOUND_API_KEY!'}'</span> <span className="text-[#F8F8F2]">{'})'}</span>
+              {'\n\n'}
+              <span className="text-[#75715E]">// Simple email</span>
+              {'\n'}
+              <span className="text-[#F92672]">const</span> <span className="text-[#F8F8F2]">{'{'}</span> <span className="text-[#F8F8F2]">id</span> <span className="text-[#F8F8F2]">{'}'}</span> <span className="text-[#F92672]">=</span> <span className="text-[#F92672]">await</span> <span className="text-[#F8F8F2]">inbound</span><span className="text-[#F92672]">.</span><span className="text-[#F8F8F2]">emails</span><span className="text-[#F92672]">.</span><span className="text-[#A6E22E]">send</span><span className="text-[#F8F8F2]">({'{'}</span>
+              {'\n'}
+              {'  '}<span className="text-[#F8F8F2]">from</span><span className="text-[#F92672]">:</span> <span className="text-[#E6DB74]">'agent@inbnd.dev'</span><span className="text-[#F8F8F2]">,</span>
+              {'\n'}
+              {'  '}<span className="text-[#F8F8F2]">to</span><span className="text-[#F92672]">:</span>
+              <span className="text-[#E6DB74]">
+                <Input
+                  id="demo-email"
+                  type="email"
+                  value={demoEmail}
+                  onChange={(e) => setDemoEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  disabled={activeStep !== 2}
+                  style={{
+                    fontSize: '.75rem',
+                    lineHeight: '1rem',
+                  }}
+                  className="inline-block w-60 h-4 bg-[#272822] border border-[#49483E] text-[#E6DB74] rounded text-left"
+                />
+              </span>
+              <span className="text-[#F8F8F2]">,</span>
+              {'\n'}
+              {'  '}<span className="text-[#F8F8F2]">subject</span><span className="text-[#F92672]">:</span> <span className="text-[#E6DB74]">'Welcome to Inbound'</span><span className="text-[#F8F8F2]">,</span>
+              {'\n'}
+              {'  '}<span className="text-[#F8F8F2]">text</span><span className="text-[#F92672]">:</span> <span className="text-[#E6DB74]">'Thanks for signing up! What is your favorite email client?'</span><span className="text-[#F8F8F2]">,</span>
+              {'\n'}
+              {'  '}<span className="text-[#F8F8F2]">html</span><span className="text-[#F92672]">:</span> <span className="text-[#E6DB74]">'&lt;p&gt;Thanks for signing up! What is your favorite email client?&lt;/p&gt;'</span>
+              {'\n'}
+              <span className="text-[#F8F8F2]">{'})'}</span>
+              {'\n\n'}
+              <span className="text-[#F8F8F2]">console</span><span className="text-[#F92672]">.</span><span className="text-[#A6E22E]">log</span><span className="text-[#F8F8F2]">(</span><span className="text-[#E6DB74]">'Email sent:'</span><span className="text-[#F8F8F2]">,</span> <span className="text-[#F8F8F2]">id</span><span className="text-[#F8F8F2]">)</span>
+            </code>
+          </pre>
+          <Button
+            onClick={handleRunDemo}
+            disabled={!apiKeyPlain || !demoEmail || isRunningDemo}
+            size="sm"
+            className="absolute bottom-4 right-4"
+          >
+            <CirclePlay width="14" height="14" className="mr-1" />
+            {isRunningDemo ? 'Running...' : 'Run'}
+          </Button>
+        </div>
+
+        {/* Terminal output */}
+        {demoOutput && (
+          <div className="bg-black text-green-400 p-4 rounded-md font-mono text-xs mt-4 border border-[#49483E]">
+            <div className="text-muted-foreground mb-1">$ node demo.js</div>
+            <div className="whitespace-pre-wrap">{demoOutput}</div>
+            {isListeningForReply && (
+              <div className="flex items-center gap-2 mt-2">
+                <div className="animate-pulse w-2 h-2 bg-yellow-400 rounded-full"></div>
+                <span className="text-yellow-400">Listening for reply...</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <span>Add and verify your domain</span>
+            )}
+            {replyReceived && (
+              <div className="mt-3 p-3 bg-gray-800 rounded border-l-4 border-green-400">
+                <div className="text-green-400 font-bold mb-1">📧 Reply Details:</div>
+                <div className="text-gray-300 text-xs space-y-1">
+                  <div><span className="text-blue-300">From:</span> {replyReceived.from}</div>
+                  <div><span className="text-blue-300">Subject:</span> {replyReceived.subject}</div>
+                  <div><span className="text-blue-300">Body:</span> {replyReceived.body.substring(0, 200)}{replyReceived.body.length > 200 ? '...' : ''}</div>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-muted-foreground/40 rounded-full"></div>
-                <span>Configure email addresses</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-muted-foreground/40 rounded-full"></div>
-                <span>Start receiving emails at your domain</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            )}
+          </div>
+        )}
 
         {/* Action Button */}
-        <div className="text-center">
-          <Button 
+        <div className="text-center mt-4">
+          <Button
             onClick={handleCompleteOnboarding}
             disabled={isCompleting}
             size="lg"
-            className="bg-blue-600 hover:bg-blue-700 text-white"
           >
             {isCompleting ? 'Completing setup...' : (
               <>
@@ -232,7 +338,7 @@ export default function OnboardingPage() {
               </>
             )}
           </Button>
-          <p className="text-xs text-gray-500 mt-2">
+          <p className="text-xs text-muted-foreground mt-2">
             This will mark your onboarding as complete and take you to add your first domain.
           </p>
         </div>
