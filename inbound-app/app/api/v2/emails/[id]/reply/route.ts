@@ -40,6 +40,8 @@ export interface PostEmailReplyRequest {
 
 export interface PostEmailReplyResponse {
     id: string
+    messageId: string  // Inbound message ID (used for threading)
+    awsMessageId: string  // AWS SES Message ID
 }
 
 // Helper functions
@@ -609,7 +611,12 @@ export async function POST(
             }
 
             console.log('✅ Reply processing complete')
-            return NextResponse.json({ id: replyEmailId }, { status: 200 })
+            const response: PostEmailReplyResponse = {
+                id: replyEmailId,
+                messageId: messageId,  // The Inbound message ID used for threading
+                awsMessageId: sesMessageId || ''  // The AWS SES Message ID
+            }
+            return NextResponse.json(response, { status: 200 })
 
         } catch (sesError) {
             console.error('❌ SES send error:', sesError)

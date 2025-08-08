@@ -38,6 +38,7 @@ export interface PostEmailsRequest {
 
 export interface PostEmailsResponse {
     id: string
+    messageId: string  // AWS SES Message ID
 }
 
 // Helper functions moved to @/lib/email-management/agent-email-helper
@@ -460,7 +461,11 @@ export async function POST(request: NextRequest) {
             }
 
             console.log('✅ Email processing complete')
-            return NextResponse.json({ id: emailId }, { status: 200 })
+            const response: PostEmailsResponse = {
+                id: emailId,
+                messageId: messageId || ''
+            }
+            return NextResponse.json(response, { status: 200 })
 
         } catch (sesError) {
             console.error('❌ SES send error:', sesError)
