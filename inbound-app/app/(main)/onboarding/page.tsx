@@ -44,6 +44,7 @@ export default function OnboardingPage() {
   const [pollTimeLeft, setPollTimeLeft] = useState(0)
   const [showManualCheck, setShowManualCheck] = useState(false)
   const [isManualChecking, setIsManualChecking] = useState(false)
+  const [pollEndTime, setPollEndTime] = useState<number | null>(null)
   const [replyReceived, setReplyReceived] = useState<{
     from: string
     subject: string
@@ -65,7 +66,20 @@ export default function OnboardingPage() {
     }
   }, [session, isPending, router])
 
-  // No cleanup on unmount - user needs to navigate away to reply!
+  // Check polling status on mount (in case user navigated back)
+  useEffect(() => {
+    if (pollEndTime) {
+      updateCountdown()
+      
+      // If we're past the end time, show manual check
+      if (!shouldStillPoll() && isListeningForReply) {
+        console.log('🔄 [MOUNT] Polling time elapsed while away - showing manual check')
+        setIsListeningForReply(false)
+        setShowManualCheck(true)
+        setPollEndTime(null)
+      }
+    }
+  }, []) // Only run on mount
 
   const handleCreateApiKey = async () => {
     try {
@@ -125,32 +139,62 @@ export default function OnboardingPage() {
     }
   }
 
+  // Check if we should still be polling based on timestamp
+  const shouldStillPoll = () => {
+    if (!pollEndTime) return false
+    return Date.now() < pollEndTime
+  }
+
+  // Update countdown timer based on timestamp
+  const updateCountdown = () => {
+    if (!pollEndTime) {
+      setPollTimeLeft(0)
+      return
+    }
+    
+    const timeLeft = Math.max(0, Math.ceil((pollEndTime - Date.now()) / 1000))
+    setPollTimeLeft(timeLeft)
+    
+    if (timeLeft === 0 && isListeningForReply) {
+      console.log('⏰ [POLLING] 60 seconds elapsed - stopping automatic polling')
+      setIsListeningForReply(false)
+      setShowManualCheck(true)
+      setPollEndTime(null)
+    }
+  }
+
+  // Timer effect to update countdown and check polling status
+  useEffect(() => {
+    if (!pollEndTime) return
+
+    const interval = setInterval(() => {
+      updateCountdown()
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [pollEndTime, isListeningForReply])
+
   const startListeningForReply = () => {
     console.log('🎯 [ONBOARDING] Starting reply listener - will poll for 60 seconds')
     console.log('🎯 [ONBOARDING] User email:', session?.user?.email)
     console.log('🎯 [ONBOARDING] Demo email sent to:', demoEmail)
     
+    // Set end time 60 seconds in the future
+    const endTime = Date.now() + (60 * 1000)
+    setPollEndTime(endTime)
     setIsListeningForReply(true)
     setPollTimeLeft(60)
     setShowManualCheck(false)
     
-    // Countdown timer
-    const countdownInterval = setInterval(() => {
-      setPollTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(countdownInterval)
-          setIsListeningForReply(false)
-          setShowManualCheck(true)
-          console.log('⏰ [POLLING] 60 seconds elapsed - stopping automatic polling')
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
+    console.log('🕐 [POLLING] Poll will end at:', new Date(endTime).toISOString())
     
     const checkForReply = async () => {
+      const now = Date.now()
+      const timeLeft = Math.max(0, Math.ceil((endTime - now) / 1000))
+      
       console.log('🔄 [POLLING] Checking for reply...', new Date().toISOString())
-      console.log('🔄 [POLLING] Time left:', pollTimeLeft, 'seconds')
+      console.log('🔄 [POLLING] Time left:', timeLeft, 'seconds')
+      console.log('🔄 [POLLING] Should still poll:', shouldStillPoll())
       
       try {
         const response = await fetch('/api/v2/onboarding/check-reply')
@@ -171,7 +215,7 @@ export default function OnboardingPage() {
             setReplyReceived(data.reply)
             setIsListeningForReply(false)
             setShowManualCheck(false)
-            clearInterval(countdownInterval)
+            setPollEndTime(null)
             setPollTimeLeft(0)
             setDemoOutput(prev => `${prev}\n\n🎉 Reply received!\nFrom: ${data.reply.from}\nSubject: ${data.reply.subject}`)
             console.log('✅ [POLLING] Stopping polling - reply received and processed')
@@ -190,12 +234,15 @@ export default function OnboardingPage() {
         })
       }
       
-      // Continue polling if still listening and time left
-      if (isListeningForReply && pollTimeLeft > 0) {
+      // Continue polling if time hasn't elapsed
+      if (now < endTime) {
         console.log('⏰ [POLLING] Scheduling next check in 3 seconds...')
         setTimeout(checkForReply, 3000) // Poll every 3 seconds
       } else {
-        console.log('🛑 [POLLING] Stopping polling - time elapsed or reply found')
+        console.log('🛑 [POLLING] Stopping polling - time elapsed')
+        setIsListeningForReply(false)
+        setShowManualCheck(true)
+        setPollEndTime(null)
       }
     }
     
