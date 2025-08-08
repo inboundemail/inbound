@@ -489,23 +489,26 @@ export default function OnboardingPage() {
         )}
 
         {/* Action Button */}
-        <div className="text-center mt-4">
-          <Button
-            onClick={handleCompleteOnboarding}
-            disabled={isCompleting}
-            size="lg"
-          >
-            {isCompleting ? 'Completing setup...' : (
-              <>
-                Continue to Domain Setup
-                <ArrowBoldRight className="h-4 w-4 ml-2" />
-              </>
-            )}
-          </Button>
-          <p className="text-xs text-muted-foreground mt-2">
-            This will mark your onboarding as complete and take you to add your first domain.
-          </p>
-        </div>
+        
+        {demoOutput && demoOutput.includes('✅ Success!') && (
+          <div className="text-center mt-4">
+            <Button
+              onClick={handleCompleteOnboarding}
+              disabled={isCompleting}
+              size="lg"
+            >
+              {isCompleting ? 'Completing setup...' : (
+                <>
+                  Continue to Domain Setup
+                  <ArrowBoldRight className="h-4 w-4 ml-2" />
+                </>
+              )}
+            </Button>
+            <p className="text-xs text-muted-foreground mt-2">
+              This will mark your onboarding as complete and take you to add your first domain.
+            </p>
+          </div>
+        )}
 
 
       </div>

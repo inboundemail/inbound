@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import { usePathname } from 'next/navigation'
 import { NavigationItem, getPageTitleFromUrl, getNavigationItemFromUrl, generateDocumentTitle } from '@/lib/navigation'
 
@@ -18,8 +18,9 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const pathname = usePathname()
   const [customTitle, setCustomTitle] = useState<string | null>(null)
   
-  const currentItem = getNavigationItemFromUrl(pathname)
-  const defaultTitle = getPageTitleFromUrl(pathname)
+  // Memoize expensive computations to prevent unnecessary recalculations
+  const currentItem = useMemo(() => getNavigationItemFromUrl(pathname), [pathname])
+  const defaultTitle = useMemo(() => getPageTitleFromUrl(pathname), [pathname])
   const currentTitle = customTitle || defaultTitle
 
   const resetTitle = () => setCustomTitle(null)
@@ -34,13 +35,14 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
     setCustomTitle(null)
   }, [pathname])
 
-  const value: NavigationContextType = {
+  // Memoize context value to prevent unnecessary re-renders
+  const value = useMemo<NavigationContextType>(() => ({
     currentPath: pathname,
     currentTitle,
     currentItem,
     setCustomTitle,
     resetTitle,
-  }
+  }), [pathname, currentTitle, currentItem])
 
   return (
     <NavigationContext.Provider value={value}>
