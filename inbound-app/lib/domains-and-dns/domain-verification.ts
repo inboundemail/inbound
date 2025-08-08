@@ -108,6 +108,16 @@ export async function initiateDomainVerification(
         type: 'MX',
         name: domain,
         value: `10 inbound-smtp.${awsRegion}.amazonaws.com`
+      },
+      {
+        type: 'TXT',
+        name: domain,
+        value: 'v=spf1 include:amazonses.com ~all'
+      },
+      {
+        type: 'TXT',
+        name: `_dmarc.${domain}`,
+        value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain}; ruf=mailto:dmarc@${domain}; fo=1; aspf=r; adkim=r`
       }
     ]
 
