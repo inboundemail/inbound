@@ -65,6 +65,7 @@ export default function OnboardingPage() {
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
+      console.log('🧹 [CLEANUP] Component unmounting - stopping reply polling')
       setIsListeningForReply(false)
     }
   }, [])
@@ -105,10 +106,19 @@ export default function OnboardingPage() {
       const result = await response.json()
 
       if (response.ok) {
+        console.log('✅ [DEMO] Email sent successfully:', {
+          emailId: result.id,
+          sentTo: demoEmail,
+          userEmail: session?.user?.email
+        })
+        
         setDemoOutput(`✅ Success!\nEmail sent to ${demoEmail} with ID: ${result.id}, check your inbox!\n\n🎯 Waiting for your reply...`)
         setIsListeningForReply(true)
+        
+        console.log('🎯 [DEMO] Starting reply polling system...')
         startListeningForReply()
       } else {
+        console.error('❌ [DEMO] Failed to send email:', result)
         setDemoOutput(`❌ Error: ${result.error || 'Unknown error'}`)
       }
     } catch (error) {
@@ -119,28 +129,60 @@ export default function OnboardingPage() {
   }
 
   const startListeningForReply = () => {
+    console.log('🎯 [ONBOARDING] Starting reply listener - will poll every 3 seconds')
+    console.log('🎯 [ONBOARDING] User email:', session?.user?.email)
+    console.log('🎯 [ONBOARDING] Demo email sent to:', demoEmail)
+    
     const checkForReply = async () => {
+      console.log('🔄 [POLLING] Checking for reply...', new Date().toISOString())
+      console.log('🔄 [POLLING] isListeningForReply state:', isListeningForReply)
+      
       try {
         const response = await fetch('/api/v2/onboarding/check-reply')
+        console.log('📡 [POLLING] Response status:', response.status, response.statusText)
+        
         if (response.ok) {
           const data = await response.json()
+          console.log('📋 [POLLING] Response data:', JSON.stringify(data, null, 2))
+          
           if (data.hasReply && data.reply) {
+            console.log('🎉 [POLLING] Reply found! Details:', {
+              from: data.reply.from,
+              subject: data.reply.subject,
+              bodyLength: data.reply.body?.length || 0,
+              receivedAt: data.reply.receivedAt
+            })
+            
             setReplyReceived(data.reply)
             setIsListeningForReply(false)
             setDemoOutput(prev => `${prev}\n\n🎉 Reply received!\nFrom: ${data.reply.from}\nSubject: ${data.reply.subject}`)
+            console.log('✅ [POLLING] Stopping polling - reply received and processed')
             return
+          } else {
+            console.log('📭 [POLLING] No reply yet, will continue polling...')
           }
+        } else {
+          console.error('❌ [POLLING] API error:', response.status, response.statusText)
         }
       } catch (error) {
-        console.error('Error checking for reply:', error)
+        console.error('❌ [POLLING] Network error checking for reply:', error)
+        console.error('❌ [POLLING] Error details:', {
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        })
       }
       
       // Continue polling if no reply yet
       if (isListeningForReply) {
+        console.log('⏰ [POLLING] Scheduling next check in 3 seconds...')
         setTimeout(checkForReply, 3000) // Poll every 3 seconds
+      } else {
+        console.log('🛑 [POLLING] Stopping polling - isListeningForReply is false')
       }
     }
     
+    // Start the first check
+    console.log('🚀 [POLLING] Starting first reply check...')
     checkForReply()
   }
 
