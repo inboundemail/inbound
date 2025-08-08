@@ -1,408 +1,263 @@
 "use client"
 
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CopyButton } from '@/components/copy-button'
-import CircleCheck from '@/components/icons/circle-check'
-import ChevronDown from '@/components/icons/chevron-down'
-import Clipboard2 from '@/components/icons/clipboard-2'
-import Gear2 from '@/components/icons/gear-2'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { formatDistanceToNow, format } from 'date-fns'
+import Link from 'next/link'
+import { useDomainsListV2Query } from '@/features/domains/hooks/useDomainV2Hooks'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+
+// Import Nucleo icons
 import Globe2 from '@/components/icons/globe-2'
-import BoltLightning from '@/components/icons/bolt-lightning'
 import Envelope2 from '@/components/icons/envelope-2'
 import CirclePlus from '@/components/icons/circle-plus'
 import Refresh2 from '@/components/icons/refresh-2'
 import ObjRemove from '@/components/icons/obj-remove'
-import { CustomInboundIcon } from '@/components/icons/customInbound'
-import { formatDistanceToNow } from 'date-fns'
-import { DOMAIN_STATUS } from '@/lib/db/schema'
-import Link from 'next/link'
-import { useDomainsListV2Query, useDomainDetailsV2Query } from '@/features/domains/hooks/useDomainV2Hooks'
+import Magnifier2 from '@/components/icons/magnifier-2'
+import Filter2 from '@/components/icons/filter-2'
+import ArrowUpRight2 from '@/components/icons/arrow-up-right-2'
 import type { DomainWithStats } from '@/app/api/v2/domains/route'
 
 export default function EmailsPage() {
-  const [expandedDomains, setExpandedDomains] = useState<Record<string, boolean>>({})
-  const [copiedEmail, setCopiedEmail] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
 
-  // Fetch domain stats using v2 API
+  // Debounce inputs to reduce API calls
+  const debouncedSearch = useDebouncedValue(searchQuery, 300)
+  const debouncedStatus = useDebouncedValue(statusFilter, 150)
+
+  // Fetch domains using v2 API
   const {
     data: domainsResponse,
-    isLoading: isDomainStatsLoading,
-    error: domainStatsError,
-    refetch: refetchDomainStats
-  } = useDomainsListV2Query()
+    isLoading,
+    error,
+    refetch: refetchDomains
+  } = useDomainsListV2Query({ limit: 100 })
 
-  // Simple helper functions
-  const toggleDomain = (domainId: string) => {
-    setExpandedDomains(prev => ({
-      ...prev,
-      [domainId]: !prev[domainId]
-    }))
-  }
-
-  const copyEmail = async (email: string) => {
-    try {
-      await navigator.clipboard.writeText(email)
-      setCopiedEmail(email)
-      setTimeout(() => setCopiedEmail(null), 2000)
-    } catch (err) {
-      console.error("Failed to copy email:", err)
+  // Helper functions for domain status
+  const getDomainStatusDot = (domain: DomainWithStats) => {
+    if (domain.status === 'verified' && domain.canReceiveEmails) {
+      return <div className="w-2 h-2 rounded-full bg-green-500" />
+    } else if (domain.status === 'verified') {
+      return <div className="w-2 h-2 rounded-full bg-yellow-500" />
+    } else {
+      return <div className="w-2 h-2 rounded-full bg-red-500" />
     }
   }
 
-  const getDomainIconColor = (domain: DomainWithStats) => {
-    if (domain.status === 'verified' && domain.canReceiveEmails) return '#059669' // green-600 - verified
-
-    switch (domain.status) {
-      case 'pending': return '#eab308' // yellow-500 - pending DNS check
-      case 'verified': return '#2563eb' // blue-600 - SES setup
-      case 'failed': return '#dc2626' // red-600 - failed
-      default: return '#64748b' // slate-500 - unknown
+  const getDomainStatusText = (domain: DomainWithStats) => {
+    if (domain.status === 'verified' && domain.canReceiveEmails) {
+      return "Active"
+    } else if (domain.status === 'verified') {
+      return "Verified"
+    } else {
+      return "Pending"
     }
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-      case "verified":
-      case "ready":
-        return "bg-emerald-500"
-      case "pending":
-      case "processing":
-        return "bg-amber-500"
-      case "inactive":
-      case "error":
-        return "bg-red-500"
-      default:
-        return "bg-gray-400"
-    }
-  }
 
-  const getBorderColor = (isActive: boolean, isConfigured: boolean) => {
-    if (isActive && isConfigured) return "border-l-emerald-500"
-    if (isActive) return "border-l-amber-500"
-    return "border-l-red-500"
-  }
 
-  const getEmailStatus = (email: any) => {
-    if (email.isActive && email.isReceiptRuleConfigured) return "active"
-    if (email.isActive) return "pending"
-    return "inactive"
-  }
+  // Process and filter data
+  const domains = domainsResponse?.data || []
 
-  const getReadyStatus = (email: any) => {
-    if (email.isReceiptRuleConfigured) return "ready"
-    if (email.isActive) return "processing"
-    return "error"
-  }
-
-  const getConnectionStatus = (email: any) => {
-    // If email has an endpoint or webhook, show connection status
-    if (email.endpointId || email.webhookId) {
-      if (email.endpointName && email.endpointType) {
-        return `Connected to ${email.endpointName} (${email.endpointType})`
-      } else if (email.webhookName) {
-        return `Connected to ${email.webhookName}`
-      } else {
-        return "Connected to endpoint"
-      }
-    }
-    // If email is configured but no endpoint/webhook, it's just storing
-    if (email.isReceiptRuleConfigured) {
-      return "Ready to receive"
-    }
-    // Otherwise it's not configured yet
-    return "Not configured"
-  }
-
-  const getConnectionStatusColor = (email: any) => {
-    // If email has an endpoint or webhook, show as connected (green)
-    if (email.endpointId || email.webhookId) {
-      return "bg-emerald-500"
-    }
-    // If email is configured but no endpoint/webhook, show as ready (blue)
-    if (email.isReceiptRuleConfigured) {
-      return "bg-blue-500"
-    }
-    // Otherwise it's not configured yet (red)
-    return "bg-red-500"
-  }
-
-  // Loading state
-  if (isDomainStatsLoading) {
-    return (
-      <div className="flex flex-1 flex-col gap-4 p-4">
-        <div className="flex items-center justify-center py-12">
-          <div className="text-muted-foreground">Loading domains...</div>
-        </div>
-      </div>
-    )
-  }
+  // Filter domains based on search query
+  const filteredDomains = domains.filter(domain => {
+    if (!debouncedSearch) return true
+    return domain.domain.toLowerCase().includes(debouncedSearch.toLowerCase())
+  })
 
   // Error state
-  if (domainStatsError) {
+  if (error) {
     return (
-      <div className="flex flex-1 flex-col gap-4 p-4">
-        <Card className="border-destructive/50 bg-destructive/10">
-          <CardContent className="p-6">
-                          <div className="flex items-center gap-2 text-destructive">
-                <ObjRemove width="16" height="16" />
-                <span>{domainStatsError?.message || 'Failed to load domain data'}</span>
-              <Button variant="ghost" size="sm" onClick={() => refetchDomainStats()} className="ml-auto text-destructive hover:text-destructive">
+      <div className="min-h-screen p-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-6">
+            <div className="flex items-center gap-2 text-destructive">
+              <ObjRemove width="16" height="16" />
+              <span>{error.message}</span>
+              <Button variant="ghost" size="sm" onClick={() => refetchDomains()} className="ml-auto text-destructive hover:text-destructive/80">
                 Try Again
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     )
   }
 
-  if (!domainsResponse) return null
-
-  const domains = domainsResponse.data || []
-  const totalDomains = domainsResponse.meta?.totalCount || 0
-
   return (
-    <div className="min-h-screen p-4 font-outfit">
-      <div className="max-w-5xl mx-auto">
-
-        {/* Domain and Email Management */}
-        <div className="mb-6 flex items-center justify-between mt-8">
-          <div className="">
-            <h2 className="text-2xl font-semibold text-foreground mb-1 tracking-tight">
-              Domains & Email Addresses ({totalDomains})
-            </h2>
-            <p className="text-muted-foreground text-sm font-medium">Manage your email domains and addresses</p></div>
-
-          <div className="flex items-center gap-2">
-            <Button size="sm" asChild>
-              <Link href="/add">
-                <CirclePlus width="12" height="12" className="mr-1" />
-                Add Domain
-              </Link>
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => refetchDomainStats()}
-              disabled={isDomainStatsLoading}
-            >
-              <Refresh2 width="12" height="12" className="mr-1" />
-              Refresh
-            </Button>
-
+    <div className="min-h-screen">
+      <div className="max-w-6xl mx-auto p-4">
+        {/* Header */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-foreground mb-1 tracking-tight">
+                Domains
+              </h2>
+              <p className="text-muted-foreground text-sm font-medium">
+                {domainsResponse?.pagination.total || 0} domains
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" asChild>
+                <Link href="/add">
+                  <CirclePlus width="12" height="12" className="mr-1" />
+                  Add Domain
+                </Link>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetchDomains()}
+                disabled={isLoading}
+              >
+                <Refresh2 width="14" height="14" className="mr-2" />
+                Refresh
+              </Button>
+            </div>
           </div>
-
         </div>
 
-
-        <div className="space-y-2 mb-6">
-          {domains.length === 0 ? (
-            <Card className="bg-card border-border rounded-xl">
-              <CardContent className="p-8">
-                <div className="text-center">
-                  <CustomInboundIcon
-                    Icon={Globe2}
-                    size={48}
-                    backgroundColor="#8b5cf6"
-                    className="mx-auto mb-4"
-                  />
-                  <p className="text-sm text-muted-foreground mb-4">No domains configured</p>
-                  <Button variant="secondary" asChild>
-                    <Link href="/add">
-                      <CirclePlus width="16" height="16" className="mr-2" />
-                      Add Your First Domain
-                    </Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            domains.map((domain) => (
-              <DomainCard
-                key={domain.id}
-                domain={domain}
-                isExpanded={expandedDomains[domain.id]}
-                onToggle={() => toggleDomain(domain.id)}
-                onCopyEmail={copyEmail}
-                copiedEmail={copiedEmail}
-                getDomainIconColor={getDomainIconColor}
-                getStatusColor={getStatusColor}
-                getBorderColor={getBorderColor}
-                getEmailStatus={getEmailStatus}
-                getReadyStatus={getReadyStatus}
-                getConnectionStatus={getConnectionStatus}
-                getConnectionStatusColor={getConnectionStatusColor}
+        {/* Filters */}
+        <div className="mb-6">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
+              <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search domains..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 h-9 rounded-xl"
               />
-            ))
-          )}
+            </div>
+
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[140px] h-9 rounded-xl">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+                <SelectItem value="configured">Configured</SelectItem>
+                <SelectItem value="unconfigured">Unconfigured</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {(searchQuery || statusFilter !== 'all') && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearchQuery('')
+                  setStatusFilter('all')
+                }}
+                className="h-9"
+              >
+                <Filter2 width="14" height="14" className="mr-2" />
+                Clear
+              </Button>
+            )}
+          </div>
         </div>
+      </div>
+
+      {/* Domains Table - Edge to Edge */}
+      <div className="w-full max-w-6xl mx-auto">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="text-muted-foreground">Loading domains...</div>
+          </div>
+        ) : !filteredDomains.length ? (
+          <div className="max-w-6xl mx-auto p-4">
+            <div className="bg-card border-border rounded-xl p-8">
+              <div className="text-center">
+                <Globe2 width="48" height="48" className="text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-semibold mb-2 text-foreground">No domains found</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {searchQuery || statusFilter !== 'all'
+                    ? 'Try adjusting your filters or search query.'
+                    : 'Start by adding a domain to create email addresses.'}
+                </p>
+                <Button variant="secondary" asChild>
+                  <Link href="/add">
+                    <CirclePlus width="16" height="16" className="mr-2" />
+                    Add Your First Domain
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {filteredDomains.map((domain) => (
+              <Link 
+                key={domain.id}
+                href={`/emails/${domain.id}`}
+                className="flex items-center gap-4 px-6 py-3 hover:bg-muted/50 transition-colors cursor-pointer group block"
+              >
+                {/* Domain Icon with Status */}
+                <div className="flex-shrink-0">
+                  <div className="relative">
+                    <Globe2 width="16" height="16" className="text-blue-600" />
+                    <div className="absolute -top-1 -right-1">
+                      {getDomainStatusDot(domain)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Domain Name */}
+                <div className="flex-shrink-0 w-64">
+                  <span className="text-sm font-medium">{domain.domain}</span>
+                </div>
+
+                {/* Email Count */}
+                <div className="flex-shrink-0 w-32">
+                  <div className="flex items-center gap-2">
+                    <Envelope2 width="12" height="12" className="text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      {domain.stats.totalEmailAddresses} address{domain.stats.totalEmailAddresses !== 1 ? 'es' : ''}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Domain Status */}
+                <div className="flex-shrink-0 w-24">
+                  <Badge 
+                    variant={domain.status === 'verified' && domain.canReceiveEmails ? 'default' : 
+                             domain.status === 'verified' ? 'secondary' : 'destructive'}
+                  >
+                    {getDomainStatusText(domain)}
+                  </Badge>
+                </div>
+
+                {/* Configuration Type */}
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm text-muted-foreground">
+                    {domain.isCatchAllEnabled ? 'Catch-all enabled' : 'Individual addresses'}
+                  </span>
+                </div>
+
+                {/* Created */}
+                <div className="flex-shrink-0 text-xs text-muted-foreground w-20">
+                  {format(new Date(domain.createdAt), 'MMM d')}
+                </div>
+
+                {/* Arrow Icon */}
+                <div className="flex-shrink-0">
+                  <ArrowUpRight2 width="12" height="12" className="text-muted-foreground group-hover:text-foreground transition-colors" />
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-// Separate component for domain cards
-function DomainCard({
-  domain,
-  isExpanded,
-  onToggle,
-  onCopyEmail,
-  copiedEmail,
-  getDomainIconColor,
-  getStatusColor,
-  getBorderColor,
-  getEmailStatus,
-  getReadyStatus,
-  getConnectionStatus,
-  getConnectionStatusColor,
-}: {
-  domain: DomainWithStats
-  isExpanded: boolean
-  onToggle: () => void
-  onCopyEmail: (email: string) => void
-  copiedEmail: string | null
-  getDomainIconColor: (domain: DomainWithStats) => string
-  getStatusColor: (status: string) => string
-  getBorderColor: (isActive: boolean, isConfigured: boolean) => string
-  getEmailStatus: (email: any) => string
-  getReadyStatus: (email: any) => string
-  getConnectionStatus: (email: any) => string
-  getConnectionStatusColor: (email: any) => string
-}) {
-  // Only fetch details if domain has email addresses and we need to show them
-  // Don't fetch details for catch-all domains as they don't show individual addresses
-  const shouldFetchDetails = domain.status === 'verified' && domain.stats.totalEmailAddresses > 0 && !domain.isCatchAllEnabled
-  const { data: domainDetails } = useDomainDetailsV2Query(shouldFetchDetails ? domain.id : '')
-
-  // For now, we'll handle email addresses display differently with v2 API
-  const emailAddresses: any[] = []
-
-  return (
-    <Card className="bg-card border-border hover:bg-accent/5 transition-all duration-300 rounded-xl overflow-hidden group">
-      <CardContent className="p-0">
-        {/* Domain Header */}
-        <div
-          className="p-4 cursor-pointer hover:bg-accent/10 transition-colors duration-200 border-b border-border"
-          onClick={onToggle}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <CustomInboundIcon
-                Icon={Globe2}
-                size={36}
-                backgroundColor={getDomainIconColor(domain)}
-              />
-              <div>
-                <h3 className="text-base font-semibold text-foreground tracking-tight">{domain.domain}</h3>
-                <div className="flex items-center space-x-2 mt-0.5">
-                  <div className="flex items-center space-x-1">
-                    <div className={`w-2 h-2 rounded-full ${domain.status === 'verified' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                    <span className="text-xs text-muted-foreground font-medium">
-                      {domain.status === 'verified' ? "Verified" : "Pending DNS"}
-                    </span>
-                  </div>
-                  {domain.isCatchAllEnabled && (
-                    <>
-                      <span className="text-xs text-muted-foreground font-medium">•</span>
-                      <div className="flex items-center space-x-1">
-                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                        <span className="text-xs text-muted-foreground font-medium">Catch-all</span>
-                      </div>
-                    </>
-                  )}
-                  {!domain.isCatchAllEnabled && (
-                    <>
-                      <span className="text-xs text-muted-foreground font-medium">•</span>
-                      <span className="text-xs text-muted-foreground font-medium">
-                        {domain.stats.totalEmailAddresses} address{domain.stats.totalEmailAddresses !== 1 ? "es" : ""}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-                        <div className="flex items-center space-x-2">
-
-              {/* {!domain.isCatchAllEnabled && 
-                // <Button 
-                //   size="sm" 
-                //   onClick={(e) => {
-                //     e.stopPropagation()
-                //     // TODO: Navigate to add email address page/dialog
-                //   }}
-                // >
-                //   <HiPlus className="w-3 h-3 mr-1" />
-                //   Add Address
-                // </Button>
-              } */}
-              <Button 
-                variant="secondary" 
-                size="sm"
-                onClick={(e) => e.stopPropagation()}
-                asChild
-              >
-                <Link href={`/emails/${domain.id}`}>
-                  <Gear2 width="12" height="12" className="mr-1" />
-                  Config
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Email Addresses - Smooth expansion */}
-        {emailAddresses.length > 0 && !domain.isCatchAllEnabled && (
-          <div
-            className="bg-muted/50 overflow-hidden transition-all duration-300 ease-in-out"
-            style={{
-              maxHeight: isExpanded ? `${emailAddresses.length * 80 + 16}px` : '0px',
-              opacity: isExpanded ? 1 : 0
-            }}
-          >
-            {emailAddresses.map((email: any, index: number) => (
-              <div
-                key={email.id}
-                className={`group/email relative px-4 py-2 hover:bg-muted/80 transition-colors duration-200 border-l-3 ${getBorderColor(email.isActive, email.isReceiptRuleConfigured)} ${index !== emailAddresses.length - 1 ? "border-b border-border" : ""
-                  }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3 flex-1">
-                    <CustomInboundIcon
-                      Icon={Envelope2}
-                      size={28}
-                      backgroundColor="#10b981"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <span className="text-sm font-medium text-foreground truncate">{email.address}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="opacity-0 group-hover/email:opacity-100 transition-all duration-200 p-1 h-auto hover:bg-accent rounded hover:scale-105 active:scale-95"
-                          onClick={() => onCopyEmail(email.address)}
-                        >
-                          {copiedEmail === email.address ? (
-                            <CircleCheck width="14" height="14" className="text-emerald-500" />
-                          ) : (
-                            <Clipboard2 width="14" height="14" className="text-muted-foreground transition-all duration-150 hover:text-foreground" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2 text-right text-sm ">
-                    <span className="text-muted-foreground">{email.emailsLast24h || 0} emails today</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-} 
+ 
