@@ -243,12 +243,48 @@ export async function GET(
                     error?: string
                 }> = []
 
-                if (dnsRecords.length > 0) {
+                // Build list of records to verify
+                const recordsToVerify: Array<{
+                    type: string
+                    name: string
+                    value: string
+                    dbId: string | null
+                }> = dnsRecords.map(record => ({
+                    type: record.recordType,
+                    name: record.name,
+                    value: record.value,
+                    dbId: record.id
+                }))
+                
+                // Also check for SPF and DMARC even if not in database
+                const spfRecord = dnsRecords.find(r => r.recordType === 'TXT' && r.name === domain.domain && (r.value || '').toLowerCase().includes('v=spf1'))
+                if (!spfRecord) {
+                    // Add SPF to verification list
+                    recordsToVerify.push({
+                        type: 'TXT',
+                        name: domain.domain,
+                        value: 'v=spf1 include:amazonses.com ~all',
+                        dbId: null
+                    })
+                }
+                
+                const dmarcRecord = dnsRecords.find(r => r.recordType === 'TXT' && r.name === `_dmarc.${domain.domain}`)
+                if (!dmarcRecord) {
+                    // Add DMARC to verification list
+                    recordsToVerify.push({
+                        type: 'TXT',
+                        name: `_dmarc.${domain.domain}`,
+                        value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain.domain}; ruf=mailto:dmarc@${domain.domain}; fo=1; aspf=r; adkim=r`,
+                        dbId: null
+                    })
+                }
+
+                if (recordsToVerify.length > 0) {
                     // Verify DNS records
-                    console.log(`🔍 Verifying ${dnsRecords.length} DNS records`)
+                    console.log(`🔍 Verifying ${recordsToVerify.length} DNS records (including SPF/DMARC checks)`)
                     const results = await verifyDnsRecords(
-                        dnsRecords.map(record => ({
-                            type: record.recordType,
+                        recordsToVerify.map(record => ({
+                            type: record.type,
                             name: record.name,
                             value: record.value
                         }))
@@ -262,17 +298,19 @@ export async function GET(
                         error: result.error
                     }))
 
-                    // Update DNS record verification status in database
+                    // Update DNS record verification status in database (only for records that exist in DB)
                     await Promise.all(
-                        dnsRecords.map(async (record, index) => {
-                            const verificationResult = results[index]
-                            await db
-                                .update(domainDnsRecords)
-                                .set({
-                                    isVerified: verificationResult.isVerified,
-                                    lastChecked: new Date()
-                                })
-                                .where(eq(domainDnsRecords.id, record.id))
+                        recordsToVerify.map(async (record, index) => {
+                            if (record.dbId) {
+                                const verificationResult = results[index]
+                                await db
+                                    .update(domainDnsRecords)
+                                    .set({
+                                        isVerified: verificationResult.isVerified,
+                                        lastChecked: new Date()
+                                    })
+                                    .where(eq(domainDnsRecords.id, record.dbId))
+                            }
                         })
                     )
                 }
@@ -387,29 +425,39 @@ export async function GET(
                 }
             }
             
-            // Build recommendations if SPF/DMARC missing
+            // Build recommendations if SPF/DMARC missing or not verified
             try {
-                const dnsRecordsForRec = await db
-                  .select()
-                  .from(domainDnsRecords)
-                  .where(eq(domainDnsRecords.domainId, domain.id))
-                const hasRootSpf = dnsRecordsForRec.some(r => r.recordType === 'TXT' && r.name === domain.domain && (r.value || '').toLowerCase().includes('v=spf1'))
-                const hasDmarc = dnsRecordsForRec.some(r => r.recordType === 'TXT' && r.name === `_dmarc.${domain.domain}`)
+                // Check verification results to see if SPF/DMARC are verified
+                const verificationCheckResults = response.verificationCheck?.dnsRecords || []
+                const spfVerified = verificationCheckResults.some((r: any) => 
+                    r.type === 'TXT' && 
+                    r.name === domain.domain && 
+                    r.isVerified
+                )
+                const dmarcVerified = verificationCheckResults.some((r: any) => 
+                    r.type === 'TXT' && 
+                    r.name === `_dmarc.${domain.domain}` && 
+                    r.isVerified
+                )
+                
                 const recommendations: GetDomainByIdResponse['authRecommendations'] = {}
-                if (!hasRootSpf) {
+                
+                if (!spfVerified) {
                     recommendations.spf = {
                         name: domain.domain,
                         value: 'v=spf1 include:amazonses.com ~all',
                         description: 'SPF record for root domain (recommended)'
                     }
                 }
-                if (!hasDmarc) {
+                
+                if (!dmarcVerified) {
                     recommendations.dmarc = {
                         name: `_dmarc.${domain.domain}`,
                         value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain.domain}; ruf=mailto:dmarc@${domain.domain}; fo=1; aspf=r; adkim=r`,
                         description: 'DMARC policy record (starts with p=none for monitoring)'
                     }
                 }
+                
                 if (recommendations.spf || recommendations.dmarc) {
                     response.authRecommendations = recommendations
                 }

@@ -48,6 +48,7 @@ import UserGroup from '@/components/icons/user-group'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
+import { cn } from '@/lib/utils'
 import {
     Select,
     SelectContent,
@@ -69,6 +70,7 @@ import {
     useDeleteEmailAddressV2Mutation,
     useUpdateEmailEndpointV2Mutation,
     useUpdateDomainCatchAllV2Mutation,
+    useDomainAuthVerifyV2Mutation,
     domainV2Keys
 } from '@/features/domains/hooks/useDomainV2Hooks'
 
@@ -140,6 +142,16 @@ export default function DomainDetailPage() {
         data: userEndpoints = [],
         isLoading: isEndpointsLoading
     } = useEndpointsQuery()
+
+    // Get auth recommendations for verified domains
+    const {
+        data: authRecommendationsData,
+        isLoading: isAuthRecommendationsLoading,
+        refetch: refetchAuthRecommendations
+    } = useDomainDetailsV2Query(domainId, { check: true })
+
+    // Auth verification mutation
+    const authVerifyMutation = useDomainAuthVerifyV2Mutation()
 
     // React Query mutations
     const domainVerificationMutation = useDomainVerificationCheckV2(domainId)
@@ -231,6 +243,17 @@ export default function DomainDetailPage() {
         console.log('🔄 Forcing domain verification check...')
         setIsRefreshingVerification(true)
         try {
+            // For verified domains, also run auth verification
+            if (domainDetailsData?.status === 'verified') {
+                try {
+                    await authVerifyMutation.mutateAsync(domainId)
+                    console.log('✅ Auth verification completed')
+                } catch (authError) {
+                    console.warn('⚠️ Auth verification failed:', authError)
+                    // Continue with regular verification check even if auth fails
+                }
+            }
+
             // Use check=true to force a fresh verification check
             const response = await fetch(`/api/v2/domains/${domainId}?check=true`)
             if (!response.ok) {
@@ -242,6 +265,11 @@ export default function DomainDetailPage() {
             
             // Manually update the query cache with the fresh data
             queryClient.setQueryData(domainV2Keys.detail(domainId), updatedDomain)
+            
+            // Refresh auth recommendations for verified domains
+            if (domainDetailsData?.status === 'verified') {
+                refetchAuthRecommendations()
+            }
             
             // Check if status changed from pending to verified
             if (domainDetailsData?.status === 'pending' && updatedDomain.status === 'verified') {
@@ -293,6 +321,31 @@ export default function DomainDetailPage() {
             toast.error('Failed to refresh verification status')
         } finally {
             setIsRefreshingVerification(false)
+        }
+    }
+
+    // Auth verification handler
+    const handleAuthVerification = async () => {
+        if (!domainId) return
+        
+        try {
+            await authVerifyMutation.mutateAsync(domainId)
+            toast.success('Authentication records verified successfully')
+            // Refresh auth recommendations
+            refetchAuthRecommendations()
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Failed to verify authentication records'
+            toast.error(errorMessage)
+        }
+    }
+
+    // Copy DNS record value to clipboard
+    const copyToClipboard = async (value: string, recordType: string) => {
+        try {
+            await navigator.clipboard.writeText(value)
+            toast.success(`${recordType} record copied to clipboard`)
+        } catch (error) {
+            toast.error('Failed to copy to clipboard')
         }
     }
 
@@ -684,6 +737,173 @@ export default function DomainDetailPage() {
                     />
                 )}
 
+                {/* Auth Recommendations for verified domains - only show if not fully verified */}
+                {status === DOMAIN_STATUS.VERIFIED && authRecommendationsData?.authRecommendations && Object.values(authRecommendationsData.authRecommendations).some(rec => rec !== undefined) && (
+                    <Card className="bg-card border-border rounded-xl">
+                        <CardHeader className="pb-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <BoltLightning width="20" height="20" className="text-primary" />
+                                    <CardTitle className="text-foreground text-lg">Improve Deliverability</CardTitle>
+                                </div>
+                                {(() => {
+                                    // Check if all recommended records are verified
+                                    const allVerified = Object.entries(authRecommendationsData.authRecommendations).every(([_, recommendation]) => {
+                                        const recordName = recommendation.name
+                                        const verificationData = authRecommendationsData?.verificationCheck?.dnsRecords?.find(
+                                            (record: any) => record.name === recordName && record.type === 'TXT'
+                                        )
+                                        return verificationData?.isVerified
+                                    })
+                                    
+                                    if (allVerified) {
+                                        return (
+                                            <Badge className="bg-green-600 text-white">
+                                                <CircleCheck width="12" height="12" className="mr-1" />
+                                                Fully Verified
+                                            </Badge>
+                                        )
+                                    }
+                                    return null
+                                })()}
+                            </div>
+                            <CardDescription className="text-muted-foreground">
+                                Add these DNS records to improve email delivery rates and authentication
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {/* DNS Records Table Header */}
+                            <div className="rounded-lg border border-border overflow-hidden">
+                                <div className="bg-muted/50 px-4 py-3 border-b border-border">
+                                    <div className="flex">
+                                        <div className="w-[20%] pr-4">
+                                            <span className="text-sm font-medium text-muted-foreground">Name</span>
+                                        </div>
+                                        <div className="w-[10%] pr-4">
+                                            <span className="text-sm font-medium text-muted-foreground">Type</span>
+                                        </div>
+                                        <div className="w-[30%] pr-4">
+                                            <span className="text-sm font-medium text-muted-foreground">Value</span>
+                                        </div>
+                                        <div className="w-[10%] pr-4">
+                                            <span className="text-sm font-medium text-muted-foreground">TTL</span>
+                                        </div>
+                                        <div className="w-[15%] pr-4">
+                                            <span className="text-sm font-medium text-muted-foreground">Priority</span>
+                                        </div>
+                                        <div className="w-[15%]">
+                                            <span className="text-sm font-medium text-muted-foreground">Status</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {/* DNS Records Body */}
+                                <div className="bg-card">
+                                    {Object.entries(authRecommendationsData.authRecommendations).map(([type, recommendation], index) => (
+                                        <div key={index} className={cn(
+                                            "flex items-center transition-colors px-4 py-3 bg-card hover:bg-muted/50",
+                                            {
+                                                "border-b border-border/50": index < Object.keys(authRecommendationsData.authRecommendations || {}).length - 1
+                                            }
+                                        )}>
+                                            <div className="w-[20%] pr-4">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="font-mono text-sm truncate">
+                                                        {recommendation.name}
+                                                    </span>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => copyToClipboard(recommendation.name, `${type} name`)}
+                                                        className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                    >
+                                                        <Clipboard2 width="16" height="16" className="text-muted-foreground" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                            <div className="w-[10%] pr-4">
+                                                <div className="flex items-center justify-between">
+                                                    <Badge variant="secondary" className="text-xs font-mono">
+                                                        TXT
+                                                    </Badge>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => copyToClipboard("TXT", "DNS record type")}
+                                                        className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                    >
+                                                        <Clipboard2 width="16" height="16" className="text-muted-foreground" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                            <div className="w-[30%] pr-4 min-w-0">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="font-mono text-sm truncate text-foreground min-w-0 flex-1">
+                                                        {recommendation.value}
+                                                    </span>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => copyToClipboard(recommendation.value, type)}
+                                                        className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                    >
+                                                        <Clipboard2 width="16" height="16" className="text-muted-foreground" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                            <div className="w-[10%] pr-4">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-sm text-muted-foreground">Auto</span>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => copyToClipboard("Auto", "TTL")}
+                                                        className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                    >
+                                                        <Clipboard2 width="16" height="16" className="text-muted-foreground" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                            <div className="w-[15%] pr-4">
+                                                <span className="text-sm text-muted-foreground">-</span>
+                                            </div>
+                                            <div className="w-[15%]">
+                                                {(() => {
+                                                    // Check if we have verification data for this record type
+                                                    const recordName = recommendation.name
+                                                    const verificationData = authRecommendationsData?.verificationCheck?.dnsRecords?.find(
+                                                        (record: any) => record.name === recordName && record.type === 'TXT'
+                                                    )
+                                                    
+                                                    if (verificationData?.isVerified) {
+                                                        return (
+                                                            <Badge variant="default" className="text-xs bg-green-600 text-white">
+                                                                Verified
+                                                            </Badge>
+                                                        )
+                                                    } else if (verificationData && !verificationData.isVerified) {
+                                                        return (
+                                                            <Badge variant="destructive" className="text-xs">
+                                                                Failed
+                                                            </Badge>
+                                                        )
+                                                    } else {
+                                                        return (
+                                                            <Badge variant="outline" className="text-xs">
+                                                                Pending
+                                                            </Badge>
+                                                        )
+                                                    }
+                                                })()}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
                 {/* Email Management Section - Only show for verified domains */}
                 {showEmailSection && (
                     <Card className="bg-card border-border rounded-xl">
@@ -1013,6 +1233,161 @@ export default function DomainDetailPage() {
                                     </div>
                                 </>
                             )}
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* DNS Records Overview - Show all DNS records for verified domains */}
+                {status === DOMAIN_STATUS.VERIFIED && authRecommendationsData?.verificationCheck?.dnsRecords && (
+                    <Card className="bg-card border-border rounded-xl">
+                        <CardHeader className="pb-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Globe2 width="20" height="20" className="text-primary" />
+                                    <CardTitle className="text-foreground text-lg">DNS Records</CardTitle>
+                                </div>
+                                {(() => {
+                                    // Check if ALL DNS records are verified
+                                    const allRecords = authRecommendationsData.verificationCheck.dnsRecords || []
+                                    const verifiedCount = allRecords.filter((r: any) => r.isVerified).length
+                                    const totalCount = allRecords.length
+                                    const allVerified = totalCount > 0 && verifiedCount === totalCount
+                                    
+                                    if (allVerified) {
+                                        return (
+                                            <Badge className="bg-green-600 text-white">
+                                                <CircleCheck width="12" height="12" className="mr-1" />
+                                                Fully Verified
+                                            </Badge>
+                                        )
+                                    } else if (verifiedCount > 0) {
+                                        return (
+                                            <Badge variant="secondary">
+                                                {verifiedCount}/{totalCount} Verified
+                                            </Badge>
+                                        )
+                                    }
+                                    return null
+                                })()}
+                            </div>
+                            <CardDescription className="text-muted-foreground">
+                                All DNS records managed for {domain}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="rounded-lg border border-border overflow-hidden">
+                                <div className="bg-muted/50 px-4 py-3 border-b border-border">
+                                    <div className="flex">
+                                        <div className="w-[20%] pr-4">
+                                            <span className="text-sm font-medium text-muted-foreground">Name</span>
+                                        </div>
+                                        <div className="w-[10%] pr-4">
+                                            <span className="text-sm font-medium text-muted-foreground">Type</span>
+                                        </div>
+                                        <div className="w-[35%] pr-4">
+                                            <span className="text-sm font-medium text-muted-foreground">Value</span>
+                                        </div>
+                                        <div className="w-[15%] pr-4">
+                                            <span className="text-sm font-medium text-muted-foreground">Purpose</span>
+                                        </div>
+                                        <div className="w-[10%] pr-4">
+                                            <span className="text-sm font-medium text-muted-foreground">Required</span>
+                                        </div>
+                                        <div className="w-[10%]">
+                                            <span className="text-sm font-medium text-muted-foreground">Status</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div className="bg-card">
+                                    {authRecommendationsData.verificationCheck.dnsRecords.map((record: any, index: number) => {
+                                        // Determine the purpose of the record
+                                        const getPurpose = () => {
+                                            if (record.name === domain) {
+                                                if (record.value?.includes('v=spf1')) return 'SPF'
+                                                if (record.value?.includes('amazonses')) return 'SES Verify'
+                                                return 'Domain'
+                                            }
+                                            if (record.name.includes('_dmarc')) return 'DMARC'
+                                            if (record.name.includes('_domainkey')) return 'DKIM'
+                                            if (record.name.includes('mail.')) return 'MAIL FROM'
+                                            if (record.type === 'MX') return 'Receive Mail'
+                                            return 'Other'
+                                        }
+                                        
+                                        const purpose = getPurpose()
+                                        const isRequired = record.type === 'MX' || record.type === 'TXT' && record.value?.includes('amazonses')
+                                        
+                                        return (
+                                            <div key={index} className={cn(
+                                                "flex items-center transition-colors px-4 py-3",
+                                                {
+                                                    "bg-green-500/5 hover:bg-green-500/10": record.isVerified,
+                                                    "bg-card hover:bg-muted/50": !record.isVerified,
+                                                    "border-b border-border/50": index < (authRecommendationsData.verificationCheck?.dnsRecords?.length || 0) - 1
+                                                }
+                                            )}>
+                                                <div className="w-[20%] pr-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-mono text-sm truncate">
+                                                            {record.name}
+                                                        </span>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => copyToClipboard(record.name, `${purpose} name`)}
+                                                            className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                        >
+                                                            <Clipboard2 width="16" height="16" className="text-muted-foreground" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                                <div className="w-[10%] pr-4">
+                                                    <Badge variant="secondary" className="text-xs font-mono">
+                                                        {record.type}
+                                                    </Badge>
+                                                </div>
+                                                <div className="w-[35%] pr-4 min-w-0">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-mono text-sm truncate text-foreground min-w-0 flex-1">
+                                                            {record.value}
+                                                        </span>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => copyToClipboard(record.value, record.type)}
+                                                            className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                        >
+                                                            <Clipboard2 width="16" height="16" className="text-muted-foreground" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                                <div className="w-[15%] pr-4">
+                                                    <Badge variant="outline" className="text-xs">
+                                                        {purpose}
+                                                    </Badge>
+                                                </div>
+                                                <div className="w-[10%] pr-4">
+                                                    <span className="text-sm text-muted-foreground">
+                                                        {isRequired ? 'Yes' : 'No'}
+                                                    </span>
+                                                </div>
+                                                <div className="w-[10%]">
+                                                    {record.isVerified ? (
+                                                        <Badge className="text-xs bg-green-600 text-white">
+                                                            Verified
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge variant="outline" className="text-xs">
+                                                            Pending
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
                         </CardContent>
                     </Card>
                 )}
