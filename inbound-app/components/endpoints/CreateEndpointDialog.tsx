@@ -60,14 +60,16 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
   const [emailConfig, setEmailConfig] = useState<EmailForwardConfig>({
     forwardTo: '',
     includeAttachments: true,
-    subjectPrefix: ''
+    subjectPrefix: '',
+    senderName: ''
   })
   
   // Email group-specific state
   const [emailGroupConfig, setEmailGroupConfig] = useState<EmailGroupConfig>({
     emails: [],
     includeAttachments: true,
-    subjectPrefix: ''
+    subjectPrefix: '',
+    senderName: ''
   })
   const [newEmail, setNewEmail] = useState('')
   
@@ -250,12 +252,14 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
     setEmailConfig({
       forwardTo: '',
       includeAttachments: true,
-      subjectPrefix: ''
+      subjectPrefix: '',
+      senderName: ''
     })
     setEmailGroupConfig({
       emails: [],
       includeAttachments: true,
-      subjectPrefix: ''
+      subjectPrefix: '',
+      senderName: ''
     })
     setHeaderKey('')
     setHeaderValue('')
@@ -449,6 +453,19 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
               {/* For email forwards, show additional config options */}
               {selectedType === 'email' && (
                 <>
+                  <div className="space-y-2">
+                    <Label htmlFor="senderNameBasic">Sender Name</Label>
+                    <Input
+                      id="senderNameBasic"
+                      value={emailConfig.senderName}
+                      onChange={(e) => setEmailConfig(prev => ({ ...prev, senderName: e.target.value }))}
+                      placeholder="Support Team (leave empty for 'Original Sender via Inbound')"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Custom display name for forwarded emails. If empty, will use "Original Sender via Inbound" format.
+                    </p>
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="subjectPrefixBasic">Subject Prefix</Label>
                     <Input
@@ -702,6 +719,20 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                     </div>
                   )}
                   {errors.emails && <p className="text-sm text-red-500">{errors.emails}</p>}
+                </div>
+
+                {/* Sender Name */}
+                <div className="space-y-2">
+                  <Label htmlFor="senderNameGroup">Sender Name</Label>
+                  <Input
+                    id="senderNameGroup"
+                    value={emailGroupConfig.senderName}
+                    onChange={(e) => setEmailGroupConfig(prev => ({ ...prev, senderName: e.target.value }))}
+                    placeholder="Team Support (leave empty for 'Original Sender via Inbound')"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Custom display name for forwarded emails. If empty, will use "Original Sender via Inbound" format.
+                  </p>
                 </div>
 
                 {/* Subject Prefix */}

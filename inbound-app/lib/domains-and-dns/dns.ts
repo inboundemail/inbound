@@ -676,6 +676,148 @@ export async function verifyTxtRecordWithFallback(name: string, expectedValue: s
 }
 
 /**
+ * Verify CNAME record exists and matches expected value
+ */
+export async function verifyCnameRecord(name: string, expectedValue: string): Promise<DnsRecordCheck> {
+  const result: DnsRecordCheck = {
+    type: 'CNAME',
+    name,
+    expectedValue,
+    actualValues: [],
+    isVerified: false,
+  }
+
+  try {
+    console.log(`🔍 CNAME Verification - Checking CNAME records for: ${name}`)
+    console.log(`🎯 CNAME Verification - Expected value: ${expectedValue}`)
+    
+    const cnameRecords = await dns.resolveCname(name)
+    console.log(`📋 CNAME Verification - Found ${cnameRecords.length} CNAME records:`, cnameRecords)
+    
+    result.actualValues = cnameRecords
+    console.log(`📊 CNAME Verification - Values:`, result.actualValues)
+    
+    // CNAME matching should be case-insensitive and handle trailing dots
+    const normalizeValue = (value: string) => value.toLowerCase().replace(/\.$/, '')
+    const expectedNormalized = normalizeValue(expectedValue)
+    
+    result.isVerified = result.actualValues.some(value => 
+      normalizeValue(value) === expectedNormalized
+    )
+    console.log(`✅ CNAME Verification - Is verified: ${result.isVerified}`)
+    
+    if (!result.isVerified && result.actualValues.length > 0) {
+      console.log(`❌ CNAME Verification - Expected "${expectedValue}" but found:`, result.actualValues)
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown DNS error'
+    console.log(`💥 CNAME Verification - DNS lookup failed for ${name}:`, errorMessage)
+    
+    // Provide more user-friendly error messages
+    if (errorMessage.includes('ENODATA') || errorMessage.includes('ENOTFOUND')) {
+      result.error = `No CNAME records found for ${name}. Please add the CNAME record to your DNS.`
+    } else {
+      result.error = errorMessage
+    }
+    
+    result.isVerified = false
+  }
+
+  return result
+}
+
+/**
+ * Enhanced CNAME record verification with fallback resolvers
+ */
+export async function verifyCnameRecordWithFallback(name: string, expectedValue: string): Promise<DnsRecordCheck> {
+  const result: DnsRecordCheck = {
+    type: 'CNAME',
+    name,
+    expectedValue,
+    actualValues: [],
+    isVerified: false,
+  }
+
+  try {
+    console.log(`🔍 CNAME Verification - Checking CNAME records for: ${name}`)
+    console.log(`🎯 CNAME Verification - Expected value: ${expectedValue}`)
+    
+    // Try default DNS first
+    let cnameRecords: string[] = []
+    try {
+      cnameRecords = await dns.resolveCname(name)
+      console.log(`📋 CNAME Verification - Default DNS found ${cnameRecords.length} CNAME records:`, cnameRecords)
+    } catch (error) {
+      console.log(`⚠️ CNAME Verification - Default DNS failed, trying alternative resolvers...`)
+      cnameRecords = await tryAlternativeCnameResolution(name)
+    }
+    
+    result.actualValues = cnameRecords
+    console.log(`📊 CNAME Verification - Values:`, result.actualValues)
+    
+    // CNAME matching should be case-insensitive and handle trailing dots
+    const normalizeValue = (value: string) => value.toLowerCase().replace(/\.$/, '')
+    const expectedNormalized = normalizeValue(expectedValue)
+    
+    result.isVerified = result.actualValues.some(value => 
+      normalizeValue(value) === expectedNormalized
+    )
+    console.log(`✅ CNAME Verification - Is verified: ${result.isVerified}`)
+    
+    if (!result.isVerified && result.actualValues.length > 0) {
+      console.log(`❌ CNAME Verification - Expected "${expectedValue}" but found:`, result.actualValues)
+    }
+    
+    if (result.actualValues.length === 0) {
+      result.error = `No CNAME records found for ${name} using multiple DNS resolvers. Please add the CNAME record to your DNS.`
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown DNS error'
+    console.log(`💥 CNAME Verification - All DNS lookups failed for ${name}:`, errorMessage)
+    result.error = `DNS resolution failed: ${errorMessage}`
+    result.isVerified = false
+  }
+
+  return result
+}
+
+/**
+ * Try alternative DNS resolution for CNAME records using different resolvers
+ */
+async function tryAlternativeCnameResolution(name: string): Promise<string[]> {
+  const resolvers = [
+    ['8.8.8.8', '8.8.4.4'], // Google DNS
+    ['1.1.1.1', '1.0.0.1'], // Cloudflare DNS
+    ['208.67.222.222', '208.67.220.220'], // OpenDNS
+  ]
+
+  for (const resolverIPs of resolvers) {
+    try {
+      console.log(`🔄 CNAME Alternative - Trying resolver: ${resolverIPs.join(', ')}`)
+      const resolver = new Resolver()
+      resolver.setServers(resolverIPs)
+      
+      const cnameRecords = await new Promise<string[]>((resolve, reject) => {
+        resolver.resolveCname(name, (err, records) => {
+          if (err) reject(err)
+          else resolve(records || [])
+        })
+      })
+      
+      if (cnameRecords.length > 0) {
+        console.log(`✅ CNAME Alternative - Found records with ${resolverIPs[0]}:`, cnameRecords)
+        return cnameRecords
+      }
+    } catch (error) {
+      console.log(`❌ CNAME Alternative - Failed with ${resolverIPs[0]}:`, error instanceof Error ? error.message : 'Unknown error')
+      continue
+    }
+  }
+  
+  return []
+}
+
+/**
  * Verify multiple DNS records (from dns-verification.ts)
  */
 export async function verifyDnsRecords(records: Array<{
@@ -694,6 +836,8 @@ export async function verifyDnsRecords(records: Array<{
         return verifyTxtRecordWithFallback(record.name, record.value)
       case 'MX':
         return verifyMxRecordWithFallback(record.name, record.value)
+      case 'CNAME':
+        return verifyCnameRecordWithFallback(record.name, record.value)
       default:
         return {
           type: record.type,

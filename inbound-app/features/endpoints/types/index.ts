@@ -23,6 +23,7 @@ export type EmailForwardConfig = {
   includeAttachments?: boolean
   subjectPrefix?: string
   fromAddress?: string // Which verified domain email to send from
+  senderName?: string // Display name to show in the from field (e.g., "Support Team")
 }
 
 export type EmailGroupConfig = {
@@ -30,6 +31,7 @@ export type EmailGroupConfig = {
   includeAttachments?: boolean
   subjectPrefix?: string
   fromAddress?: string // Which verified domain email to send from
+  senderName?: string // Display name to show in the from field (e.g., "Support Team")
 }
 
 // Union type for all config types

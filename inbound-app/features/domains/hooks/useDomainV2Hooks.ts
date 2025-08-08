@@ -53,11 +53,14 @@ export const useDomainsListV2Query = (params?: GetDomainsRequest) => {
 }
 
 // Hook for domain details query
-export const useDomainDetailsV2Query = (domainId: string) => {
+export const useDomainDetailsV2Query = (domainId: string, options?: { check?: boolean }) => {
     return useQuery<GetDomainByIdResponse>({
-        queryKey: domainV2Keys.detail(domainId),
+        queryKey: options?.check ? [...domainV2Keys.detail(domainId), 'check'] : domainV2Keys.detail(domainId),
         queryFn: async () => {
-            const response = await fetch(`/api/v2/domains/${domainId}`)
+            const url = options?.check 
+                ? `/api/v2/domains/${domainId}?check=true`
+                : `/api/v2/domains/${domainId}`
+            const response = await fetch(url)
             if (!response.ok) {
                 const error = await response.json()
                 throw new Error(error.error || `HTTP error! status: ${response.status}`)
@@ -65,7 +68,7 @@ export const useDomainDetailsV2Query = (domainId: string) => {
             return response.json()
         },
         enabled: !!domainId,
-        staleTime: 2 * 60 * 1000, // 2 minutes
+        staleTime: options?.check ? 30 * 1000 : 2 * 60 * 1000, // 30s for check, 2min for regular
         gcTime: 10 * 60 * 1000, // 10 minutes
     })
 }
@@ -86,6 +89,30 @@ export const useDomainVerificationCheckV2 = (domainId: string) => {
         onSuccess: () => {
             // Invalidate domain details to refresh the data
             queryClient.invalidateQueries({ queryKey: domainV2Keys.detail(domainId) })
+        },
+    })
+}
+
+// Hook for domain auth verification (PATCH /api/v2/domains/{id}/auth)
+export const useDomainAuthVerifyV2Mutation = () => {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async (domainId: string) => {
+            const response = await fetch(`/api/v2/domains/${domainId}/auth`, {
+                method: 'PATCH',
+            })
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.error || 'Failed to verify domain authentication')
+            }
+            return response.json()
+        },
+        onSuccess: (_, domainId) => {
+            // Invalidate domain details to refresh auth status
+            queryClient.invalidateQueries({ queryKey: domainV2Keys.detail(domainId) })
+            // Also invalidate the check query
+            queryClient.invalidateQueries({ queryKey: [...domainV2Keys.detail(domainId), 'check'] })
         },
     })
 }

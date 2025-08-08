@@ -19,6 +19,7 @@ import { nanoid } from 'nanoid'
 // POST /api/v2/emails/[id]/reply types
 export interface PostEmailReplyRequest {
     from: string
+    from_name?: string      // Optional sender name for display
     to?: string | string[]  // Optional - will use original sender if not provided
     subject?: string        // Optional - will add "Re: " to original subject if not provided
     cc?: string | string[]
@@ -55,6 +56,21 @@ function extractDomain(email: string): string {
 function toArray(value: string | string[] | undefined): string[] {
     if (!value) return []
     return Array.isArray(value) ? value : [value]
+}
+
+// Format sender name and email address for display
+function formatSenderAddress(email: string, name?: string): string {
+    if (!name) return email
+    
+    // Escape quotes in name and wrap in quotes if it contains special characters
+    const escapedName = name.replace(/"/g, '\\"')
+    const needsQuotes = /[,<>()[\]:;@\\"]/.test(name)
+    
+    if (needsQuotes) {
+        return `"${escapedName}" <${email}>`
+    } else {
+        return `${escapedName} <${email}>`
+    }
 }
 
 // Format date for email headers
@@ -99,9 +115,9 @@ function quoteMessage(originalEmail: any, includeOriginal: boolean = true): stri
     // Split into lines and process each line properly
     const lines = originalText.split('\n')
     const quotedLines = lines.map((line: string) => {
-        // If line is empty or only whitespace, keep it empty (no > prefix)
+        // If line is empty or only whitespace, keep it empty with just >
         if (line.trim() === '') {
-            return ''
+            return '>'
         }
         
         // If line already starts with '>', add another level of quoting
@@ -342,9 +358,10 @@ export async function POST(
             )
         }
 
-        // Extract sender information
+        // Extract sender information and format with name if provided
         const fromAddress = extractEmailAddress(body.from)
         const fromDomain = extractDomain(body.from)
+        const formattedFromAddress = formatSenderAddress(fromAddress, body.from_name)
         
         console.log('📧 Reply details:', { 
             from: body.from, 
@@ -450,15 +467,21 @@ export async function POST(
         // Add quoted original message to HTML body
         let finalHtmlBody = body.html || ''
         if (includeOriginal && body.html && original.htmlBody) {
-            // HTML quoting with proper email client styling
+            // HTML quoting with Gmail-style formatting
             const fromText = originalFromData?.text || 'Unknown Sender'
             const dateStr = original.date ? formatEmailDate(new Date(original.date)) : 'Unknown Date'
             
             finalHtmlBody += `
-                <br><br>
-                <div style="border-left: 2px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666; font-size: 13px;">
-                    <p style="margin: 0 0 10px 0; font-weight: normal;">On ${dateStr}, ${fromText} wrote:</p>
-                    <div style="margin: 0;">${original.htmlBody}</div>
+                <div dir="ltr">
+                    <br><br>
+                    <div class="gmail_quote">
+                        <div dir="ltr" class="gmail_attr">
+                            On ${dateStr}, ${fromText} wrote:<br>
+                        </div>
+                        <blockquote class="gmail_quote" style="margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex">
+                            ${original.htmlBody}
+                        </blockquote>
+                    </div>
                 </div>
             `
         }
@@ -483,7 +506,7 @@ export async function POST(
         
         const sentEmailRecord = await db.insert(sentEmails).values({
             id: replyEmailId,
-            from: body.from,
+            from: formattedFromAddress,
             fromAddress,
             fromDomain,
             to: JSON.stringify(toAddresses),
@@ -532,7 +555,7 @@ export async function POST(
             
             // Build raw email message with proper headers
             const rawMessage = buildRawEmailMessage({
-                from: body.from,
+                from: formattedFromAddress,
                 to: toAddresses,
                 cc: ccAddresses,
                 bcc: bccAddresses,

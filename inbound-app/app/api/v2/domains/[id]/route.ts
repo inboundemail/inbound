@@ -5,7 +5,7 @@ import { emailDomains, emailAddresses, endpoints, domainDnsRecords } from '@/lib
 import { eq, and, count } from 'drizzle-orm'
 import { AWSSESReceiptRuleManager } from '@/lib/aws-ses/aws-ses-rules'
 import { verifyDnsRecords } from '@/lib/domains-and-dns/dns'
-import { SESClient, GetIdentityVerificationAttributesCommand } from '@aws-sdk/client-ses'
+import { SESClient, GetIdentityVerificationAttributesCommand, GetIdentityDkimAttributesCommand, GetIdentityMailFromDomainAttributesCommand } from '@aws-sdk/client-ses'
 
 // AWS SES Client setup
 const awsRegion = process.env.AWS_REGION || 'us-east-2'
@@ -78,8 +78,19 @@ export interface GetDomainByIdResponse {
             error?: string
         }>
         sesStatus?: string
+        dkimStatus?: string
+        dkimVerified?: boolean
+        dkimTokens?: string[]
+        mailFromDomain?: string
+        mailFromStatus?: string
+        mailFromVerified?: boolean
         isFullyVerified?: boolean
         lastChecked?: Date
+    }
+    // Recommendations when records are missing
+    authRecommendations?: {
+        spf?: { name: string; value: string; description: string }
+        dmarc?: { name: string; value: string; description: string }
     }
 }
 
@@ -232,12 +243,48 @@ export async function GET(
                     error?: string
                 }> = []
 
-                if (dnsRecords.length > 0) {
+                // Build list of records to verify
+                const recordsToVerify: Array<{
+                    type: string
+                    name: string
+                    value: string
+                    dbId: string | null
+                }> = dnsRecords.map(record => ({
+                    type: record.recordType,
+                    name: record.name,
+                    value: record.value,
+                    dbId: record.id
+                }))
+                
+                // Also check for SPF and DMARC even if not in database
+                const spfRecord = dnsRecords.find(r => r.recordType === 'TXT' && r.name === domain.domain && (r.value || '').toLowerCase().includes('v=spf1'))
+                if (!spfRecord) {
+                    // Add SPF to verification list
+                    recordsToVerify.push({
+                        type: 'TXT',
+                        name: domain.domain,
+                        value: 'v=spf1 include:amazonses.com ~all',
+                        dbId: null
+                    })
+                }
+                
+                const dmarcRecord = dnsRecords.find(r => r.recordType === 'TXT' && r.name === `_dmarc.${domain.domain}`)
+                if (!dmarcRecord) {
+                    // Add DMARC to verification list
+                    recordsToVerify.push({
+                        type: 'TXT',
+                        name: `_dmarc.${domain.domain}`,
+                        value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain.domain}; ruf=mailto:dmarc@${domain.domain}; fo=1; aspf=r; adkim=r`,
+                        dbId: null
+                    })
+                }
+
+                if (recordsToVerify.length > 0) {
                     // Verify DNS records
-                    console.log(`🔍 Verifying ${dnsRecords.length} DNS records`)
+                    console.log(`🔍 Verifying ${recordsToVerify.length} DNS records (including SPF/DMARC checks)`)
                     const results = await verifyDnsRecords(
-                        dnsRecords.map(record => ({
-                            type: record.recordType,
+                        recordsToVerify.map(record => ({
+                            type: record.type,
                             name: record.name,
                             value: record.value
                         }))
@@ -251,23 +298,31 @@ export async function GET(
                         error: result.error
                     }))
 
-                    // Update DNS record verification status in database
+                    // Update DNS record verification status in database (only for records that exist in DB)
                     await Promise.all(
-                        dnsRecords.map(async (record, index) => {
-                            const verificationResult = results[index]
-                            await db
-                                .update(domainDnsRecords)
-                                .set({
-                                    isVerified: verificationResult.isVerified,
-                                    lastChecked: new Date()
-                                })
-                                .where(eq(domainDnsRecords.id, record.id))
+                        recordsToVerify.map(async (record, index) => {
+                            if (record.dbId) {
+                                const verificationResult = results[index]
+                                await db
+                                    .update(domainDnsRecords)
+                                    .set({
+                                        isVerified: verificationResult.isVerified,
+                                        lastChecked: new Date()
+                                    })
+                                    .where(eq(domainDnsRecords.id, record.dbId))
+                            }
                         })
                     )
                 }
 
                 // Check SES verification status
                 let sesStatus = 'Unknown'
+                let dkimStatus: string | undefined
+                let dkimVerified = false
+                let dkimTokens: string[] | undefined
+                let mailFromDomain: string | undefined
+                let mailFromStatus: string | undefined
+                let mailFromVerified = false
                 if (sesClient) {
                     try {
                         console.log(`🔍 Checking SES verification status`)
@@ -277,6 +332,22 @@ export async function GET(
                         const attributesResponse = await sesClient.send(getAttributesCommand)
                         const attributes = attributesResponse.VerificationAttributes?.[domain.domain]
                         sesStatus = attributes?.VerificationStatus || 'NotFound'
+                        
+                        // DKIM status
+                        const dkimCmd = new GetIdentityDkimAttributesCommand({ Identities: [domain.domain] })
+                        const dkimResp = await sesClient.send(dkimCmd)
+                        const dkimAttrs = dkimResp.DkimAttributes?.[domain.domain]
+                        dkimStatus = dkimAttrs?.DkimVerificationStatus || 'Pending'
+                        dkimVerified = dkimStatus === 'Success'
+                        dkimTokens = dkimAttrs?.DkimTokens || []
+                        
+                        // MAIL FROM status
+                        const mailFromCmd = new GetIdentityMailFromDomainAttributesCommand({ Identities: [domain.domain] })
+                        const mailFromResp = await sesClient.send(mailFromCmd)
+                        const mailFromAttrs = mailFromResp.MailFromDomainAttributes?.[domain.domain]
+                        mailFromDomain = mailFromAttrs?.MailFromDomain
+                        mailFromStatus = mailFromAttrs?.MailFromDomainStatus || 'NotSet'
+                        mailFromVerified = mailFromStatus === 'Success'
                         
                         // Update domain status based on SES verification
                         if (sesStatus === 'Success' && domain.status !== 'verified') {
@@ -321,6 +392,12 @@ export async function GET(
                 response.verificationCheck = {
                     dnsRecords: verificationResults,
                     sesStatus,
+                    dkimStatus,
+                    dkimVerified,
+                    dkimTokens,
+                    mailFromDomain,
+                    mailFromStatus,
+                    mailFromVerified,
                     isFullyVerified,
                     lastChecked: new Date()
                 }
@@ -328,6 +405,8 @@ export async function GET(
                 console.log(`✅ Verification check complete for ${domain.domain}:`, {
                     dnsVerified: allDnsVerified,
                     sesStatus,
+                    dkimStatus,
+                    mailFromStatus,
                     isFullyVerified
                 })
 
@@ -336,9 +415,54 @@ export async function GET(
                 response.verificationCheck = {
                     dnsRecords: [],
                     sesStatus: 'Error',
+                    dkimStatus: 'Unknown',
+                    dkimVerified: false,
+                    dkimTokens: [],
+                    mailFromStatus: 'Unknown',
+                    mailFromVerified: false,
                     isFullyVerified: false,
                     lastChecked: new Date()
                 }
+            }
+            
+            // Build recommendations if SPF/DMARC missing or not verified
+            try {
+                // Check verification results to see if SPF/DMARC are verified
+                const verificationCheckResults = response.verificationCheck?.dnsRecords || []
+                const spfVerified = verificationCheckResults.some((r: any) => 
+                    r.type === 'TXT' && 
+                    r.name === domain.domain && 
+                    r.isVerified
+                )
+                const dmarcVerified = verificationCheckResults.some((r: any) => 
+                    r.type === 'TXT' && 
+                    r.name === `_dmarc.${domain.domain}` && 
+                    r.isVerified
+                )
+                
+                const recommendations: GetDomainByIdResponse['authRecommendations'] = {}
+                
+                if (!spfVerified) {
+                    recommendations.spf = {
+                        name: domain.domain,
+                        value: 'v=spf1 include:amazonses.com ~all',
+                        description: 'SPF record for root domain (recommended)'
+                    }
+                }
+                
+                if (!dmarcVerified) {
+                    recommendations.dmarc = {
+                        name: `_dmarc.${domain.domain}`,
+                        value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain.domain}; ruf=mailto:dmarc@${domain.domain}; fo=1; aspf=r; adkim=r`,
+                        description: 'DMARC policy record (starts with p=none for monitoring)'
+                    }
+                }
+                
+                if (recommendations.spf || recommendations.dmarc) {
+                    response.authRecommendations = recommendations
+                }
+            } catch (recError) {
+                console.warn('⚠️ Failed to build auth recommendations:', recError)
             }
         }
 

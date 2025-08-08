@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateRequest } from '../helper/main'
-import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses'
+import { SESClient, SendEmailCommand, SendRawEmailCommand } from '@aws-sdk/client-ses'
 import { db } from '@/lib/db'
 import { sentEmails, emailDomains, SENT_EMAIL_STATUS } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
@@ -18,7 +18,7 @@ import { nanoid } from 'nanoid'
 
 // POST /api/v2/emails types
 export interface PostEmailsRequest {
-    from: string
+    from: string // Now supports both "email@domain.com" and "Display Name <email@domain.com>" formats
     to: string | string[]
     subject: string
     bcc?: string | string[]
@@ -56,6 +56,109 @@ function extractDomain(email: string): string {
 function toArray(value: string | string[] | undefined): string[] {
     if (!value) return []
     return Array.isArray(value) ? value : [value]
+}
+
+// Helper function to parse email with optional display name
+function parseEmailWithName(emailString: string): { email: string; name?: string } {
+    const match = emailString.match(/^(.+?)\s*<([^>]+)>$/)
+    if (match) {
+        return {
+            name: match[1].replace(/^["']|["']$/g, '').trim(), // Remove quotes if present
+            email: match[2].trim()
+        }
+    }
+    return { email: emailString.trim() }
+}
+
+// Helper function to format email with display name
+function formatEmailWithName(email: string, name?: string): string {
+    if (name && name.trim()) {
+        // Escape name if it contains special characters
+        const escapedName = name.includes(',') || name.includes(';') || name.includes('<') || name.includes('>') 
+            ? `"${name.replace(/"/g, '\\"')}"` 
+            : name
+        return `${escapedName} <${email}>`
+    }
+    return email
+}
+
+// Helper function to build raw email message for SES
+function buildRawEmailMessage(params: {
+    from: string
+    to: string[]
+    cc?: string[]
+    bcc?: string[]
+    replyTo?: string[]
+    subject: string
+    textBody?: string
+    htmlBody?: string
+    headers?: Record<string, string>
+}): string {
+    const boundary = `----=_NextPart_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    
+    // Build RFC 2822 compliant email headers
+    const headers = [
+        `From: ${params.from}`,
+        `To: ${params.to.join(', ')}`,
+        ...(params.cc && params.cc.length > 0 ? [`Cc: ${params.cc.join(', ')}`] : []),
+        ...(params.replyTo && params.replyTo.length > 0 ? [`Reply-To: ${params.replyTo.join(', ')}`] : []),
+        `Subject: ${params.subject}`,
+        `Date: ${new Date().toUTCString()}`,
+        `MIME-Version: 1.0`
+    ]
+
+    // Add custom headers if provided
+    if (params.headers) {
+        for (const [key, value] of Object.entries(params.headers)) {
+            headers.push(`${key}: ${value}`)
+        }
+    }
+
+    const hasText = !!params.textBody
+    const hasHtml = !!params.htmlBody
+
+    if (!hasText && !hasHtml) {
+        // No content
+        headers.push('Content-Type: text/plain; charset=UTF-8')
+        return [...headers, '', '[No content]'].join('\r\n')
+    }
+
+    if (hasText && hasHtml) {
+        // Multipart alternative
+        headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`)
+        
+        const messageParts = [
+            ...headers,
+            '',
+            'This is a multi-part message in MIME format.',
+            '',
+            `--${boundary}`,
+            'Content-Type: text/plain; charset=UTF-8',
+            'Content-Transfer-Encoding: 8bit',
+            '',
+            params.textBody,
+            '',
+            `--${boundary}`,
+            'Content-Type: text/html; charset=UTF-8',
+            'Content-Transfer-Encoding: 8bit',
+            '',
+            params.htmlBody,
+            '',
+            `--${boundary}--`
+        ]
+        
+        return messageParts.join('\r\n')
+    } else if (hasHtml) {
+        // HTML only
+        headers.push('Content-Type: text/html; charset=UTF-8')
+        headers.push('Content-Transfer-Encoding: 8bit')
+        return [...headers, '', params.htmlBody].join('\r\n')
+    } else {
+        // Text only
+        headers.push('Content-Type: text/plain; charset=UTF-8')
+        headers.push('Content-Transfer-Encoding: 8bit')
+        return [...headers, '', params.textBody].join('\r\n')
+    }
 }
 
 // Initialize SES client
@@ -260,40 +363,74 @@ export async function POST(request: NextRequest) {
         try {
             console.log('📤 Sending email via AWS SES')
             
-            // Build SES email command
-            const sesCommand = new SendEmailCommand({
-                Source: body.from,
-                Destination: {
-                    ToAddresses: toAddresses.map(extractEmailAddress),
-                    CcAddresses: ccAddresses.map(extractEmailAddress),
-                    BccAddresses: bccAddresses.map(extractEmailAddress)
-                },
-                Message: {
-                    Subject: {
-                        Data: body.subject,
-                        Charset: 'UTF-8'
-                    },
-                    Body: {
-                        ...(body.text && {
-                            Text: {
-                                Data: body.text,
-                                Charset: 'UTF-8'
-                            }
-                        }),
-                        ...(body.html && {
-                            Html: {
-                                Data: body.html,
-                                Charset: 'UTF-8'
-                            }
-                        })
-                    }
-                },
-                ...(replyToAddresses.length > 0 && {
-                    ReplyToAddresses: replyToAddresses.map(extractEmailAddress)
+            // Parse the from address to support display names
+            const fromParsed = parseEmailWithName(body.from)
+            const sourceEmail = fromParsed.email
+            
+            let sesResponse: any
+            
+            // If we have a display name, use SendRawEmailCommand to preserve it
+            if (fromParsed.name) {
+                console.log(`📧 Using raw email format to preserve display name: "${fromParsed.name}"`)
+                
+                // Build raw email message with display name
+                const rawMessage = buildRawEmailMessage({
+                    from: formatEmailWithName(sourceEmail, fromParsed.name),
+                    to: toAddresses,
+                    cc: ccAddresses.length > 0 ? ccAddresses : undefined,
+                    bcc: bccAddresses.length > 0 ? bccAddresses : undefined,
+                    replyTo: replyToAddresses.length > 0 ? replyToAddresses : undefined,
+                    subject: body.subject,
+                    textBody: body.text,
+                    htmlBody: body.html,
+                    headers: body.headers
                 })
-            })
-
-            const sesResponse = await sesClient.send(sesCommand)
+                
+                const rawCommand = new SendRawEmailCommand({
+                    RawMessage: {
+                        Data: Buffer.from(rawMessage)
+                    },
+                    Source: sourceEmail,
+                    Destinations: [...toAddresses, ...ccAddresses, ...bccAddresses].map(extractEmailAddress)
+                })
+                
+                sesResponse = await sesClient.send(rawCommand)
+            } else {
+                // Use regular SendEmailCommand for simple emails without display names
+                const sesCommand = new SendEmailCommand({
+                    Source: sourceEmail,
+                    Destination: {
+                        ToAddresses: toAddresses.map(extractEmailAddress),
+                        CcAddresses: ccAddresses.map(extractEmailAddress),
+                        BccAddresses: bccAddresses.map(extractEmailAddress)
+                    },
+                    Message: {
+                        Subject: {
+                            Data: body.subject,
+                            Charset: 'UTF-8'
+                        },
+                        Body: {
+                            ...(body.text && {
+                                Text: {
+                                    Data: body.text,
+                                    Charset: 'UTF-8'
+                                }
+                            }),
+                            ...(body.html && {
+                                Html: {
+                                    Data: body.html,
+                                    Charset: 'UTF-8'
+                                }
+                            })
+                        }
+                    },
+                    ...(replyToAddresses.length > 0 && {
+                        ReplyToAddresses: replyToAddresses.map(extractEmailAddress)
+                    })
+                })
+                
+                sesResponse = await sesClient.send(sesCommand)
+            }
             const messageId = sesResponse.MessageId
 
             console.log('✅ Email sent successfully via SES:', messageId)

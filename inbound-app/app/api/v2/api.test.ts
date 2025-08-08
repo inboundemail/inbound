@@ -12,6 +12,7 @@ import { GetDomainsResponse, PostDomainsRequest, PostDomainsResponse } from "./d
 import { GetDomainByIdResponse, PutDomainByIdRequest, PutDomainByIdResponse } from "./domains/[id]/route";
 import { PostEmailsResponse } from "./emails/route";
 import { GetEmailByIdResponse } from "./emails/[id]/route";
+import { PostDomainAuthInitResponse, PatchDomainAuthVerifyResponse } from "./domains/[id]/auth/route";
 import type { WebhookConfig } from "@/features/endpoints/types";
 import { setupWebhook, createTestFlag, sendTestEmail } from "./helper/webhook-tester";
 import dotenv from "dotenv";
@@ -1856,5 +1857,105 @@ describe("comprehensive reply to email test with real setup", () => {
         
         // The email should have subject: "Re: " + originalSubject
         console.log(`✅ Auto-subject reply sent: ${data.id}`);
+    });
+});
+
+// Domain Authentication API Tests
+describe("Domain Authentication API", () => {
+    describe("POST /domains/{id}/auth", () => {
+        it("should initialize domain authentication and return DNS records", async () => {
+            if (!domainId) {
+                console.error("❌ No domain ID available for auth init test");
+                return;
+            }
+
+            const response = await fetch(`${API_URL}/domains/${domainId}/auth`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    mailFromDomain: "mail",
+                    generateSpf: true,
+                    generateDmarc: true
+                })
+            });
+
+            const data: any = await response.json();
+            
+            if (response.status === 500 && data.error?.includes('AWS SES not configured')) {
+                console.log("⚠️ Skipping auth init test - AWS SES not configured");
+                return;
+            }
+
+            expect(response.status).toBe(201);
+            expect(data.success).toBe(true);
+            expect(data.domain).toBeDefined();
+            expect(data.records).toBeDefined();
+            expect(Array.isArray(data.records)).toBe(true);
+            expect(data.records.length).toBeGreaterThan(0);
+            
+            // Should have at least SES verification TXT record
+            const sesRecord = (data.records as Array<{type:string;name:string}>).find((r) => r.type === 'TXT' && r.name.includes('_amazonses.'));
+            expect(sesRecord).toBeDefined();
+            // best effort type check
+            expect((sesRecord as any)?.isRequired).toBe(true);
+
+            // Should have DKIM CNAME records if DKIM is enabled
+            if (data.dkimEnabled) {
+                const dkimRecords = (data.records as Array<{type:string;name:string}>).filter((r) => r.type === 'CNAME' && r.name.includes('._domainkey.'));
+                expect(dkimRecords.length).toBeGreaterThanOrEqual(1);
+            }
+
+            // Should have MAIL FROM MX record
+            const mailFromMxRecord = (data.records as Array<{type:string;name:string}>).find((r) => r.type === 'MX' && r.name.includes('mail.'));
+            expect(mailFromMxRecord).toBeDefined();
+
+            console.log(`✅ Domain auth initialized with ${data.records.length} DNS records`);
+        });
+    });
+
+    describe("PATCH /domains/{id}/auth", () => {
+        it("should verify domain authentication status", async () => {
+            if (!domainId) {
+                console.error("❌ No domain ID available for auth verify test");
+                return;
+            }
+
+            const response = await fetch(`${API_URL}/domains/${domainId}/auth`, {
+                method: "PATCH",
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`,
+                    "Content-Type": "application/json"
+                }
+            });
+
+            const data: any = await response.json();
+            
+            if (response.status === 500 && data.error?.includes('AWS SES not configured')) {
+                console.log("⚠️ Skipping auth verify test - AWS SES not configured");
+                return;
+            }
+
+            if (response.status === 400 && data.error?.includes('No DNS records found')) {
+                console.log("⚠️ Skipping auth verify test - No DNS records found (run init first)");
+                return;
+            }
+
+            expect(response.status).toBe(200);
+            expect(data.success).toBe(true);
+            expect(data.domain).toBeDefined();
+            expect(data.overallStatus).toBeDefined();
+            expect(['verified', 'pending', 'failed']).toContain(data.overallStatus);
+            expect(data.dnsRecords).toBeDefined();
+            expect(Array.isArray(data.dnsRecords)).toBe(true);
+            expect(data.sesStatus).toBeDefined();
+            expect(data.summary).toBeDefined();
+            expect(data.summary.totalRecords).toBeGreaterThanOrEqual(0);
+            expect(data.summary.verifiedRecords).toBeGreaterThanOrEqual(0);
+
+            console.log(`✅ Domain auth verification completed - Status: ${data.overallStatus}, Records: ${data.summary.verifiedRecords}/${data.summary.totalRecords} verified`);
+        });
     });
 });
