@@ -39,18 +39,29 @@ export async function POST(request: NextRequest) {
       fromEmail
     })
 
+    // Helper function to extract messageId from email header format
+    const extractMessageId = (headerValue: string): string => {
+      // Remove angle brackets and extract just the messageId part before @
+      // Example: "<010f01988ac2c958-25262f92-271c-4f99-9fad-a483f03511d6-000000@us-east-2.amazonses.com>" 
+      // becomes: "010f01988ac2c958-25262f92-271c-4f99-9fad-a483f03511d6-000000"
+      return headerValue.replace(/[<>]/g, '').split('@')[0]
+    }
+
     // Look for matching demo email using proper reply headers first
     let demoEmail: any[] = []
     
     // Method 1: Match by In-Reply-To header (most reliable)
     if (email.parsedData?.inReplyTo) {
       console.log('🎯 Trying to match by In-Reply-To:', email.parsedData.inReplyTo)
+      const extractedMessageId = extractMessageId(email.parsedData.inReplyTo)
+      console.log('🔍 Extracted messageId:', extractedMessageId)
+      
       demoEmail = await db
         .select()
         .from(onboardingDemoEmails)
         .where(
           and(
-            eq(onboardingDemoEmails.messageId, email.parsedData.inReplyTo),
+            eq(onboardingDemoEmails.messageId, extractedMessageId),
             eq(onboardingDemoEmails.replyReceived, false)
           )
         )
@@ -61,19 +72,22 @@ export async function POST(request: NextRequest) {
     if (demoEmail.length === 0 && email.parsedData?.references?.length) {
       console.log('🎯 Trying to match by References:', email.parsedData.references)
       for (const ref of email.parsedData.references) {
+        const extractedMessageId = extractMessageId(ref)
+        console.log('🔍 Checking reference messageId:', extractedMessageId)
+        
         demoEmail = await db
           .select()
           .from(onboardingDemoEmails)
           .where(
             and(
-              eq(onboardingDemoEmails.messageId, ref),
+              eq(onboardingDemoEmails.messageId, extractedMessageId),
               eq(onboardingDemoEmails.replyReceived, false)
             )
           )
           .limit(1)
         
         if (demoEmail.length > 0) {
-          console.log('✅ Found match in references:', ref)
+          console.log('✅ Found match in references:', ref, '→', extractedMessageId)
           break
         }
       }

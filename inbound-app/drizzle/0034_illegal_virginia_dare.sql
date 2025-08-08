@@ -1,0 +1,1 @@
+ALTER TABLE "onboarding_demo_emails" ADD COLUMN "message_id" varchar(255);
