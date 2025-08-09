@@ -1,7 +1,7 @@
 "use client"
 
 import EnvelopePlus from "@/components/icons/envelope-plus"
-import { Link } from "next-view-transitions"
+import { OptimizedLink } from "@/components/optimized-link"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -57,10 +57,10 @@ export function NavMain({
                     asChild 
                     isActive={false}
                   >
-                    <Link href={item.url}>
+                    <OptimizedLink href={item.url}>
                       {item.icon && <item.icon className={`h-4 w-4 ${item.customTailwind}`} />}
                       <span className={item.customTailwind}>{item.title}</span>
-                    </Link>
+                    </OptimizedLink>
                   </SidebarMenuButton>
                 )}
               </SidebarMenuItem>
