@@ -29,13 +29,14 @@ const pageVariants = {
     opacity: 0,
     x: -20,
     scale: 0.98,
+    transition: { duration: 0 },
   },
 }
 
 const pageTransition = {
   type: "tween",
   ease: "easeInOut",
-  duration: 0.15, // Faster transition for better perceived performance
+  duration: 0.08, // Reduce duration for snappier transitions
 }
 
 export function PageTransition({ children, className = "" }: PageTransitionProps) {
@@ -57,7 +58,7 @@ export function PageTransition({ children, className = "" }: PageTransitionProps
 
   // Fallback to Framer Motion for browsers without View Transitions support
   return (
-    <AnimatePresence mode="wait" initial={false}>
+    <AnimatePresence mode="sync" initial={false}>
       <motion.div
         key={pathname}
         initial="initial"
@@ -116,7 +117,7 @@ export function EnhancedPageTransition({
   }
 
   return (
-    <AnimatePresence mode="wait" initial={false}>
+    <AnimatePresence mode="sync" initial={false}>
       <motion.div
         key={pathname}
         initial="initial"
