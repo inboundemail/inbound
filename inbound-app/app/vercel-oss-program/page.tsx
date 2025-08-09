@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,8 @@ import { useSession } from "@/lib/auth/auth-client";
 import { toast } from "sonner";
 import { submitVercelOssApplication } from "./actions";
 
-export default function VercelOssProgramPage() {
+// Component that uses useSearchParams - needs to be wrapped in Suspense
+function VercelOssProgramContent() {
   const { data: session, isPending } = useSession();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -292,5 +293,22 @@ export default function VercelOssProgramPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Main page component with Suspense wrapper
+export default function VercelOssProgramPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-center py-20">
+            <div className="text-muted-foreground">Loading...</div>
+          </div>
+        </div>
+      </div>
+    }>
+      <VercelOssProgramContent />
+    </Suspense>
   );
 }
