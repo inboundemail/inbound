@@ -775,7 +775,7 @@ export default async function HomePage() {
 
         {/* Pricing */}
         <AnimatedSection className="px-2 xs:px-4 sm:px-6 w-full mx-auto bg-card rounded-xl xs:rounded-2xl border border-border my-8 xs:my-12 sm:my-20 py-8 xs:py-12 sm:py-20">
-          <div className="text-center mb-6 xs:mb-8 sm:mb-12">
+          <div className="text-center mb-6 xs:mb-8 sm:mb-12" id="pricing">
             <h2 className="text-2xl xs:text-3xl sm:text-4xl font-medium mb-2 xs:mb-3 sm:mb-4 text-foreground">simple pricing</h2>
             <p className="text-muted-foreground text-xs xs:text-sm sm:text-base px-2 xs:px-4">
               Start free and scale as you grow. No hidden fees, no surprises.
