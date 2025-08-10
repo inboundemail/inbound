@@ -22,13 +22,10 @@ import {
   SidebarMenuButton,
 } from "@/components/ui/sidebar"
 import { TeamSwitcher } from "./ui/team-switcher"
-import { useSession } from "@/lib/auth/auth-client"
 import { navigationConfig, isUserAdmin, filterNavigationByFeatureFlags } from "@/lib/navigation"
 import Book2 from "./icons/book-2"
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { data: session } = useSession()
-
+export function AppSidebar({ session, ...props }: React.ComponentProps<typeof Sidebar & any>) {
   // Don't render sidebar if no session (this shouldn't happen due to layout protection)
   if (!session?.user) {
     return null
