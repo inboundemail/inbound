@@ -25,7 +25,8 @@ export interface PostEmailReplyRequest {
     subject?: string        // Optional - will add "Re: " to original subject if not provided
     cc?: string | string[]
     bcc?: string | string[]
-    reply_to?: string | string[]
+    reply_to?: string | string[]    // snake_case (legacy)
+    replyTo?: string | string[]     // camelCase (Resend-compatible)
     html?: string
     text?: string
     headers?: Record<string, string>
@@ -33,9 +34,15 @@ export interface PostEmailReplyRequest {
         content: string // Base64 encoded
         filename: string
         path?: string
-        content_type?: string
+        content_type?: string     // snake_case (legacy)
+        contentType?: string      // camelCase (Resend-compatible)
     }>
-    include_original?: boolean  // Whether to include quoted original message (default: true)
+    include_original?: boolean    // snake_case (legacy)
+    includeOriginal?: boolean     // camelCase (Resend-compatible)
+    tags?: Array<{  // Resend-compatible tags
+        name: string
+        value: string
+    }>
 }
 
 export interface PostEmailReplyResponse {
@@ -331,7 +338,7 @@ export async function POST(
         // Set default values
         const toAddresses = body.to ? toArray(body.to) : [originalFromData?.text || originalSenderAddress]
         const subject = body.subject || `Re: ${original.subject || 'No Subject'}`
-        const includeOriginal = body.include_original !== false  // Default to true
+        const includeOriginal = (body.includeOriginal ?? body.include_original) !== false  // Default to true, support both formats
 
         // Validate required fields
         if (!body.from) {
@@ -397,7 +404,7 @@ export async function POST(
         // Convert recipients to arrays
         const ccAddresses = toArray(body.cc)
         const bccAddresses = toArray(body.bcc)
-        const replyToAddresses = toArray(body.reply_to)
+        const replyToAddresses = toArray(body.replyTo || body.reply_to) // Support both formats
 
         // Validate email addresses
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -521,7 +528,16 @@ export async function POST(
                 'In-Reply-To': inReplyTo,
                 'References': references.join(' ')
             }),
-            attachments: body.attachments ? JSON.stringify(body.attachments) : null,
+            attachments: body.attachments ? JSON.stringify(
+                // Normalize attachment fields to support both formats
+                body.attachments.map(att => ({
+                    content: att.content,
+                    filename: att.filename,
+                    path: att.path,
+                    content_type: att.contentType || att.content_type  // Support both formats
+                }))
+            ) : null,
+            tags: body.tags ? JSON.stringify(body.tags) : null, // Store tags
             status: SENT_EMAIL_STATUS.PENDING,
             messageId,
             userId,

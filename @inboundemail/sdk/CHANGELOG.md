@@ -37,6 +37,7 @@ This release aligns the SDK with the Resend SDK pattern and introduces breaking 
 - Removed circular dependency in package.json
 - Fixed inconsistent examples in documentation
 - Updated all examples to use new constructor pattern
+- **IMPORTANT**: Updated API endpoints to support both snake_case and camelCase field names for backward compatibility
 
 ### 📚 Documentation
 - Updated README with new usage patterns
