@@ -27,7 +27,7 @@ import Filter2 from '@/components/icons/filter-2'
 import { CustomInboundIcon } from '@/components/icons/customInbound'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
-import { Endpoint } from '@/features/endpoints/types'
+import type { Endpoint } from '@/features/endpoints/types'
 
 type FilterType = 'all' | 'webhook' | 'email' | 'email_group'
 type FilterStatus = 'all' | 'active' | 'disabled'
