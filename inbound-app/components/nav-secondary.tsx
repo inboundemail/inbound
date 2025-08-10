@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Link } from "next-view-transitions"
+import * as React from "react";
+import { Link } from "next-view-transitions";
 
 import {
   SidebarGroup,
@@ -9,27 +9,27 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar"
-import { NavigationItem, isNavigationItemActive } from "@/lib/navigation"
-import { useNavigation } from "@/contexts/navigation-context"
+} from "@/components/ui/sidebar";
+import { NavigationItem, isNavigationItemActive } from "@/lib/navigation";
+import { useNavigation } from "@/contexts/navigation-context";
 
 export function NavSecondary({
   items,
   ...props
 }: {
-  items: NavigationItem[]
+  items: NavigationItem[];
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
-  const { currentPath } = useNavigation()
+  const { currentPath } = useNavigation();
   return (
     <SidebarGroup {...props}>
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => {
-            const isActive = isNavigationItemActive(item.url, currentPath)
+            const isActive = isNavigationItemActive(item.url, currentPath);
             return (
               <SidebarMenuItem key={item.title}>
                 {isActive ? (
-                  <SidebarMenuButton 
+                  <SidebarMenuButton
                     tooltip={item.title}
                     isActive={true}
                     className="cursor-default"
@@ -38,8 +38,8 @@ export function NavSecondary({
                     <span>{item.title}</span>
                   </SidebarMenuButton>
                 ) : (
-                  <SidebarMenuButton 
-                    asChild 
+                  <SidebarMenuButton
+                    asChild
                     tooltip={item.title}
                     isActive={false}
                   >
@@ -50,10 +50,10 @@ export function NavSecondary({
                   </SidebarMenuButton>
                 )}
               </SidebarMenuItem>
-            )
+            );
           })}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
-  )
+  );
 }
