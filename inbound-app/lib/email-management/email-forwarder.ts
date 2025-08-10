@@ -26,7 +26,7 @@ export class EmailForwarder {
 
     // Build email subject with optional prefix
     const subject = options?.subjectPrefix 
-      ? `${options.subjectPrefix}${originalEmail.subject || 'No Subject'}`
+      ? `${options.subjectPrefix}${options.subjectPrefix.endsWith(' ') ? '' : ' '}${originalEmail.subject || 'No Subject'}`
       : originalEmail.subject || 'No Subject'
 
     // Construct the "via Inbound" from address format
