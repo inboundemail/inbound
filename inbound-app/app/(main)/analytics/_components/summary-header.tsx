@@ -17,9 +17,7 @@ export async function SummaryHeader() {
   ])
 
   if (!statsRes.success || !recentRes.success) {
-    const statsError = (!statsRes.success && 'error' in statsRes) ? statsRes.error : undefined
-    const recentError = (!recentRes.success && 'error' in recentRes) ? recentRes.error : undefined
-    const error = statsError ?? recentError ?? 'Failed to load summary'
+    const error = (!statsRes.success ? statsRes.error : recentRes.error) || 'Failed to load summary'
     return (
       <div className="flex items-center justify-between bg-card border border-border rounded-lg p-4">
         <div className="flex items-center gap-2 text-destructive">
