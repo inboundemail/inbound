@@ -7,6 +7,8 @@ import { Toaster } from "@/components/ui/sonner"
 import { NavigationProvider } from "@/contexts/navigation-context"
 
 import { EnhancedPageTransition } from "@/components/page-transition"
+import { SimpleNavigationLoader } from "@/components/simple-navigation-loader"
+import { MinimalProgress } from "@/components/navigation-progress"
 import { useSession } from "@/lib/auth/auth-client"
 import { useRouter, usePathname } from "next/navigation"
 import { useEffect } from "react"
@@ -63,6 +65,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <NavigationProvider>
       <SidebarProvider>
+        {/* Navigation Loading States */}
+        <MinimalProgress />
+        <SimpleNavigationLoader />
+        
         <AppSidebar variant="sidebar" />
         <SidebarInset>
           <EnhancedPageTransition direction="horizontal" className="h-full">
