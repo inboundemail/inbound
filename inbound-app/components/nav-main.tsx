@@ -22,12 +22,12 @@ export function NavMain({ items }: { items: NavigationItem[] }) {
         <SidebarMenu>
           <SidebarMenuItem className="flex items-center gap-2">
             <Button variant="primary" className="w-full" asChild>
-              <a href="/add" className="flex items-center gap-2">
+              <Link href="/add" className="flex items-center gap-2">
                 <EnvelopePlus className="h-4 w-4" />
                 <span className="group-data-[collapsible=icon]:hidden">
                   new inbound
                 </span>
-              </a>
+              </Link>
             </Button>
           </SidebarMenuItem>
         </SidebarMenu>

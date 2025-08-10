@@ -60,6 +60,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <ViewTransitions>
     <NavigationProvider>
       <SidebarProvider>
         <AppSidebar variant="sidebar" />
@@ -69,5 +70,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </SidebarProvider>
       <Toaster />
     </NavigationProvider>
+    <ViewTransitions />
   )
 }
