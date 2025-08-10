@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, timestamp, boolean, integer } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, text, timestamp, boolean, integer, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { user, session, account, verification, apikey } from './auth-schema';
 
 // Additional app-specific tables
@@ -25,7 +25,9 @@ export const userAccounts = pgTable('user_accounts', {
   stripeRestrictedKey: text('stripe_restricted_key'), // Account-level Stripe key for VIP BYOK
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (t) => ({
+  userAccountsUserIdIdx: index('user_accounts_user_id_idx').on(t.userId),
+}));
 
 // User onboarding tracking table
 export const userOnboarding = pgTable('user_onboarding', {
@@ -53,7 +55,11 @@ export const onboardingDemoEmails = pgTable('onboarding_demo_emails', {
   replyReceivedAt: timestamp('reply_received_at'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (t) => ({
+  onboardingDemoEmailsMsgReplyIdx: index('onboarding_demo_emails_message_reply_idx').on(t.messageId, t.replyReceived),
+  onboardingDemoEmailsUserReplyIdx: index('onboarding_demo_emails_user_reply_idx').on(t.userId, t.replyReceived),
+  onboardingDemoEmailsUserCreatedIdx: index('onboarding_demo_emails_user_created_idx').on(t.userId, t.createdAt),
+}));
 
 // You can add more app-specific tables here
 export const emailDomains = pgTable('email_domains', {
@@ -75,7 +81,12 @@ export const emailDomains = pgTable('email_domains', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
   userId: varchar('user_id', { length: 255 }).notNull(),
-});
+}, (t) => ({
+  emailDomainsUserIdx: index('email_domains_user_id_idx').on(t.userId),
+  emailDomainsUserStatusIdx: index('email_domains_user_status_idx').on(t.userId, t.status),
+  emailDomainsCatchAllEndpointIdx: index('email_domains_catchall_endpoint_id_idx').on(t.catchAllEndpointId),
+  emailDomainsCreatedIdx: index('email_domains_created_at_idx').on(t.createdAt),
+}));
 
 export const emailAddresses = pgTable('email_addresses', {
   id: varchar('id', { length: 255 }).primaryKey(),
@@ -92,7 +103,13 @@ export const emailAddresses = pgTable('email_addresses', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
   userId: varchar('user_id', { length: 255 }).notNull(),
-});
+}, (t) => ({
+  emailAddressesDomainIdx: index('email_addresses_domain_id_idx').on(t.domainId),
+  emailAddressesEndpointIdx: index('email_addresses_endpoint_id_idx').on(t.endpointId),
+  emailAddressesUserIdx: index('email_addresses_user_id_idx').on(t.userId),
+  emailAddressesDomainActiveIdx: index('email_addresses_domain_active_idx').on(t.domainId, t.isActive),
+  emailAddressesCreatedIdx: index('email_addresses_created_at_idx').on(t.createdAt),
+}));
 
 // Webhooks table - stores webhook configurations
 export const webhooks = pgTable('webhooks', {
@@ -112,7 +129,10 @@ export const webhooks = pgTable('webhooks', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
   userId: varchar('user_id', { length: 255 }).notNull(),
-});
+}, (t) => ({
+  webhooksUserIdx: index('webhooks_user_id_idx').on(t.userId),
+  webhooksCreatedIdx: index('webhooks_created_at_idx').on(t.createdAt),
+}));
 
 // SES Events table - stores raw SES event data
 export const sesEvents = pgTable('ses_events', {
@@ -145,7 +165,9 @@ export const sesEvents = pgTable('ses_events', {
   webhookPayload: text('webhook_payload'), // Complete webhook payload
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (t) => ({
+  sesEventsMessageIdIdx: index('ses_events_message_id_idx').on(t.messageId),
+}));
 
 export const receivedEmails = pgTable('received_emails', { // deprecating.... use structuredEmails instead
   id: varchar('id', { length: 255 }).primaryKey(),
@@ -300,7 +322,16 @@ export const structuredEmails = pgTable('structured_emails', {
   userId: varchar('user_id', { length: 255 }).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (t) => ({
+  structuredEmailsUserCreatedIdx: index('structured_emails_user_created_at_idx').on(t.userId, t.createdAt),
+  structuredEmailsUserArchivedIdx: index('structured_emails_user_archived_idx').on(t.userId, t.isArchived),
+  structuredEmailsUserParseIdx: index('structured_emails_user_parse_success_idx').on(t.userId, t.parseSuccess),
+  structuredEmailsEmailIdIdx: index('structured_emails_email_id_idx').on(t.emailId),
+  structuredEmailsSesEventIdIdx: index('structured_emails_ses_event_id_idx').on(t.sesEventId),
+  structuredEmailsMessageIdIdx: index('structured_emails_message_id_idx').on(t.messageId),
+  structuredEmailsInReplyToIdx: index('structured_emails_in_reply_to_idx').on(t.inReplyTo),
+  structuredEmailsUserDateIdx: index('structured_emails_user_date_idx').on(t.userId, t.date),
+}));
 
 export const webhookDeliveries = pgTable('webhook_deliveries', {
   id: varchar('id', { length: 255 }).primaryKey(),
@@ -317,7 +348,12 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
   deliveryTime: integer('delivery_time'), // Time in milliseconds
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (t) => ({
+  webhookDeliveriesWebhookIdIdx: index('webhook_deliveries_webhook_id_idx').on(t.webhookId),
+  webhookDeliveriesEmailIdIdx: index('webhook_deliveries_email_id_idx').on(t.emailId),
+  webhookDeliveriesStatusIdx: index('webhook_deliveries_status_idx').on(t.status),
+  webhookDeliveriesCreatedIdx: index('webhook_deliveries_created_at_idx').on(t.createdAt),
+}));
 
 export const domainDnsRecords = pgTable('domain_dns_records', {
   id: varchar('id', { length: 255 }).primaryKey(),
@@ -331,7 +367,11 @@ export const domainDnsRecords = pgTable('domain_dns_records', {
   createdAt: timestamp('created_at').defaultNow(),
   priority: integer('priority'), // For MX records
   description: text('description'), // Human-readable description of the record purpose
-});
+}, (t) => ({
+  domainDnsRecordsDomainIdx: index('domain_dns_records_domain_id_idx').on(t.domainId),
+  domainDnsRecordsDomainTypeNameIdx: index('domain_dns_records_domain_type_name_idx').on(t.domainId, t.recordType, t.name),
+  domainDnsRecordsVerifiedIdx: index('domain_dns_records_is_verified_idx').on(t.isVerified),
+}));
 
 // Endpoints table - unified system for webhooks, email forwards, and email groups
 export const endpoints = pgTable('endpoints', {
@@ -345,7 +385,12 @@ export const endpoints = pgTable('endpoints', {
   userId: varchar('user_id', { length: 255 }).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (t) => ({
+  endpointsUserIdx: index('endpoints_user_id_idx').on(t.userId),
+  endpointsUserTypeIdx: index('endpoints_user_type_idx').on(t.userId, t.type),
+  endpointsUserActiveIdx: index('endpoints_user_active_idx').on(t.userId, t.isActive),
+  endpointsUserCreatedIdx: index('endpoints_user_created_at_idx').on(t.userId, t.createdAt),
+}));
 
 // Email Groups table - stores individual email addresses for email group endpoints
 export const emailGroups = pgTable('email_groups', {
@@ -353,7 +398,10 @@ export const emailGroups = pgTable('email_groups', {
   endpointId: varchar('endpoint_id', { length: 255 }).notNull(), // Reference to endpoints table
   emailAddress: varchar('email_address', { length: 255 }).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (t) => ({
+  emailGroupsEndpointCreatedIdx: index('email_groups_endpoint_created_at_idx').on(t.endpointId, t.createdAt),
+  emailGroupsEmailAddressIdx: index('email_groups_email_address_idx').on(t.emailAddress),
+}));
 
 // Endpoint Deliveries table - tracks deliveries for all endpoint types (extends webhook deliveries)
 export const endpointDeliveries = pgTable('endpoint_deliveries', {
@@ -367,7 +415,13 @@ export const endpointDeliveries = pgTable('endpoint_deliveries', {
   responseData: text('response_data'), // JSON response/error data
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (t) => ({
+  endpointDeliveriesEndpointIdx: index('endpoint_deliveries_endpoint_id_idx').on(t.endpointId),
+  endpointDeliveriesEndpointStatusIdx: index('endpoint_deliveries_endpoint_status_idx').on(t.endpointId, t.status),
+  endpointDeliveriesEndpointLastAttemptIdx: index('endpoint_deliveries_endpoint_last_attempt_at_idx').on(t.endpointId, t.lastAttemptAt),
+  endpointDeliveriesEmailIdIdx: index('endpoint_deliveries_email_id_idx').on(t.emailId),
+  endpointDeliveriesCreatedIdx: index('endpoint_deliveries_created_at_idx').on(t.createdAt),
+}));
 
 // Blocked Emails table - stores email addresses that should be blocked from processing
 export const blockedEmails = pgTable('blocked_emails', {
@@ -378,7 +432,9 @@ export const blockedEmails = pgTable('blocked_emails', {
   blockedBy: varchar('blocked_by', { length: 255 }).notNull(), // User who blocked this email
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (t) => ({
+  blockedEmailsDomainIdIdx: index('blocked_emails_domain_id_idx').on(t.domainId),
+}));
 
 // Sent Emails table - stores emails sent through the API
 export const sentEmails = pgTable('sent_emails', {
@@ -417,7 +473,10 @@ export const sentEmails = pgTable('sent_emails', {
   userId: varchar('user_id', { length: 255 }).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (t) => ({
+  sentEmailsUserCreatedIdx: index('sent_emails_user_created_at_idx').on(t.userId, t.createdAt),
+  sentEmailsMessageIdIdx: index('sent_emails_message_id_idx').on(t.messageId),
+}));
 
 // Export types for Better Auth tables (using the imported tables)
 export { user, session, account, verification, apikey };
@@ -530,7 +589,10 @@ export const vipConfigs = pgTable('vip_configs', {
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (t) => ({
+  vipConfigsUserIdIdx: index('vip_configs_user_id_idx').on(t.userId),
+  vipConfigsIsActiveIdx: index('vip_configs_is_active_idx').on(t.isActive),
+}));
 
 // VIP Payment Sessions table - tracks payment links and their status
 export const vipPaymentSessions = pgTable('vip_payment_sessions', {
@@ -546,7 +608,11 @@ export const vipPaymentSessions = pgTable('vip_payment_sessions', {
   expiresAt: timestamp('expires_at'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (t) => ({
+  vipPaymentSessionsVipConfigIdx: index('vip_payment_sessions_vip_config_id_idx').on(t.vipConfigId),
+  vipPaymentSessionsStatusIdx: index('vip_payment_sessions_status_idx').on(t.status),
+  vipPaymentSessionsCreatedIdx: index('vip_payment_sessions_created_at_idx').on(t.createdAt),
+}));
 
 // VIP Allowed Senders - tracks who can send without payment
 export const vipAllowedSenders = pgTable('vip_allowed_senders', {
@@ -557,7 +623,10 @@ export const vipAllowedSenders = pgTable('vip_allowed_senders', {
   allowedUntil: timestamp('allowed_until'), // Optional expiration
   paymentSessionId: varchar('payment_session_id', { length: 255 }), // Reference to the payment that allowed them
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (t) => ({
+  vipAllowedSendersVipConfigIdx: index('vip_allowed_senders_vip_config_id_idx').on(t.vipConfigId),
+  vipAllowedSendersUnique: uniqueIndex('vip_allowed_senders_unique').on(t.vipConfigId, t.senderEmail),
+}));
 
 // VIP Email Attempts - tracks all emails that hit VIP protection
 export const vipEmailAttempts = pgTable('vip_email_attempts', {
@@ -572,7 +641,12 @@ export const vipEmailAttempts = pgTable('vip_email_attempts', {
   allowedReason: varchar('allowed_reason', { length: 100 }), // 'previous_payment', 'whitelisted', etc.
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (t) => ({
+  vipEmailAttemptsVipConfigIdx: index('vip_email_attempts_vip_config_id_idx').on(t.vipConfigId),
+  vipEmailAttemptsPaymentSessionIdx: index('vip_email_attempts_payment_session_id_idx').on(t.paymentSessionId),
+  vipEmailAttemptsStatusIdx: index('vip_email_attempts_status_idx').on(t.status),
+  vipEmailAttemptsCreatedIdx: index('vip_email_attempts_created_at_idx').on(t.createdAt),
+}));
 
 // Create index for faster lookups
 // Note: These would be created in migration files
