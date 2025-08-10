@@ -3,10 +3,8 @@ const {
   Inbound
 } = require('@inboundemail/sdk')
 
-// Initialize the SDK
-const inbound = new Inbound('macbook-testingVaWvxQLddFWZQSuqHLZxKVMCBrBbsGRoUOYmRtUCaOYltLpeQALEfcMTbhhDBmiU', {
-  baseUrl: 'https://inbound.new/api/v2'
-})
+// Initialize the SDK (Resend-style constructor)
+const inbound = new Inbound('macbook-testingVaWvxQLddFWZQSuqHLZxKVMCBrBbsGRoUOYmRtUCaOYltLpeQALEfcMTbhhDBmiU')
 
 async function basicExample() {
   try {

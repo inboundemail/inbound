@@ -12,11 +12,8 @@ import type {
   getEmailText 
 } from '@inboundemail/sdk'
 
-// Initialize with default reply address for streamlined replies
-const inbound = new Inbound({
-  apiKey: process.env.INBOUND_API_KEY!,
-  defaultReplyFrom: 'support@yourdomain.com' // 🔥 Set this for simple replies
-})
+// Initialize the SDK (Resend-style constructor)
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
 
 export async function POST(request: NextRequest) {
   try {
@@ -55,15 +52,21 @@ export async function POST(request: NextRequest) {
     
     // ===== YOUR BUSINESS LOGIC WITH STREAMLINED REPLIES =====
     
-    // 🔥 Example 1: Super simple auto-replies (uses defaultReplyFrom)
+    // 🔥 Example 1: Simple auto-replies
     if (email.subject?.toLowerCase().includes('thanks')) {
       console.log('😊 Sending thank you reply')
-      await inbound.reply(email, "You're welcome! Let us know if you need anything else.")
+      await inbound.reply(email, {
+        from: 'support@yourdomain.com',
+        text: "You're welcome! Let us know if you need anything else."
+      })
     }
     
     if (email.subject?.toLowerCase().includes('support')) {
       console.log('🤖 Detected support email - sending auto-reply')
-      await inbound.reply(email, "Thanks for contacting support! We'll get back to you within 24 hours.")
+      await inbound.reply(email, {
+        from: 'support@yourdomain.com',
+        text: "Thanks for contacting support! We'll get back to you within 24 hours."
+      })
     }
     
     // 🔥 Example 2: Simple replies with custom from address
@@ -98,6 +101,7 @@ export async function POST(request: NextRequest) {
     
     if (email.subject?.toLowerCase().includes('urgent') && !isBusinessHours) {
       await inbound.reply(email, {
+        from: 'support@yourdomain.com',
         subject: 'Urgent Request Received - Out of Hours',
         text: `Thanks for your urgent request! We're currently outside business hours (9 AM - 5 PM EST), but we'll prioritize your message first thing tomorrow morning.`,
         headers: {
@@ -166,19 +170,22 @@ function isWithinBusinessHours(date: Date): boolean {
 }
 
 /*
-🔥 STREAMLINED REPLY EXAMPLES:
+🔥 REPLY EXAMPLES:
 
-// Method 1: Configure default reply address (recommended)
-const inbound = new Inbound({
-  apiKey: 'your-key',
-  defaultReplyFrom: 'support@yourdomain.com'
+// Method 1: Simple replies
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+await inbound.reply(email, {
+  from: 'support@yourdomain.com',
+  text: "Thanks!"
 })
 
-// Super simple replies
-await inbound.reply(email, "Thanks!")
-await inbound.reply(email, "Got your message, we'll respond soon.")
+await inbound.reply(email, {
+  from: 'support@yourdomain.com', 
+  text: "Got your message, we'll respond soon."
+})
 
-// Method 2: Override from address when needed
+// Method 2: Replies with custom from address
 await inbound.reply(email, {
   from: 'billing@yourdomain.com',
   text: "Thanks for your billing inquiry."

@@ -6,12 +6,11 @@ import { Inbound } from './src/index'
 async function testSDK() {
   console.log('🚀 Testing Inbound SDK locally...')
   
-  // Initialize with a test API key
-  const inbound = new Inbound({
-    apiKey: 'macbook-testingVaWvxQLddFWZQSuqHLZxKVMCBrBbsGRoUOYmRtUCaOYltLpeQALEfcMTbhhDBmiU',
-    // You can point to your local development server
-    baseUrl: 'http://localhost:3000/api/v2'
-  })
+  // Initialize with a test API key (Resend-style constructor)
+  const inbound = new Inbound(
+    'macbook-testingVaWvxQLddFWZQSuqHLZxKVMCBrBbsGRoUOYmRtUCaOYltLpeQALEfcMTbhhDBmiU',
+    'http://localhost:3000/api/v2' // Optional custom baseUrl
+  )
   
   try {
     // Test basic initialization

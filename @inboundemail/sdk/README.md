@@ -13,9 +13,9 @@ npm install @inboundemail/sdk
 ```typescript
 import { Inbound } from '@inboundemail/sdk'
 
-const inbound = new Inbound('your-api-key-here')
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
 
-// Send an email
+// Send an email (Resend-compatible API)
 const email = await inbound.emails.send({
   from: 'hello@yourdomain.com',
   to: 'user@example.com',
@@ -28,7 +28,7 @@ console.log(email.id)
 
 ## Streamlined Webhook Replies
 
-The SDK includes a streamlined `reply()` method that makes it incredibly easy to reply to emails directly from webhook handlers:
+The SDK includes a streamlined `reply()` method that makes it easy to reply to emails directly from webhook handlers:
 
 ### Quick Setup
 
@@ -36,11 +36,7 @@ The SDK includes a streamlined `reply()` method that makes it incredibly easy to
 import { Inbound, type InboundWebhookPayload, isInboundWebhook } from '@inboundemail/sdk'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Configure with default reply address for super simple replies
-const inbound = new Inbound({
-  apiKey: process.env.INBOUND_API_KEY!,
-  defaultReplyFrom: 'support@yourdomain.com'
-})
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
 
 export async function POST(request: NextRequest) {
   const payload: InboundWebhookPayload = await request.json()
@@ -51,13 +47,19 @@ export async function POST(request: NextRequest) {
   
   const { email } = payload
   
-  // 🔥 Super simple replies!
+  // Reply to emails
   if (email.subject?.includes('thanks')) {
-    await inbound.reply(email, "You're welcome!")
+    await inbound.reply(email, {
+      from: 'support@yourdomain.com',
+      text: "You're welcome!"
+    })
   }
   
   if (email.subject?.includes('support')) {
-    await inbound.reply(email, "Thanks for contacting support! We'll respond within 24 hours.")
+    await inbound.reply(email, {
+      from: 'support@yourdomain.com',
+      text: "Thanks for contacting support! We'll respond within 24 hours."
+    })
   }
   
   return NextResponse.json({ success: true })
@@ -66,12 +68,15 @@ export async function POST(request: NextRequest) {
 
 ### Reply Methods
 
-**1. Simple String Reply (with defaultReplyFrom configured):**
+**Standard Reply:**
 ```typescript
-await inbound.reply(email, "Thanks for your message!")
+await inbound.reply(email, {
+  from: 'support@yourdomain.com',
+  text: "Thanks for your message!"
+})
 ```
 
-**2. Override From Address:**
+**Reply with HTML:**
 ```typescript
 await inbound.reply(email, {
   from: 'billing@yourdomain.com',
