@@ -6,7 +6,6 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { NavigationProvider } from "@/contexts/navigation-context"
 
-import { EnhancedPageTransition } from "@/components/page-transition"
 import { useSession } from "@/lib/auth/auth-client"
 import { useRouter, usePathname } from "next/navigation"
 import { useEffect } from "react"
@@ -19,7 +18,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   
   // Only fetch onboarding status if user is authenticated and not on onboarding page
   const shouldFetchOnboarding = !!session?.user && pathname !== '/onboarding'
-  const { data: onboardingData, isLoading: isOnboardingLoading } = useOnboardingStatusQuery()
+  const { data: onboardingData, isLoading: isOnboardingLoading } = useOnboardingStatusQuery(shouldFetchOnboarding)
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -65,9 +64,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <SidebarProvider>
         <AppSidebar variant="sidebar" />
         <SidebarInset>
-          <EnhancedPageTransition direction="horizontal" className="h-full">
-            {children}
-          </EnhancedPageTransition>
+          {children}
         </SidebarInset>
       </SidebarProvider>
       <Toaster />

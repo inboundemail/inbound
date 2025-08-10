@@ -57,7 +57,7 @@ export function NavMain({
                     asChild 
                     isActive={false}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} prefetch>
                       {item.icon && <item.icon className={`h-4 w-4 ${item.customTailwind}`} />}
                       <span className={item.customTailwind}>{item.title}</span>
                     </Link>

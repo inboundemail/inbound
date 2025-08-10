@@ -43,7 +43,7 @@ export function NavSecondary({
                     tooltip={item.title}
                     isActive={false}
                   >
-                    <Link href={item.url} className="flex items-center gap-2">
+                    <Link href={item.url} prefetch className="flex items-center gap-2">
                       {item.icon && <item.icon className="h-4 w-4" />}
                       <span>{item.title}</span>
                     </Link>

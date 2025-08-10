@@ -33,7 +33,8 @@ import CirclePlus from "@/components/icons/circle-plus"
 import Clipboard2 from "@/components/icons/clipboard-2"
 import Trash2 from "@/components/icons/trash-2"
 import { formatDistanceToNow } from 'date-fns'
-import { PricingTable } from '@/components/autumn/pricing-table-format'
+import dynamic from 'next/dynamic'
+const PricingTable = dynamic(() => import('@/components/autumn/pricing-table-format').then(m => m.PricingTable), { ssr: false, loading: () => <div className="min-h-[300px] flex items-center justify-center text-sm text-muted-foreground">Loading pricing…</div> })
 import { useRouter, useSearchParams } from 'next/navigation'
 // removed unused feature icons after layout merge
 // Types are now imported from @/features/settings/types

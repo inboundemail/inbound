@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { Link } from "next-view-transitions";
 import { LoginForm } from "@/components/login-form";
 import InboundIcon from "@/components/InboundIcon";
 import { useSession } from "@/lib/auth/auth-client";
