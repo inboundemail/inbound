@@ -1,5 +1,6 @@
 "use client"
 
+import { ViewTransitions } from 'next-view-transitions'
 import { AppSidebar } from "@/components/app-sidebar"
 import SiteHeader from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
@@ -61,16 +62,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <NavigationProvider>
-      <SidebarProvider>
-        <AppSidebar variant="sidebar" />
-        <SidebarInset>
-          <EnhancedPageTransition direction="horizontal" className="h-full">
-            {children}
-          </EnhancedPageTransition>
-        </SidebarInset>
-      </SidebarProvider>
-      <Toaster />
-    </NavigationProvider>
+    <ViewTransitions>
+      <NavigationProvider>
+        <SidebarProvider>
+          <AppSidebar session={session} variant="sidebar" />
+          <SidebarInset>
+            <EnhancedPageTransition direction="horizontal" className="h-full">
+              {children}
+            </EnhancedPageTransition>
+          </SidebarInset>
+        </SidebarProvider>
+        <Toaster />
+      </NavigationProvider>
+    </ViewTransitions>
   )
 }
