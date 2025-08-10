@@ -21,11 +21,20 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from "@/components/ui/sidebar"
+import { useSession } from "@/lib/auth/auth-client"
 import { TeamSwitcher } from "./ui/team-switcher"
 import { navigationConfig, isUserAdmin, filterNavigationByFeatureFlags } from "@/lib/navigation"
 import Book2 from "./icons/book-2"
 
-export function AppSidebar({ session, ...props }: React.ComponentProps<typeof Sidebar & any>) {
+// Derive the exact session shape from useSession
+type SessionData = ReturnType<typeof useSession>["data"]
+
+// Compose a single props interface
+type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
+  session: SessionData
+}
+
+export function AppSidebar({ session, ...props }: AppSidebarProps) {
   // Don't render sidebar if no session (this shouldn't happen due to layout protection)
   if (!session?.user) {
     return null
