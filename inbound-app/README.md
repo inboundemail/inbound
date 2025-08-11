@@ -99,6 +99,12 @@ git clone https://github.com/R44VC0RP/inbound
 cd inbound
 bun install
 
+# Prepare `.env` variables
+cp inbound-app/.env.example inbound-app/.env.local
+
+# Setup db
+bun run db-prepare
+
 # Start the dev server
 bun run dev
 
