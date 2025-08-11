@@ -1,13 +1,13 @@
 /**
  * @inboundemail/sdk
  * Official SDK for Inbound Email API
- * Version 2.0.0
+ * Version 3.0.0
  */
 
 // Main SDK client
 export { InboundEmailClient } from './client'
 export { InboundEmailClient as Inbound } from './client'
-export type { InboundEmailConfigExtended } from './client'
+// Removed InboundEmailConfigExtended as part of v3.0.0 refactor
 
 // Type definitions
 export * from './types'
@@ -19,7 +19,7 @@ export * from './webhook-types'
 export * from './utils'
 
 // Version
-export const VERSION = '2.0.0'
+export const VERSION = '3.0.0'
 
 // Default export for convenience
 export { InboundEmailClient as default } from './client' 

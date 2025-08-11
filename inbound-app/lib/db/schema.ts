@@ -401,6 +401,7 @@ export const sentEmails = pgTable('sent_emails', {
   // Headers and metadata
   headers: text('headers'), // JSON object of custom headers
   attachments: text('attachments'), // JSON array of attachment metadata
+  tags: text('tags'), // JSON array of email tags (Resend-compatible)
   
   // Delivery status
   status: varchar('status', { length: 50 }).notNull().default('pending'), // 'pending', 'sent', 'failed'

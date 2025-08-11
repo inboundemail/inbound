@@ -1,6 +1,6 @@
 {
   "name": "@inboundemail/sdk",
-  "version": "2.0.1",
+  "version": "3.0.0",
   "description": "Official SDK for Inbound Email API",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -42,9 +42,7 @@
     "typescript": "^5.0.0",
     "bun-types": "latest"
   },
-  "dependencies": {
-    "@inboundemail/sdk": "^2.0.1"
-  },
+  "dependencies": {},
   "publishConfig": {
     "access": "public"
   },

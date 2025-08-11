@@ -24,7 +24,8 @@ export interface PostEmailsRequest {
     subject: string
     bcc?: string | string[]
     cc?: string | string[]
-    reply_to?: string | string[]
+    reply_to?: string | string[] // snake_case (legacy)
+    replyTo?: string | string[]  // camelCase (Resend-compatible)
     html?: string
     text?: string
     headers?: Record<string, string>
@@ -32,7 +33,12 @@ export interface PostEmailsRequest {
         content: string // Base64 encoded
         filename: string
         path?: string
-        content_type?: string
+        content_type?: string  // snake_case (legacy)
+        contentType?: string   // camelCase (Resend-compatible)
+    }>
+    tags?: Array<{  // Resend-compatible tags
+        name: string
+        value: string
     }>
 }
 
@@ -267,11 +273,11 @@ export async function POST(request: NextRequest) {
             console.log('✅ Domain ownership verified')
         }
 
-        // Convert recipients to arrays
+        // Convert recipients to arrays (support both snake_case and camelCase)
         const toAddresses = toArray(body.to)
         const ccAddresses = toArray(body.cc)
         const bccAddresses = toArray(body.bcc)
-        const replyToAddresses = toArray(body.reply_to)
+        const replyToAddresses = toArray(body.replyTo || body.reply_to) // Support both formats
 
         // Validate email addresses
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -330,7 +336,16 @@ export async function POST(request: NextRequest) {
             textBody: body.text,
             htmlBody: body.html,
             headers: body.headers ? JSON.stringify(body.headers) : null,
-            attachments: body.attachments ? JSON.stringify(body.attachments) : null,
+            attachments: body.attachments ? JSON.stringify(
+                // Normalize attachment fields to support both formats
+                body.attachments.map(att => ({
+                    content: att.content,
+                    filename: att.filename,
+                    path: att.path,
+                    content_type: att.contentType || att.content_type  // Support both formats
+                }))
+            ) : null,
+            tags: body.tags ? JSON.stringify(body.tags) : null, // Store tags
             status: SENT_EMAIL_STATUS.PENDING,
             userId,
             idempotencyKey,

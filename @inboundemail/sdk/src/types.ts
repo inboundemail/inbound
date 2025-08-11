@@ -420,14 +420,14 @@ export interface DeleteEmailAddressByIdResponse {
   }
 }
 
-// Emails API Types (for sending)
+// Emails API Types (for sending) - Resend-compatible
 export interface PostEmailsRequest {
   from: string
   to: string | string[]
   subject: string
   bcc?: string | string[]
   cc?: string | string[]
-  reply_to?: string | string[]
+  replyTo?: string | string[]  // Changed from reply_to to match Resend
   html?: string
   text?: string
   headers?: Record<string, string>
@@ -435,7 +435,11 @@ export interface PostEmailsRequest {
     content: string // Base64 encoded
     filename: string
     path?: string
-    content_type?: string
+    contentType?: string  // Changed from content_type to match Resend
+  }>
+  tags?: Array<{  // Added tags support like Resend
+    name: string
+    value: string
   }>
 }
 
@@ -458,7 +462,7 @@ export interface GetEmailByIdResponse {
   last_event: 'pending' | 'delivered' | 'failed'
 }
 
-// Reply API Types
+// Reply API Types - Resend-compatible
 export interface PostEmailReplyRequest {
   from: string
   to?: string | string[]
@@ -467,14 +471,19 @@ export interface PostEmailReplyRequest {
   subject?: string
   text?: string
   html?: string
+  replyTo?: string | string[]  // Added replyTo support
   headers?: Record<string, string>
   attachments?: Array<{
     content: string
     filename: string
     path?: string
-    content_type?: string
+    contentType?: string  // Changed from content_type to match Resend
   }>
-  include_original?: boolean
+  tags?: Array<{  // Added tags support like Resend
+    name: string
+    value: string
+  }>
+  includeOriginal?: boolean  // Changed from include_original to camelCase
 }
 
 export interface PostEmailReplyResponse {
