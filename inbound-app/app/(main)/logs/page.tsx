@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { formatDistanceToNow, format } from 'date-fns'
-import Link from 'next/link'
+import { Link } from 'next-view-transitions'
 
 // Import Nucleo icons
 import Clock2 from '@/components/icons/clock-2'

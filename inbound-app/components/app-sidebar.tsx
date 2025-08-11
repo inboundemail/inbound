@@ -3,7 +3,7 @@
 import * as React from "react"
 import Envelope2 from "@/components/icons/envelope-2"
 import Calendar2 from "@/components/icons/calendar-2"
-import Link from "next/link"
+import { Link } from "next-view-transitions"
 
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
@@ -67,7 +67,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         <SidebarMenu className="mb-4 mt-2">
-          <Link href="/">
+          <Link href="/" prefetch>
             <TeamSwitcher
               enabled={false}
               teams={[{
@@ -123,7 +123,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Show Onboarding" asChild>
-                  <Link href="/onboarding">
+                  <Link href="/onboarding" prefetch>
                     <Envelope2 className="h-4 w-4" />
                     <span>Show Onboarding</span>
                   </Link>
