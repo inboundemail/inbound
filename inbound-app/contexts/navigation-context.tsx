@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useState, useMemo } from 'react'
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import { NavigationItem, getPageTitleFromUrl, getNavigationItemFromUrl, generateDocumentTitle } from '@/lib/navigation'
 
@@ -23,7 +23,8 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const defaultTitle = useMemo(() => getPageTitleFromUrl(pathname), [pathname])
   const currentTitle = customTitle || defaultTitle
 
-  const resetTitle = () => setCustomTitle(null)
+  // Use useCallback to memoize the function
+  const resetTitle = useCallback(() => setCustomTitle(null), [])
 
   // Update document title when current title changes
   useEffect(() => {
@@ -42,7 +43,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
     currentItem,
     setCustomTitle,
     resetTitle,
-  }), [pathname, currentTitle, currentItem])
+  }), [pathname, currentTitle, currentItem, resetTitle])
 
   return (
     <NavigationContext.Provider value={value}>

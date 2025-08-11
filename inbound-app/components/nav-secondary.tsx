@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Link } from "next-view-transitions"
+import { OptimizedLink } from "@/components/optimized-link"
 
 import {
   SidebarGroup,
@@ -43,10 +43,10 @@ export function NavSecondary({
                     tooltip={item.title}
                     isActive={false}
                   >
-                    <Link href={item.url} className="flex items-center gap-2">
+                    <OptimizedLink href={item.url} className="flex items-center gap-2">
                       {item.icon && <item.icon className="h-4 w-4" />}
                       <span>{item.title}</span>
-                    </Link>
+                    </OptimizedLink>
                   </SidebarMenuButton>
                 )}
               </SidebarMenuItem>
