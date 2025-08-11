@@ -37,10 +37,12 @@
   "homepage": "https://github.com/inboundemail/sdk#readme",
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.39.0",
+    "@typescript-eslint/parser": "^8.39.0",
+    "bun-types": "latest",
     "eslint": "^8.0.0",
     "tsup": "^8.0.0",
-    "typescript": "^5.0.0",
-    "bun-types": "latest"
+    "typescript": "^5.0.0"
   },
   "dependencies": {},
   "publishConfig": {

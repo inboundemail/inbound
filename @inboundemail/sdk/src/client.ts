@@ -3,7 +3,6 @@
  */
 
 import type { 
-  InboundEmailConfig,
   // Mail API
   GetMailRequest, GetMailResponse, PostMailRequest, PostMailResponse, GetMailByIdResponse,
   // Endpoints API  
@@ -22,7 +21,6 @@ import type {
 } from './types'
 import type { InboundWebhookEmail } from './webhook-types'
 import { buildQueryString } from './utils'
-import { getSenderInfo } from './webhook-types'
 
 export class InboundEmailClient {
   private readonly apiKey: string
