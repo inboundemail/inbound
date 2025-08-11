@@ -102,9 +102,12 @@ bun install
 # Prepare `.env` variables
 cp inbound-app/.env.example inbound-app/.env.local
 
+# Ensure inbound-app/.env.local has a valid DATABASE_URL:
+# For example:
+# DATABASE_URL="postgresql://postgres:postgres@localhost:5432/inbound?schema=public"
+
 # Setup db
 bun run db-prepare
-
 # Start the dev server
 bun run dev
 
