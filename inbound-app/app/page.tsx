@@ -257,55 +257,58 @@ export async function POST(request: NextRequest) {
       <SiteHeader />
 
       {/* Hero Section */}
-      <section className="max-w-6xl mx-auto px-6 py-20 relative z-10 overflow-hidden">
-        <div className="text-center mb-16 relative z-20 flex flex-col items-center h-[75vh] justify-center">
-          <div className="mb-8 bg-[#272822] rounded-lg overflow-hidden relative border-0.5 border-[#6C47FF]" style={{
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-20 relative z-10 overflow-hidden">
+        <div className="text-center mb-16 relative z-20 flex flex-col items-center min-h-[60vh] sm:min-h-[75vh] justify-center">
+          <div className="mb-6 sm:mb-8 bg-[#272822] rounded-lg overflow-hidden relative border-0.5 border-[#6C47FF]" style={{
             boxShadow: '0 0 0 1px #6C47FF, 0 0 20px rgba(108, 71, 255, 0.4), 0 0 40px rgba(108, 71, 255, 0.2)'
           }}>
-            <img src="/vercel-oss.svg" alt="Vercel OSS" className="h-8 p-3 color-white" />
+            <img src="/vercel-oss.svg" alt="Vercel OSS" className="h-6 sm:h-8 p-2 sm:p-3 color-white" />
           </div>
           
-          <h1 className="text-4xl md:text-5xl font-bold mb-6 leading-tight">
-            <div className="flex items-center gap-2">
-              <PaperPlane2 width={30} height={30} />
-              email platform for
-              <Settings3 width={30} height={30} />
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 sm:mb-6 leading-tight">
+            <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-2">
+              <PaperPlane2 width={24} height={24} className="sm:w-[30px] sm:h-[30px] shrink-0" />
+              <span>email platform for</span>
+              <Settings3 width={24} height={24} className="sm:w-[30px] sm:h-[30px] shrink-0" />
               <Highlighter action="underline" color="#6C47FF">builders</Highlighter>
             </div>
             <TextGenerateEffect
               words="focus on your product, not configs"
-              className="text-2xl md:text-3xl font-bold leading-tight text-[#A18AFF] -mt-2"
+              className="text-xl sm:text-2xl md:text-3xl font-bold leading-tight text-[#A18AFF] mt-1 sm:-mt-2"
               duration={0.5}
             />
           </h1>
-          <p className="text-base text-[var(--text-secondary)] max-w-2xl mx-auto mb-4 leading-relaxed">
+          <p className="text-sm sm:text-base text-[var(--text-secondary)] max-w-2xl mx-auto mb-4 leading-relaxed px-4">
             stop messing with multiple providers and ancient sdks
-            <br />
+            <br className="hidden sm:block" />
+            <span className="sm:hidden"> </span>
             inbound is the easiest way to send, receive, and reply to emails in your app
           </p>
-          <div className="relative bg-[#272822] border border-[var(--border-primary)] rounded-lg overflow-hidden mb-8 w-fit pr-10 pl-2">
-            <pre className="p-2 overflow-x-auto">
-              <code className="text-[#ffffff] font-mono text-sm">npm i @inboundemail/sdk</code>
-            </pre>
-            <button
-              onClick={() => copyToClipboard('npm i @inboundemail/sdk', -1)}
-              className="absolute top-1/2 right-3 -translate-y-1/2 p-1.5 rounded hover:bg-[#3a3a3a] transition-colors duration-200 flex items-center justify-center"
-              title={copiedStates[-1] ? "Copied!" : "Copy to clipboard"}
-              aria-label="Copy to clipboard"
-            >
-              <div className={`transition-all duration-300 ease-in-out ${copiedStates[-1] ? 'scale-110' : 'scale-100'}`}>
-                {copiedStates[-1] ? (
-                  <Check2 width={16} height={16} className="text-green-400" />
-                ) : (
-                  <Copy2 width={16} height={16} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]" />
-                )}
-              </div>
-            </button>
+          <div className="relative bg-[#272822] border border-[var(--border-primary)] rounded-md overflow-hidden mb-6 sm:mb-8 mx-auto" style={{ width: 'fit-content' }}>
+            <div className="flex items-center pr-8 sm:pr-10">
+              <pre className="px-2 py-1.5 sm:px-3 sm:py-2">
+                <code className="text-[#ffffff] font-mono text-[10px] sm:text-xs whitespace-nowrap">npm i @inboundemail/sdk</code>
+              </pre>
+              <button
+                onClick={() => copyToClipboard('npm i @inboundemail/sdk', -1)}
+                className="absolute top-1/2 right-1.5 sm:right-2 -translate-y-1/2 p-1 sm:p-1.5 rounded hover:bg-[#3a3a3a] transition-colors duration-200 flex items-center justify-center"
+                title={copiedStates[-1] ? "Copied!" : "Copy to clipboard"}
+                aria-label="Copy to clipboard"
+              >
+                <div className={`transition-all duration-300 ease-in-out ${copiedStates[-1] ? 'scale-110' : 'scale-100'}`}>
+                  {copiedStates[-1] ? (
+                    <Check2 width={12} height={12} className="sm:w-3.5 sm:h-3.5 text-green-400" />
+                  ) : (
+                    <Copy2 width={12} height={12} className="sm:w-3.5 sm:h-3.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)]" />
+                  )}
+                </div>
+              </button>
+            </div>
           </div>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center w-full max-w-sm sm:max-w-none">
             <Button
               size="lg"
-              className="bg-[var(--purple-primary)] hover:bg-[var(--purple-dark)] text-white border-0 px-8 py-3"
+              className="bg-[var(--purple-primary)] hover:bg-[var(--purple-dark)] text-white border-0 px-6 sm:px-8 py-3 w-full sm:w-auto"
               asChild
             >
               <Link href="/logs" className="text-white">start building</Link>
@@ -313,7 +316,7 @@ export async function POST(request: NextRequest) {
             <Button
               size="lg"
               variant="outline"
-              className="border-[var(--purple-primary)] text-[var(--purple-primary)] hover:bg-[var(--purple-primary)] hover:text-white font-medium px-8 py-3"
+              className="border-[var(--purple-primary)] text-[var(--purple-primary)] hover:bg-[var(--purple-primary)] hover:text-white font-medium px-6 sm:px-8 py-3 w-full sm:w-auto"
               asChild
             >
               <Link href="https://docs.inbound.new">view docs</Link>
