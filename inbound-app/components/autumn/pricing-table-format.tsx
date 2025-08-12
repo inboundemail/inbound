@@ -13,6 +13,10 @@ export const PricingTable = () => {
   const { attach } = useAutumn();
   const { products, isLoading, error } = usePricingTable();
 
+  // only allow the scale, pro, and free_tier product ids
+  const allowedProductIds = ["scale", "pro", "free_tier"];
+  const filteredProducts = products?.filter((product) => allowedProductIds.includes(product.id));
+
   if (isLoading) {
     return (
       <div className="w-full h-full flex justify-center items-center min-h-[300px]">
@@ -27,9 +31,9 @@ export const PricingTable = () => {
 
   return (
     <div>
-      {products && (
-        <PricecnPricingTable products={products}>
-          {products.map((product) => (
+      {filteredProducts && (
+        <PricecnPricingTable products={filteredProducts}>
+          {filteredProducts.map((product) => (
             <PricingCard
               productId={product.id}
               key={product.id}

@@ -18,7 +18,6 @@ import { ConnectingArrow } from '@/components/ui/connecting-arrow';
 import InboxArrowDown from '@/components/icons/inbox-arrow-down';
 import Settings3 from '@/components/icons/settings-3';
 import PaperPlane2 from '@/components/icons/paper-plane-2';
-import { SiteHeader } from "@/components/site-header";
 
 // High-contrast Monokai theme with Monaspace Neon
 const monokaiTheme = {
@@ -254,7 +253,27 @@ export async function POST(request: NextRequest) {
             `}
             </style>
 
-            <SiteHeader />
+            {/* Header */}
+            <header className="border-b border-[var(--border-primary)] bg-[#1B1C1D]/90 backdrop-blur-sm sticky top-0 z-50 relative">
+                <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <Image src="/inbound-logo-3.png" alt="inbound" width={32} height={32} />
+                        <span className="text-2xl font-semibold text-[var(--text-primary)] -ml-2">inbound</span>
+                    </div>
+                    <nav className="hidden md:flex items-center gap-8 text-sm">
+                        <a href="#features" className="text-[var(--text-secondary)] hover:text-[var(--purple-primary)] transition-colors">features</a>
+                        <a href="#examples" className="text-[var(--text-secondary)] hover:text-[var(--purple-primary)] transition-colors">examples</a>
+                        <a href="#testimonials" className="text-[var(--text-secondary)] hover:text-[var(--purple-primary)] transition-colors">testimonials</a>
+                        <Link href="/docs" className="text-[var(--text-secondary)] hover:text-[var(--purple-primary)] transition-colors">docs</Link>
+                    </nav>
+                    <Button
+                        className="bg-[var(--purple-primary)] hover:bg-[var(--purple-dark)] text-white border-0 font-medium"
+                        asChild
+                    >
+                        <Link href="/login">get started</Link>
+                    </Button>
+                </div>
+            </header>
 
             {/* Hero Section */}
             <section className="max-w-6xl mx-auto px-6 py-20 relative z-10 overflow-hidden">

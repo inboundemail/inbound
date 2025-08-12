@@ -246,6 +246,13 @@
       "when": 1754676384401,
       "tag": "0034_illegal_virginia_dare",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1755019305950,
+      "tag": "0035_glorious_the_renegades",
+      "breakpoints": true
     }
   ]
 }
