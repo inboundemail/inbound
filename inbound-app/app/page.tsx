@@ -369,7 +369,7 @@ export async function POST(request: NextRequest) {
         </div>
 
         {/* Problem-Solution Story */}
-        <div className="space-y-8 relative z-20">
+        <div className="space-y-8 relative z-20 ">
           {problemStories.map((story, i) => (
             <>
               <div key={i} className="grid md:grid-cols-4 gap-8 items-center">
@@ -404,8 +404,10 @@ export async function POST(request: NextRequest) {
                       customStyle={{
                         margin: 0,
                         borderRadius: 0,
-                        background: '#1e1f20'
+                        background: '#1e1f20',
+                        fontSize: '12px',
                       }}
+                      className="md:w-full w-[90vw] overflow-x-auto"
                     >
                       {story.code}
                     </SyntaxHighlighter>
@@ -518,8 +520,9 @@ await inbound.emails.send(emailData)
                   customStyle={{
                     margin: 0,
                     borderRadius: 0,
-                    background: '#1e1f20'
+                    background: '#1e1f20',
                   }}
+                  className="md:w-full w-[90vw] overflow-x-auto"
                 >
                   {`// Install once
 npm install @inboundemail/sdk
@@ -622,6 +625,7 @@ await inbound.emails.send(emailData)
                     fontSize: '0.7rem',
                     padding: '1rem'
                   }}
+                  className="md:w-full w-[90vw] overflow-x-auto"
                 >
                   {`await inbound.emails.send({
   from: 'hello@yourdomain.com',
@@ -677,6 +681,7 @@ await inbound.emails.send(emailData)
                     fontSize: '0.7rem',
                     padding: '1rem'
                   }}
+                  className="md:w-full w-[90vw] overflow-x-auto"
                 >
                   {`export async function POST(req: Request) {
   const { email } = await req.json()
@@ -731,6 +736,7 @@ await inbound.emails.send(emailData)
                     fontSize: '0.7rem',
                     padding: '1rem'
                   }}
+                  className="md:w-full w-[90vw] overflow-x-auto"
                 >
                   {`await inbound.reply(email, {
   from: 'support@yourdomain.com',
