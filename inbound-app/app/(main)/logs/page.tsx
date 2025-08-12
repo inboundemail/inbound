@@ -632,14 +632,14 @@ function LogDetailSheet({ log, isOpen, onClose }: { log: EmailLogEntry | null, i
             )}
 
             {/* Actions */}
-            <div className="flex items-center gap-2 pt-4">
+            {/* <div className="flex items-center gap-2 pt-4">
               <Button variant="secondary" size="sm" asChild>
                 <Link href={`/mail/${log.id}`}>
                   <Eye2 width="14" height="14" className="mr-2" />
                   View Email
                 </Link>
               </Button>
-            </div>
+            </div> */}
           </div>
         </ScrollArea>
       </div>
