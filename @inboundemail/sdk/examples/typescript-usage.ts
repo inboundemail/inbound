@@ -31,7 +31,7 @@ async function typedEmailExample() {
       attachments: [{
         filename: 'example.txt',
         content: Buffer.from('Hello from TypeScript!').toString('base64'),
-        content_type: 'text/plain'
+        contentType: 'text/plain'
       }]
     }
     
@@ -47,6 +47,93 @@ async function typedEmailExample() {
     
   } catch (error) {
     console.error('Error sending email:', error)
+  }
+}
+
+async function inlineImageExample() {
+  try {
+    console.log('\n=== Inline Image Example (CID) ===')
+    
+    // Create a simple 1x1 pixel PNG in base64 for demonstration
+    const sampleImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='
+    
+    // Send email with inline images using Content-ID (CID)
+    const emailRequest: PostEmailsRequest = {
+      from: 'Newsletter <newsletter@yourdomain.com>',
+      to: 'subscriber@example.com',
+      subject: 'Monthly Newsletter with Inline Images',
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif;">
+            <h1>Monthly Newsletter</h1>
+            <p>Welcome to our monthly update!</p>
+            
+            <div style="text-align: center; margin: 20px 0;">
+              <img src="cid:header-logo" alt="Company Logo" style="max-width: 200px;" />
+            </div>
+            
+            <h2>This Month's Statistics</h2>
+            <p>Check out our performance chart below:</p>
+            
+            <div style="text-align: center; margin: 20px 0;">
+              <img src="cid:monthly-chart" alt="Monthly Performance Chart" style="max-width: 400px;" />
+            </div>
+            
+            <p>Thanks for being a valued subscriber!</p>
+            
+            <div style="margin-top: 30px; padding: 15px; background-color: #f5f5f5; border-radius: 5px;">
+              <img src="cid:footer-icon" alt="Footer Icon" style="width: 16px; height: 16px; vertical-align: middle;" />
+              <small style="margin-left: 5px;">This email was sent with Inbound's inline image support.</small>
+            </div>
+          </body>
+        </html>
+      `,
+      text: `
+        Monthly Newsletter
+        
+        Welcome to our monthly update!
+        
+        This Month's Statistics
+        Check out our performance chart (images not supported in plain text).
+        
+        Thanks for being a valued subscriber!
+      `,
+      attachments: [
+        {
+          filename: 'logo.png',
+          content: sampleImageBase64,
+          contentType: 'image/png',
+          contentId: 'header-logo'  // Referenced as cid:header-logo in HTML
+        },
+        {
+          filename: 'chart.png',
+          content: sampleImageBase64, // In real usage, this would be your actual chart image
+          contentType: 'image/png',
+          contentId: 'monthly-chart'  // Referenced as cid:monthly-chart in HTML
+        },
+        {
+          filename: 'icon.png',
+          content: sampleImageBase64,
+          contentType: 'image/png',
+          contentId: 'footer-icon'  // Referenced as cid:footer-icon in HTML
+        },
+        {
+          // Regular attachment (not inline)
+          filename: 'newsletter-data.pdf',
+          content: Buffer.from('PDF content would go here').toString('base64'),
+          contentType: 'application/pdf'
+          // No contentId = regular attachment, not inline
+        }
+      ]
+    }
+    
+    const result = await inbound.emails.send(emailRequest)
+    console.log('Newsletter sent successfully!')
+    console.log('Email ID:', result.id)
+    console.log('Message ID:', result.messageId)
+    
+  } catch (error) {
+    console.error('Error sending newsletter:', error)
   }
 }
 
@@ -200,6 +287,7 @@ async function replyExample() {
 async function main() {
   try {
     await typedEmailExample()
+    await inlineImageExample()
     await typedMailboxExample()
     await typedEndpointExample()
     await typedDomainExample()

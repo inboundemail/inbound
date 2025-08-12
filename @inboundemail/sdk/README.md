@@ -240,8 +240,35 @@ await inbound.emails.send({
   attachments: [{
     filename: 'document.pdf',
     content: 'base64-encoded-content',
-    content_type: 'application/pdf'
+    contentType: 'application/pdf'
   }]
+})
+
+// Email with inline images using Content-ID (CID)
+await inbound.emails.send({
+  from: 'Acme <onboarding@yourdomain.com>',
+  to: 'user@example.com',
+  subject: 'Welcome to our service!',
+  html: `
+    <h1>Welcome!</h1>
+    <p>Here's our logo: <img src="cid:company-logo" alt="Company Logo" /></p>
+    <p>And here's a chart: <img src="cid:monthly-chart" alt="Monthly Chart" /></p>
+    <p>Thanks for joining us!</p>
+  `,
+  attachments: [
+    {
+      filename: 'logo.png',
+      content: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', // Base64 image data
+      contentType: 'image/png',
+      contentId: 'company-logo'  // Reference this with cid:company-logo in HTML
+    },
+    {
+      filename: 'chart.png',
+      content: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
+      contentType: 'image/png',
+      contentId: 'monthly-chart'  // Reference this with cid:monthly-chart in HTML
+    }
+  ]
 })
 
 // Using the legacy send method (same as emails.send)

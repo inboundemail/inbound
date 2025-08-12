@@ -36,6 +36,7 @@ export interface PostEmailReplyRequest {
         path?: string
         content_type?: string     // snake_case (legacy)
         contentType?: string      // camelCase (Resend-compatible)
+        contentId?: string        // For inline attachments (CID support)
     }>
     include_original?: boolean    // snake_case (legacy)
     includeOriginal?: boolean     // camelCase (Resend-compatible)
