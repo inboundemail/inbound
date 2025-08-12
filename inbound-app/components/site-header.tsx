@@ -4,9 +4,11 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Button } from "@/components/ui/button"
 import { usePathname } from 'next/navigation'
+import { useSession } from "@/lib/auth/auth-client"
 
 export function SiteHeader() {
   const pathname = usePathname()
+  const { data: session } = useSession()
 
   const isActive = (href: string) => {
     if (href === '/pricing') {
@@ -25,24 +27,32 @@ export function SiteHeader() {
         <nav className="hidden md:flex items-center gap-8 text-sm">
           <a href="/#features" className="text-[var(--text-secondary)] hover:text-[var(--purple-primary)] transition-colors">features</a>
           <a href="/#examples" className="text-[var(--text-secondary)] hover:text-[var(--purple-primary)] transition-colors">examples</a>
-          <Link 
-            href="/pricing" 
-            className={`transition-colors ${
-              isActive('/pricing') 
-                ? 'text-[var(--purple-primary)] font-medium' 
+          <Link
+            href="/pricing"
+            className={`transition-colors ${isActive('/pricing')
+                ? 'text-[var(--purple-primary)] font-medium'
                 : 'text-[var(--text-secondary)] hover:text-[var(--purple-primary)]'
-            }`}
+              }`}
           >
             pricing
           </Link>
           <Link href="/docs" className="text-[var(--text-secondary)] hover:text-[var(--purple-primary)] transition-colors">docs</Link>
         </nav>
-        <Button
-          className="bg-[var(--purple-primary)] hover:bg-[var(--purple-dark)] text-white border-0 font-medium"
-          asChild
-        >
-          <Link href="/login">get started</Link>
-        </Button>
+        {session?.user ? (
+          <Button
+            className="bg-[var(--purple-primary)] hover:bg-[var(--purple-dark)] text-white border-0 font-medium"
+            asChild
+          >
+            <Link href="/logs">hey {session.user.name.toLowerCase().split(' ')[0]} 👋</Link>
+          </Button>
+        ) : (
+          <Button
+            className="bg-[var(--purple-primary)] hover:bg-[var(--purple-dark)] text-white border-0 font-medium"
+            asChild
+          >
+            <Link href="/login">get started</Link>
+          </Button>
+        )}
       </div>
     </header>
   )

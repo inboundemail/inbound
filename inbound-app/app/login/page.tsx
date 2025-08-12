@@ -21,10 +21,20 @@ export default function LoginPage() {
   // Show loading state while checking session
   if (isPending) {
     return (
-      <div className="min-h-svh flex items-center justify-center bg-gradient-to-br from-purple-600 via-purple-700 to-purple-900 dark:from-purple-900 dark:via-purple-800 dark:to-purple-950">
-        <div className="flex items-center gap-2 text-white">
-          <InboundIcon className="w-7 h-7" variant="white" />
-          <span className="text-xl">loading...</span>
+      <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center" style={{ overscrollBehaviorY: "none" }}>
+        <BackgroundSvg />
+        <div className="w-full max-w-sm z-10 px-4 sm:px-0">
+          <div className="flex flex-col items-center gap-6">
+            <img
+              src="/inbound-logo-3.png"
+              alt="Inbound Logo"
+              className="w-11 h-11 shadow-[0_4px_10px_1px_rgba(0,0,0,0.3)] dark:shadow-[0_4px_10px_1px_rgba(0,0,0,0.5)] rounded-[14px]"
+            />
+            <div className="flex items-center gap-2 text-foreground">
+              <InboundIcon className="w-7 h-7" variant="white" />
+              <span className="text-xl">Loading...</span>
+            </div>
+          </div>
         </div>
       </div>
     );
