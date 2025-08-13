@@ -22,6 +22,7 @@ import Clock2 from '@/components/icons/clock-2'
 import Link from 'next/link'
 import { useAutumn, useCustomer } from 'autumn-js/react'
 import ProductChangeDialog from '@/components/autumn/product-change-dialog'
+import { trackVipPurchaseConversion } from '@/lib/utils/twitter-tracking'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 interface VipPageClientProps {
@@ -152,6 +153,11 @@ export default function VipPageClient({
     const upgradeParam = searchParams.get('upgrade')
     if (upgradeParam === 'true') {
       toast.success('Successfully upgraded to VIP BYOK! You can now use your own Stripe key.')
+      
+      // Track Twitter conversion for VIP purchase
+      // Note: We don't have access to session here, so we'll track without email for now
+      trackVipPurchaseConversion('') // Email will be empty, but conversion_id will still track
+      
       // Remove the parameter from URL without reloading
       const newUrl = new URL(window.location.href)
       newUrl.searchParams.delete('upgrade')

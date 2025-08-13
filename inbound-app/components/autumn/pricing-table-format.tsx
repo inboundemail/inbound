@@ -41,7 +41,7 @@ export const PricingTable = () => {
                 onClick: async () => {
                   await attach({
                     productId: product.id,
-                    successUrl: `${process.env.NEXT_PUBLIC_BETTER_AUTH_URL}/settings?upgrade=true`,
+                    successUrl: `${process.env.NEXT_PUBLIC_BETTER_AUTH_URL}/settings?upgrade=true&product=${product.id}`,
                     dialog: ProductChangeDialog,
                   });
                 },

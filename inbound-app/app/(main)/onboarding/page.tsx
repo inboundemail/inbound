@@ -17,6 +17,7 @@ import { useCreateApiKeyMutation } from '@/features/settings/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { completeOnboarding } from '@/app/actions/onboarding'
+import { trackSignupConversion } from '@/lib/utils/twitter-tracking'
 import Copy2 from '@/components/icons/copy-2'
 import Code2 from '@/components/icons/code-2'
 import CirclePlay from '@/components/icons/circle-play'
@@ -295,6 +296,11 @@ export default function OnboardingPage() {
 
       // Invalidate onboarding status to update the cache
       queryClient.invalidateQueries({ queryKey: ['onboarding-status'] })
+
+      // Track user signup conversion for Twitter ads
+      if (session.user.email) {
+        trackSignupConversion(session.user.email, session.user.id)
+      }
 
       toast.success('Welcome to Inbound! 🎉')
       router.push('/add?onboarding=true')

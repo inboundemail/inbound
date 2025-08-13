@@ -35,6 +35,7 @@ import Trash2 from "@/components/icons/trash-2"
 import { formatDistanceToNow } from 'date-fns'
 import { PricingTable } from '@/components/autumn/pricing-table-format'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { trackPurchaseConversion } from '@/lib/utils/twitter-tracking'
 // removed unused feature icons after layout merge
 // Types are now imported from @/features/settings/types
 
@@ -169,14 +170,23 @@ export default function SettingsPage() {
   // Check for upgrade success parameter
   useEffect(() => {
     const upgradeParam = searchParams.get('upgrade')
+    const productParam = searchParams.get('product') // Get product ID if available
     if (upgradeParam === 'true') {
       setIsUpgradeSuccessOpen(true)
+      
+      // Track Twitter conversion for plan purchase
+      if (session?.user?.email) {
+        const productId = productParam || 'pro' // Default to 'pro' if not specified
+        trackPurchaseConversion(productId, session.user.email)
+      }
+      
       // Remove the parameter from URL
       const newUrl = new URL(window.location.href)
       newUrl.searchParams.delete('upgrade')
+      newUrl.searchParams.delete('product')
       router.replace(newUrl.pathname + newUrl.search)
     }
-  }, [searchParams, router])
+  }, [searchParams, router, session?.user?.email])
 
   if (isPending) {
     return (
