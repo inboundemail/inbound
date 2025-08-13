@@ -6,6 +6,7 @@ import { AutumnProvider } from "autumn-js/react";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import Script from "next/script";
+import { Databuddy } from "@databuddy/sdk"
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -38,7 +39,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
-        
+
         <Script
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
@@ -51,12 +52,12 @@ export default function RootLayout({
             `
           }}
         />
-        
+
         <Script
           src="https://static.ads-twitter.com/uwt.js"
           strategy="beforeInteractive"
         />
-        
+
       </head>
       <body
         className={`${outfit.variable} ${geistMono.variable} antialiased`}
@@ -68,6 +69,8 @@ export default function RootLayout({
             src="//unpkg.com/react-scan/dist/auto.global.js"
           />
         )}
+        <Databuddy clientId="jj0WXe_nNBuyT2e2YnLSY" trackErrors trackAttributes disabled={process.env.NODE_ENV === "development"} />
+
         <QueryProvider>
           <AutumnProvider backendUrl={process.env.BETTER_AUTH_URL || ""}>
             {children}
