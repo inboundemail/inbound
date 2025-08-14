@@ -20,6 +20,8 @@ export async function getAllEmails(userId: string, options?: {
     domainFilter?: string
     timeRange?: '24h' | '7d' | '30d' | '90d'
     includeArchived?: boolean
+    emailAddress?: string
+    emailId?: string
 }) {
     try {
         const {
@@ -29,7 +31,9 @@ export async function getAllEmails(userId: string, options?: {
             statusFilter = 'all',
             domainFilter = 'all',
             timeRange = '30d',
-            includeArchived = false
+            includeArchived = false,
+            emailAddress = '',
+            emailId = ''
         } = options || {}
 
         // Build where conditions
@@ -80,6 +84,24 @@ export async function getAllEmails(userId: string, options?: {
             whereConditions.push(
                 sql`(${structuredEmails.subject} ILIKE ${searchPattern} OR ${structuredEmails.fromData}::text ILIKE ${searchPattern} OR ${structuredEmails.toData}::text ILIKE ${searchPattern})`
             )
+        }
+
+        // Add email address filter - search specifically for the email address in JSON address arrays
+        if (emailAddress.trim()) {
+            const emailAddr = emailAddress.trim()
+            whereConditions.push(
+                sql`(
+                    ${structuredEmails.toData}::jsonb->'addresses' @> ${JSON.stringify([{address: emailAddr}])} OR
+                    ${structuredEmails.fromData}::jsonb->'addresses' @> ${JSON.stringify([{address: emailAddr}])} OR
+                    ${structuredEmails.ccData}::jsonb->'addresses' @> ${JSON.stringify([{address: emailAddr}])} OR
+                    ${structuredEmails.bccData}::jsonb->'addresses' @> ${JSON.stringify([{address: emailAddr}])}
+                )`
+            )
+        }
+
+        // Add email ID filter
+        if (emailId.trim()) {
+            whereConditions.push(eq(structuredEmails.emailId, emailId.trim()))
         }
 
         // Get total count

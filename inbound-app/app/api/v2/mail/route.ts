@@ -20,6 +20,8 @@ export interface GetMailRequest {
     domain?: string
     timeRange?: '24h' | '7d' | '30d' | '90d'
     includeArchived?: boolean
+    emailAddress?: string
+    emailId?: string
 }
 
 export interface EmailItem {
@@ -81,6 +83,8 @@ export async function GET(request: NextRequest) {
         const domainFilter = searchParams.get('domain') || 'all'
         const timeRange = searchParams.get('timeRange') as '24h' | '7d' | '30d' | '90d' || '30d'
         const includeArchived = searchParams.get('includeArchived') === 'true'
+        const emailAddress = searchParams.get('emailAddress') || ''
+        const emailId = searchParams.get('emailId') || ''
 
         console.log('📊 Query parameters:', {
             limit,
@@ -89,7 +93,9 @@ export async function GET(request: NextRequest) {
             statusFilter,
             domainFilter,
             timeRange,
-            includeArchived
+            includeArchived,
+            emailAddress,
+            emailId
         })
 
         // Validate parameters
@@ -109,6 +115,23 @@ export async function GET(request: NextRequest) {
             )
         }
 
+        // Validate email filters
+        if (emailAddress && emailId) {
+            console.log('⚠️ Both emailAddress and emailId provided - only one should be used')
+            return NextResponse.json(
+                { error: 'Cannot filter by both emailAddress and emailId at the same time' },
+                { status: 400 }
+            )
+        }
+
+        // Log specific filtering being applied
+        if (emailAddress) {
+            console.log('🔍 Filtering emails by email address:', emailAddress)
+        }
+        if (emailId) {
+            console.log('🔍 Filtering emails by email ID:', emailId)
+        }
+
         console.log('🔍 Calling getAllEmails function')
         // Call the function with userId
         const result = await getAllEmails(userId, {
@@ -118,7 +141,9 @@ export async function GET(request: NextRequest) {
             statusFilter,
             domainFilter,
             timeRange,
-            includeArchived
+            includeArchived,
+            emailAddress,
+            emailId
         })
 
         if (result.error) {
@@ -129,7 +154,14 @@ export async function GET(request: NextRequest) {
             )
         }
 
-        console.log('✅ Successfully retrieved emails, count:', result.data?.emails?.length || 0)
+        const emailCount = result.data?.emails?.length || 0
+        if (emailAddress) {
+            console.log(`✅ Successfully retrieved ${emailCount} emails for email address: ${emailAddress}`)
+        } else if (emailId) {
+            console.log(`✅ Successfully retrieved ${emailCount} emails for email ID: ${emailId}`)
+        } else {
+            console.log('✅ Successfully retrieved emails, count:', emailCount)
+        }
         return NextResponse.json(result.data)
 
     } catch (error) {
