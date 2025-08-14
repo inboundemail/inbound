@@ -5,6 +5,24 @@ All notable changes to the @inboundemail/sdk will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### ✨ Added
+- **Inline Images Support**: Full support for embedding inline images in emails
+  - Added `contentId` field to attachment types for inline image references
+  - Support for both remote URLs and base64-encoded local images
+  - Compatible with Resend's inline images API
+  - Comprehensive utility functions for inline image management:
+    - `createRemoteInlineImage()` - Create remote inline image attachments
+    - `createBase64InlineImage()` - Create base64 inline image attachments
+    - `generateContentId()` - Generate unique content IDs
+    - `validateContentId()` - Validate content ID format
+    - `extractContentIdsFromHtml()` - Extract content IDs from HTML
+    - `validateInlineImageReferences()` - Validate HTML references match attachments
+    - `getContentTypeFromExtension()` - Auto-detect content types
+  - Added comprehensive examples and test cases
+  - Updated documentation with inline images section
+
 ## [3.0.0] - 2025-01-23
 
 ### 🚨 BREAKING CHANGES

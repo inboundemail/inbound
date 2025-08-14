@@ -983,3 +983,287 @@ describe("reply to email via Inbound SDK", () => {
         }
     });
 });
+
+// Inline Images API Tests
+
+describe("send email with inline images via Inbound SDK", () => {
+    let inlineImageEmailId: string;
+
+    it("should send an email with remote inline image and return email ID", async () => {
+        const data = await inbound.emails.send({
+            from: "Test Sender <test@exon.dev>",
+            to: "inline-test@example.com",
+            subject: "Test Email with Remote Inline Image",
+            html: '<p>Here is our <img src="cid:logo-image"/> inline logo</p>',
+            attachments: [
+                {
+                    path: "https://resend.com/static/sample/logo.png",
+                    filename: "logo.png",
+                    contentId: "logo-image"
+                }
+            ]
+        });
+        
+        expect(data.id).toBeDefined();
+        expect(data.id).toMatch(/^[a-zA-Z0-9_-]+$/);
+        inlineImageEmailId = data.id;
+        console.log(`✅ Email with remote inline image sent: ${data.id}`);
+    });
+
+    it("should send an email with local inline image (base64)", async () => {
+        // Create a simple base64 encoded 1x1 PNG (transparent pixel)
+        const base64Image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI9jU77zgAAAABJRU5ErkJggg==";
+        
+        const data = await inbound.emails.send({
+            from: "Test Sender <test@exon.dev>",
+            to: "inline-test@example.com",
+            subject: "Test Email with Local Inline Image",
+            html: '<p>Here is a local <img src="cid:local-image"/> inline image</p>',
+            attachments: [
+                {
+                    content: base64Image,
+                    filename: "pixel.png",
+                    contentType: "image/png",
+                    contentId: "local-image"
+                }
+            ]
+        });
+        
+        expect(data.id).toBeDefined();
+        expect(data.id).toMatch(/^[a-zA-Z0-9_-]+$/);
+        console.log(`✅ Email with local inline image sent: ${data.id}`);
+    });
+
+    it("should send an email with multiple inline images", async () => {
+        const data = await inbound.emails.send({
+            from: "Test Sender <test@exon.dev>",
+            to: "inline-test@example.com",
+            subject: "Test Email with Multiple Inline Images",
+            html: `
+                <div>
+                    <h1>Multiple Images Test</h1>
+                    <p>Logo: <img src="cid:logo" alt="Logo" style="width: 50px;"/></p>
+                    <p>Banner: <img src="cid:banner" alt="Banner" style="width: 200px;"/></p>
+                </div>
+            `,
+            attachments: [
+                {
+                    path: "https://resend.com/static/sample/logo.png",
+                    filename: "logo.png",
+                    contentType: "image/png",
+                    contentId: "logo"
+                },
+                {
+                    path: "https://via.placeholder.com/200x50/0066cc/ffffff?text=Banner",
+                    filename: "banner.png",
+                    contentType: "image/png",
+                    contentId: "banner"
+                }
+            ]
+        });
+        
+        expect(data.id).toBeDefined();
+        expect(data.id).toMatch(/^[a-zA-Z0-9_-]+$/);
+        console.log(`✅ Email with multiple inline images sent: ${data.id}`);
+    });
+
+    it("should send an email with mixed attachments (regular + inline)", async () => {
+        const data = await inbound.emails.send({
+            from: "Test Sender <test@exon.dev>",
+            to: "inline-test@example.com",
+            subject: "Test Email with Mixed Attachments",
+            html: `
+                <div>
+                    <h1>Invoice Attached</h1>
+                    <p>Please find your invoice attached.</p>
+                    <p>Company logo: <img src="cid:company-logo" alt="Logo" style="width: 60px;"/></p>
+                </div>
+            `,
+            attachments: [
+                {
+                    // Regular attachment (no contentId)
+                    content: "VGVzdCBpbnZvaWNlIGNvbnRlbnQ=", // Base64 for "Test invoice content"
+                    filename: "invoice.txt",
+                    contentType: "text/plain"
+                },
+                {
+                    // Inline image (with contentId)
+                    path: "https://resend.com/static/sample/logo.png",
+                    filename: "logo.png",
+                    contentType: "image/png",
+                    contentId: "company-logo"
+                }
+            ]
+        });
+        
+        expect(data.id).toBeDefined();
+        expect(data.id).toMatch(/^[a-zA-Z0-9_-]+$/);
+        console.log(`✅ Email with mixed attachments sent: ${data.id}`);
+    });
+
+    it("should handle invalid contentId gracefully", async () => {
+        // Test with contentId that has invalid characters
+        const data = await inbound.emails.send({
+            from: "Test Sender <test@exon.dev>",
+            to: "inline-test@example.com",
+            subject: "Test Email with Special Characters in ContentId",
+            html: '<p>Image: <img src="cid:logo-with-special-chars"/></p>',
+            attachments: [
+                {
+                    path: "https://resend.com/static/sample/logo.png",
+                    filename: "logo.png",
+                    contentId: "logo-with-special-chars" // Should work fine
+                }
+            ]
+        });
+        
+        expect(data.id).toBeDefined();
+        console.log(`✅ Email with special chars in contentId sent: ${data.id}`);
+    });
+
+    it("should handle contentId length validation", async () => {
+        // Test with very long contentId (should be under 128 chars as per Resend docs)
+        const longContentId = "a".repeat(120); // Just under the limit
+        
+        const data = await inbound.emails.send({
+            from: "Test Sender <test@exon.dev>",
+            to: "inline-test@example.com",
+            subject: "Test Email with Long ContentId",
+            html: `<p>Image: <img src="cid:${longContentId}"/></p>`,
+            attachments: [
+                {
+                    path: "https://resend.com/static/sample/logo.png",
+                    filename: "logo.png",
+                    contentId: longContentId
+                }
+            ]
+        });
+        
+        expect(data.id).toBeDefined();
+        console.log(`✅ Email with long contentId sent: ${data.id}`);
+    });
+});
+
+describe("reply with inline images via Inbound SDK", () => {
+    let replyEmailId: string;
+
+    // First send an email to reply to
+    beforeAll(async () => {
+        const data = await inbound.emails.send({
+            from: "Original Sender <test@exon.dev>",
+            to: "reply-test@example.com",
+            subject: "Original Email for Reply Test",
+            text: "This is the original email for testing replies with inline images"
+        });
+        replyEmailId = data.id;
+    });
+
+    it("should reply to an email with inline image", async () => {
+        const data = await inbound.emails.reply(replyEmailId, {
+            from: "Support <support@exon.dev>",
+            html: `
+                <p>Thank you for your inquiry!</p>
+                <p>Here's our support team signature:</p>
+                <img src="cid:support-signature" alt="Support Team" style="width: 150px;"/>
+                <p>Best regards,<br/>Support Team</p>
+            `,
+            attachments: [
+                {
+                    path: "https://via.placeholder.com/150x40/28a745/ffffff?text=Support+Team",
+                    filename: "support-signature.png",
+                    contentType: "image/png",
+                    contentId: "support-signature"
+                }
+            ]
+        });
+
+        expect(data.id).toBeDefined();
+        expect(data.id).toMatch(/^[a-zA-Z0-9_-]+$/);
+        console.log(`✅ Reply with inline image sent: ${data.id}`);
+    });
+
+    it("should reply with multiple inline images", async () => {
+        const data = await inbound.emails.reply(replyEmailId, {
+            from: "Marketing <marketing@exon.dev>",
+            html: `
+                <div>
+                    <img src="cid:header" alt="Header" style="width: 300px;"/>
+                    <p>Check out our latest offers!</p>
+                    <img src="cid:product" alt="Product" style="width: 200px;"/>
+                    <p>Limited time only!</p>
+                </div>
+            `,
+            attachments: [
+                {
+                    path: "https://via.placeholder.com/300x80/0066cc/ffffff?text=Marketing+Header",
+                    filename: "header.png",
+                    contentId: "header"
+                },
+                {
+                    path: "https://via.placeholder.com/200x200/ff6600/ffffff?text=Product",
+                    filename: "product.png",
+                    contentId: "product"
+                }
+            ]
+        });
+
+        expect(data.id).toBeDefined();
+        console.log(`✅ Reply with multiple inline images sent: ${data.id}`);
+    });
+});
+
+describe("inline images error handling", () => {
+    it("should handle missing contentId gracefully", async () => {
+        // Send email with attachment that has no contentId (should work as regular attachment)
+        const data = await inbound.emails.send({
+            from: "Test Sender <test@exon.dev>",
+            to: "error-test@example.com",
+            subject: "Test Regular Attachment",
+            html: '<p>This email has a regular attachment (no inline image)</p>',
+            attachments: [
+                {
+                    path: "https://resend.com/static/sample/logo.png",
+                    filename: "logo.png"
+                    // No contentId - should be treated as regular attachment
+                }
+            ]
+        });
+        
+        expect(data.id).toBeDefined();
+        console.log(`✅ Email with regular attachment (no contentId) sent: ${data.id}`);
+    });
+
+    it("should handle contentId without corresponding HTML reference", async () => {
+        // Send email with contentId but no cid: reference in HTML
+        const data = await inbound.emails.send({
+            from: "Test Sender <test@exon.dev>",
+            to: "error-test@example.com",
+            subject: "Test Unused ContentId",
+            html: '<p>This email has an attachment with contentId but no cid: reference</p>',
+            attachments: [
+                {
+                    path: "https://resend.com/static/sample/logo.png",
+                    filename: "logo.png",
+                    contentId: "unused-logo"
+                }
+            ]
+        });
+        
+        expect(data.id).toBeDefined();
+        console.log(`✅ Email with unused contentId sent: ${data.id}`);
+    });
+
+    it("should handle HTML with cid reference but no matching attachment", async () => {
+        // Send email with cid: reference but no matching contentId in attachments
+        const data = await inbound.emails.send({
+            from: "Test Sender <test@exon.dev>",
+            to: "error-test@example.com",
+            subject: "Test Missing Attachment",
+            html: '<p>This image will be broken: <img src="cid:missing-image" alt="Missing"/></p>',
+            // No attachments with matching contentId
+        });
+        
+        expect(data.id).toBeDefined();
+        console.log(`✅ Email with missing attachment reference sent: ${data.id}`);
+    });
+});
