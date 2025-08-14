@@ -50,14 +50,16 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
     forwardTo: '',
     includeAttachments: true,
     subjectPrefix: '',
-    fromAddress: ''
+    fromAddress: '',
+    senderName: ''
   })
   
   const [emailGroupConfig, setEmailGroupConfig] = useState<EmailGroupConfig>({
     emails: [],
     includeAttachments: true,
     subjectPrefix: '',
-    fromAddress: ''
+    fromAddress: '',
+    senderName: ''
   })
   const [newEmail, setNewEmail] = useState('')
   
@@ -87,9 +89,10 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
     }
   }, [open, updateEndpointMutation.isPending, endpoint, formData, webhookConfig, emailConfig, emailGroupConfig])
 
+  // Effect to handle endpoint data loading whenever endpoint changes
   useEffect(() => {
-    if (endpoint && open) {
-      // Reset form data when endpoint changes and dialog is open
+    if (endpoint) {
+      // Reset form data when endpoint changes
       setFormData({
         name: endpoint.name,
         description: endpoint.description || '',
@@ -123,21 +126,23 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
           forwardTo: (parsedConfig as EmailForwardConfig).forwardTo || '',
           includeAttachments: (parsedConfig as EmailForwardConfig).includeAttachments ?? true,
           subjectPrefix: (parsedConfig as EmailForwardConfig).subjectPrefix || '',
-          fromAddress: (parsedConfig as EmailForwardConfig).fromAddress || ''
+          fromAddress: (parsedConfig as EmailForwardConfig).fromAddress || '',
+          senderName: (parsedConfig as EmailForwardConfig).senderName || ''
         })
       } else if (endpoint.type === 'email_group') {
         setEmailGroupConfig({
           emails: (parsedConfig as EmailGroupConfig).emails || [],
           includeAttachments: (parsedConfig as EmailGroupConfig).includeAttachments ?? true,
           subjectPrefix: (parsedConfig as EmailGroupConfig).subjectPrefix || '',
-          fromAddress: (parsedConfig as EmailGroupConfig).fromAddress || ''
+          fromAddress: (parsedConfig as EmailGroupConfig).fromAddress || '',
+          senderName: (parsedConfig as EmailGroupConfig).senderName || ''
         })
       }
       
       // Clear any previous errors
       setErrors({})
     }
-  }, [endpoint, open])
+  }, [endpoint])
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
