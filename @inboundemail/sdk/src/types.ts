@@ -53,6 +53,8 @@ export interface GetMailRequest {
   domain?: string
   timeRange?: '24h' | '7d' | '30d' | '90d'
   includeArchived?: boolean
+  emailAddress?: string
+  emailId?: string
 }
 
 export interface GetMailResponse {

@@ -32,6 +32,24 @@ async function basicExample() {
     })
     console.log('Found', receivedEmails.emails.length, 'received emails')
 
+    // Filter emails by email address
+    console.log('Filtering emails by specific email address...')
+    const emailsByAddress = await inbound.mail.list({
+      emailAddress: 'user@inbound.new',
+      limit: 10
+    })
+    console.log('Found', emailsByAddress.emails.length, 'emails for user@inbound.new')
+
+    // Filter emails by email ID
+    if (receivedEmails.emails.length > 0) {
+      console.log('Filtering emails by email ID...')
+      const emailsByEmailId = await inbound.mail.list({
+        emailId: receivedEmails.emails[0].emailId,
+        limit: 10
+      })
+      console.log('Found', emailsByEmailId.emails.length, 'emails with emailId:', receivedEmails.emails[0].emailId)
+    }
+
     // List endpoints
     console.log('Listing endpoints...')
     const endpoints = await inbound.endpoints.list({
