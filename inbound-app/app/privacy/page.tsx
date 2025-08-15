@@ -168,9 +168,10 @@ export default function PrivacyPage() {
             <span className="text-lg font-bold text-gray-900">inbound</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-gray-500">
+            <a href="https://docs.inbound.new" target="_blank" rel="noopener noreferrer" className="hover:text-gray-700 transition-colors">Docs</a>
+            <a href="https://x.com/inbounddotnew" target="_blank" rel="noopener noreferrer" className="hover:text-gray-700 transition-colors">X</a>
             <a href="/privacy" className="hover:text-gray-700 transition-colors">Privacy</a>
             <a href="/terms" className="hover:text-gray-700 transition-colors">Terms</a>
-            <a href="/docs" className="hover:text-gray-700 transition-colors">Docs</a>
             <a href="mailto:support@inbound.exon.dev" className="hover:text-gray-700 transition-colors">Support</a>
           </div>
         </div>

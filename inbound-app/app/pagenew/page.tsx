@@ -497,8 +497,11 @@ export default async function AIAgentLandingPage() {
               <span className="font-semibold text-sm xs:text-base sm:text-lg text-foreground">inbound</span>
             </div>
             <div className="flex flex-wrap items-center gap-3 xs:gap-4 sm:gap-6 text-[11px] xs:text-xs sm:text-sm text-muted-foreground justify-center md:justify-end">
-              <a href="/docs" className="hover:text-foreground transition-colors">
-                API Docs
+              <a href="https://docs.inbound.new" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+                Docs
+              </a>
+              <a href="https://x.com/inbounddotnew" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+                X
               </a>
               <a href="https://discord.gg/NKD3qHzKE5" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
                 Discord

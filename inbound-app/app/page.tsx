@@ -783,6 +783,7 @@ await inbound.emails.send(emailData)
             </div>
             <div className="flex gap-8 text-sm text-[var(--text-muted)]">
               <Link href="https://docs.inbound.new" className="hover:text-[var(--purple-primary)] transition-colors">docs</Link>
+              <a href="https://x.com/inbounddotnew" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--purple-primary)] transition-colors">x</a>
               <Link href="https://inbound.new/privacy" className="hover:text-[var(--purple-primary)] transition-colors">privacy</Link>
               <Link href="https://inbound.new/terms" className="hover:text-[var(--purple-primary)] transition-colors">terms</Link>
               <a href="mailto:support@inbound.new" className="hover:text-[var(--purple-primary)] transition-colors">support</a>
