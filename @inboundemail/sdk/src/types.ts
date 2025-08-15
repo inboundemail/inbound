@@ -432,10 +432,11 @@ export interface PostEmailsRequest {
   text?: string
   headers?: Record<string, string>
   attachments?: Array<{
-    content: string // Base64 encoded
+    content?: string // Base64 encoded
     filename: string
     path?: string
     contentType?: string  // Changed from content_type to match Resend
+    contentId?: string    // For inline images (CID references)
   }>
   tags?: Array<{  // Added tags support like Resend
     name: string
@@ -474,10 +475,11 @@ export interface PostEmailReplyRequest {
   replyTo?: string | string[]  // Added replyTo support
   headers?: Record<string, string>
   attachments?: Array<{
-    content: string
+    content?: string
     filename: string
     path?: string
     contentType?: string  // Changed from content_type to match Resend
+    contentId?: string    // For inline images (CID references)
   }>
   tags?: Array<{  // Added tags support like Resend
     name: string
