@@ -73,19 +73,9 @@ export type EmailActionResult = {
 // Get emails for a user
 export async function getEmails(userId: string, params?: EmailListParams): Promise<EmailActionResult> {
   try {
-    // Get the user's API key
-    const apiKeyResult = await getApiKey(userId)
-    if (!apiKeyResult.success || !apiKeyResult.data) {
-      return {
-        success: false,
-        error: 'API key not found'
-      }
-    }
 
     // Initialize the Inbound SDK
-    const inbound = new Inbound({ 
-      apiKey: apiKeyResult.data.api_key 
-    })
+    const inbound = new Inbound(process.env.INBOUND_API_KEY!)
 
     // Fetch emails with the provided parameters
     const emailsResponse = await inbound.mail.list({
@@ -125,9 +115,7 @@ export async function getEmailDetails(userId: string, emailId: string): Promise<
     }
 
     // Initialize the Inbound SDK
-    const inbound = new Inbound({ 
-      apiKey: apiKeyResult.data.api_key 
-    })
+    const inbound = new Inbound(process.env.INBOUND_API_KEY!)
 
     // Fetch email details
     const emailDetails = await inbound.mail.get(emailId)
@@ -169,19 +157,8 @@ export async function replyToEmail(
   }
 ): Promise<EmailActionResult> {
   try {
-    // Get the user's API key
-    const apiKeyResult = await getApiKey(userId)
-    if (!apiKeyResult.success || !apiKeyResult.data) {
-      return {
-        success: false,
-        error: 'API key not found'
-      }
-    }
-
     // Initialize the Inbound SDK
-    const inbound = new Inbound({ 
-      apiKey: apiKeyResult.data.api_key 
-    })
+    const inbound = new Inbound(process.env.INBOUND_API_KEY!)
 
     // Reply to the email
     await inbound.emails.reply(emailId, {
@@ -193,7 +170,7 @@ export async function replyToEmail(
       text: replyData.textBody,
       html: replyData.htmlBody,
       attachments: replyData.attachments,
-      include_original: true
+      includeOriginal: true
     })
 
     return {

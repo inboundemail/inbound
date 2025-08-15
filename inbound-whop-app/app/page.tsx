@@ -6,8 +6,6 @@ export default function Page() {
 			<div className="max-w-4xl mx-auto">
 				<div className="text-center mb-12">
 					<h1 className="text-8 font-bold text-gray-12 mb-4 tracking-tight flex items-center justify-center gap-2">
-
-						the
 						<Image src="/whoplogo.png" alt="Whop Logo" width={30} height={30} className="rounded-sm" />
 						whop 🤝
 						<Image src="https://inbound.new/inbound-logo-3.png" alt="Whop Logo" width={30} height={30} />

@@ -4,13 +4,15 @@ import { getApiKey } from "@/app/actions/apiManagement";
 import { getEmailDetails, replyToEmail, type EmailDetailsResponse } from "@/app/actions/emailManagement";
 import { redirect } from "next/navigation";
 import { Button } from "../../../../components/button";
+import { SubmitButton } from "../../../../components/submit-button";
 import Link from "next/link";
+import { AlertCircle, ArrowLeft, X } from "lucide-react";
 
 // Server action to handle email reply
 async function handleEmailReply(
-	userId: string, 
-	emailId: string, 
-	experienceId: string, 
+	userId: string,
+	emailId: string,
+	experienceId: string,
 	formData: FormData
 ) {
 	'use server'
@@ -26,16 +28,18 @@ async function handleEmailReply(
 	}
 
 	const result = await replyToEmail(userId, emailId, {
-		from: fromEmail.trim(),
+		from: fromEmail,
 		to: recipientEmail,
 		subject: replySubject,
 		textBody: `${replyText.trim()}\n\nsent via whop`,
 		htmlBody: `<p>${replyText.trim().replace(/\n/g, '<br>')}</p><br><br><p><em>sent via whop</em></p>`
 	});
 
+	// Handle redirects to avoid NEXT_REDIRECT error in logs
 	if (result.success) {
-		// Redirect back to the email list
-		redirect(`/experiences/${experienceId}`);
+		redirect(`/experiences/${experienceId}?toast=reply-sent`);
+	} else {
+		redirect(`/experiences/${experienceId}?toast=reply-error`);
 	}
 
 	// For errors, we could implement toast notifications or error handling
@@ -63,12 +67,11 @@ export default async function EmailDetailPage({
 
 	const user = await whopSdk.users.getUser({ userId });
 	const experience = await whopSdk.experiences.getExperience({ experienceId });
+	const userInboundEmail = user.username + '@whopbound.com';
+	const userName = user.name;
+	const formattedFromEmail = `${userName} <${userInboundEmail}>`;
 
-	let doesUserHaveInboundApiKey = false;
-	const apiKey = await getApiKey(userId);
-	if (apiKey.success) {
-		doesUserHaveInboundApiKey = true;
-	}
+
 
 	// Either: 'admin' | 'customer' | 'no_access';
 	const { accessLevel } = result;
@@ -77,15 +80,15 @@ export default async function EmailDetailPage({
 	let emailDetails: EmailDetailsResponse | null = null;
 	let emailError: string | null = null;
 
-	if (doesUserHaveInboundApiKey) {
-		const emailResponse = await getEmailDetails(userId, emailId);
 
-		if (emailResponse.success && emailResponse.data) {
-			emailDetails = emailResponse.data;
-		} else {
-			emailError = emailResponse.error || 'Failed to fetch email details';
-		}
+	const emailResponse = await getEmailDetails(userId, emailId);
+
+	if (emailResponse.success && emailResponse.data) {
+		emailDetails = emailResponse.data;
+	} else {
+		emailError = emailResponse.error || 'Failed to fetch email details';
 	}
+
 
 	if (!result.hasAccess) {
 		return (
@@ -93,9 +96,7 @@ export default async function EmailDetailPage({
 				<div className="max-w-5xl mx-auto">
 					<div className="bg-red-2 border border-red-6 rounded-xl p-6 shadow-sm">
 						<div className="flex items-center gap-2 text-red-9">
-							<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-							</svg>
+							<X className="h-4 w-4" />
 							<span className="font-medium">You don't have access to this experience.</span>
 						</div>
 					</div>
@@ -104,9 +105,7 @@ export default async function EmailDetailPage({
 		);
 	}
 
-	if (!doesUserHaveInboundApiKey) {
-		redirect(`/experiences/${experienceId}`);
-	}
+
 
 	console.log("emailDetails", emailDetails?.content.htmlBody);
 
@@ -115,21 +114,17 @@ export default async function EmailDetailPage({
 			<div className="min-h-screen bg-gray-1 py-12 px-4 sm:px-6 lg:px-8">
 				<div className="max-w-5xl mx-auto">
 					<div className="mb-6">
-						<Link 
+						<Link
 							href={`/experiences/${experienceId}`}
 							className="inline-flex items-center gap-2 text-gray-10 hover:text-gray-12 transition-colors"
 						>
-							<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-							</svg>
+							<ArrowLeft className="h-4 w-4" />
 							Back to Inbox
 						</Link>
 					</div>
 					<div className="bg-red-2 border border-red-6 rounded-xl p-6 shadow-sm">
 						<div className="flex items-center gap-2 text-red-9">
-							<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-							</svg>
+							<AlertCircle className="h-4 w-4" />
 							<span className="font-medium">Error loading email: {emailError || 'Email not found'}</span>
 						</div>
 					</div>
@@ -143,13 +138,11 @@ export default async function EmailDetailPage({
 			<div className="max-w-4xl mx-auto">
 				{/* Header */}
 				<div className="mb-6">
-					<Link 
+					<Link
 						href={`/experiences/${experienceId}`}
 						className="inline-flex items-center gap-2 text-gray-10 hover:text-gray-12 transition-colors mb-4"
 					>
-						<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-						</svg>
+						<ArrowLeft className="h-4 w-4" />
 						Back to Inbox
 					</Link>
 					<h1 className="text-6 font-bold text-gray-12 tracking-tight">
@@ -175,7 +168,7 @@ export default async function EmailDetailPage({
 						<h3 className="text-4 font-semibold text-gray-12 mb-3">Message</h3>
 						<div className="bg-gray-1 border border-gray-4 rounded-lg p-4">
 							{emailDetails.content.htmlBody ? (
-								<div 
+								<div
 									dangerouslySetInnerHTML={{ __html: emailDetails.content.htmlBody }}
 									className="prose prose-sm max-w-none text-gray-12"
 								/>
@@ -191,11 +184,14 @@ export default async function EmailDetailPage({
 				{/* Card 2: Reply Form */}
 				<div className="bg-gray-2 border border-gray-5 rounded-xl p-6 shadow-sm">
 					<h2 className="text-4 font-semibold text-gray-12 mb-4">Reply</h2>
-					
+					{/* <p className="text-3 text-gray-10 mb-4">
+						Replying as: <span className="font-medium text-gray-12">{formattedFromEmail}</span>
+					</p> */}
+
 					<form action={handleEmailReply.bind(null, userId, emailId, experienceId)} className="space-y-4">
 						<input type="hidden" name="recipientEmail" value={emailDetails.from} />
 						<input type="hidden" name="replySubject" value={`Re: ${emailDetails.subject}`} />
-						<input type="hidden" name="fromEmail" value={emailDetails.to} />
+						<input type="hidden" name="fromEmail" value={formattedFromEmail} />
 
 						<div>
 							<textarea
@@ -208,17 +204,19 @@ export default async function EmailDetailPage({
 						</div>
 
 						<div className="flex items-center gap-3">
-							<Button
-								type="submit"
+							<SubmitButton
 								variant="primary"
 								size="default"
+								className="h-12"
+								loadingText="Sending..."
 							>
 								Send Reply
-							</Button>
+							</SubmitButton>
 							<Link href={`/experiences/${experienceId}`}>
 								<Button
 									variant="secondary"
 									size="default"
+									className="h-12"
 								>
 									Cancel
 								</Button>

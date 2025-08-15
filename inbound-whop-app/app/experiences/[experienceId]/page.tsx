@@ -1,11 +1,20 @@
 import { whopSdk } from "@/lib/whop-sdk";
 import { headers } from "next/headers";
-import { getApiKey, saveApiKey } from "@/app/actions/apiManagement";
-import { getEmails, type EmailItem, type EmailListParams } from "@/app/actions/emailManagement";
+import { getApiKey, saveApiKey, initTable } from "@/app/actions/apiManagement";
+import { type EmailItem } from "@/app/actions/emailManagement";
 import { redirect } from "next/navigation";
 import { Button } from "../../components/button";
 import Image from "next/image";
 import Link from "next/link";
+import { Inbound } from '@inboundemail/sdk'
+import { getInboundEmail, saveInboundEmail } from "@/app/actions/dbManagement";
+import { CopyableEmail } from "@/app/components/copyable-email";
+import { ToastHandler } from "@/app/components/toast-handler";
+import { SubmitButton } from "@/app/components/submit-button";
+import { ArrowDown, Check, MailPlus, RefreshCcw, Search, X } from "lucide-react";
+
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
 
 // Helper function to format relative time
 const formatRelativeTime = (date: Date) => {
@@ -88,6 +97,7 @@ async function handleSearch(userId: string, experienceId: string, formData: Form
 
 	const searchQuery = formData.get('search') as string;
 	const filterType = formData.get('filterType') as string;
+	const isRefresh = formData.get('refresh') as string;
 
 	// Build search URL with parameters
 	const params = new URLSearchParams();
@@ -96,6 +106,11 @@ async function handleSearch(userId: string, experienceId: string, formData: Form
 	}
 	if (filterType && filterType !== 'all') {
 		params.set('filter', filterType);
+	}
+	
+	// Add toast parameter for refresh
+	if (isRefresh === 'true') {
+		params.set('toast', 'refresh-success');
 	}
 
 	const redirectUrl = `/experiences/${experienceId}${params.toString() ? `?${params.toString()}` : ''}`;
@@ -129,6 +144,11 @@ export default async function ExperiencePage({
 	});
 
 	const user = await whopSdk.users.getUser({ userId });
+	const userInboundEmail = user.username + '@whopbound.com';
+	const userName = user.name;
+
+	console.log(userInboundEmail, userName);
+
 	const experience = await whopSdk.experiences.getExperience({ experienceId });
 
 	let doesUserHaveInboundApiKey = false;
@@ -148,43 +168,9 @@ export default async function ExperiencePage({
 	let emailsError: string | null = null;
 	let unreadCount = 0;
 
-	if (doesUserHaveInboundApiKey) {
-		// Build email query parameters
-		const emailParams: EmailListParams = {
-			limit: 50,
-			timeRange: '30d',
-			includeArchived: false
-		};
 
-		// Add search query if provided
-		if (searchQuery) {
-			emailParams.search = searchQuery;
-		}
 
-		// Add status filter if provided
-		if (filterType === 'unread') {
-			// Note: The SDK doesn't have an unread filter, we'll filter client-side
-		} else if (filterType === 'attachments') {
-			// Note: The SDK doesn't have an attachments filter, we'll filter client-side
-		}
 
-		const emailsResponse = await getEmails(userId, emailParams);
-
-		if (emailsResponse.success && emailsResponse.data) {
-			emails = emailsResponse.data.emails;
-			
-			// Apply client-side filters
-			if (filterType === 'unread') {
-				emails = emails.filter(email => !email.isRead);
-			} else if (filterType === 'attachments') {
-				emails = emails.filter(email => email.hasAttachments);
-			}
-			
-			unreadCount = emails.filter(email => !email.isRead).length;
-		} else {
-			emailsError = emailsResponse.error || 'Failed to fetch emails';
-		}
-	}
 
 	if (!result.hasAccess) {
 		return (
@@ -192,9 +178,7 @@ export default async function ExperiencePage({
 				<div className="max-w-5xl mx-auto">
 					<div className="bg-red-2 border border-red-6 rounded-xl p-6 shadow-sm">
 						<div className="flex items-center gap-2 text-red-9">
-							<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-							</svg>
+							<X className="h-4 w-4" /> 
 							<span className="font-medium">You don't have access to this experience.</span>
 						</div>
 					</div>
@@ -203,113 +187,98 @@ export default async function ExperiencePage({
 		);
 	}
 
-	if (!doesUserHaveInboundApiKey) {
-		return (
-			<div className="min-h-screen bg-gray-1 py-12 px-4 sm:px-6 lg:px-8">
-				<div className="max-w-5xl mx-auto">
-					<div className="bg-gradient-to-br from-gray-2 to-gray-3 border border-gray-6 rounded-xl p-8 shadow-lg">
-						<div className="text-center">
-							<div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-accent-8 to-accent-9 rounded-full flex items-center justify-center shadow-lg">
-								<Image src="/api-icon.png" alt="Inbound Logo" width={64} height={64} />
-							</div>
-							<h3 className="text-6 font-bold text-gray-12 mb-2 tracking-tight">
-								API Key Required
-							</h3>
-							<p className="text-4 text-gray-10 mb-6 max-w-md mx-auto leading-relaxed">
-								To access your inbox, you'll need an Inbound API key. This connects your Whop experience to your email service.
-							</p>
-							<form action={handleApiKeySubmission.bind(null, userId)} className="space-y-6">
-								<input type="hidden" name="experienceId" value={experienceId} />
+	// Inbound Logic:
 
-								<div className="space-y-4">
-									<div>
-										<label htmlFor="apiKey" className="block text-3 font-semibold text-gray-12 mb-2">
-											Enter your Inbound API Key
-										</label>
-										<input
-											type="text"
-											id="apiKey"
-											name="apiKey"
-											placeholder="sk-..."
-											required
-											className="flex h-12 w-full rounded-xl border border-gray-6 bg-gray-1 px-4 py-3 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-8 focus-visible:border-accent-8 disabled:cursor-not-allowed disabled:opacity-50 text-gray-12"
-										/>
-									</div>
+	// We are going to use neon to check and see if we have created an email address for this whop user. 
 
-									<Button
-										type="submit"
-										variant="primary"
-										size="lg"
-										className="w-full"
-									>
-										<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-										</svg>
-										Save API Key
-									</Button>
-								</div>
-							</form>
+	console.log("Checking inbound email")
 
-							<div className="mt-8 pt-6 border-t border-gray-6">
-								<div className="bg-blue-2 border border-blue-6 rounded-xl p-4 mb-4">
-									<div className="flex items-center gap-3 flex-col">
-										<p className="text-3 font-semibold text-blue-11 mb-1">Don&apos;t have an API key?</p>
-										<p className="text-3 text-blue-10 leading-relaxed">
-											Visit your Inbound settings page to generate a new API key.
-										</p>
-									</div>
-								</div>
+	let inboundEmail = await getInboundEmail(userId)
 
-								<Button
-									variant="ghost"
-									size="lg"
-									asChild
-								>
-									<a
-										href="https://inbound.new/settings"
-										target="_blank"
-										rel="noopener noreferrer"
-									>
-										<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-										</svg>
-										Get API Key from Inbound Settings
-										<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-										</svg>
-									</a>
-								</Button>
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
-		);
+	// console.log('inboundEmail', inboundEmail)
+
+
+	if (!inboundEmail) {
+		// create the inbound email
+		const newEmail = await inbound.emailAddresses.create({
+			address: userInboundEmail,
+			domainId: 'indm_QSvWz0JBZxrmIzUWuWyOh',
+		})
+
+		await saveInboundEmail(userId, newEmail.id)
+		console.log('inbound email created', newEmail.id)
 	}
+
+	try {
+		// Use the new email address filtering feature
+		const emailsResponse = await inbound.mail.list({
+			emailAddress: userInboundEmail,
+			limit: 100,
+			search: searchQuery || undefined,
+			includeArchived: true,
+		});
+
+		// console.log('emails response:', emailsResponse);
+
+		if (emailsResponse.emails) {
+			emails = emailsResponse.emails;
+
+			// Apply client-side filters for features not yet supported by API
+			if (filterType === 'unread') {
+				emails = emails.filter(email => !email.isRead);
+			} else if (filterType === 'attachments') {
+				emails = emails.filter(email => email.hasAttachments);
+			}
+
+			// Count unread emails for header badge
+			unreadCount = emailsResponse.emails.filter(email => !email.isRead).length;
+		} else {
+			emailsError = 'No emails found';
+		}
+	} catch (error) {
+		console.error('Error fetching emails:', error);
+		emailsError = 'Failed to fetch emails';
+	}
+
+
 
 	return (
 		<div className="min-h-screen bg-gray-1 py-12 px-4 sm:px-6 lg:px-8">
+			<ToastHandler />
 			<div className="max-w-5xl mx-auto">
 				{/* Header Section */}
 				<div className="mb-6">
 					<div className="flex items-center justify-between">
 						<div>
 							<h2 className="text-8 font-bold text-gray-12 mb-1 tracking-tight">
-								{experience.name} ({unreadCount} unread)
+								inbound email
 							</h2>
 							<p className="text-4 text-gray-10 font-medium">
-								Welcome {user.name} · Access Level: {accessLevel}
+								Welcome {userName} · Your email is
+								<CopyableEmail email={userInboundEmail} />
 							</p>
 						</div>
-						{unreadCount > 0 && (
-							<Button variant="primary" size="default">
-								<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-								</svg>
-								Mark all as read
-							</Button>
-						)}
+						<div className="flex items-center gap-3">
+							{unreadCount > 0 && (
+								<Button variant="secondary" size="default">
+									<Check className="h-4 w-4" />
+									Mark all as read
+								</Button>
+							)}
+							<form action={handleSearch.bind(null, userId, experienceId)} className="contents">
+								<input type="hidden" name="refresh" value="true" />
+								<SubmitButton variant="secondary" size="default" loadingText="Refreshing...">
+									<RefreshCcw className="h-4 w-4" />
+									Refresh
+								</SubmitButton>
+							</form>
+							<Link href={`/experiences/${experienceId}/send`}>
+								<Button variant="primary" size="default">
+									<MailPlus className="h-4 w-4" />
+									Compose
+								</Button>
+							</Link>
+						</div>
 					</div>
 				</div>
 
@@ -317,39 +286,34 @@ export default async function ExperiencePage({
 				<div className="mb-6">
 					<form action={handleSearch.bind(null, userId, experienceId)} className="flex items-center gap-3">
 						<div className="relative flex-1">
-							<svg className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-							</svg>
+							<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-8" />
 							<input
 								type="text"
 								name="search"
 								defaultValue={searchQuery}
 								placeholder="Search messages..."
-								className="flex h-9 w-full rounded-xl border border-gray-6 bg-gray-2 px-3 py-1 pl-10 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-8 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-8 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm text-gray-12"
+								className="flex h-12 w-full rounded-xl border border-gray-6 bg-gray-2 px-3 py-2 pl-10 text-sm shadow-sm transition-all duration-200 placeholder:text-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-8 focus-visible:ring-offset-2 focus-visible:ring-offset-background hover:border-gray-7 disabled:cursor-not-allowed disabled:opacity-50 text-gray-12"
 							/>
 						</div>
 						<div className="relative">
-							<select 
+							<select
 								name="filterType"
 								defaultValue={filterType}
-								className="flex h-9 items-center justify-between whitespace-nowrap rounded-xl border border-gray-6 bg-gray-2 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-accent-8 disabled:cursor-not-allowed disabled:opacity-50 text-gray-12 appearance-none pr-8"
+								className="flex h-12 items-center justify-between whitespace-nowrap rounded-xl border border-gray-6 bg-gray-2 px-3 py-2 pr-8 text-sm shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-8 focus-visible:ring-offset-2 focus-visible:ring-offset-background hover:border-gray-7 disabled:cursor-not-allowed disabled:opacity-50 text-gray-12 appearance-none cursor-pointer"
 							>
 								<option value="all">All Messages</option>
 								<option value="unread">Unread</option>
 								<option value="attachments">With Attachments</option>
 							</select>
-							<svg className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-							</svg>
+							<ArrowDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-8 pointer-events-none" />
 						</div>
 						<Button
 							type="submit"
 							variant="secondary"
 							size="default"
+							className="h-12 bg-accent-9 text-white"
 						>
-							<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-							</svg>
+							<Search className="h-4 w-4" />
 							Search
 						</Button>
 					</form>
@@ -368,7 +332,7 @@ export default async function ExperiencePage({
 									Filter: {filterType}
 								</span>
 							)}
-							<Link 
+							<Link
 								href={`/experiences/${experienceId}`}
 								className="text-2 text-gray-8 hover:text-gray-10 underline"
 							>

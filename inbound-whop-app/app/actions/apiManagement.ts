@@ -25,7 +25,7 @@ export type ApiKeyResult = {
 };
 
 // Initialize the table if it doesn't exist
-async function initTable() {
+export async function initTable() {
   await sql`
     CREATE TABLE IF NOT EXISTS api_keys (
       id SERIAL PRIMARY KEY,
@@ -34,6 +34,7 @@ async function initTable() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
+    
   `;
 }
 
