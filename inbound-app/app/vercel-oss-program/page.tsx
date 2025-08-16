@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useSession } from "@/lib/auth/auth-client";
 import { toast } from "sonner";
 import { submitVercelOssApplication } from "./actions";
+import InboundIcon from "@/components/icons/inbound";
 
 // Component that uses useSearchParams - needs to be wrapped in Suspense
 function VercelOssProgramContent() {
@@ -78,13 +79,7 @@ function VercelOssProgramContent() {
         {/* Header - matching app/page.tsx */}
         <header className="flex items-center justify-between py-3 sm:py-4 lg:py-6 w-full">
           <Link href="/" className="flex items-center gap-2 sm:gap-3">
-            <Image
-              src="https://inbound.new/inbound-logo-3.png"
-              alt="Inbound Logo"
-              width={24}
-              height={24}
-              className="rounded-lg shadow-sm sm:w-7 sm:h-7 lg:w-8 lg:h-8"
-            />
+            <InboundIcon variant="primary" width={24} height={24} />
             <span className="font-semibold text-xl sm:text-2xl lg:text-3xl text-foreground">inbound</span>
           </Link>
           <div className="flex items-center gap-2 sm:gap-4">

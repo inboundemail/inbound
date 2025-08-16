@@ -17,6 +17,7 @@ import TabClose from "@/components/icons/tab-close"
 import Microchip from "@/components/icons/microchip"
 import CircleSparkle from "@/components/icons/circle-sparkle"
 import Check2 from "@/components/icons/check-2"
+import InboundIcon from "@/components/icons/inbound"
 
 export const metadata: Metadata = {
   title: 'Best ImprovMX Alternative - Free Email Aliases For Custom Domains | Inbound',
@@ -426,7 +427,7 @@ await client.domains.setCatchAll({
       <footer className="border-t border-gray-100 px-6 py-8">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between">
           <div className="flex items-center gap-2 mb-4 md:mb-0">
-            <img src="/inbound-logo-3.png" alt="Inbound Logo" className="w-6 h-6" />
+            <InboundIcon variant="primary" width={24} height={24} />
             <span className="text-lg font-bold text-gray-900">inbound</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-gray-500">

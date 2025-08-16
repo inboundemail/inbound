@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { LoginForm } from "@/components/login-form";
-import InboundIcon from "@/components/InboundIcon";
+import InboundIcon from "@/components/icons/inbound";
 import { useSession } from "@/lib/auth/auth-client";
 
 export default function LoginPage() {
@@ -14,7 +14,7 @@ export default function LoginPage() {
   useEffect(() => {
     // If user is already logged in, redirect to main app (layout will handle onboarding check)
     if (session && !isPending) {
-      router.push("/mail");
+      router.push("/logs");
     }
   }, [session, isPending, router]);
 
@@ -25,13 +25,8 @@ export default function LoginPage() {
         <BackgroundSvg />
         <div className="w-full max-w-sm z-10 px-4 sm:px-0">
           <div className="flex flex-col items-center gap-6">
-            <img
-              src="/inbound-logo-3.png"
-              alt="Inbound Logo"
-              className="w-11 h-11 shadow-[0_4px_10px_1px_rgba(0,0,0,0.3)] dark:shadow-[0_4px_10px_1px_rgba(0,0,0,0.5)] rounded-[14px]"
-            />
+            <InboundIcon variant="primary" width={44} height={44} />
             <div className="flex items-center gap-2 text-foreground">
-              <InboundIcon className="w-7 h-7" variant="white" />
               <span className="text-xl">Loading...</span>
             </div>
           </div>
@@ -52,12 +47,8 @@ export default function LoginPage() {
       <div className="w-full max-w-sm z-10 px-4 sm:px-0">
         {/* Logo section */}
         <Link href="/">
-          <div className="flex flex-col items-center gap-6 mb-8">
-            <img
-              src="/inbound-logo-3.png"
-              alt="Inbound Logo"
-              className="w-11 h-11 shadow-[0_4px_10px_1px_rgba(0,0,0,0.3)] dark:shadow-[0_4px_10px_1px_rgba(0,0,0,0.5)] rounded-[14px]"
-            />
+          <div className="flex flex-col items-center gap-3 mb-8">
+            <InboundIcon variant="primary" width={44} height={44} />
 
             <div className="flex flex-col items-center gap-2">
               <p className="text-3xl font-semibold text-foreground">Welcome Back!</p>

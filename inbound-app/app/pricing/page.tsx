@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { Button } from "@/components/ui/button"
 import { PricingTable } from "@/components/autumn/pricing-table-format"
 import { SiteHeader } from "@/components/site-header"
+import InboundIcon from '@/components/icons/inbound'
 
 export default function PricingPage() {
   return (
@@ -108,7 +109,7 @@ export default function PricingPage() {
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center gap-3 mb-4 md:mb-0">
-              <Image src="/inbound-logo-3.png" alt="inbound" width={32} height={32} />
+              <InboundIcon variant="primary" width={32} height={32} />
               <span className="text-xl font-semibold text-[var(--text-primary)]">inbound</span>
             </div>
             <div className="flex gap-8 text-sm text-[var(--text-muted)]">

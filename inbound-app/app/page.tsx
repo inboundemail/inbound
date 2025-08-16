@@ -19,6 +19,7 @@ import InboxArrowDown from '@/components/icons/inbox-arrow-down';
 import Settings3 from '@/components/icons/settings-3';
 import PaperPlane2 from '@/components/icons/paper-plane-2';
 import { SiteHeader } from "@/components/site-header";
+import InboundIcon from '@/components/icons/inbound';
 
 // High-contrast Monokai theme with Monaspace Neon
 const monokaiTheme = {
@@ -778,7 +779,7 @@ await inbound.emails.send(emailData)
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center gap-3 mb-4 md:mb-0">
-              <Image src="/inbound-logo-3.png" alt="inbound" width={32} height={32} />
+              <InboundIcon variant="primary" width={32} height={32} />
               <span className="text-xl font-semibold text-[var(--text-primary)]">inbound</span>
             </div>
             <div className="flex gap-8 text-sm text-[var(--text-muted)]">

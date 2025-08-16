@@ -528,11 +528,7 @@ export default function BountiesPage() {
         <div className="w-full max-w-6xl mx-auto px-4 pt-8">
           <Link href="/">
             <div className="flex items-center gap-3 mb-8">
-              <img
-                src="/inbound-logo-3.png"
-                alt="Inbound Logo"
-                className="w-11 h-11 shadow-[0_4px_10px_1px_rgba(0,0,0,0.3)] dark:shadow-[0_4px_10px_1px_rgba(0,0,0,0.5)] rounded-[14px]"
-              />
+              <InboundIcon variant="white" width={44} height={44} />
               <div className="flex flex-col">
                 <p className="text-2xl font-semibold text-foreground">Bounty Program</p>
                 <p className="text-sm text-muted-foreground">

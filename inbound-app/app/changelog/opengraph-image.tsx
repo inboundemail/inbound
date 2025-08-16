@@ -1,6 +1,7 @@
 import { ImageResponse } from 'next/og'
 import { promises as fs } from 'fs'
 import path from 'path'
+import InboundIcon from '@/components/icons/inbound'
 
 export const runtime = 'nodejs'
 
@@ -99,7 +100,7 @@ export default async function Image() {
               alignItems: 'center',
             }}
           >
-            <img src="https://inbound.new/inbound-logo-3.png" alt="Inbound" style={{ width: '39px', height: '39px', marginRight: '10px' }} />
+            <InboundIcon variant="white" width={39} height={39} />
             inbound
           </div>
         </div>

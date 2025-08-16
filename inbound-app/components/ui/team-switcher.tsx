@@ -17,7 +17,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import InboundIcon from "../InboundIcon"
+import InboundIcon from "../icons/inbound"
 export function TeamSwitcher({
   teams,
   enabled,
@@ -42,7 +42,7 @@ export function TeamSwitcher({
         <SidebarMenuItem>
           <div className="flex items-center justify-center gap-2 w-full mx-auto">
             {/* <InboundIcon className="h-8 w-8 group-data-[collapsible=icon]:h-6 group-data-[collapsible=icon]:w-6" variant="white" /> */}
-            <img src="/inbound-logo-3.png" alt="Inbound Logo" className="h-8 w-8 group-data-[collapsible=icon]:h-6 group-data-[collapsible=icon]:w-6" />
+            <InboundIcon variant="white" width={32} height={32} />
             <div className="text-left text-xl leading-tight group-data-[collapsible=icon]:hidden">
               <span className="truncate font-semibold font-outfit text-3xl">
                 inbound
