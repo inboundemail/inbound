@@ -35,6 +35,7 @@ export interface PostEmailsRequest {
         path?: string
         content_type?: string  // snake_case (legacy)
         contentType?: string   // camelCase (Resend-compatible)
+        contentId?: string     // For inline attachments (CID support)
     }>
     tags?: Array<{  // Resend-compatible tags
         name: string
@@ -90,8 +91,15 @@ function buildRawEmailMessage(params: {
     textBody?: string
     htmlBody?: string
     headers?: Record<string, string>
+    attachments?: Array<{
+        content: string // Base64 encoded
+        filename: string
+        contentType?: string
+        contentId?: string
+    }>
 }): string {
-    const boundary = `----=_NextPart_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const mainBoundary = `----=_NextPart_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const altBoundary = `----=_Alternative_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     
     // Build RFC 2822 compliant email headers
     const headers = [
@@ -113,35 +121,106 @@ function buildRawEmailMessage(params: {
 
     const hasText = !!params.textBody
     const hasHtml = !!params.htmlBody
+    const hasAttachments = !!(params.attachments && params.attachments.length > 0)
 
-    if (!hasText && !hasHtml) {
-        // No content
+    // If no content at all
+    if (!hasText && !hasHtml && !hasAttachments) {
         headers.push('Content-Type: text/plain; charset=UTF-8')
         return [...headers, '', '[No content]'].join('\r\n')
     }
 
-    if (hasText && hasHtml) {
-        // Multipart alternative
-        headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`)
+    // If we have attachments, use multipart/mixed
+    if (hasAttachments) {
+        headers.push(`Content-Type: multipart/mixed; boundary="${mainBoundary}"`)
         
         const messageParts = [
             ...headers,
             '',
             'This is a multi-part message in MIME format.',
             '',
-            `--${boundary}`,
+            `--${mainBoundary}`
+        ]
+
+        // Handle the content part (text/html/both)
+        if (hasText && hasHtml) {
+            // Both text and HTML - use multipart/alternative
+            messageParts.push(
+                `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+                '',
+                `--${altBoundary}`,
+                'Content-Type: text/plain; charset=UTF-8',
+                'Content-Transfer-Encoding: 8bit',
+                '',
+                params.textBody,
+                '',
+                `--${altBoundary}`,
+                'Content-Type: text/html; charset=UTF-8',
+                'Content-Transfer-Encoding: 8bit',
+                '',
+                params.htmlBody,
+                '',
+                `--${altBoundary}--`
+            )
+        } else if (hasHtml) {
+            // HTML only
+            messageParts.push(
+                'Content-Type: text/html; charset=UTF-8',
+                'Content-Transfer-Encoding: 8bit',
+                '',
+                params.htmlBody
+            )
+        } else if (hasText) {
+            // Text only
+            messageParts.push(
+                'Content-Type: text/plain; charset=UTF-8',
+                'Content-Transfer-Encoding: 8bit',
+                '',
+                params.textBody
+            )
+        }
+
+        // Add attachments
+        for (const attachment of params.attachments) {
+            messageParts.push(
+                '',
+                `--${mainBoundary}`,
+                `Content-Type: ${attachment.contentType || 'application/octet-stream'}`,
+                'Content-Transfer-Encoding: base64',
+                `Content-Disposition: attachment; filename="${attachment.filename}"`,
+                ...(attachment.contentId ? [`Content-ID: <${attachment.contentId}>`] : []),
+                '',
+                // Split base64 content into 76-character lines per RFC 2045
+                attachment.content.match(/.{1,76}/g)?.join('\r\n') || attachment.content
+            )
+        }
+
+        messageParts.push('', `--${mainBoundary}--`)
+        return messageParts.join('\r\n')
+    }
+
+    // No attachments - handle simple cases
+    if (hasText && hasHtml) {
+        // Multipart alternative
+        headers.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`)
+        
+        const messageParts = [
+            ...headers,
+            '',
+            'This is a multi-part message in MIME format.',
+            '',
+            `--${altBoundary}`,
             'Content-Type: text/plain; charset=UTF-8',
             'Content-Transfer-Encoding: 8bit',
             '',
             params.textBody,
             '',
-            `--${boundary}`,
+            `--${altBoundary}`,
             'Content-Type: text/html; charset=UTF-8',
             'Content-Transfer-Encoding: 8bit',
             '',
             params.htmlBody,
             '',
-            `--${boundary}--`
+            `--${altBoundary}--`
         ]
         
         return messageParts.join('\r\n')
@@ -342,7 +421,8 @@ export async function POST(request: NextRequest) {
                     content: att.content,
                     filename: att.filename,
                     path: att.path,
-                    content_type: att.contentType || att.content_type  // Support both formats
+                    content_type: att.contentType || att.content_type,  // Support both formats
+                    contentId: att.contentId  // Add CID support
                 }))
             ) : null,
             tags: body.tags ? JSON.stringify(body.tags) : null, // Store tags
@@ -382,11 +462,22 @@ export async function POST(request: NextRequest) {
             
             let sesResponse: any
             
-            // If we have a display name, use SendRawEmailCommand to preserve it
-            if (fromParsed.name) {
-                console.log(`📧 Using raw email format to preserve display name: "${fromParsed.name}"`)
+            // Prepare attachments for raw message if provided
+            const processedAttachments = body.attachments?.map(att => ({
+                content: att.content,
+                filename: att.filename,
+                contentType: att.contentType || att.content_type || 'application/octet-stream',
+                contentId: att.contentId
+            }))
+            
+            // Use SendRawEmailCommand if we have display names or attachments
+            if (fromParsed.name || processedAttachments?.length) {
+                const logReason = fromParsed.name 
+                    ? `display name: "${fromParsed.name}"` 
+                    : `${processedAttachments?.length} attachment(s)`
+                console.log(`📧 Using raw email format for ${logReason}`)
                 
-                // Build raw email message with display name
+                // Build raw email message with display name and/or attachments
                 const rawMessage = buildRawEmailMessage({
                     from: formatEmailWithName(sourceEmail, fromParsed.name),
                     to: toAddresses,
@@ -396,7 +487,8 @@ export async function POST(request: NextRequest) {
                     subject: body.subject,
                     textBody: body.text,
                     htmlBody: body.html,
-                    headers: body.headers
+                    headers: body.headers,
+                    attachments: processedAttachments
                 })
                 
                 const rawCommand = new SendRawEmailCommand({
@@ -409,7 +501,8 @@ export async function POST(request: NextRequest) {
                 
                 sesResponse = await sesClient.send(rawCommand)
             } else {
-                // Use regular SendEmailCommand for simple emails without display names
+                // Use regular SendEmailCommand for simple emails without display names or attachments
+                console.log('📧 Using simple email format')
                 const sesCommand = new SendEmailCommand({
                     Source: sourceEmail,
                     Destination: {

@@ -436,6 +436,7 @@ export interface PostEmailsRequest {
     filename: string
     path?: string
     contentType?: string  // Changed from content_type to match Resend
+    contentId?: string    // For inline attachments (CID support)
   }>
   tags?: Array<{  // Added tags support like Resend
     name: string
@@ -478,6 +479,7 @@ export interface PostEmailReplyRequest {
     filename: string
     path?: string
     contentType?: string  // Changed from content_type to match Resend
+    contentId?: string    // For inline attachments (CID support)
   }>
   tags?: Array<{  // Added tags support like Resend
     name: string
