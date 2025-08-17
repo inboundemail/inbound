@@ -2,7 +2,7 @@
 
 import { getCurrentSession } from '@/lib/auth/auth-utils'
 import { db } from '@/lib/db'
-import { emailAddresses, vipConfigs, userAccounts, vipEmailAttempts, vipPaymentSessions } from '@/lib/db/schema'
+import { emailAddresses, vipConfigs, userAccounts, vipEmailAttempts, vipPaymentSessions, endpoints, user } from '@/lib/db/schema'
 import { eq, and, desc, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { revalidatePath } from 'next/cache'
@@ -31,9 +31,38 @@ export async function toggleVipStatus(emailAddressId: string, isEnabled: boolean
     }
 
     if (isEnabled) {
-      // Create VIP config if enabling
+      // Get user's email for default destination
+      const userData = await db
+        .select({ email: user.email })
+        .from(user)
+        .where(eq(user.id, session.user.id))
+        .limit(1)
+      
+      const userEmail = userData[0]?.email || null
+
+      // Create VIP endpoint first
+      const endpointId = nanoid()
       const vipConfigId = nanoid()
       
+      // Create the VIP webhook endpoint
+      await db.insert(endpoints).values({
+        id: endpointId,
+        name: `VIP - ${emailAddress[0].address}`,
+        type: 'webhook',
+        webhookFormat: 'inbound',
+        config: JSON.stringify({
+          url: `${process.env.NEXT_PUBLIC_BETTER_AUTH_URL || 'https://inbound.new'}/api/products/inboundvip`,
+          timeout: 30,
+          retryAttempts: 3,
+        }),
+        isActive: true,
+        description: `VIP protection for ${emailAddress[0].address}`,
+        userId: session.user.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      
+      // Create VIP config
       await db.insert(vipConfigs).values({
         id: vipConfigId,
         emailAddressId: emailAddressId,
@@ -41,26 +70,51 @@ export async function toggleVipStatus(emailAddressId: string, isEnabled: boolean
         priceInCents: 100, // Default $1.00
         allowAfterPayment: false,
         paymentLinkExpirationHours: 24,
+        destinationEmail: userEmail, // Default to user's account email
+        endpointId: endpointId, // Link to the VIP endpoint
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
 
+      // Update email address to use the VIP endpoint
       await db
         .update(emailAddresses)
         .set({
           isVipEnabled: true,
           vipConfigId: vipConfigId,
+          endpointId: endpointId, // Assign the VIP endpoint
           updatedAt: new Date(),
         })
         .where(eq(emailAddresses.id, emailAddressId))
     } else {
       // Disable VIP
+      // Get the VIP config to find the endpoint
+      const vipConfig = await db
+        .select({ endpointId: vipConfigs.endpointId })
+        .from(vipConfigs)
+        .where(eq(vipConfigs.emailAddressId, emailAddressId))
+        .limit(1)
+      
+      // Delete the VIP endpoint if it exists
+      if (vipConfig[0]?.endpointId) {
+        await db
+          .delete(endpoints)
+          .where(eq(endpoints.id, vipConfig[0].endpointId))
+      }
+      
+      // Delete the VIP config
+      await db
+        .delete(vipConfigs)
+        .where(eq(vipConfigs.emailAddressId, emailAddressId))
+      
+      // Update email address to remove VIP
       await db
         .update(emailAddresses)
         .set({
           isVipEnabled: false,
           vipConfigId: null,
+          endpointId: null, // Remove the endpoint assignment
           updatedAt: new Date(),
         })
         .where(eq(emailAddresses.id, emailAddressId))
@@ -81,6 +135,7 @@ export async function updateVipConfig(
     expirationHours?: string
     allowAfterPayment?: boolean
     customMessage?: string
+    destinationEmail?: string
   }
 ) {
   const session = await getCurrentSession()
@@ -129,6 +184,10 @@ export async function updateVipConfig(
 
     if (data.customMessage !== undefined) {
       updates.customMessage = data.customMessage || null
+    }
+
+    if (data.destinationEmail !== undefined) {
+      updates.destinationEmail = data.destinationEmail || null
     }
 
     await db

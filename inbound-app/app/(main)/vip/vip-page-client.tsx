@@ -89,6 +89,7 @@ export default function VipPageClient({
         expirationHours: formData.get('expirationHours') as string,
         allowAfterPayment: formData.get('allowAfterPayment') === 'on',
         customMessage: formData.get('customMessage') as string,
+        destinationEmail: formData.get('destinationEmail') as string,
       })
       
       if (result.error) {
@@ -516,7 +517,20 @@ export default function VipPageClient({
                           />
                         </div>
 
-
+                        <div>
+                          <Label htmlFor={`destination-${vipConfig.id}`} className="text-xs">Destination Email (optional)</Label>
+                          <Input
+                            id={`destination-${vipConfig.id}`}
+                            name="destinationEmail"
+                            type="email"
+                            placeholder="Where to forward emails after payment (defaults to your account email)"
+                            defaultValue={vipConfig.destinationEmail || ''}
+                            className="h-8 text-sm mt-1"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Leave empty to use your account email
+                          </p>
+                        </div>
 
                         <div className="flex justify-end pt-2">
                           <Button 

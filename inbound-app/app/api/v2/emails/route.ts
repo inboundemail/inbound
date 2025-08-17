@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateRequest } from '../helper/main'
-import { SESClient, SendEmailCommand, SendRawEmailCommand } from '@aws-sdk/client-ses'
+import { processAttachments, attachmentsToStorageFormat, type AttachmentInput } from '../helper/attachment-processor'
+import { buildRawEmailMessage } from '../helper/email-builder'
+import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses'
 import { db } from '@/lib/db'
 import { sentEmails, emailDomains, SENT_EMAIL_STATUS } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
@@ -29,13 +31,7 @@ export interface PostEmailsRequest {
     html?: string
     text?: string
     headers?: Record<string, string>
-    attachments?: Array<{
-        content: string // Base64 encoded
-        filename: string
-        path?: string
-        content_type?: string  // snake_case (legacy)
-        contentType?: string   // camelCase (Resend-compatible)
-    }>
+    attachments?: AttachmentInput[]
     tags?: Array<{  // Resend-compatible tags
         name: string
         value: string
@@ -79,84 +75,7 @@ function formatEmailWithName(email: string, name?: string): string {
     return email
 }
 
-// Helper function to build raw email message for SES
-function buildRawEmailMessage(params: {
-    from: string
-    to: string[]
-    cc?: string[]
-    bcc?: string[]
-    replyTo?: string[]
-    subject: string
-    textBody?: string
-    htmlBody?: string
-    headers?: Record<string, string>
-}): string {
-    const boundary = `----=_NextPart_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
-    // Build RFC 2822 compliant email headers
-    const headers = [
-        `From: ${params.from}`,
-        `To: ${params.to.join(', ')}`,
-        ...(params.cc && params.cc.length > 0 ? [`Cc: ${params.cc.join(', ')}`] : []),
-        ...(params.replyTo && params.replyTo.length > 0 ? [`Reply-To: ${params.replyTo.join(', ')}`] : []),
-        `Subject: ${params.subject}`,
-        `Date: ${new Date().toUTCString()}`,
-        `MIME-Version: 1.0`
-    ]
-
-    // Add custom headers if provided
-    if (params.headers) {
-        for (const [key, value] of Object.entries(params.headers)) {
-            headers.push(`${key}: ${value}`)
-        }
-    }
-
-    const hasText = !!params.textBody
-    const hasHtml = !!params.htmlBody
-
-    if (!hasText && !hasHtml) {
-        // No content
-        headers.push('Content-Type: text/plain; charset=UTF-8')
-        return [...headers, '', '[No content]'].join('\r\n')
-    }
-
-    if (hasText && hasHtml) {
-        // Multipart alternative
-        headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`)
-        
-        const messageParts = [
-            ...headers,
-            '',
-            'This is a multi-part message in MIME format.',
-            '',
-            `--${boundary}`,
-            'Content-Type: text/plain; charset=UTF-8',
-            'Content-Transfer-Encoding: 8bit',
-            '',
-            params.textBody,
-            '',
-            `--${boundary}`,
-            'Content-Type: text/html; charset=UTF-8',
-            'Content-Transfer-Encoding: 8bit',
-            '',
-            params.htmlBody,
-            '',
-            `--${boundary}--`
-        ]
-        
-        return messageParts.join('\r\n')
-    } else if (hasHtml) {
-        // HTML only
-        headers.push('Content-Type: text/html; charset=UTF-8')
-        headers.push('Content-Transfer-Encoding: 8bit')
-        return [...headers, '', params.htmlBody].join('\r\n')
-    } else {
-        // Text only
-        headers.push('Content-Type: text/plain; charset=UTF-8')
-        headers.push('Content-Transfer-Encoding: 8bit')
-        return [...headers, '', params.textBody].join('\r\n')
-    }
-}
+// buildRawEmailMessage function moved to ../helper/email-builder.ts
 
 // Initialize SES client
 const awsRegion = process.env.AWS_REGION || 'us-east-2'
@@ -294,6 +213,22 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        // Process attachments if provided
+        console.log('📎 Processing attachments')
+        let processedAttachments: any[] = []
+        if (body.attachments && body.attachments.length > 0) {
+            try {
+                processedAttachments = await processAttachments(body.attachments)
+                console.log('✅ Attachments processed successfully:', processedAttachments.length)
+            } catch (attachmentError) {
+                console.error('❌ Attachment processing error:', attachmentError)
+                return NextResponse.json(
+                    { error: attachmentError instanceof Error ? attachmentError.message : 'Failed to process attachments' },
+                    { status: 400 }
+                )
+            }
+        }
+
         // Check Autumn for email sending limits
         console.log('🔍 Checking email sending limits with Autumn')
         const { data: emailCheck, error: emailCheckError } = await autumn.check({
@@ -336,14 +271,8 @@ export async function POST(request: NextRequest) {
             textBody: body.text,
             htmlBody: body.html,
             headers: body.headers ? JSON.stringify(body.headers) : null,
-            attachments: body.attachments ? JSON.stringify(
-                // Normalize attachment fields to support both formats
-                body.attachments.map(att => ({
-                    content: att.content,
-                    filename: att.filename,
-                    path: att.path,
-                    content_type: att.contentType || att.content_type  // Support both formats
-                }))
+            attachments: processedAttachments.length > 0 ? JSON.stringify(
+                attachmentsToStorageFormat(processedAttachments)
             ) : null,
             tags: body.tags ? JSON.stringify(body.tags) : null, // Store tags
             status: SENT_EMAIL_STATUS.PENDING,
@@ -379,71 +308,34 @@ export async function POST(request: NextRequest) {
             // Parse the from address to support display names
             const fromParsed = parseEmailWithName(body.from)
             const sourceEmail = fromParsed.email
+            const formattedFromAddress = formatEmailWithName(sourceEmail, fromParsed.name)
             
-            let sesResponse: any
+            // Always use SendRawEmailCommand for full MIME support (attachments, display names, etc.)
+            console.log('📧 Building raw email message with full MIME support')
             
-            // If we have a display name, use SendRawEmailCommand to preserve it
-            if (fromParsed.name) {
-                console.log(`📧 Using raw email format to preserve display name: "${fromParsed.name}"`)
-                
-                // Build raw email message with display name
-                const rawMessage = buildRawEmailMessage({
-                    from: formatEmailWithName(sourceEmail, fromParsed.name),
-                    to: toAddresses,
-                    cc: ccAddresses.length > 0 ? ccAddresses : undefined,
-                    bcc: bccAddresses.length > 0 ? bccAddresses : undefined,
-                    replyTo: replyToAddresses.length > 0 ? replyToAddresses : undefined,
-                    subject: body.subject,
-                    textBody: body.text,
-                    htmlBody: body.html,
-                    headers: body.headers
-                })
-                
-                const rawCommand = new SendRawEmailCommand({
-                    RawMessage: {
-                        Data: Buffer.from(rawMessage)
-                    },
-                    Source: sourceEmail,
-                    Destinations: [...toAddresses, ...ccAddresses, ...bccAddresses].map(extractEmailAddress)
-                })
-                
-                sesResponse = await sesClient.send(rawCommand)
-            } else {
-                // Use regular SendEmailCommand for simple emails without display names
-                const sesCommand = new SendEmailCommand({
-                    Source: sourceEmail,
-                    Destination: {
-                        ToAddresses: toAddresses.map(extractEmailAddress),
-                        CcAddresses: ccAddresses.map(extractEmailAddress),
-                        BccAddresses: bccAddresses.map(extractEmailAddress)
-                    },
-                    Message: {
-                        Subject: {
-                            Data: body.subject,
-                            Charset: 'UTF-8'
-                        },
-                        Body: {
-                            ...(body.text && {
-                                Text: {
-                                    Data: body.text,
-                                    Charset: 'UTF-8'
-                                }
-                            }),
-                            ...(body.html && {
-                                Html: {
-                                    Data: body.html,
-                                    Charset: 'UTF-8'
-                                }
-                            })
-                        }
-                    },
-                    ...(replyToAddresses.length > 0 && {
-                        ReplyToAddresses: replyToAddresses.map(extractEmailAddress)
-                    })
-                })
-                
-                sesResponse = await sesClient.send(sesCommand)
-            }
+            const rawMessage = buildRawEmailMessage({
+                from: formattedFromAddress,
+                to: toAddresses,
+                cc: ccAddresses.length > 0 ? ccAddresses : undefined,
+                bcc: bccAddresses.length > 0 ? bccAddresses : undefined,
+                replyTo: replyToAddresses.length > 0 ? replyToAddresses : undefined,
+                subject: body.subject,
+                textBody: body.text,
+                htmlBody: body.html,
+                customHeaders: body.headers,
+                attachments: processedAttachments,
+                date: new Date()
+            })
+            
+            const rawCommand = new SendRawEmailCommand({
+                RawMessage: {
+                    Data: Buffer.from(rawMessage)
+                },
+                Source: sourceEmail,
+                Destinations: [...toAddresses, ...ccAddresses, ...bccAddresses].map(extractEmailAddress)
+            })
+            
+            const sesResponse = await sesClient.send(rawCommand)
             const messageId = sesResponse.MessageId
 
             console.log('✅ Email sent successfully via SES:', messageId)

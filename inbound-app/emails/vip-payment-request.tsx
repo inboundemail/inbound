@@ -48,7 +48,7 @@ export const VipPaymentRequestEmail = ({
       <Body style={main}>
         <Container style={container}>
           <Img
-            src={`${process.env.NEXT_PUBLIC_APP_URL}/logo.png`}
+            src={`${process.env.NEXT_PUBLIC_BETTER_AUTH_URL}/logo.png`}
             width="120"
             height="36"
             alt="Inbound"

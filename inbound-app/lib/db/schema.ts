@@ -528,6 +528,8 @@ export const vipConfigs = pgTable('vip_configs', {
   allowAfterPayment: boolean('allow_after_payment').default(false), // false = single email, true = allow all future
   customMessage: text('custom_message'), // Custom message in payment email
   paymentLinkExpirationHours: integer('payment_link_expiration_hours').default(24),
+  destinationEmail: varchar('destination_email', { length: 255 }), // Where to forward emails after payment (defaults to account email)
+  endpointId: varchar('endpoint_id', { length: 255 }), // Reference to the VIP endpoint in endpoints table
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),

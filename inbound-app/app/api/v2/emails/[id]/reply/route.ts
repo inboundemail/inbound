@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateRequest } from '../../../helper/main'
+import { processAttachments, attachmentsToStorageFormat, type AttachmentInput } from '../../../helper/attachment-processor'
+import { buildRawEmailMessage } from '../../../helper/email-builder'
 import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses'
 import { db } from '@/lib/db'
 import { sentEmails, emailDomains, structuredEmails, SENT_EMAIL_STATUS } from '@/lib/db/schema'
@@ -30,13 +32,7 @@ export interface PostEmailReplyRequest {
     html?: string
     text?: string
     headers?: Record<string, string>
-    attachments?: Array<{
-        content: string // Base64 encoded
-        filename: string
-        path?: string
-        content_type?: string     // snake_case (legacy)
-        contentType?: string      // camelCase (Resend-compatible)
-    }>
+    attachments?: AttachmentInput[]
     include_original?: boolean    // snake_case (legacy)
     includeOriginal?: boolean     // camelCase (Resend-compatible)
     tags?: Array<{  // Resend-compatible tags
@@ -132,89 +128,7 @@ function quoteMessage(originalEmail: any, includeOriginal: boolean = true): stri
     return quoteHeader + quotedLines.join('\n')
 }
 
-// Build raw email message
-function buildRawEmailMessage(params: {
-    from: string
-    to: string[]
-    cc?: string[]
-    bcc?: string[]
-    replyTo?: string[]
-    subject: string
-    textBody?: string
-    htmlBody?: string
-    messageId: string
-    inReplyTo?: string
-    references?: string[]
-    date: Date
-    customHeaders?: Record<string, string>
-}): string {
-    const boundary = `----=_Part_${nanoid()}`
-    
-    // Check if Message-ID is provided in custom headers
-    const hasCustomMessageId = params.customHeaders && 
-        Object.keys(params.customHeaders).some(key => key.toLowerCase() === 'message-id')
-    
-    // Build headers
-    let headers = [
-        `From: ${params.from}`,
-        `To: ${params.to.join(', ')}`,
-        params.cc && params.cc.length > 0 ? `Cc: ${params.cc.join(', ')}` : null,
-        params.replyTo && params.replyTo.length > 0 ? `Reply-To: ${params.replyTo.join(', ')}` : null,
-        `Subject: ${params.subject}`,
-        // Only add Message-ID if not provided in custom headers
-        !hasCustomMessageId ? `Message-ID: <${params.messageId}@${extractDomain(params.from)}>` : null,
-        params.inReplyTo ? `In-Reply-To: ${params.inReplyTo}` : null,
-        params.references && params.references.length > 0 ? `References: ${params.references.join(' ')}` : null,
-        `Date: ${formatEmailDate(params.date)}`,
-        'MIME-Version: 1.0',
-    ].filter(Boolean)
-    
-    // Add custom headers
-    if (params.customHeaders) {
-        for (const [key, value] of Object.entries(params.customHeaders)) {
-            headers.push(`${key}: ${value}`)
-        }
-    }
-    
-    // Build body based on content type
-    let body = []
-    
-    if (params.textBody && params.htmlBody) {
-        // Multipart alternative
-        headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`)
-        body.push('')  // Empty line between headers and body
-        
-        // Text part
-        body.push(`--${boundary}`)
-        body.push('Content-Type: text/plain; charset=UTF-8')
-        body.push('Content-Transfer-Encoding: quoted-printable')
-        body.push('')
-        body.push(params.textBody)
-        
-        // HTML part
-        body.push(`--${boundary}`)
-        body.push('Content-Type: text/html; charset=UTF-8')
-        body.push('Content-Transfer-Encoding: quoted-printable')
-        body.push('')
-        body.push(params.htmlBody)
-        
-        body.push(`--${boundary}--`)
-    } else if (params.textBody) {
-        // Plain text only
-        headers.push('Content-Type: text/plain; charset=UTF-8')
-        headers.push('Content-Transfer-Encoding: quoted-printable')
-        body.push('')  // Empty line between headers and body
-        body.push(params.textBody)
-    } else if (params.htmlBody) {
-        // HTML only
-        headers.push('Content-Type: text/html; charset=UTF-8')
-        headers.push('Content-Transfer-Encoding: quoted-printable')
-        body.push('')  // Empty line between headers and body
-        body.push(params.htmlBody)
-    }
-    
-    return headers.join('\r\n') + '\r\n' + body.join('\r\n')
-}
+// buildRawEmailMessage function moved to ../../../helper/email-builder.ts
 
 // Initialize SES client
 const awsRegion = process.env.AWS_REGION || 'us-east-2'
@@ -421,6 +335,22 @@ export async function POST(
             }
         }
 
+        // Process attachments if provided
+        console.log('📎 Processing reply attachments')
+        let processedAttachments: any[] = []
+        if (body.attachments && body.attachments.length > 0) {
+            try {
+                processedAttachments = await processAttachments(body.attachments)
+                console.log('✅ Reply attachments processed successfully:', processedAttachments.length)
+            } catch (attachmentError) {
+                console.error('❌ Reply attachment processing error:', attachmentError)
+                return NextResponse.json(
+                    { error: attachmentError instanceof Error ? attachmentError.message : 'Failed to process attachments' },
+                    { status: 400 }
+                )
+            }
+        }
+
         // Check Autumn for email sending limits
         console.log('🔍 Checking email sending limits with Autumn')
         const { data: emailCheck, error: emailCheckError } = await autumn.check({
@@ -528,14 +458,8 @@ export async function POST(
                 'In-Reply-To': inReplyTo,
                 'References': references.join(' ')
             }),
-            attachments: body.attachments ? JSON.stringify(
-                // Normalize attachment fields to support both formats
-                body.attachments.map(att => ({
-                    content: att.content,
-                    filename: att.filename,
-                    path: att.path,
-                    content_type: att.contentType || att.content_type  // Support both formats
-                }))
+            attachments: processedAttachments.length > 0 ? JSON.stringify(
+                attachmentsToStorageFormat(processedAttachments)
             ) : null,
             tags: body.tags ? JSON.stringify(body.tags) : null, // Store tags
             status: SENT_EMAIL_STATUS.PENDING,
@@ -569,7 +493,7 @@ export async function POST(
         try {
             console.log('📤 Sending reply email via AWS SES')
             
-            // Build raw email message with proper headers
+            // Build raw email message with proper headers and attachments
             const rawMessage = buildRawEmailMessage({
                 from: formattedFromAddress,
                 to: toAddresses,
@@ -583,7 +507,8 @@ export async function POST(
                 inReplyTo,
                 references,
                 date: new Date(),
-                customHeaders: body.headers
+                customHeaders: body.headers,
+                attachments: processedAttachments
             })
             
             // Send raw email to preserve headers

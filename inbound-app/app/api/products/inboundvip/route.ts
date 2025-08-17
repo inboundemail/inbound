@@ -2,14 +2,85 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Inbound, isInboundWebhook } from '@inboundemail/sdk'
 import type { InboundWebhookPayload } from '@inboundemail/sdk'
 import { db } from '@/lib/db'
-import { emailAddresses, vipConfigs, vipAllowedSenders, vipPaymentSessions, vipEmailAttempts, userAccounts, structuredEmails, apikey } from '@/lib/db/schema'
+import { emailAddresses, vipConfigs, vipAllowedSenders, vipPaymentSessions, vipEmailAttempts, userAccounts, structuredEmails, apikey, user } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import Stripe from 'stripe'
 import { generateVipPaymentRequestEmail } from '@/emails/vip-payment-request-preview'
+import { EmailForwarder } from '@/lib/email-management/email-forwarder'
 
 // Default Stripe instance for Inbound
 const defaultStripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+
+/**
+ * Forward VIP email to configured destination
+ */
+async function forwardVipEmail(email: any, vipConfig: any, recipientEmail: string): Promise<void> {
+  try {
+    console.log(`📤 Forwarding VIP email to destination for ${recipientEmail}`)
+    
+    // Get destination email (from vipConfig or user's account email)
+    let destinationEmail = vipConfig.destinationEmail
+    
+    if (!destinationEmail) {
+      // Get user's account email as fallback
+      const userData = await db
+        .select({ email: user.email })
+        .from(user)
+        .where(eq(user.id, vipConfig.userId))
+        .limit(1)
+      
+      destinationEmail = userData[0]?.email
+    }
+    
+    if (!destinationEmail) {
+      throw new Error('No destination email configured for VIP forwarding')
+    }
+    
+    console.log(`📧 Forwarding VIP email to: ${destinationEmail}`)
+    
+    // Create email forwarder
+    const forwarder = new EmailForwarder()
+    
+    // Convert the webhook email to ParsedEmailData format
+    const parsedEmailData = {
+      messageId: email.id,
+      date: new Date(email.receivedAt),
+      subject: email.subject,
+      from: email.from,
+      to: email.to,
+      cc: email.cc,
+      bcc: email.bcc,
+      replyTo: email.replyTo,
+      inReplyTo: email.parsedData?.inReplyTo,
+      references: email.parsedData?.references,
+      textBody: email.cleanedContent?.text,
+      htmlBody: email.cleanedContent?.html,
+      attachments: email.attachments || [],
+      headers: email.parsedData?.headers || {},
+      priority: email.parsedData?.priority
+    }
+    
+    // Forward the email
+    await forwarder.forwardEmail(
+      parsedEmailData,
+      recipientEmail, // Use the VIP email as the from address
+      [destinationEmail],
+      {
+        subjectPrefix: '[VIP] ',
+        includeAttachments: true,
+        recipientEmail: recipientEmail,
+        senderName: 'VIP Email'
+      }
+    )
+    
+    console.log(`✅ Successfully forwarded VIP email to ${destinationEmail}`)
+    
+  } catch (error) {
+    console.error('❌ Error forwarding VIP email:', error)
+    throw error
+  }
+}
 
 /**
  * Get user's API key for Inbound SDK operations
@@ -118,23 +189,16 @@ export async function POST(request: NextRequest) {
           updatedAt: new Date(),
         })
         
+        // Forward the email to the configured destination
+        await forwardVipEmail(email, vipConfig[0], recipientEmail)
+        
         return NextResponse.json({ success: true })
       }
     }
 
-    // Get user's API key for Inbound SDK
-    const userApiKey = await getUserApiKey(vipConfig[0].userId)
-    if (!userApiKey) {
-      console.error('No API key found for user:', vipConfig[0].userId)
-      return NextResponse.json(
-        { error: 'User API key not found' },
-        { status: 500 }
-      )
-    }
-
-    // Create user-specific Inbound client
+    // Create Inbound client using system API key for sending payment requests
     const inbound = new Inbound({
-      apiKey: userApiKey,
+      apiKey: process.env.INBOUND_API_KEY!, // Use system API key
       defaultReplyFrom: 'payments@inbound.new'
     })
 
@@ -182,8 +246,8 @@ export async function POST(request: NextRequest) {
         recipientEmail,
         emailId: email.id,
       },
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/products/inboundvip/success?session_id=${sessionId}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/products/inboundvip/cancelled`,
+      success_url: `${process.env.NEXT_PUBLIC_BETTER_AUTH_URL}/api/products/inboundvip/success?session_id=${sessionId}`,
+      cancel_url: `${process.env.NEXT_PUBLIC_BETTER_AUTH_URL}/api/products/inboundvip/cancelled`,
       expires_at: Math.floor(expiresAt.getTime() / 1000), // Convert to Unix timestamp
     })
 

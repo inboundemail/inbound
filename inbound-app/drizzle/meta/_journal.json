@@ -253,6 +253,13 @@
       "when": 1755019305950,
       "tag": "0035_glorious_the_renegades",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1755391278425,
+      "tag": "0036_flaky_blur",
+      "breakpoints": true
     }
   ]
 }

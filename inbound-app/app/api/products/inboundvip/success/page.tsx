@@ -1,5 +1,5 @@
 import { db } from '@/lib/db'
-import { vipPaymentSessions, vipAllowedSenders, vipConfigs, vipEmailAttempts, structuredEmails } from '@/lib/db/schema'
+import { vipPaymentSessions, vipAllowedSenders, vipConfigs, vipEmailAttempts, structuredEmails, user } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import Envelope2 from '@/components/icons/envelope-2'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { nanoid } from 'nanoid'
+import { EmailForwarder } from '@/lib/email-management/email-forwarder'
 
 async function processPaymentSuccess(sessionId: string) {
   // Get payment session
@@ -72,7 +73,7 @@ async function processPaymentSuccess(sessionId: string) {
     })
     .where(eq(vipEmailAttempts.paymentSessionId, sessionId))
 
-  // Get the original email
+  // Forward the original email that was held up for payment
   const originalEmail = await db
     .select()
     .from(structuredEmails)
@@ -80,12 +81,65 @@ async function processPaymentSuccess(sessionId: string) {
     .limit(1)
 
   if (originalEmail[0]) {
-    // Deliver the original email
-    // This would typically trigger your normal email delivery flow
-    console.log('Delivering original email:', originalEmail[0].id)
-    
-    // You might want to send a notification to the recipient
-    // or trigger your normal email processing flow here
+    try {
+      console.log('Forwarding original email after VIP payment:', originalEmail[0].id)
+      
+      // Get destination email (from vipConfig or user's account email)
+      let destinationEmail = vipConfig[0].destinationEmail
+      
+      if (!destinationEmail) {
+        // Get user's account email as fallback
+        const userData = await db
+          .select({ email: user.email })
+          .from(user)
+          .where(eq(user.id, vipConfig[0].userId))
+          .limit(1)
+        
+        destinationEmail = userData[0]?.email
+      }
+      
+      if (destinationEmail) {
+        // Create email forwarder
+        const forwarder = new EmailForwarder()
+        
+        // Parse the structured email data
+        const parsedEmailData = {
+          messageId: originalEmail[0].messageId || originalEmail[0].id,
+          date: originalEmail[0].date || new Date(),
+          subject: originalEmail[0].subject || undefined,
+          from: originalEmail[0].fromData ? JSON.parse(originalEmail[0].fromData) : undefined,
+          to: originalEmail[0].toData ? JSON.parse(originalEmail[0].toData) : undefined,
+          cc: originalEmail[0].ccData ? JSON.parse(originalEmail[0].ccData) : undefined,
+          bcc: originalEmail[0].bccData ? JSON.parse(originalEmail[0].bccData) : undefined,
+          replyTo: originalEmail[0].replyToData ? JSON.parse(originalEmail[0].replyToData) : undefined,
+          inReplyTo: originalEmail[0].inReplyTo || undefined,
+          references: originalEmail[0].references ? JSON.parse(originalEmail[0].references) : undefined,
+          textBody: originalEmail[0].textBody || undefined,
+          htmlBody: originalEmail[0].htmlBody || undefined,
+          attachments: originalEmail[0].attachments ? JSON.parse(originalEmail[0].attachments) : [],
+          headers: originalEmail[0].headers ? JSON.parse(originalEmail[0].headers) : {},
+          priority: originalEmail[0].priority || undefined
+        }
+        
+        // Forward the email
+        await forwarder.forwardEmail(
+          parsedEmailData,
+          'vip@inbound.new', // Use VIP email as from
+          [destinationEmail],
+          {
+            subjectPrefix: '[VIP] ',
+            includeAttachments: true,
+            recipientEmail: 'vip@inbound.new',
+            senderName: 'VIP Email'
+          }
+        )
+        
+        console.log(`✅ Successfully forwarded VIP email to ${destinationEmail} after payment`)
+      }
+    } catch (error) {
+      console.error('Error forwarding email after VIP payment:', error)
+      // Don't fail the payment success page if forwarding fails
+    }
   }
 
   return { 
