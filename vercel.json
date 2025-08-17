@@ -9,8 +9,5 @@
     "app/api/cron/process-scheduled-emails/route.ts": {
       "maxDuration": 60
     }
-  },
-  "env": {
-    "CRON_SECRET": "@cron_secret"
   }
 }

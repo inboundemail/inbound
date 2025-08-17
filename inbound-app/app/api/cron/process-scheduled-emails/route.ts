@@ -56,29 +56,11 @@ export async function GET(request: NextRequest) {
     try {
         // Security check - verify cron secret (skip in development)
         const isDevelopment = process.env.NODE_ENV === 'development'
-        
+
         if (!isDevelopment) {
-            const cronSecret = process.env.CRON_SECRET
-            if (cronSecret) {
-                const providedSecret = request.headers.get('Authorization')?.replace('Bearer ', '') ||
-                    request.nextUrl.searchParams.get('secret')
-
-                if (providedSecret !== cronSecret) {
-                    console.log('❌ Invalid cron secret provided')
-                    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-                }
-                console.log('✅ Cron secret verified')
-            } else {
-                // For Vercel cron jobs, check if request is from Vercel
-                const userAgent = request.headers.get('User-Agent') || ''
-                const isVercelCron = userAgent.includes('vercel-cron') ||
-                    request.headers.get('x-vercel-cron') === '1'
-
-                if (!isVercelCron) {
-                    console.log('❌ Unauthorized cron request - not from Vercel and no secret configured')
-                    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-                }
-                console.log('✅ Vercel cron request verified')
+            const authHeader = request.headers.get('authorization');
+            if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+                return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
             }
         } else {
             console.log('🔧 Development mode - skipping authentication check')
@@ -160,7 +142,7 @@ export async function GET(request: NextRequest) {
                         const filename = att.filename || 'unknown'
                         const ext = filename.toLowerCase().split('.').pop()
                         let contentType = 'application/octet-stream' // Safe fallback
-                        
+
                         // Common file type mappings
                         switch (ext) {
                             case 'pdf': contentType = 'application/pdf'; break
@@ -176,13 +158,13 @@ export async function GET(request: NextRequest) {
                             case 'xls': contentType = 'application/vnd.ms-excel'; break
                             case 'xlsx': contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; break
                         }
-                        
+
                         return {
                             ...att,
                             contentType: contentType
                         }
                     }
-                    
+
                     // Use existing contentType or content_type (backward compatibility)
                     return {
                         ...att,
