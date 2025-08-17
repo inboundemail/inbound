@@ -14,6 +14,7 @@ export type {
   SuccessResponse, 
   ErrorResponse,
   AttachmentData,
+  ReactEmailComponent,
   PostEmailsRequest,
   PostEmailsResponse,
   PostEmailReplyRequest,

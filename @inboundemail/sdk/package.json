@@ -13,10 +13,12 @@
     "dev": "tsup --watch",
     "test": "bun test sdk.test.ts",
     "test:send": "bun test sdk.send.test.ts",
-    "test:all": "bun test sdk.test.ts sdk.send.test.ts",
+    "test:react": "bun test sdk.react.test.ts",
+    "test:all": "bun test sdk.test.ts sdk.send.test.ts sdk.react.test.ts",
     "test:ci": "bun test sdk.test.ts --reporter=verbose",
     "test:send:ci": "bun test sdk.send.test.ts --reporter=verbose",
-    "test:all:ci": "bun test sdk.test.ts sdk.send.test.ts --reporter=verbose",
+    "test:react:ci": "bun test sdk.react.test.ts --reporter=verbose",
+    "test:all:ci": "bun test sdk.test.ts sdk.send.test.ts sdk.react.test.ts --reporter=verbose",
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
@@ -40,7 +42,10 @@
   },
   "homepage": "https://github.com/inboundemail/sdk#readme",
   "devDependencies": {
+    "@react-email/components": "^0.0.25",
     "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
     "@typescript-eslint/eslint-plugin": "^8.39.0",
     "@typescript-eslint/parser": "^8.39.0",
     "bun-types": "latest",
@@ -48,7 +53,14 @@
     "tsup": "^8.0.0",
     "typescript": "^5.0.0"
   },
-  "dependencies": {},
+  "dependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "peerDependencies": {
+    "react": ">=16.8.0",
+    "react-dom": ">=16.8.0"
+  },
   "publishConfig": {
     "access": "public"
   },

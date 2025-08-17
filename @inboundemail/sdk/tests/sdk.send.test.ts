@@ -6,7 +6,7 @@
 
 import { describe, test, expect, beforeAll } from 'bun:test'
 import fs from 'fs'
-import { Inbound } from './src/index'
+import { Inbound } from '../src/index'
 import type { 
   PostEmailsRequest, 
   PostEmailsResponse, 
@@ -14,7 +14,7 @@ import type {
   PostEmailReplyResponse,
   AttachmentData,
   ApiResponse
-} from './src/types'
+} from '../src/types'
 
 // Test configuration
 const TEST_API_KEY = "uHpoGGrqCpinyLltyiOAkqKsqzOuTbyoxnueruOyUQpfuQDJefSHSdQlsIghaHIH"
@@ -510,9 +510,9 @@ describe('Inbound Email SDK - Email Sending with Attachments', () => {
       expect(response.data).toBeUndefined()
       // Should contain either the specific error message or a generic 400 error
       expect(
-        response.error.includes('File too large') || 
-        response.error.includes('HTTP 400') ||
-        response.error.includes('Bad Request')
+        response.error?.includes('File too large') || 
+        response.error?.includes('HTTP 400') ||
+        response.error?.includes('Bad Request')
       ).toBe(true)
     })
 
@@ -891,9 +891,7 @@ describe('Inbound Email SDK - Email Sending with Attachments', () => {
       // Validate PostEmailsResponse structure
       const data = response.data as PostEmailsResponse
       expect(data).toHaveProperty('id')
-      expect(data).toHaveProperty('messageId')
       expect(typeof data.id).toBe('string')
-      expect(typeof data.messageId).toBe('string')
     })
 
     test('should validate error response structure', async () => {

@@ -2,6 +2,8 @@
  * Type definitions for the Inbound Email SDK
  */
 
+import * as React from 'react'
+
 // Base configuration
 export interface InboundEmailConfig {
   apiKey: string
@@ -442,6 +444,9 @@ export interface AttachmentData {
   contentType?: string // Optional MIME type
 }
 
+// React component type for email rendering
+export type ReactEmailComponent = React.ReactElement | React.ComponentType<any>
+
 // Emails API Types (for sending) - Enhanced with full attachment support
 export interface PostEmailsRequest {
   from: string
@@ -452,6 +457,7 @@ export interface PostEmailsRequest {
   replyTo?: string | string[]
   html?: string
   text?: string
+  react?: ReactEmailComponent  // React component for email content
   headers?: Record<string, string>
   attachments?: AttachmentData[]
   tags?: Array<{

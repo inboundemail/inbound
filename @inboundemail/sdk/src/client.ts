@@ -23,6 +23,7 @@ import type {
 } from './types'
 import type { InboundWebhookEmail } from './webhook-types'
 import { buildQueryString } from './utils'
+import { renderReactToHtml, isReactRenderingSupported, getReactRenderingError } from './react-renderer'
 
 export class InboundEmailClient {
   private readonly apiKey: string
@@ -79,6 +80,42 @@ export class InboundEmailClient {
       return {
         error: error instanceof Error ? error.message : 'Network error occurred'
       }
+    }
+  }
+
+  /**
+   * Process React component in email request
+   * Converts React component to HTML and adds it to the request
+   */
+  private async processReactComponent(params: PostEmailsRequest): Promise<PostEmailsRequest> {
+    // If no React component provided, return params as-is
+    if (!params.react) {
+      return params
+    }
+
+    // Check if React rendering is supported
+    if (!isReactRenderingSupported()) {
+      throw new Error(getReactRenderingError())
+    }
+
+    try {
+      // Render React component to HTML
+      const renderedHtml = renderReactToHtml(params.react)
+      
+      // Create new params object with rendered HTML
+      const processedParams: PostEmailsRequest = {
+        ...params,
+        html: renderedHtml, // Set the rendered HTML
+        // Remove the react property as it's not sent to the API
+        react: undefined
+      }
+
+      // Remove the react property completely
+      delete processedParams.react
+
+      return processedParams
+    } catch (error) {
+      throw new Error(`Failed to process React component: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -257,11 +294,15 @@ export class InboundEmailClient {
     /**
      * Send an email with optional attachments
      * Supports both remote files (path) and base64 content
+     * Also supports React components for email content
      */
     send: async (params: PostEmailsRequest): Promise<ApiResponse<PostEmailsResponse>> => {
+      // Process React component if provided
+      const processedParams = await this.processReactComponent(params)
+      
       return this.request<PostEmailsResponse>('/emails', {
         method: 'POST',
-        body: JSON.stringify(params),
+        body: JSON.stringify(processedParams),
       })
     },
 

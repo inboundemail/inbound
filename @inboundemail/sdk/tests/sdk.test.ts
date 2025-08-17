@@ -2,7 +2,7 @@
 
 // @ts-ignore - bun:test is a Bun-specific module not recognized by TypeScript
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { Inbound } from './src/index';
+import { Inbound } from '../src/index';
 import type { 
   GetMailResponse, PostMailResponse, GetMailByIdResponse,
   GetEndpointsResponse, PostEndpointsResponse, GetEndpointByIdResponse, 
@@ -13,7 +13,7 @@ import type {
   PutDomainByIdRequest, PutDomainByIdResponse,
   PostEmailsResponse, GetEmailByIdResponse,
   WebhookConfig
-} from './src/types';
+} from '../src/types';
 import { setupWebhook, createTestFlag, sendTestEmail } from "../../app/api/v2/helper/webhook-tester";
 import dotenv from "dotenv";
 
