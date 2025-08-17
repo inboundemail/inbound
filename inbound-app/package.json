@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
+    "prebuild": "drizzle-kit generate && drizzle-kit push",
     "build": "next build --turbopack",
     "test-api": "bun run app/api/v2/api.test.ts",
     "test-sdk": "bun run app/api/v2/sdk.test.ts",

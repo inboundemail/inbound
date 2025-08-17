@@ -217,7 +217,7 @@ describe('SDK Email Scheduling - Enhanced API Tests', () => {
       console.log('🔍 Testing get scheduled email details')
       
       const emailId = createdScheduledEmailIds[0]
-      const response: ApiResponse<GetScheduledEmailResponse> = await inbound.emails.getScheduled(emailId)
+      const response: ApiResponse<GetScheduledEmailResponse> = await inbound.emails.getScheduled(emailId!)
       
       console.log('📊 Get Scheduled Email Response:', response)
 
@@ -225,7 +225,7 @@ describe('SDK Email Scheduling - Enhanced API Tests', () => {
       expect(response.data).toBeDefined()
       
       if (response.data) {
-        expect(response.data.id).toBe(emailId)
+        expect(response.data.id).toBe(emailId!)
         expect(response.data.from).toBeDefined()
         expect(response.data.to).toBeDefined()
         expect(response.data.subject).toBeDefined()
@@ -252,7 +252,7 @@ describe('SDK Email Scheduling - Enhanced API Tests', () => {
       console.log('❌ Testing cancel scheduled email')
       
       const emailId = createdScheduledEmailIds[0]
-      const response: ApiResponse<DeleteScheduledEmailResponse> = await inbound.emails.cancel(emailId)
+      const response: ApiResponse<DeleteScheduledEmailResponse> = await inbound.emails.cancel(emailId!)
       
       console.log('📊 Cancel Response:', response)
 
@@ -260,7 +260,7 @@ describe('SDK Email Scheduling - Enhanced API Tests', () => {
       expect(response.data).toBeDefined()
       
       if (response.data) {
-        expect(response.data.id).toBe(emailId)
+        expect(response.data.id).toBe(emailId!)
         expect(response.data.status).toBe('cancelled')
         expect(response.data.cancelled_at).toBeDefined()
         
@@ -271,7 +271,7 @@ describe('SDK Email Scheduling - Enhanced API Tests', () => {
         })
         
         // Remove from our tracking array since it's cancelled
-        const index = createdScheduledEmailIds.indexOf(emailId)
+        const index = createdScheduledEmailIds.indexOf(emailId!)
         if (index > -1) {
           createdScheduledEmailIds.splice(index, 1)
         }

@@ -356,7 +356,7 @@ export async function GET(request: NextRequest) {
             scheduled_at: formatScheduledDate(email.scheduledAt),
             status: email.status,
             timezone: email.timezone || 'UTC',
-            created_at: email.createdAt.toISOString(),
+            created_at: email.createdAt?.toISOString() || new Date().toISOString(),
             attempts: email.attempts || 0,
             last_error: email.lastError || undefined
         }))
