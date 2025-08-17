@@ -8,11 +8,22 @@ export interface InboundEmailConfig {
   baseUrl?: string
 }
 
-// Basic API response structure
+// Standard response pattern - { data, error }
 export interface ApiResponse<T = any> {
-  data: T
-  success: boolean
+  data?: T
   error?: string
+}
+
+// Success response helper
+export interface SuccessResponse<T> {
+  data: T
+  error?: never
+}
+
+// Error response helper  
+export interface ErrorResponse {
+  data?: never
+  error: string
 }
 
 // Pagination interface
@@ -422,24 +433,28 @@ export interface DeleteEmailAddressByIdResponse {
   }
 }
 
-// Emails API Types (for sending) - Resend-compatible
+// Enhanced attachment interface supporting both remote and base64
+export interface AttachmentData {
+  // Either path OR content required (not both)
+  path?: string        // Remote file URL
+  content?: string     // Base64 encoded content
+  filename: string     // Required display name
+  contentType?: string // Optional MIME type
+}
+
+// Emails API Types (for sending) - Enhanced with full attachment support
 export interface PostEmailsRequest {
   from: string
   to: string | string[]
   subject: string
   bcc?: string | string[]
   cc?: string | string[]
-  replyTo?: string | string[]  // Changed from reply_to to match Resend
+  replyTo?: string | string[]
   html?: string
   text?: string
   headers?: Record<string, string>
-  attachments?: Array<{
-    content: string // Base64 encoded
-    filename: string
-    path?: string
-    contentType?: string  // Changed from content_type to match Resend
-  }>
-  tags?: Array<{  // Added tags support like Resend
+  attachments?: AttachmentData[]
+  tags?: Array<{
     name: string
     value: string
   }>
@@ -464,7 +479,7 @@ export interface GetEmailByIdResponse {
   last_event: 'pending' | 'delivered' | 'failed'
 }
 
-// Reply API Types - Resend-compatible
+// Reply API Types - Enhanced with full attachment support
 export interface PostEmailReplyRequest {
   from: string
   to?: string | string[]
@@ -473,19 +488,14 @@ export interface PostEmailReplyRequest {
   subject?: string
   text?: string
   html?: string
-  replyTo?: string | string[]  // Added replyTo support
+  replyTo?: string | string[]
   headers?: Record<string, string>
-  attachments?: Array<{
-    content: string
-    filename: string
-    path?: string
-    contentType?: string  // Changed from content_type to match Resend
-  }>
-  tags?: Array<{  // Added tags support like Resend
+  attachments?: AttachmentData[]
+  tags?: Array<{
     name: string
     value: string
   }>
-  includeOriginal?: boolean  // Changed from include_original to camelCase
+  includeOriginal?: boolean
 }
 
 export interface PostEmailReplyResponse {

@@ -3,6 +3,8 @@
  */
 
 import type { 
+  // Core response types
+  ApiResponse,
   // Mail API
   GetMailRequest, GetMailResponse, PostMailRequest, PostMailResponse, GetMailByIdResponse,
   // Endpoints API  
@@ -36,12 +38,12 @@ export class InboundEmailClient {
   }
 
   /**
-   * Make an authenticated request to the API
+   * Make an authenticated request to the API with { data, error } response pattern
    */
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
-  ): Promise<T> {
+  ): Promise<ApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`
     
     const headers = {
@@ -50,17 +52,34 @@ export class InboundEmailClient {
       ...options.headers,
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    })
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      })
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+      let responseData: any = {}
+      try {
+        responseData = await response.json()
+      } catch (jsonError) {
+        // If JSON parsing fails, use empty object
+        responseData = {}
+      }
+
+      if (!response.ok) {
+        return {
+          error: (responseData && typeof responseData === 'object' && responseData.error) || `HTTP ${response.status}: ${response.statusText}`
+        }
+      }
+
+      return {
+        data: responseData as T
+      }
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : 'Network error occurred'
+      }
     }
-
-    return response.json()
   }
 
   /**
@@ -70,7 +89,7 @@ export class InboundEmailClient {
     /**
      * List all emails in the mailbox
      */
-    list: async (params?: GetMailRequest): Promise<GetMailResponse> => {
+    list: async (params?: GetMailRequest): Promise<ApiResponse<GetMailResponse>> => {
       const queryString = params ? buildQueryString(params) : ''
       return this.request<GetMailResponse>(`/mail${queryString}`)
     },
@@ -78,14 +97,14 @@ export class InboundEmailClient {
     /**
      * Get a specific email by ID
      */
-    get: async (id: string): Promise<GetMailByIdResponse> => {
+    get: async (id: string): Promise<ApiResponse<GetMailByIdResponse>> => {
       return this.request<GetMailByIdResponse>(`/mail/${id}`)
     },
 
     /**
      * Reply to an email
      */
-    reply: async (params: PostMailRequest): Promise<PostMailResponse> => {
+    reply: async (params: PostMailRequest): Promise<ApiResponse<PostMailResponse>> => {
       return this.request<PostMailResponse>('/mail', {
         method: 'POST',
         body: JSON.stringify(params),
@@ -100,7 +119,7 @@ export class InboundEmailClient {
     /**
      * List all endpoints
      */
-    list: async (params?: GetEndpointsRequest): Promise<GetEndpointsResponse> => {
+    list: async (params?: GetEndpointsRequest): Promise<ApiResponse<GetEndpointsResponse>> => {
       const queryString = params ? buildQueryString(params) : ''
       return this.request<GetEndpointsResponse>(`/endpoints${queryString}`)
     },
@@ -108,7 +127,7 @@ export class InboundEmailClient {
     /**
      * Create a new endpoint
      */
-    create: async (params: PostEndpointsRequest): Promise<PostEndpointsResponse> => {
+    create: async (params: PostEndpointsRequest): Promise<ApiResponse<PostEndpointsResponse>> => {
       return this.request<PostEndpointsResponse>('/endpoints', {
         method: 'POST',
         body: JSON.stringify(params),
@@ -118,14 +137,14 @@ export class InboundEmailClient {
     /**
      * Get a specific endpoint by ID
      */
-    get: async (id: string): Promise<GetEndpointByIdResponse> => {
+    get: async (id: string): Promise<ApiResponse<GetEndpointByIdResponse>> => {
       return this.request<GetEndpointByIdResponse>(`/endpoints/${id}`)
     },
 
     /**
      * Update an endpoint
      */
-    update: async (id: string, params: PutEndpointByIdRequest): Promise<PutEndpointByIdResponse> => {
+    update: async (id: string, params: PutEndpointByIdRequest): Promise<ApiResponse<PutEndpointByIdResponse>> => {
       return this.request<PutEndpointByIdResponse>(`/endpoints/${id}`, {
         method: 'PUT',
         body: JSON.stringify(params),
@@ -135,7 +154,7 @@ export class InboundEmailClient {
     /**
      * Delete an endpoint
      */
-    delete: async (id: string): Promise<DeleteEndpointByIdResponse> => {
+    delete: async (id: string): Promise<ApiResponse<DeleteEndpointByIdResponse>> => {
       return this.request<DeleteEndpointByIdResponse>(`/endpoints/${id}`, {
         method: 'DELETE',
       })
@@ -149,7 +168,7 @@ export class InboundEmailClient {
     /**
      * List all domains
      */
-    list: async (params?: GetDomainsRequest): Promise<GetDomainsResponse> => {
+    list: async (params?: GetDomainsRequest): Promise<ApiResponse<GetDomainsResponse>> => {
       const queryString = params ? buildQueryString(params) : ''
       return this.request<GetDomainsResponse>(`/domains${queryString}`)
     },
@@ -157,7 +176,7 @@ export class InboundEmailClient {
     /**
      * Create a new domain
      */
-    create: async (params: PostDomainsRequest): Promise<PostDomainsResponse> => {
+    create: async (params: PostDomainsRequest): Promise<ApiResponse<PostDomainsResponse>> => {
       return this.request<PostDomainsResponse>('/domains', {
         method: 'POST',
         body: JSON.stringify(params),
@@ -167,14 +186,14 @@ export class InboundEmailClient {
     /**
      * Get a specific domain by ID
      */
-    get: async (id: string): Promise<GetDomainByIdResponse> => {
+    get: async (id: string): Promise<ApiResponse<GetDomainByIdResponse>> => {
       return this.request<GetDomainByIdResponse>(`/domains/${id}`)
     },
 
     /**
      * Update domain settings (catch-all configuration)
      */
-    update: async (id: string, params: PutDomainByIdRequest): Promise<PutDomainByIdResponse> => {
+    update: async (id: string, params: PutDomainByIdRequest): Promise<ApiResponse<PutDomainByIdResponse>> => {
       return this.request<PutDomainByIdResponse>(`/domains/${id}`, {
         method: 'PUT',
         body: JSON.stringify(params),
@@ -189,7 +208,7 @@ export class InboundEmailClient {
     /**
      * List all email addresses
      */
-    list: async (params?: GetEmailAddressesRequest): Promise<GetEmailAddressesResponse> => {
+    list: async (params?: GetEmailAddressesRequest): Promise<ApiResponse<GetEmailAddressesResponse>> => {
       const queryString = params ? buildQueryString(params) : ''
       return this.request<GetEmailAddressesResponse>(`/email-addresses${queryString}`)
     },
@@ -197,7 +216,7 @@ export class InboundEmailClient {
     /**
      * Create a new email address
      */
-    create: async (params: PostEmailAddressesRequest): Promise<PostEmailAddressesResponse> => {
+    create: async (params: PostEmailAddressesRequest): Promise<ApiResponse<PostEmailAddressesResponse>> => {
       return this.request<PostEmailAddressesResponse>('/email-addresses', {
         method: 'POST',
         body: JSON.stringify(params),
@@ -207,14 +226,14 @@ export class InboundEmailClient {
     /**
      * Get a specific email address by ID
      */
-    get: async (id: string): Promise<GetEmailAddressByIdResponse> => {
+    get: async (id: string): Promise<ApiResponse<GetEmailAddressByIdResponse>> => {
       return this.request<GetEmailAddressByIdResponse>(`/email-addresses/${id}`)
     },
 
     /**
      * Update an email address
      */
-    update: async (id: string, params: PutEmailAddressByIdRequest): Promise<PutEmailAddressByIdResponse> => {
+    update: async (id: string, params: PutEmailAddressByIdRequest): Promise<ApiResponse<PutEmailAddressByIdResponse>> => {
       return this.request<PutEmailAddressByIdResponse>(`/email-addresses/${id}`, {
         method: 'PUT',
         body: JSON.stringify(params),
@@ -224,7 +243,7 @@ export class InboundEmailClient {
     /**
      * Delete an email address
      */
-    delete: async (id: string): Promise<DeleteEmailAddressByIdResponse> => {
+    delete: async (id: string): Promise<ApiResponse<DeleteEmailAddressByIdResponse>> => {
       return this.request<DeleteEmailAddressByIdResponse>(`/email-addresses/${id}`, {
         method: 'DELETE',
       })
@@ -232,13 +251,14 @@ export class InboundEmailClient {
   }
 
   /**
-   * Emails API - for sending emails (Resend-compatible)
+   * Emails API - for sending emails with enhanced attachment support
    */
   emails = {
     /**
-     * Send an email
+     * Send an email with optional attachments
+     * Supports both remote files (path) and base64 content
      */
-    send: async (params: PostEmailsRequest): Promise<PostEmailsResponse> => {
+    send: async (params: PostEmailsRequest): Promise<ApiResponse<PostEmailsResponse>> => {
       return this.request<PostEmailsResponse>('/emails', {
         method: 'POST',
         body: JSON.stringify(params),
@@ -248,14 +268,14 @@ export class InboundEmailClient {
     /**
      * Get a sent email by ID
      */
-    get: async (id: string): Promise<GetEmailByIdResponse> => {
+    get: async (id: string): Promise<ApiResponse<GetEmailByIdResponse>> => {
       return this.request<GetEmailByIdResponse>(`/emails/${id}`)
     },
 
     /**
-     * Reply to an email by ID
+     * Reply to an email by ID with optional attachments
      */
-    reply: async (id: string, params: PostEmailReplyRequest): Promise<PostEmailReplyResponse> => {
+    reply: async (id: string, params: PostEmailReplyRequest): Promise<ApiResponse<PostEmailReplyResponse>> => {
       return this.request<PostEmailReplyResponse>(`/emails/${id}/reply`, {
         method: 'POST',
         body: JSON.stringify(params),
@@ -264,9 +284,9 @@ export class InboundEmailClient {
   }
 
   /**
-   * Legacy send method for backwards compatibility (similar to Resend)
+   * Legacy send method for backwards compatibility
    */
-  send = async (params: PostEmailsRequest): Promise<PostEmailsResponse> => {
+  send = async (params: PostEmailsRequest): Promise<ApiResponse<PostEmailsResponse>> => {
     return this.emails.send(params)
   }
 
@@ -281,13 +301,15 @@ export class InboundEmailClient {
   reply = async (
     emailOrId: InboundWebhookEmail | string,
     replyParams: PostEmailReplyRequest
-  ): Promise<PostEmailReplyResponse> => {
+  ): Promise<ApiResponse<PostEmailReplyResponse>> => {
     // Determine email ID
     const emailId = typeof emailOrId === 'string' ? emailOrId : emailOrId.id
 
     // Validate that we have a from address
     if (!replyParams.from) {
-      throw new Error('Reply requires a "from" address.')
+      return {
+        error: 'Reply requires a "from" address.'
+      }
     }
 
     return this.emails.reply(emailId, replyParams)

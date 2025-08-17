@@ -38,7 +38,10 @@ let domainId: string;
 
 describe("list all emails in a mailbox", () => {
     it("should return emails with ids and a 200 status code", async () => {
-        const data: GetMailResponse = await inbound.mail.list();
+        const response = await inbound.mail.list();
+        expect(response.data).toBeDefined();
+        expect(response.error).toBeUndefined();
+        const data = response.data as GetMailResponse;
         expect(data.emails.length).toBeGreaterThan(0);
         expect(data.emails[0].id).toBeDefined();
         expect(data.emails[0].emailId).toBeDefined();
@@ -48,19 +51,25 @@ describe("list all emails in a mailbox", () => {
 
 describe("reply to an email", () => {
     it("should return a 200 status code", async () => {
-        const data: PostMailResponse = await inbound.mail.reply({
+        const response = await inbound.mail.reply({
             emailId: emailId,
             to: "test@test.com",
             subject: "Test",
             textBody: "Test"
         });
+        expect(response.data).toBeDefined();
+        expect(response.error).toBeUndefined();
+        const data = response.data as PostMailResponse;
         expect(data.message).toBe("Reply functionality is not yet implemented");
     });
 });
 
 describe("get an email by id", () => {
     it("should return an email with a 200 status code", async () => {
-        const data: GetMailByIdResponse = await inbound.mail.get(emailId);
+        const response = await inbound.mail.get(emailId);
+        expect(response.data).toBeDefined();
+        expect(response.error).toBeUndefined();
+        const data = response.data as GetMailByIdResponse;
         expect(data.id).toBe(emailId);
     });
 });
@@ -80,7 +89,10 @@ describe("get an email by id", () => {
 
 describe("list all endpoints", () => {
     it("should return endpoints with pagination and a 200 status code", async () => {
-        const data: GetEndpointsResponse = await inbound.endpoints.list();
+        const response = await inbound.endpoints.list();
+        expect(response.data).toBeDefined();
+        expect(response.error).toBeUndefined();
+        const data = response.data as GetEndpointsResponse;
         expect(data.data).toBeDefined();
         expect(Array.isArray(data.data)).toBe(true);
         expect(data.pagination).toBeDefined();
