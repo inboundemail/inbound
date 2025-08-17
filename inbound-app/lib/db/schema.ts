@@ -420,6 +420,59 @@ export const sentEmails = pgTable('sent_emails', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+// Scheduled Emails table - stores emails to be sent at a future time
+export const scheduledEmails = pgTable('scheduled_emails', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull(),
+  
+  // Scheduling information
+  scheduledAt: timestamp('scheduled_at').notNull(), // When to send the email
+  timezone: varchar('timezone', { length: 50 }).default('UTC'), // User's timezone for natural language parsing
+  status: varchar('status', { length: 50 }).notNull().default('scheduled'), // 'scheduled', 'processing', 'sent', 'failed', 'cancelled'
+  
+  // Email content (same structure as sentEmails but for future sending)
+  fromAddress: varchar('from_address', { length: 500 }).notNull(), // Full "Name <email@domain.com>" format
+  fromDomain: varchar('from_domain', { length: 255 }).notNull(), // Domain part for validation
+  toAddresses: text('to_addresses').notNull(), // JSON array of email addresses
+  ccAddresses: text('cc_addresses'), // JSON array of email addresses
+  bccAddresses: text('bcc_addresses'), // JSON array of email addresses
+  replyToAddresses: text('reply_to_addresses'), // JSON array of email addresses
+  
+  // Email content
+  subject: text('subject').notNull(),
+  textBody: text('text_body'),
+  htmlBody: text('html_body'),
+  
+  // Headers and metadata
+  headers: text('headers'), // JSON object of custom headers
+  attachments: text('attachments'), // JSON array of attachment data (base64 or S3 references)
+  tags: text('tags'), // JSON array of email tags (Resend-compatible)
+  
+  // Processing metadata
+  attempts: integer('attempts').default(0), // Number of send attempts
+  maxAttempts: integer('max_attempts').default(3), // Maximum retry attempts
+  nextRetryAt: timestamp('next_retry_at'), // When to retry if failed
+  lastError: text('last_error'), // Last error message if failed
+  
+  // Idempotency
+  idempotencyKey: varchar('idempotency_key', { length: 256 }), // For preventing duplicates
+  
+  // Audit and tracking
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+  sentAt: timestamp('sent_at'), // When the email was actually sent
+  sentEmailId: varchar('sent_email_id', { length: 255 }), // Reference to sentEmails after successful sending
+});
+
+// Scheduled email status constants
+export const SCHEDULED_EMAIL_STATUS = {
+  SCHEDULED: 'scheduled',
+  PROCESSING: 'processing', 
+  SENT: 'sent',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled'
+} as const;
+
 // Export types for Better Auth tables (using the imported tables)
 export { user, session, account, verification, apikey };
 

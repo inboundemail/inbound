@@ -1,7 +1,7 @@
 /**
  * @inboundemail/sdk
  * Official SDK for Inbound Email API
- * Version 3.2.0 - Enhanced with CID image embedding support
+ * Version 3.3.0 - Enhanced with email scheduling support
  */
 
 // Main SDK client
@@ -18,7 +18,15 @@ export type {
   PostEmailsRequest,
   PostEmailsResponse,
   PostEmailReplyRequest,
-  PostEmailReplyResponse
+  PostEmailReplyResponse,
+  // Scheduling types
+  PostScheduleEmailRequest,
+  PostScheduleEmailResponse,
+  GetScheduledEmailsRequest,
+  GetScheduledEmailsResponse,
+  ScheduledEmailItem,
+  GetScheduledEmailResponse,
+  DeleteScheduledEmailResponse
 } from './types'
 
 // Webhook types
@@ -45,7 +53,7 @@ export * from './webhook-types'
 export * from './utils'
 
 // Version
-export const VERSION = '3.2.0'
+export const VERSION = '3.3.0'
 
 // Default export for convenience
 export { InboundEmailClient as default } from './client' 

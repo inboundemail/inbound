@@ -22,8 +22,8 @@ import {
   Hr,
   Preview
 } from '@react-email/components'
-import { Inbound } from './src/index'
-import type { PostEmailsResponse, ApiResponse } from './src/types'
+import { Inbound } from '../src/index'
+import type { PostEmailsResponse, ApiResponse } from '../src/types'
 
 // Test configuration
 const TEST_API_KEY = "uHpoGGrqCpinyLltyiOAkqKsqzOuTbyoxnueruOyUQpfuQDJefSHSdQlsIghaHIH"
@@ -501,7 +501,7 @@ describe('🧪 React Email Rendering Utilities', () => {
   test('should render React Email components to valid HTML', async () => {
     console.log('🔧 Testing React Email component rendering')
     
-    const { renderReactToHtml } = await import('./src/react-renderer')
+    const { renderReactToHtml } = await import('../src/react-renderer')
     
     const simpleEmail = React.createElement(Html, {}, [
       React.createElement(Body, { key: 'body' }, [

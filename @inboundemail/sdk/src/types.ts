@@ -483,10 +483,16 @@ export interface PostEmailsRequest {
     name: string
     value: string
   }>
+  scheduled_at?: string  // Schedule email to be sent later (ISO 8601 or natural language like "in 1 hour")
+  timezone?: string      // User's timezone for natural language parsing (defaults to UTC)
 }
 
 export interface PostEmailsResponse {
   id: string
+  messageId?: string  // AWS SES Message ID (only present when email is sent immediately)
+  scheduled_at?: string  // ISO 8601 timestamp (only present when email is scheduled)
+  status?: 'sent' | 'scheduled'  // Status of the email
+  timezone?: string  // Timezone used for scheduling (only present when scheduled)
 }
 
 export interface GetEmailByIdResponse {
@@ -525,4 +531,88 @@ export interface PostEmailReplyRequest {
 
 export interface PostEmailReplyResponse {
   id: string
+}
+
+// Email Scheduling API Types
+export interface PostScheduleEmailRequest {
+  from: string
+  to: string | string[]
+  subject: string
+  bcc?: string | string[]
+  cc?: string | string[]
+  replyTo?: string | string[]
+  html?: string
+  text?: string
+  react?: ReactEmailComponent  // React component for email content
+  headers?: Record<string, string>
+  attachments?: AttachmentData[]
+  tags?: Array<{
+    name: string
+    value: string
+  }>
+  scheduled_at: string // ISO 8601 or natural language ("in 1 hour", "tomorrow at 9am")
+  timezone?: string    // User's timezone for natural language parsing (defaults to UTC)
+}
+
+export interface PostScheduleEmailResponse {
+  id: string
+  scheduled_at: string // Normalized ISO 8601 timestamp
+  status: 'scheduled'
+  timezone: string
+}
+
+export interface GetScheduledEmailsRequest {
+  limit?: number
+  offset?: number
+  status?: string // Filter by status ('scheduled', 'sent', 'failed', 'cancelled')
+}
+
+export interface ScheduledEmailItem {
+  id: string
+  from: string
+  to: string[]
+  subject: string
+  scheduled_at: string
+  status: string
+  timezone: string
+  created_at: string
+  attempts: number
+  last_error?: string
+}
+
+export interface GetScheduledEmailsResponse {
+  data: ScheduledEmailItem[]
+  pagination: Pagination
+}
+
+export interface GetScheduledEmailResponse {
+  id: string
+  from: string
+  to: string[]
+  cc?: string[]
+  bcc?: string[]
+  replyTo?: string[]
+  subject: string
+  text?: string
+  html?: string
+  headers?: Record<string, string>
+  attachments?: AttachmentData[]
+  tags?: Array<{ name: string; value: string }>
+  scheduled_at: string
+  timezone: string
+  status: string
+  attempts: number
+  max_attempts: number
+  next_retry_at?: string
+  last_error?: string
+  created_at: string
+  updated_at: string
+  sent_at?: string
+  sent_email_id?: string
+}
+
+export interface DeleteScheduledEmailResponse {
+  id: string
+  status: 'cancelled'
+  cancelled_at: string
 } 

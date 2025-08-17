@@ -19,7 +19,10 @@ import type {
   // Emails API (sending)
   PostEmailsRequest, PostEmailsResponse, GetEmailByIdResponse,
   // Reply API
-  PostEmailReplyRequest, PostEmailReplyResponse
+  PostEmailReplyRequest, PostEmailReplyResponse,
+  // Scheduling API
+  PostScheduleEmailRequest, PostScheduleEmailResponse, GetScheduledEmailsRequest, GetScheduledEmailsResponse,
+  GetScheduledEmailResponse, DeleteScheduledEmailResponse
 } from './types'
 import type { InboundWebhookEmail } from './webhook-types'
 import { buildQueryString } from './utils'
@@ -295,12 +298,16 @@ export class InboundEmailClient {
      * Send an email with optional attachments
      * Supports both remote files (path) and base64 content
      * Also supports React components for email content
+     * If scheduled_at is provided, the email will be scheduled for future delivery
      */
     send: async (params: PostEmailsRequest): Promise<ApiResponse<PostEmailsResponse>> => {
       // Process React component if provided
       const processedParams = await this.processReactComponent(params)
       
-      return this.request<PostEmailsResponse>('/emails', {
+      // Determine endpoint based on whether email is scheduled
+      const endpoint = processedParams.scheduled_at ? '/emails/schedule' : '/emails'
+      
+      return this.request<PostEmailsResponse>(endpoint, {
         method: 'POST',
         body: JSON.stringify(processedParams),
       })
@@ -320,6 +327,94 @@ export class InboundEmailClient {
       return this.request<PostEmailReplyResponse>(`/emails/${id}/reply`, {
         method: 'POST',
         body: JSON.stringify(params),
+      })
+    },
+
+    /**
+     * Schedule an email to be sent at a future time
+     * Supports both ISO 8601 dates and natural language (e.g., "in 1 hour", "tomorrow at 9am")
+     * 
+     * @example
+     * // Schedule with natural language
+     * await inbound.emails.schedule({
+     *   from: "sender@domain.com",
+     *   to: "recipient@domain.com", 
+     *   subject: "Scheduled Email",
+     *   html: "<p>This will be sent in 1 hour</p>",
+     *   scheduled_at: "in 1 hour",
+     *   timezone: "America/New_York"
+     * })
+     * 
+     * // Schedule with ISO 8601 date
+     * await inbound.emails.schedule({
+     *   from: "sender@domain.com",
+     *   to: "recipient@domain.com",
+     *   subject: "Scheduled Email", 
+     *   html: "<p>This will be sent at a specific time</p>",
+     *   scheduled_at: "2024-12-25T09:00:00Z"
+     * })
+     */
+    schedule: async (params: PostScheduleEmailRequest): Promise<ApiResponse<PostScheduleEmailResponse>> => {
+      // Process React component if provided
+      const processedParams = await this.processReactComponent(params as any)
+      
+      return this.request<PostScheduleEmailResponse>('/emails/schedule', {
+        method: 'POST',
+        body: JSON.stringify(processedParams),
+      })
+    },
+
+    /**
+     * List scheduled emails with filtering and pagination
+     * 
+     * @example
+     * // List all scheduled emails
+     * await inbound.emails.listScheduled()
+     * 
+     * // List only pending scheduled emails
+     * await inbound.emails.listScheduled({ status: 'scheduled', limit: 10 })
+     */
+    listScheduled: async (params?: GetScheduledEmailsRequest): Promise<ApiResponse<GetScheduledEmailsResponse>> => {
+      const queryString = params ? buildQueryString(params) : ''
+      return this.request<GetScheduledEmailsResponse>(`/emails/schedule${queryString}`)
+    },
+
+    /**
+     * Get details of a specific scheduled email
+     * 
+     * @example
+     * const scheduledEmail = await inbound.emails.getScheduled("email-id")
+     * if (scheduledEmail.data) {
+     *   console.log("Status:", scheduledEmail.data.status)
+     *   console.log("Scheduled for:", scheduledEmail.data.scheduled_at)
+     * }
+     */
+    getScheduled: async (id: string): Promise<ApiResponse<GetScheduledEmailResponse>> => {
+      return this.request<GetScheduledEmailResponse>(`/emails/schedule/${id}`)
+    },
+
+    /**
+     * Cancel a scheduled email (only works if status is 'scheduled')
+     * 
+     * @example
+     * const result = await inbound.emails.cancel("scheduled-email-id")
+     * if (result.data) {
+     *   console.log("Email cancelled at:", result.data.cancelled_at)
+     * }
+     */
+    cancel: async (id: string): Promise<ApiResponse<DeleteScheduledEmailResponse>> => {
+      return this.request<DeleteScheduledEmailResponse>(`/emails/schedule/${id}`, {
+        method: 'DELETE',
+      })
+    },
+
+    /**
+     * @deprecated Use cancel() instead
+     * Cancel a scheduled email (only works if status is 'scheduled')
+     */
+    cancelScheduled: async (id: string): Promise<ApiResponse<DeleteScheduledEmailResponse>> => {
+      return this.request<DeleteScheduledEmailResponse>(`/emails/schedule/${id}`, {
+        method: 'DELETE',
       })
     },
   }
