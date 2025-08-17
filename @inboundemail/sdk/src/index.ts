@@ -1,7 +1,7 @@
 /**
  * @inboundemail/sdk
  * Official SDK for Inbound Email API
- * Version 3.3.0 - Enhanced with email scheduling support
+ * Version 4.0.0 - Hierarchical API structure with email.address.* methods
  */
 
 // Main SDK client
@@ -53,7 +53,7 @@ export * from './webhook-types'
 export * from './utils'
 
 // Version
-export const VERSION = '3.3.0'
+export const VERSION = '4.0.0'
 
 // Default export for convenience
 export { InboundEmailClient as default } from './client' 
