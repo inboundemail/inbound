@@ -435,13 +435,32 @@ export interface DeleteEmailAddressByIdResponse {
   }
 }
 
-// Enhanced attachment interface supporting both remote and base64
+/**
+ * Enhanced attachment interface supporting both remote and base64 content
+ * 
+ * For embedding images in HTML using Content-ID (CID):
+ * 1. Set content_id to a unique identifier (e.g., "logo-image")
+ * 2. Reference it in HTML: <img src="cid:logo-image" />
+ * 3. The content_id must be less than 128 characters
+ * 
+ * @example
+ * // Embed an image in email HTML
+ * const attachment = {
+ *   content: base64ImageData,
+ *   filename: "logo.png",
+ *   contentType: "image/png",
+ *   content_id: "company-logo"
+ * }
+ * 
+ * const html = '<p>Welcome! <img src="cid:company-logo" alt="Company Logo" /></p>'
+ */
 export interface AttachmentData {
   // Either path OR content required (not both)
   path?: string        // Remote file URL
   content?: string     // Base64 encoded content
   filename: string     // Required display name
-  contentType?: string // Optional MIME type
+  contentType?: string // Optional MIME type (auto-detected if not provided)
+  content_id?: string  // Content ID for embedding images in HTML (max 128 chars)
 }
 
 // React component type for email rendering

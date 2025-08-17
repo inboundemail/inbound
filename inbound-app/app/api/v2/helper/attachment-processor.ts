@@ -13,6 +13,9 @@ export interface AttachmentInput {
   // Support both formats for backward compatibility
   contentType?: string   // camelCase (Resend-compatible)
   content_type?: string  // snake_case (legacy)
+  
+  // CID (Content-ID) for embedding images in HTML
+  content_id?: string    // Content ID for embedding (e.g., "logo" for <img src="cid:logo">)
 }
 
 export interface ProcessedAttachment {
@@ -20,6 +23,7 @@ export interface ProcessedAttachment {
   filename: string
   contentType: string
   size: number
+  content_id?: string  // Content ID for CID embedding
 }
 
 // Configuration - Following industry standards and AWS SES limits
@@ -338,6 +342,33 @@ function validateFileType(contentType: string, filename: string): {
 }
 
 /**
+ * Validate content_id parameters for CID embedding
+ */
+function validateContentIds(attachments: AttachmentInput[]): void {
+  const contentIds = new Set<string>()
+  
+  for (let i = 0; i < attachments.length; i++) {
+    const attachment = attachments[i]
+    
+    if (attachment.content_id) {
+      // Check length limit (Resend spec: max 128 characters)
+      if (attachment.content_id.length > 128) {
+        throw new Error(`Attachment ${i + 1}: content_id must be less than 128 characters (current: ${attachment.content_id.length})`)
+      }
+      
+      // Check for duplicates
+      if (contentIds.has(attachment.content_id)) {
+        throw new Error(`Duplicate content_id "${attachment.content_id}" found in attachments. Each content_id must be unique.`)
+      }
+      
+      contentIds.add(attachment.content_id)
+      
+      console.log(`📎 Content ID validated: "${attachment.content_id}" for ${attachment.filename}`)
+    }
+  }
+}
+
+/**
  * Process all attachments in a request
  * Supports both remote URLs (path) and base64 content
  * Maintains backward compatibility
@@ -353,6 +384,9 @@ export async function processAttachments(attachments: AttachmentInput[]): Promis
   if (attachments.length > MAX_ATTACHMENTS_COUNT) {
     throw new Error(`Too many attachments: ${attachments.length} (max: ${MAX_ATTACHMENTS_COUNT})`)
   }
+  
+  // Validate content_id parameters for CID embedding
+  validateContentIds(attachments)
   
   const processed: ProcessedAttachment[] = []
   let totalSize = 0
@@ -414,7 +448,8 @@ export async function processAttachments(attachments: AttachmentInput[]): Promis
       content: processedContent.content,
       filename: attachment.filename,
       contentType: processedContent.contentType,
-      size: processedContent.size
+      size: processedContent.size,
+      content_id: attachment.content_id
     })
     
     console.log(`✅ Attachment ${i + 1} processed:`, {

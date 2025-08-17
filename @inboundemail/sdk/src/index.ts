@@ -1,7 +1,7 @@
 /**
  * @inboundemail/sdk
  * Official SDK for Inbound Email API
- * Version 3.1.0 - Enhanced with attachment support and { data, error } responses
+ * Version 3.2.0 - Enhanced with CID image embedding support
  */
 
 // Main SDK client
@@ -45,7 +45,7 @@ export * from './webhook-types'
 export * from './utils'
 
 // Version
-export const VERSION = '3.1.0'
+export const VERSION = '3.2.0'
 
 // Default export for convenience
 export { InboundEmailClient as default } from './client' 

@@ -95,9 +95,18 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
   const hasHtml = !!htmlBody
   const hasAttachments = attachments.length > 0
   
+  // Separate CID attachments from regular attachments
+  const cidAttachments = attachments.filter(att => att.content_id)
+  const regularAttachments = attachments.filter(att => !att.content_id)
+  const hasCidAttachments = cidAttachments.length > 0
+  const hasRegularAttachments = regularAttachments.length > 0
+  
   // Generate boundaries
   const mixedBoundary = generateBoundary()
+  const relatedBoundary = generateBoundary()
   const alternativeBoundary = generateBoundary()
+  
+  console.log(`📧 Email structure: CID=${hasCidAttachments}, Regular=${hasRegularAttachments}, Text=${hasText}, HTML=${hasHtml}`)
   
   // Check if Message-ID is provided in custom headers
   const hasCustomMessageId = customHeaders && 
@@ -127,117 +136,188 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
   
   const messageParts: string[] = []
   
-  if (hasAttachments) {
-    // Multipart/mixed for attachments
+  // Determine the overall structure based on what we have
+  if (hasRegularAttachments && hasCidAttachments) {
+    // Mixed structure: multipart/mixed containing multipart/related and regular attachments
     headers.push(`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`)
     messageParts.push(...headers, '', 'This is a multi-part message in MIME format.', '')
     
-    // Content part (either simple or alternative)
+    // First part: multipart/related (content + CID attachments)
     messageParts.push(`--${mixedBoundary}`)
-    
-    if (hasText && hasHtml) {
-      // Multipart/alternative for text and HTML
-      messageParts.push(`Content-Type: multipart/alternative; boundary="${alternativeBoundary}"`, '')
-      
-      // Text part
-      messageParts.push(`--${alternativeBoundary}`)
-      messageParts.push('Content-Type: text/plain; charset=UTF-8')
-      messageParts.push('Content-Transfer-Encoding: quoted-printable')
-      messageParts.push('')
-      messageParts.push(encodeQuotedPrintable(textBody || ''))
-      messageParts.push('')
-      
-      // HTML part
-      messageParts.push(`--${alternativeBoundary}`)
-      messageParts.push('Content-Type: text/html; charset=UTF-8')
-      messageParts.push('Content-Transfer-Encoding: quoted-printable')
-      messageParts.push('')
-      messageParts.push(encodeQuotedPrintable(htmlBody || ''))
-      messageParts.push('')
-      
-      messageParts.push(`--${alternativeBoundary}--`)
-      
-    } else if (hasText) {
-      // Text only
-      messageParts.push('Content-Type: text/plain; charset=UTF-8')
-      messageParts.push('Content-Transfer-Encoding: quoted-printable')
-      messageParts.push('')
-      messageParts.push(encodeQuotedPrintable(textBody || ''))
-      
-    } else if (hasHtml) {
-      // HTML only
-      messageParts.push('Content-Type: text/html; charset=UTF-8')
-      messageParts.push('Content-Transfer-Encoding: quoted-printable')
-      messageParts.push('')
-      messageParts.push(encodeQuotedPrintable(htmlBody || ''))
-    }
-    
+    messageParts.push(`Content-Type: multipart/related; boundary="${relatedBoundary}"`)
     messageParts.push('')
     
-    // Add attachments
-    for (const attachment of attachments) {
-      messageParts.push(`--${mixedBoundary}`)
-      messageParts.push(`Content-Type: ${attachment.contentType}`)
-      messageParts.push('Content-Transfer-Encoding: base64')
-      messageParts.push(`Content-Disposition: attachment; filename="${attachment.filename}"`)
-      messageParts.push('')
-      
-      // Split base64 content into 76-character lines (RFC requirement)
-      const base64Lines = attachment.content.match(/.{1,76}/g) || []
-      messageParts.push(...base64Lines)
-      messageParts.push('')
+    // Add content and CID attachments in related part
+    addContentAndCidAttachments(messageParts, relatedBoundary, alternativeBoundary, hasText, hasHtml, textBody, htmlBody, cidAttachments)
+    
+    // Add regular attachments
+    for (const attachment of regularAttachments) {
+      addRegularAttachment(messageParts, mixedBoundary, attachment)
+    }
+    
+    messageParts.push(`--${mixedBoundary}--`)
+    
+  } else if (hasCidAttachments) {
+    // Only CID attachments: use multipart/related
+    headers.push(`Content-Type: multipart/related; boundary="${relatedBoundary}"`)
+    messageParts.push(...headers, '', 'This is a multi-part message in MIME format.', '')
+    
+    addContentAndCidAttachments(messageParts, relatedBoundary, alternativeBoundary, hasText, hasHtml, textBody, htmlBody, cidAttachments)
+    
+  } else if (hasRegularAttachments) {
+    // Only regular attachments: use multipart/mixed
+    headers.push(`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`)
+    messageParts.push(...headers, '', 'This is a multi-part message in MIME format.', '')
+    
+    // Content part
+    messageParts.push(`--${mixedBoundary}`)
+    addContentPart(messageParts, alternativeBoundary, hasText, hasHtml, textBody, htmlBody)
+    messageParts.push('')
+    
+    // Regular attachments
+    for (const attachment of regularAttachments) {
+      addRegularAttachment(messageParts, mixedBoundary, attachment)
     }
     
     messageParts.push(`--${mixedBoundary}--`)
     
   } else {
-    // No attachments - simpler structure
-    if (hasText && hasHtml) {
-      // Multipart/alternative
-      headers.push(`Content-Type: multipart/alternative; boundary="${alternativeBoundary}"`)
-      messageParts.push(...headers, '', 'This is a multi-part message in MIME format.', '')
-      
-      // Text part
-      messageParts.push(`--${alternativeBoundary}`)
-      messageParts.push('Content-Type: text/plain; charset=UTF-8')
-      messageParts.push('Content-Transfer-Encoding: quoted-printable')
-      messageParts.push('')
-      messageParts.push(encodeQuotedPrintable(textBody || ''))
-      messageParts.push('')
-      
-      // HTML part
-      messageParts.push(`--${alternativeBoundary}`)
-      messageParts.push('Content-Type: text/html; charset=UTF-8')
-      messageParts.push('Content-Transfer-Encoding: quoted-printable')
-      messageParts.push('')
-      messageParts.push(encodeQuotedPrintable(htmlBody || ''))
-      messageParts.push('')
-      
-      messageParts.push(`--${alternativeBoundary}--`)
-      
-    } else if (hasText) {
-      // Text only
-      headers.push('Content-Type: text/plain; charset=UTF-8')
-      headers.push('Content-Transfer-Encoding: quoted-printable')
-      messageParts.push(...headers, '')
-      messageParts.push(encodeQuotedPrintable(textBody || ''))
-      
-    } else if (hasHtml) {
-      // HTML only
-      headers.push('Content-Type: text/html; charset=UTF-8')
-      headers.push('Content-Transfer-Encoding: quoted-printable')
-      messageParts.push(...headers, '')
-      messageParts.push(encodeQuotedPrintable(htmlBody || ''))
-      
-    } else {
-      // No content
-      headers.push('Content-Type: text/plain; charset=UTF-8')
-      messageParts.push(...headers, '')
-      messageParts.push('[No content]')
-    }
+    // No attachments - simple content structure
+    addContentPart(messageParts, alternativeBoundary, hasText, hasHtml, textBody, htmlBody, headers)
   }
   
   return messageParts.join('\r\n')
+}
+
+/**
+ * Add content and CID attachments in a multipart/related structure
+ */
+function addContentAndCidAttachments(
+  messageParts: string[], 
+  relatedBoundary: string, 
+  alternativeBoundary: string,
+  hasText: boolean, 
+  hasHtml: boolean, 
+  textBody?: string, 
+  htmlBody?: string, 
+  cidAttachments: ProcessedAttachment[] = []
+) {
+  // Content part (first in related)
+  messageParts.push(`--${relatedBoundary}`)
+  addContentPart(messageParts, alternativeBoundary, hasText, hasHtml, textBody, htmlBody)
+  messageParts.push('')
+  
+  // CID attachments
+  for (const attachment of cidAttachments) {
+    messageParts.push(`--${relatedBoundary}`)
+    messageParts.push(`Content-Type: ${attachment.contentType}`)
+    messageParts.push('Content-Transfer-Encoding: base64')
+    messageParts.push(`Content-ID: <${attachment.content_id}>`)
+    messageParts.push(`Content-Disposition: inline; filename="${attachment.filename}"`)
+    console.log(`📎 Added CID attachment: <${attachment.content_id}> for ${attachment.filename}`)
+    messageParts.push('')
+    
+    // Split base64 content into 76-character lines (RFC requirement)
+    const base64Lines = attachment.content.match(/.{1,76}/g) || []
+    messageParts.push(...base64Lines)
+    messageParts.push('')
+  }
+  
+  messageParts.push(`--${relatedBoundary}--`)
+}
+
+/**
+ * Add a regular (non-CID) attachment
+ */
+function addRegularAttachment(messageParts: string[], boundary: string, attachment: ProcessedAttachment) {
+  messageParts.push(`--${boundary}`)
+  messageParts.push(`Content-Type: ${attachment.contentType}`)
+  messageParts.push('Content-Transfer-Encoding: base64')
+  messageParts.push(`Content-Disposition: attachment; filename="${attachment.filename}"`)
+  messageParts.push('')
+  
+  // Split base64 content into 76-character lines (RFC requirement)
+  const base64Lines = attachment.content.match(/.{1,76}/g) || []
+  messageParts.push(...base64Lines)
+  messageParts.push('')
+}
+
+/**
+ * Add content part (text/html with proper multipart/alternative if needed)
+ */
+function addContentPart(
+  messageParts: string[], 
+  alternativeBoundary: string,
+  hasText: boolean, 
+  hasHtml: boolean, 
+  textBody?: string, 
+  htmlBody?: string,
+  headers?: string[]
+) {
+  if (hasText && hasHtml) {
+    // Multipart/alternative for text and HTML
+    if (headers) {
+      headers.push(`Content-Type: multipart/alternative; boundary="${alternativeBoundary}"`)
+      messageParts.push(...headers, '', 'This is a multi-part message in MIME format.', '')
+    } else {
+      messageParts.push(`Content-Type: multipart/alternative; boundary="${alternativeBoundary}"`, '')
+    }
+    
+    // Text part
+    messageParts.push(`--${alternativeBoundary}`)
+    messageParts.push('Content-Type: text/plain; charset=UTF-8')
+    messageParts.push('Content-Transfer-Encoding: quoted-printable')
+    messageParts.push('')
+    messageParts.push(encodeQuotedPrintable(textBody || ''))
+    messageParts.push('')
+    
+    // HTML part
+    messageParts.push(`--${alternativeBoundary}`)
+    messageParts.push('Content-Type: text/html; charset=UTF-8')
+    messageParts.push('Content-Transfer-Encoding: quoted-printable')
+    messageParts.push('')
+    messageParts.push(encodeQuotedPrintable(htmlBody || ''))
+    messageParts.push('')
+    
+    messageParts.push(`--${alternativeBoundary}--`)
+    
+  } else if (hasText) {
+    // Text only
+    if (headers) {
+      headers.push('Content-Type: text/plain; charset=UTF-8')
+      headers.push('Content-Transfer-Encoding: quoted-printable')
+      messageParts.push(...headers, '')
+    } else {
+      messageParts.push('Content-Type: text/plain; charset=UTF-8')
+      messageParts.push('Content-Transfer-Encoding: quoted-printable')
+      messageParts.push('')
+    }
+    messageParts.push(encodeQuotedPrintable(textBody || ''))
+    
+  } else if (hasHtml) {
+    // HTML only
+    if (headers) {
+      headers.push('Content-Type: text/html; charset=UTF-8')
+      headers.push('Content-Transfer-Encoding: quoted-printable')
+      messageParts.push(...headers, '')
+    } else {
+      messageParts.push('Content-Type: text/html; charset=UTF-8')
+      messageParts.push('Content-Transfer-Encoding: quoted-printable')
+      messageParts.push('')
+    }
+    messageParts.push(encodeQuotedPrintable(htmlBody || ''))
+    
+  } else {
+    // No content
+    if (headers) {
+      headers.push('Content-Type: text/plain; charset=UTF-8')
+      messageParts.push(...headers, '')
+    } else {
+      messageParts.push('Content-Type: text/plain; charset=UTF-8')
+      messageParts.push('')
+    }
+    messageParts.push('[No content]')
+  }
 }
 
 /**
