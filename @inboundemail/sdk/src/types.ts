@@ -36,6 +36,11 @@ export interface Pagination {
   hasMore?: boolean
 }
 
+// Idempotency options for email sending
+export interface IdempotencyOptions {
+  idempotencyKey?: string
+}
+
 // Mail API Types
 export interface EmailItem {
   id: string

@@ -1,6 +1,8 @@
 # @inboundemail/sdk
 
-The official SDK for the Inbound Email API v2. This SDK provides a simple and intuitive interface for managing email receiving, sending, and webhook endpoints.
+The official SDK for the Inbound Email API v2. This SDK provides a simple and intuitive hierarchical interface for managing email receiving, sending, domains, email addresses, and webhook endpoints.
+
+**Version 4.0.0** introduces a new hierarchical structure with `inbound.email.address.*` methods and consistent `{ data, error }` response patterns.
 
 ## Installation
 
@@ -15,15 +17,76 @@ import { Inbound } from '@inboundemail/sdk'
 
 const inbound = new Inbound(process.env.INBOUND_API_KEY!)
 
-// Send an email (Resend-compatible API)
-const email = await inbound.emails.send({
+// Send an email (with { data, error } pattern)
+const { data: email, error } = await inbound.email.send({
   from: 'hello@yourdomain.com',
   to: 'user@example.com',
   subject: 'Hello World',
   html: '<h1>Hello World</h1><p>This is your first email!</p>',
 })
 
-console.log(email.id)
+if (error) {
+  console.error('Failed to send email:', error)
+} else {
+  console.log('Email sent:', email.id)
+}
+```
+
+## 🏗️ Hierarchical Structure (New in v4.0.0)
+
+The SDK now uses a logical hierarchical structure:
+
+```typescript
+// 📧 Inbound Email Management
+inbound.mail.list()           // List received emails
+inbound.mail.get(id)          // Get specific email
+inbound.mail.thread(id)       // Get email thread
+inbound.mail.markRead(id)     // Mark as read
+inbound.mail.archive(id)      // Archive email
+inbound.mail.reply(params)    // Reply to email
+
+// 📤 Outbound Email Management  
+inbound.email.send(data)           // Send email immediately
+inbound.email.schedule(data)       // Schedule email
+inbound.email.reply(id, data)      // Reply to sent email
+inbound.email.listScheduled()      // List scheduled emails
+inbound.email.cancel(id)           // Cancel scheduled email
+
+// 📮 Email Address Management (NEW - nested under email)
+inbound.email.address.create(data)       // Create email address
+inbound.email.address.list()             // List email addresses
+inbound.email.address.get(id)            // Get address details
+inbound.email.address.update(id, data)   // Update address routing
+inbound.email.address.delete(id)         // Remove address
+
+// 🌐 Domain Management
+inbound.domain.create(data)        // Add new domain
+inbound.domain.list()              // List all domains
+inbound.domain.verify(id)          // Verify domain
+inbound.domain.getDnsRecords(id)   // Get DNS records
+
+// 🔗 Endpoint Management (Webhooks & Forwarding)
+inbound.endpoint.create(data)      // Create endpoint
+inbound.endpoint.list()            // List endpoints
+inbound.endpoint.test(id)          // Test endpoint
+```
+
+## 📊 Response Pattern
+
+All methods now return a consistent `{ data, error }` pattern:
+
+```typescript
+// Success case
+const { data, error } = await inbound.mail.list()
+if (error) {
+  console.error('Error:', error)
+  return
+}
+console.log('Emails:', data.emails)
+
+// Or with destructuring
+const { data: emails, error: emailsError } = await inbound.mail.list()
+const { data: domains, error: domainsError } = await inbound.domain.list()
 ```
 
 ## Streamlined Webhook Replies
@@ -47,405 +110,321 @@ export async function POST(request: NextRequest) {
   
   const { email } = payload
   
-  // Reply to emails
-  if (email.subject?.includes('thanks')) {
-    await inbound.reply(email, {
-      from: 'support@yourdomain.com',
-      text: "You're welcome!"
-    })
+  // Reply to emails with new { data, error } pattern
+  const { data, error } = await inbound.reply(email, {
+    from: 'support@yourdomain.com',
+    text: 'Thanks for your message! We\'ll get back to you soon.'
+  })
+
+  if (error) {
+    console.error('Reply failed:', error)
+    return NextResponse.json({ error }, { status: 500 })
   }
-  
-  if (email.subject?.includes('support')) {
-    await inbound.reply(email, {
-      from: 'support@yourdomain.com',
-      text: "Thanks for contacting support! We'll respond within 24 hours."
-    })
-  }
-  
-  return NextResponse.json({ success: true })
+
+  return NextResponse.json({ success: true, messageId: data.messageId })
 }
 ```
 
-### Reply Methods
+## 📮 Email Address Management
 
-**Standard Reply:**
-```typescript
-await inbound.reply(email, {
-  from: 'support@yourdomain.com',
-  text: "Thanks for your message!"
-})
-```
-
-**Reply with HTML:**
-```typescript
-await inbound.reply(email, {
-  from: 'billing@yourdomain.com',
-  text: "Thanks for your billing inquiry."
-})
-```
-
-**3. Full Control:**
-```typescript
-await inbound.reply(email, {
-  from: 'sales@yourdomain.com',
-  subject: 'Custom Subject',
-  html: '<h1>Thanks!</h1><p>We got your message.</p>',
-  text: 'Thanks! We got your message.',
-  cc: ['manager@yourdomain.com'],
-  headers: { 'X-Priority': 'High' }
-})
-```
-
-**4. Reply by Email ID:**
-```typescript
-await inbound.reply('email-id-string', {
-  from: 'support@yourdomain.com',
-  text: "Thanks!"
-})
-```
-
-## Webhook Types for Incoming Requests
-
-The SDK includes comprehensive TypeScript types for webhook payloads that Inbound sends to your server. Use these types to add type safety to your webhook handlers:
-
-### Basic Webhook Handler
-
-```typescript
-import type { InboundWebhookPayload, isInboundWebhook } from '@inboundemail/sdk'
-import { NextRequest, NextResponse } from 'next/server'
-
-export async function POST(request: NextRequest) {
-  // Parse with type safety
-  const payload: InboundWebhookPayload = await request.json()
-  
-  // Verify it's a valid Inbound webhook
-  if (!isInboundWebhook(payload)) {
-    return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
-  }
-  
-  // Access typed email data
-  const { email, endpoint, timestamp } = payload
-  console.log(`📧 New email: ${email.subject}`)
-  console.log(`👤 From: ${email.from?.addresses[0]?.address}`)
-  
-  return NextResponse.json({ success: true })
-}
-```
-
-### Using Helper Functions
-
-```typescript
-import { 
-  getSenderInfo, 
-  getEmailText, 
-  getEmailHtml,
-  getAttachmentInfo 
-} from '@inboundemail/sdk'
-
-// Get sender information
-const sender = getSenderInfo(email)
-console.log(`From: ${sender.name} <${sender.address}>`)
-
-// Get email content
-const textContent = getEmailText(email)
-const htmlContent = getEmailHtml(email)
-
-// Process attachments with metadata
-email.cleanedContent.attachments.forEach(attachment => {
-  const info = getAttachmentInfo(attachment)
-  console.log(`📎 ${attachment.filename} - ${info.isImage ? 'Image' : 'Document'}`)
-})
-```
-
-### Framework-Specific Examples
-
-**Next.js Pages Router:**
-```typescript
-import type { NextApiRequest, NextApiResponse } from 'next'
-import type { InboundWebhookPayload } from '@inboundemail/sdk'
-
-interface TypedRequest extends NextApiRequest {
-  body: InboundWebhookPayload
-}
-
-export default function handler(req: TypedRequest, res: NextApiResponse) {
-  const { email } = req.body
-  // Process with full type safety
-}
-```
-
-**Express.js:**
-```typescript
-import express from 'express'
-import type { InboundWebhookPayload } from '@inboundemail/sdk'
-
-app.post('/webhook', (req: express.Request, res: express.Response) => {
-  const payload = req.body as InboundWebhookPayload
-  // Handle webhook with types
-})
-```
-
-**Available Webhook Types:**
-- `InboundWebhookPayload` - Complete webhook payload
-- `InboundWebhookEmail` - Email data structure
-- `InboundWebhookHeaders` - Webhook HTTP headers
-- `InboundEmailAddress` - Email address structure
-- `InboundEmailAttachment` - Attachment metadata
-- `InboundParsedEmailData` - Complete parsed email data
-
-## API Reference
-
-### Initialization
-
-```typescript
-// Basic initialization
-const inbound = new Inbound('your-api-key')
-
-// With configuration object
-const inbound = new Inbound({
-  apiKey: 'your-api-key',
-  baseUrl: 'https://inbound.new/api/v2' // optional
-})
-
-// With default reply address for streamlined replies
-const inbound = new Inbound({
-  apiKey: 'your-api-key',
-  defaultReplyFrom: 'support@yourdomain.com' // enables simple string replies
-})
-```
-
-### Sending Emails
-
-```typescript
-// Basic email
-await inbound.emails.send({
-  from: 'hello@yourdomain.com',
-  to: 'user@example.com',
-  subject: 'Hello World',
-  text: 'Hello World',
-})
-
-// Advanced email with multiple recipients and attachments
-await inbound.emails.send({
-  from: 'hello@yourdomain.com',
-  to: ['user1@example.com', 'user2@example.com'],
-  cc: ['manager@example.com'],
-  bcc: ['archive@example.com'],
-  subject: 'Important Update',
-  html: '<h1>Important Update</h1><p>Please review the attached document.</p>',
-  text: 'Important Update\n\nPlease review the attached document.',
-  headers: {
-    'X-Priority': 'High'
-  },
-  attachments: [{
-    filename: 'document.pdf',
-    content: 'base64-encoded-content',
-    content_type: 'application/pdf'
-  }]
-})
-
-// Using the legacy send method (same as emails.send)
-await inbound.send({
-  from: 'hello@yourdomain.com',
-  to: 'user@example.com',
-  subject: 'Hello World',
-  text: 'Hello World',
-})
-```
-
-### Retrieving Sent Emails
-
-```typescript
-// Get a sent email by ID
-const email = await inbound.emails.get('email-id')
-console.log(email.subject, email.last_event)
-```
-
-### Managing Received Emails
-
-```typescript
-// List all received emails
-const emails = await inbound.mail.list({
-  limit: 10,
-  status: 'processed'
-})
-
-// Get a specific received email
-const email = await inbound.mail.get('email-id')
-
-// Reply to an email (legacy method)
-await inbound.mail.reply({
-  emailId: 'email-id',
-  to: 'sender@example.com',
-  subject: 'Re: Original Subject',
-  textBody: 'Thank you for your email!'
-})
-```
-
-### Reply to Emails
-
-```typescript
-// Streamlined reply (new method - recommended)
-await inbound.reply(email, "Thanks for your message!")
-
-// Reply with options
-await inbound.reply(email, {
-  from: 'support@yourdomain.com',
-  text: 'Thank you for contacting us!',
-  html: '<p>Thank you for contacting us!</p>'
-})
-
-// Advanced reply method (via emails.reply)
-await inbound.emails.reply('email-id', {
-  from: 'support@yourdomain.com',
-  to: ['custom@example.com'],
-  cc: ['manager@yourdomain.com'],
-  subject: 'Custom Reply Subject',
-  text: 'Custom reply message',
-  include_original: true // Include quoted original message
-})
-```
-
-### Managing Endpoints
-
-```typescript
-// List all endpoints
-const endpoints = await inbound.endpoints.list()
-
-// Create a webhook endpoint
-const endpoint = await inbound.endpoints.create({
-  name: 'My Webhook',
-  type: 'webhook',
-  description: 'Handles incoming emails',
-  config: {
-    url: 'https://your-app.com/webhook',
-    timeout: 30,
-    retryAttempts: 3,
-    headers: {
-      'Authorization': 'Bearer your-token'
-    }
-  }
-})
-
-// Get endpoint details
-const endpoint = await inbound.endpoints.get('endpoint-id')
-
-// Update an endpoint
-await inbound.endpoints.update('endpoint-id', {
-  name: 'Updated Webhook Name',
-  isActive: true
-})
-
-// Delete an endpoint
-await inbound.endpoints.delete('endpoint-id')
-```
-
-### Managing Domains
-
-```typescript
-// List all domains
-const domains = await inbound.domains.list()
-
-// Create a new domain
-const domain = await inbound.domains.create({
-  domain: 'mail.yourdomain.com'
-})
-
-// Get domain details
-const domain = await inbound.domains.get('domain-id')
-
-// Update domain catch-all settings
-await inbound.domains.update('domain-id', {
-  isCatchAllEnabled: true,
-  catchAllEndpointId: 'endpoint-id'
-})
-```
-
-### Managing Email Addresses
+The new hierarchical structure makes email address management more intuitive:
 
 ```typescript
 // List all email addresses
-const addresses = await inbound.emailAddresses.list()
+const { data: addresses, error } = await inbound.email.address.list()
 
 // Create a new email address
-const address = await inbound.emailAddresses.create({
+const { data: newAddress, error: createError } = await inbound.email.address.create({
   address: 'support@yourdomain.com',
-  domainId: 'domain-id',
-  endpointId: 'endpoint-id',
+  domainId: 'domain-123'
+})
+
+// Update routing for an email address
+const { data: updated, error: updateError } = await inbound.email.address.update('address-123', {
+  endpointId: 'webhook-456',
   isActive: true
 })
 
-// Get email address details
-const address = await inbound.emailAddresses.get('address-id')
-
-// Update an email address
-await inbound.emailAddresses.update('address-id', {
-  isActive: false
-})
-
 // Delete an email address
-await inbound.emailAddresses.delete('address-id')
+const { data: deleted, error: deleteError } = await inbound.email.address.delete('address-123')
 ```
 
-## Error Handling
-
-The SDK throws errors for failed requests. Always wrap your calls in try-catch blocks:
+## 🌐 Domain Management
 
 ```typescript
-try {
-  const email = await inbound.emails.send({
-    from: 'hello@yourdomain.com',
-    to: 'user@example.com',
-    subject: 'Hello World',
-    text: 'Hello World',
-  })
-  console.log('Email sent:', email.id)
-} catch (error) {
-  console.error('Failed to send email:', error.message)
+// Create and verify a domain
+const { data: domain, error } = await inbound.domain.create({
+  domain: 'yourdomain.com'
+})
+
+if (!error) {
+  // Get DNS records needed for verification
+  const { data: dnsRecords } = await inbound.domain.getDnsRecords(domain.id)
+  console.log('Add these DNS records:', dnsRecords)
+  
+  // Verify domain after DNS setup
+  const { data: verification } = await inbound.domain.verify(domain.id)
 }
 ```
 
-## Convenience Aliases
-
-The SDK provides several convenience aliases for better developer experience:
+## 🔗 Endpoint Management
 
 ```typescript
-// These are equivalent
-inbound.endpoints === inbound.endpoint
-inbound.domains === inbound.domain  
-inbound.emailAddresses === inbound.emailAddress
-inbound.emails === inbound.email
+// Create a webhook endpoint
+const { data: webhook, error } = await inbound.endpoint.create({
+  name: 'My Webhook',
+  type: 'webhook',
+  config: {
+    url: 'https://yourapp.com/webhook',
+    timeout: 30000,
+    retryAttempts: 3
+  }
+})
 
-// Legacy send method
-inbound.send === inbound.emails.send
-
-// Streamlined reply method
-inbound.reply // Works with webhook emails or email IDs
+// Test the endpoint
+if (!error) {
+  const { data: testResult } = await inbound.endpoint.test(webhook.id)
+  console.log('Test result:', testResult)
+}
 ```
 
-## TypeScript Support
+## 🎯 Convenience Methods
 
-The SDK is written in TypeScript and provides full type definitions:
+```typescript
+// Quick reply to an email
+const { data, error } = await inbound.quickReply(
+  'email-123', 
+  'Thanks for your message!', 
+  'support@yourdomain.com',
+  { idempotencyKey: 'quick-reply-123' }
+)
+
+// One-step domain setup with webhook
+const { data: setup } = await inbound.setupDomain(
+  'newdomain.com',
+  'https://yourapp.com/webhook'
+)
+
+// Create email forwarder
+const { data: forwarder } = await inbound.createForwarder(
+  'info@yourdomain.com',
+  'team@yourdomain.com'
+)
+
+// Schedule a reminder
+const { data: reminder } = await inbound.scheduleReminder(
+  'user@example.com',
+  'Meeting Tomorrow',
+  'tomorrow at 9am',
+  'reminders@yourdomain.com',
+  { idempotencyKey: 'reminder-meeting-456' }
+)
+```
+
+## 🔄 Legacy Compatibility
+
+All previous method names still work for backwards compatibility:
+
+```typescript
+// These are equivalent:
+inbound.email === inbound.emails
+inbound.domain === inbound.domains  
+inbound.endpoint === inbound.endpoints
+inbound.email.address === inbound.emailAddresses
+
+// Legacy usage still works:
+const { data } = await inbound.emails.send(emailData)
+const { data } = await inbound.domains.list()
+```
+
+## 📧 Email Sending & Scheduling
+
+### Send Immediate Email
+
+```typescript
+const { data: email, error } = await inbound.email.send({
+  from: 'hello@yourdomain.com',
+  to: ['user@example.com', 'admin@example.com'],
+  subject: 'Welcome!',
+  html: '<h1>Welcome to our service!</h1>',
+  text: 'Welcome to our service!',
+  attachments: [
+    {
+      filename: 'welcome.pdf',
+      path: './welcome.pdf'
+    }
+  ]
+})
+```
+
+### Schedule Email
+
+```typescript
+const { data: scheduled, error } = await inbound.email.schedule({
+  from: 'hello@yourdomain.com',
+  to: 'user@example.com',
+  subject: 'Scheduled Email',
+  html: '<p>This email was scheduled!</p>',
+  scheduled_at: 'in 1 hour',           // Natural language
+  timezone: 'America/New_York'
+})
+
+// Or with specific date
+const { data: scheduled2 } = await inbound.email.schedule({
+  from: 'hello@yourdomain.com',
+  to: 'user@example.com',
+  subject: 'New Year Email',
+  html: '<p>Happy New Year!</p>',
+  scheduled_at: '2024-01-01T00:00:00Z'  // ISO 8601
+})
+```
+
+### Manage Scheduled Emails
+
+```typescript
+// List scheduled emails
+const { data: scheduledEmails } = await inbound.email.listScheduled({
+  status: 'scheduled',
+  limit: 10
+})
+
+// Get specific scheduled email
+const { data: scheduledEmail } = await inbound.email.getScheduled('email-id')
+
+// Cancel scheduled email
+const { data: cancelled } = await inbound.email.cancel('email-id')
+```
+
+## 📬 Inbound Email Management
+
+```typescript
+// List received emails
+const { data: emails } = await inbound.mail.list({
+  limit: 50,
+  status: 'processed',
+  timeRange: '7d'
+})
+
+// Get specific email
+const { data: email } = await inbound.mail.get('email-123')
+
+// Get email thread/conversation
+const { data: thread } = await inbound.mail.thread('email-123')
+
+// Mark email as read/unread
+await inbound.mail.markRead('email-123')
+await inbound.mail.markUnread('email-123')
+
+// Archive/unarchive emails
+await inbound.mail.archive('email-123')
+await inbound.mail.unarchive('email-123')
+
+// Bulk operations
+const { data: result } = await inbound.mail.bulk(
+  ['email-1', 'email-2', 'email-3'],
+  { isRead: true }
+)
+```
+
+## 🔧 Advanced Usage
+
+### React Email Components
+
+```typescript
+import { EmailTemplate } from './EmailTemplate'
+
+const { data, error } = await inbound.email.send({
+  from: 'hello@yourdomain.com',
+  to: 'user@example.com',
+  subject: 'Welcome!',
+  react: EmailTemplate({ name: 'John', welcomeUrl: 'https://app.com' })
+})
+```
+
+### Idempotency
+
+Prevent duplicate emails by using idempotency keys:
+
+```typescript
+const { data, error } = await inbound.email.send({
+  from: 'hello@yourdomain.com',
+  to: 'user@example.com',
+  subject: 'Important Email',
+  text: 'This email will only be sent once'
+}, {
+  idempotencyKey: 'unique-key-123'
+})
+
+// Works with all email sending methods
+await inbound.email.schedule({
+  from: 'hello@yourdomain.com',
+  to: 'user@example.com',
+  subject: 'Scheduled Email',
+  text: 'This scheduled email is idempotent',
+  scheduled_at: 'tomorrow at 9am'
+}, {
+  idempotencyKey: 'scheduled-email-456'
+})
+
+// Also works with replies
+await inbound.email.reply('email-123', {
+  from: 'support@yourdomain.com',
+  text: 'This reply will only be sent once'
+}, {
+  idempotencyKey: 'reply-789'
+})
+```
+
+## 🛠️ Error Handling
+
+```typescript
+const { data, error } = await inbound.email.send(emailData)
+
+if (error) {
+  // Handle different error types
+  if (error.includes('Invalid API key')) {
+    console.error('Authentication failed')
+  } else if (error.includes('Rate limit')) {
+    console.error('Rate limit exceeded')
+  } else {
+    console.error('Unknown error:', error)
+  }
+  return
+}
+
+// Success case
+console.log('Email sent successfully:', data.id)
+```
+
+## 📚 TypeScript Support
+
+The SDK is fully typed with TypeScript:
 
 ```typescript
 import type { 
-  PostEmailsRequest, 
+  ApiResponse,
+  PostEmailsRequest,
   PostEmailsResponse,
-  GetMailResponse,
-  InboundWebhookPayload, // For webhook handlers
-  InboundEmailConfigExtended // For extended config with defaultReplyFrom
+  InboundWebhookPayload 
 } from '@inboundemail/sdk'
 
-const emailData: PostEmailsRequest = {
+// Type-safe email sending
+const emailRequest: PostEmailsRequest = {
   from: 'hello@yourdomain.com',
   to: 'user@example.com',
-  subject: 'Hello World',
-  text: 'Hello World',
+  subject: 'Typed Email',
+  html: '<p>This is type-safe!</p>'
 }
 
-const response: PostEmailsResponse = await inbound.emails.send(emailData)
+const response: ApiResponse<PostEmailsResponse> = await inbound.email.send(emailRequest)
 ```
 
-## License
+## 🔗 Links
 
-MIT 
+- [API Documentation](https://docs.inbound.new)
+- [GitHub Repository](https://github.com/inboundemail/sdk)
+- [NPM Package](https://www.npmjs.com/package/@inboundemail/sdk)
+
+## 📄 License
+
+MIT License - see LICENSE file for details. 
