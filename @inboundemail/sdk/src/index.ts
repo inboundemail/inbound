@@ -13,6 +13,7 @@ export type {
   ApiResponse, 
   SuccessResponse, 
   ErrorResponse,
+  IdempotencyOptions,
   AttachmentData,
   ReactEmailComponent,
   PostEmailsRequest,

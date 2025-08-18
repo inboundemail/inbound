@@ -195,7 +195,8 @@ if (!error) {
 const { data, error } = await inbound.quickReply(
   'email-123', 
   'Thanks for your message!', 
-  'support@yourdomain.com'
+  'support@yourdomain.com',
+  { idempotencyKey: 'quick-reply-123' }
 )
 
 // One-step domain setup with webhook
@@ -215,7 +216,8 @@ const { data: reminder } = await inbound.scheduleReminder(
   'user@example.com',
   'Meeting Tomorrow',
   'tomorrow at 9am',
-  'reminders@yourdomain.com'
+  'reminders@yourdomain.com',
+  { idempotencyKey: 'reminder-meeting-456' }
 )
 ```
 
@@ -318,10 +320,10 @@ await inbound.mail.archive('email-123')
 await inbound.mail.unarchive('email-123')
 
 // Bulk operations
-const { data: result } = await inbound.mail.bulk({
-  operation: 'mark_read',
-  emailIds: ['email-1', 'email-2', 'email-3']
-})
+const { data: result } = await inbound.mail.bulk(
+  ['email-1', 'email-2', 'email-3'],
+  { isRead: true }
+)
 ```
 
 ## 🔧 Advanced Usage
@@ -341,6 +343,8 @@ const { data, error } = await inbound.email.send({
 
 ### Idempotency
 
+Prevent duplicate emails by using idempotency keys:
+
 ```typescript
 const { data, error } = await inbound.email.send({
   from: 'hello@yourdomain.com',
@@ -348,9 +352,26 @@ const { data, error } = await inbound.email.send({
   subject: 'Important Email',
   text: 'This email will only be sent once'
 }, {
-  headers: {
-    'Idempotency-Key': 'unique-key-123'
-  }
+  idempotencyKey: 'unique-key-123'
+})
+
+// Works with all email sending methods
+await inbound.email.schedule({
+  from: 'hello@yourdomain.com',
+  to: 'user@example.com',
+  subject: 'Scheduled Email',
+  text: 'This scheduled email is idempotent',
+  scheduled_at: 'tomorrow at 9am'
+}, {
+  idempotencyKey: 'scheduled-email-456'
+})
+
+// Also works with replies
+await inbound.email.reply('email-123', {
+  from: 'support@yourdomain.com',
+  text: 'This reply will only be sent once'
+}, {
+  idempotencyKey: 'reply-789'
 })
 ```
 

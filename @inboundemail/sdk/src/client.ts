@@ -4,7 +4,7 @@
 
 import type { 
   // Core response types
-  ApiResponse,
+  ApiResponse, IdempotencyOptions,
   // Mail API
   GetMailRequest, GetMailResponse, PostMailRequest, PostMailResponse, GetMailByIdResponse,
   // Endpoints API  
@@ -201,10 +201,10 @@ export class InboundEmailClient {
     /**
      * Bulk operations on multiple emails
      */
-    bulk: async (operation: any): Promise<ApiResponse<any>> => {
+    bulk: async (emailIds: string[], updates: { isRead?: boolean; isArchived?: boolean }): Promise<ApiResponse<any>> => {
       return this.request<any>('/mail/bulk', {
         method: 'POST',
-        body: JSON.stringify(operation),
+        body: JSON.stringify({ emailIds, updates }),
       })
     },
   }
@@ -219,15 +219,25 @@ export class InboundEmailClient {
      * Also supports React components for email content
      * If scheduled_at is provided, the email will be scheduled for future delivery
      */
-    send: async (params: PostEmailsRequest): Promise<ApiResponse<PostEmailsResponse>> => {
+    send: async (params: PostEmailsRequest, options?: IdempotencyOptions): Promise<ApiResponse<PostEmailsResponse>> => {
       // Process React component if provided
       const processedParams = await this.processReactComponent(params)
       
       // Determine endpoint based on whether email is scheduled
       const endpoint = processedParams.scheduled_at ? '/emails/schedule' : '/emails'
       
+      // Build headers with optional idempotency key
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      }
+      
+      if (options?.idempotencyKey) {
+        headers['Idempotency-Key'] = options.idempotencyKey
+      }
+      
       return this.request<PostEmailsResponse>(endpoint, {
         method: 'POST',
+        headers,
         body: JSON.stringify(processedParams),
       })
     },
@@ -242,9 +252,19 @@ export class InboundEmailClient {
     /**
      * Reply to an email by ID with optional attachments
      */
-    reply: async (id: string, params: PostEmailReplyRequest): Promise<ApiResponse<PostEmailReplyResponse>> => {
+    reply: async (id: string, params: PostEmailReplyRequest, options?: IdempotencyOptions): Promise<ApiResponse<PostEmailReplyResponse>> => {
+      // Build headers with optional idempotency key
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      }
+      
+      if (options?.idempotencyKey) {
+        headers['Idempotency-Key'] = options.idempotencyKey
+      }
+      
       return this.request<PostEmailReplyResponse>(`/emails/${id}/reply`, {
         method: 'POST',
+        headers,
         body: JSON.stringify(params),
       })
     },
@@ -273,12 +293,22 @@ export class InboundEmailClient {
      *   scheduled_at: "2024-12-25T09:00:00Z"
      * })
      */
-    schedule: async (params: PostScheduleEmailRequest): Promise<ApiResponse<PostScheduleEmailResponse>> => {
+    schedule: async (params: PostScheduleEmailRequest, options?: IdempotencyOptions): Promise<ApiResponse<PostScheduleEmailResponse>> => {
       // Process React component if provided
       const processedParams = await this.processReactComponent(params as any)
       
+      // Build headers with optional idempotency key
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      }
+      
+      if (options?.idempotencyKey) {
+        headers['Idempotency-Key'] = options.idempotencyKey
+      }
+      
       return this.request<PostScheduleEmailResponse>('/emails/schedule', {
         method: 'POST',
+        headers,
         body: JSON.stringify(processedParams),
       })
     },
@@ -526,11 +556,11 @@ export class InboundEmailClient {
   /**
    * Quick text reply to an email
    */
-  quickReply = async (emailId: string, message: string, from: string): Promise<ApiResponse<PostEmailReplyResponse>> => {
+  quickReply = async (emailId: string, message: string, from: string, options?: IdempotencyOptions): Promise<ApiResponse<PostEmailReplyResponse>> => {
     return this.email.reply(emailId, {
       from,
       text: message
-    })
+    }, options)
   }
 
   /**
@@ -582,14 +612,14 @@ export class InboundEmailClient {
   /**
    * Quick scheduled email reminder
    */
-  scheduleReminder = async (to: string, subject: string, when: string, from: string): Promise<ApiResponse<PostScheduleEmailResponse>> => {
+  scheduleReminder = async (to: string, subject: string, when: string, from: string, options?: IdempotencyOptions): Promise<ApiResponse<PostScheduleEmailResponse>> => {
     return this.email.schedule({
       from,
       to,
       subject,
       text: `Reminder: ${subject}`,
       scheduled_at: when
-    })
+    }, options)
   }
 
   /**
@@ -600,8 +630,8 @@ export class InboundEmailClient {
    * @deprecated Use email.send() instead
    * Legacy send method for backwards compatibility
    */
-  send = async (params: PostEmailsRequest): Promise<ApiResponse<PostEmailsResponse>> => {
-    return this.email.send(params)
+  send = async (params: PostEmailsRequest, options?: IdempotencyOptions): Promise<ApiResponse<PostEmailsResponse>> => {
+    return this.email.send(params, options)
   }
 
   /**
@@ -614,7 +644,8 @@ export class InboundEmailClient {
    */
   reply = async (
     emailOrId: InboundWebhookEmail | string,
-    replyParams: PostEmailReplyRequest
+    replyParams: PostEmailReplyRequest,
+    options?: IdempotencyOptions
   ): Promise<ApiResponse<PostEmailReplyResponse>> => {
     // Determine email ID
     const emailId = typeof emailOrId === 'string' ? emailOrId : emailOrId.id
@@ -626,7 +657,7 @@ export class InboundEmailClient {
       }
     }
 
-    return this.email.reply(emailId, replyParams)
+    return this.email.reply(emailId, replyParams, options)
   }
 
   // Legacy aliases for backwards compatibility

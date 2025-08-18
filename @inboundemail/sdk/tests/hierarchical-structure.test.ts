@@ -32,6 +32,7 @@ describe('Hierarchical SDK Structure', () => {
     expect(client.mail.unarchive).toBeDefined()
     expect(client.mail.reply).toBeDefined()
     expect(client.mail.bulk).toBeDefined()
+    expect(typeof client.mail.bulk).toBe('function')
   })
 
   test('should have email methods for outbound emails', () => {

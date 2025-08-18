@@ -41,6 +41,8 @@ async function demonstrateHierarchicalStructure() {
     subject: 'Welcome!',
     html: '<h1>Welcome to our service!</h1>',
     text: 'Welcome to our service!'
+  }, {
+    idempotencyKey: 'welcome-email-123'
   })
 
   if (sendError) {
@@ -143,11 +145,12 @@ async function demonstrateHierarchicalStructure() {
   // 🎯 CONVENIENCE METHODS
   console.log('\n🎯 Convenience Methods:')
   
-  // Quick reply to an email
+  // Quick reply to an email with idempotency
   const { data: replyResult, error: replyError } = await inbound.quickReply(
     'email-123',
     'Thanks for your message!',
-    'support@yourdomain.com'
+    'support@yourdomain.com',
+    { idempotencyKey: 'support-reply-456' }
   )
 
   if (!replyError) {
