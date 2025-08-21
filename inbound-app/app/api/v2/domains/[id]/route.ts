@@ -925,6 +925,28 @@ export async function DELETE(
             )
         }
 
+        // 7. Track domain deletion with Autumn to free up domain spot
+        try {
+            console.log('📊 Tracking domain deletion with Autumn for user:', userId)
+            const { Autumn: autumn } = await import('autumn-js')
+            const { error: trackError } = await autumn.track({
+                customer_id: userId,
+                feature_id: "domains",
+                value: -1,
+            })
+
+            if (trackError) {
+                console.error('⚠️ Failed to track domain deletion:', trackError)
+                // Don't fail the deletion if tracking fails, just log it
+                console.warn(`⚠️ Domain deleted but usage tracking failed for user: ${userId}`)
+            } else {
+                console.log(`✅ Successfully tracked domain deletion for user: ${userId}`)
+            }
+        } catch (trackingError) {
+            console.error('⚠️ Failed to import or use Autumn tracking:', trackingError)
+            // Don't fail the deletion if tracking fails, just log it
+        }
+
         console.log('✅ Successfully deleted domain and all associated resources')
 
         const response: DeleteDomainByIdResponse = {
