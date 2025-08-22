@@ -209,6 +209,7 @@ async function findEndpointForEmail(recipient: string, userId: string): Promise<
         isCatchAllEnabled: emailDomains.isCatchAllEnabled,
         catchAllEndpointId: emailDomains.catchAllEndpointId,
         catchAllWebhookId: emailDomains.catchAllWebhookId,
+        isDmarcCaptureEnabled: emailDomains.isDmarcCaptureEnabled,
         domain: emailDomains.domain,
       })
       .from(emailDomains)
@@ -220,8 +221,15 @@ async function findEndpointForEmail(recipient: string, userId: string): Promise<
       .limit(1)
 
     if (domainRecord[0]) {
-      const { catchAllEndpointId, catchAllWebhookId } = domainRecord[0]
+      const { catchAllEndpointId, catchAllWebhookId, isDmarcCaptureEnabled } = domainRecord[0]
       console.log(`🌐 findEndpointForEmail - Found catch-all domain: ${domain}, endpointId: ${catchAllEndpointId}, webhookId: ${catchAllWebhookId}`)
+
+      // Check for DMARC capture filtering - prevent DMARC reports from being processed through catch-all
+      const localPart = recipient.split('@')[0]?.toLowerCase()
+      if (isDmarcCaptureEnabled && localPart === 'dmarc') {
+        console.log(`🛡️ findEndpointForEmail - DMARC capture enabled: blocking dmarc@${domain} from catch-all processing`)
+        return null // Don't process DMARC reports through catch-all
+      }
 
       // Priority 3: Use catch-all endpoint
       if (catchAllEndpointId) {

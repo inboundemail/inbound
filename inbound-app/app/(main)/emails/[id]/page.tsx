@@ -45,6 +45,7 @@ import Refresh2 from '@/components/icons/refresh-2'
 import ObjRemove from '@/components/icons/obj-remove'
 import BoltLightning from '@/components/icons/bolt-lightning'
 import UserGroup from '@/components/icons/user-group'
+import Shield2 from '@/components/icons/shield-2'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { DOMAIN_STATUS } from '@/lib/db/schema'
@@ -73,6 +74,7 @@ import {
     useDomainAuthVerifyV2Mutation,
     domainV2Keys
 } from '@/features/domains/hooks/useDomainV2Hooks'
+import { useDmarcCaptureToggle } from '@/features/dmarc/hooks'
 
 // v2 API types
 import type { 
@@ -160,6 +162,7 @@ export default function DomainDetailPage() {
     const deleteEmailMutation = useDeleteEmailAddressV2Mutation()
     const updateEmailWebhookMutation = useUpdateEmailEndpointV2Mutation()
     const updateCatchAllMutation = useUpdateDomainCatchAllV2Mutation()
+    const dmarcCaptureMutation = useDmarcCaptureToggle()
 
     // Local state for UI interactions
     const [newEmailAddress, setNewEmailAddress] = useState('')
@@ -491,7 +494,7 @@ export default function DomainDetailPage() {
         }
     }
 
-    const toggleCatchAll = async () => {
+        const toggleCatchAll = async () => {
         if (!domainDetailsData) return
 
         try {
@@ -508,7 +511,7 @@ export default function DomainDetailPage() {
                     return
                 }
 
-                await updateCatchAllMutation.mutateAsync({
+                await updateCatchAllMutation.mutateAsync({ 
                     domainId,
                     isCatchAllEnabled: true,
                     catchAllEndpointId: catchAllEndpointId
@@ -517,6 +520,24 @@ export default function DomainDetailPage() {
             }
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to toggle catch-all')
+        }
+    }
+
+    const toggleDmarcCapture = async () => {
+        if (!domainDetailsData) return
+
+        try {
+            await dmarcCaptureMutation.mutateAsync({
+                domainId,
+                isDmarcCaptureEnabled: !domainDetailsData.isDmarcCaptureEnabled
+            })
+            toast.success(
+                domainDetailsData.isDmarcCaptureEnabled 
+                    ? 'DMARC capture disabled - DMARC reports will now be processed through catch-all'
+                    : 'DMARC capture enabled - DMARC reports will be blocked from catch-all processing'
+            )
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to toggle DMARC capture')
         }
     }
 
@@ -1233,6 +1254,50 @@ export default function DomainDetailPage() {
                                     </div>
                                 </>
                             )}
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* DMARC Capture Configuration - Show for domains with catch-all enabled */}
+                {domainDetailsData && domainDetailsData.isCatchAllEnabled && (
+                    <Card className="bg-card border-border rounded-xl">
+                        <CardHeader className="pb-4">
+                            <div className="flex items-center gap-2">
+                                <Shield2 width="20" height="20" className="text-primary" />
+                                <CardTitle className="text-foreground text-lg">DMARC Capture</CardTitle>
+                            </div>
+                            <CardDescription className="text-muted-foreground">
+                                Control whether DMARC reports (dmarc@{domainDetailsData.domain}) are blocked from catch-all processing
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <div className="font-medium text-foreground">DMARC Report Filtering</div>
+                                    <div className="text-sm text-muted-foreground">
+                                        {domainDetailsData.isDmarcCaptureEnabled
+                                            ? 'DMARC reports are blocked from catch-all processing'
+                                            : 'DMARC reports will be processed through catch-all'
+                                        }
+                                    </div>
+                                </div>
+                                <Button
+                                    variant={domainDetailsData.isDmarcCaptureEnabled ? "default" : "secondary"}
+                                    onClick={toggleDmarcCapture}
+                                    disabled={dmarcCaptureMutation.isPending}
+                                    className="min-w-[120px]"
+                                >
+                                    {domainDetailsData.isDmarcCaptureEnabled ? 'Enabled' : 'Disabled'}
+                                </Button>
+                            </div>
+                            <div className="text-xs text-muted-foreground bg-muted p-3 rounded-md">
+                                <div className="font-medium mb-1">What is DMARC Capture?</div>
+                                <p>
+                                    DMARC reports are automated emails sent to dmarc@{domainDetailsData.domain} by email providers. 
+                                    When enabled (recommended), these reports are filtered out from your catch-all configuration to prevent 
+                                    automated emails from cluttering your inbox or triggering webhooks unnecessarily.
+                                </p>
+                            </div>
                         </CardContent>
                     </Card>
                 )}

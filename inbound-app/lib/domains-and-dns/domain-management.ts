@@ -159,6 +159,7 @@ export async function listDomains(
       lastDnsCheck: emailDomains.lastDnsCheck,
       lastSesCheck: emailDomains.lastSesCheck,
       isCatchAllEnabled: emailDomains.isCatchAllEnabled,
+      isDmarcCaptureEnabled: emailDomains.isDmarcCaptureEnabled,
       createdAt: emailDomains.createdAt,
       updatedAt: emailDomains.updatedAt,
       userId: emailDomains.userId
@@ -405,6 +406,7 @@ export async function updateDomain(
     catchAllEndpointId?: string | null
     domainProvider?: string
     providerConfidence?: 'high' | 'medium' | 'low'
+    isDmarcCaptureEnabled?: boolean
   }
 ): Promise<EmailDomain | null> {
   // Verify domain belongs to user
@@ -437,6 +439,10 @@ export async function updateDomain(
 
   if (updates.providerConfidence !== undefined) {
     updateData.providerConfidence = updates.providerConfidence
+  }
+
+  if (updates.isDmarcCaptureEnabled !== undefined) {
+    updateData.isDmarcCaptureEnabled = updates.isDmarcCaptureEnabled
   }
 
   // Update domain

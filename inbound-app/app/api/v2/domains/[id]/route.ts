@@ -58,6 +58,7 @@ export interface GetDomainByIdResponse {
     lastSesCheck: Date | null
     isCatchAllEnabled: boolean
     catchAllEndpointId: string | null
+    isDmarcCaptureEnabled: boolean
     createdAt: Date
     updatedAt: Date
     userId: string
@@ -214,6 +215,7 @@ export async function GET(
             lastSesCheck: domain.lastSesCheck,
             isCatchAllEnabled: domain.isCatchAllEnabled || false,
             catchAllEndpointId: domain.catchAllEndpointId,
+            isDmarcCaptureEnabled: domain.isDmarcCaptureEnabled ?? true,
             createdAt: domain.createdAt || new Date(),
             updatedAt: domain.updatedAt || new Date(),
             userId: domain.userId,
@@ -493,6 +495,7 @@ export async function GET(
 export interface PutDomainByIdRequest {
     isCatchAllEnabled: boolean
     catchAllEndpointId?: string | null
+    isDmarcCaptureEnabled?: boolean
 }
 
 export interface PutDomainByIdResponse {
@@ -501,6 +504,7 @@ export interface PutDomainByIdResponse {
     status: string
     isCatchAllEnabled: boolean
     catchAllEndpointId: string | null
+    isDmarcCaptureEnabled: boolean
     catchAllEndpoint?: {
         id: string
         name: string
@@ -534,7 +538,8 @@ export async function PUT(
         const data: PutDomainByIdRequest = await request.json()
         console.log('📝 Update data received:', {
             isCatchAllEnabled: data.isCatchAllEnabled,
-            catchAllEndpointId: data.catchAllEndpointId
+            catchAllEndpointId: data.catchAllEndpointId,
+            isDmarcCaptureEnabled: data.isDmarcCaptureEnabled
         })
 
         // Check if domain exists and belongs to user
@@ -666,6 +671,7 @@ export async function PUT(
                 isCatchAllEnabled: data.isCatchAllEnabled,
                 catchAllEndpointId: data.isCatchAllEnabled ? data.catchAllEndpointId : null,
                 catchAllReceiptRuleName: receiptRuleName,
+                isDmarcCaptureEnabled: data.isDmarcCaptureEnabled ?? existingDomain[0].isDmarcCaptureEnabled ?? true,
                 updatedAt: new Date()
             })
             .where(eq(emailDomains.id, id))
@@ -704,6 +710,7 @@ export async function PUT(
              status: updatedDomain.status,
              isCatchAllEnabled: updatedDomain.isCatchAllEnabled || false,
              catchAllEndpointId: updatedDomain.catchAllEndpointId,
+             isDmarcCaptureEnabled: updatedDomain.isDmarcCaptureEnabled ?? true,
              catchAllEndpoint,
              receiptRuleName,
              updatedAt: updatedDomain.updatedAt || new Date()

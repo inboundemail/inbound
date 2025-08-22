@@ -1,0 +1,1 @@
+ALTER TABLE "email_domains" ADD COLUMN "is_dmarc_capture_enabled" boolean DEFAULT true;

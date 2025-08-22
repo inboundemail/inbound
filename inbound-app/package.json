@@ -78,7 +78,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "dompurify": "^3.2.6",
-    "dotenv": "^16.5.0",
+    "dotenv": "^16.6.1",
     "drizzle-orm": "^0.43.1",
     "flags": "^4.0.1",
     "framer-motion": "^12.14.0",
