@@ -9,6 +9,7 @@ import { eq, and } from 'drizzle-orm'
 import { Autumn as autumn } from 'autumn-js'
 import { nanoid } from 'nanoid'
 import { canUserSendFromEmail, extractEmailAddress, extractDomain } from '@/lib/email-management/agent-email-helper'
+import { getMailFromDomain } from '@/lib/domains-and-dns/mail-from-domain'
 
 /**
  * POST /api/v2/emails
@@ -310,6 +311,12 @@ export async function POST(request: NextRequest) {
             const sourceEmail = fromParsed.email
             const formattedFromAddress = formatEmailWithName(sourceEmail, fromParsed.name)
             
+            // Get the configured MAIL FROM domain to eliminate "via amazonses.com"
+            const mailFromDomain = await getMailFromDomain(sourceEmail, userId)
+            const sourceForSes = mailFromDomain || sourceEmail
+            
+            console.log(`📧 Using SES Source: ${sourceForSes}${mailFromDomain ? ' (custom MAIL FROM domain)' : ' (sender email)'}`)
+            
             // Always use SendRawEmailCommand for full MIME support (attachments, display names, etc.)
             console.log('📧 Building raw email message with full MIME support')
             
@@ -331,7 +338,7 @@ export async function POST(request: NextRequest) {
                 RawMessage: {
                     Data: Buffer.from(rawMessage)
                 },
-                Source: sourceEmail,
+                Source: sourceForSes,
                 Destinations: [...toAddresses, ...ccAddresses, ...bccAddresses].map(extractEmailAddress)
             })
             

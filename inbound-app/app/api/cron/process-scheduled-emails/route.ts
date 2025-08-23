@@ -5,6 +5,7 @@ import { eq, and, lte, ne } from 'drizzle-orm'
 import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses'
 import { buildRawEmailMessage } from '../../v2/helper/email-builder'
 import { extractEmailAddress } from '@/lib/email-management/agent-email-helper'
+import { getMailFromDomain } from '@/lib/domains-and-dns/mail-from-domain'
 import { nanoid } from 'nanoid'
 
 /**
@@ -201,6 +202,13 @@ export async function GET(request: NextRequest) {
                     .values(sentEmailData)
                     .returning()
 
+                // Get the configured MAIL FROM domain to eliminate "via amazonses.com"
+                const fromAddress = extractEmailAddress(scheduledEmail.fromAddress)
+                const mailFromDomain = await getMailFromDomain(fromAddress, scheduledEmail.userId)
+                const sourceForSes = mailFromDomain || fromAddress
+                
+                console.log(`📧 Using SES Source: ${sourceForSes}${mailFromDomain ? ' (custom MAIL FROM domain)' : ' (sender email)'}`)
+
                 // Build raw email message
                 console.log('📧 Building raw email message for scheduled email')
                 const rawMessage = buildRawEmailMessage({
@@ -222,7 +230,7 @@ export async function GET(request: NextRequest) {
                     RawMessage: {
                         Data: Buffer.from(rawMessage)
                     },
-                    Source: extractEmailAddress(scheduledEmail.fromAddress),
+                    Source: sourceForSes,
                     Destinations: [...toAddresses, ...ccAddresses, ...bccAddresses].map(extractEmailAddress)
                 })
 
