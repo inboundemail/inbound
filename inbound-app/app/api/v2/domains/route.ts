@@ -187,6 +187,7 @@ export async function GET(request: NextRequest) {
                 lastSesCheck: emailDomains.lastSesCheck,
                 isCatchAllEnabled: emailDomains.isCatchAllEnabled,
                 catchAllEndpointId: emailDomains.catchAllEndpointId,
+                mailFromDomain: emailDomains.mailFromDomain,
                 createdAt: emailDomains.createdAt,
                 updatedAt: emailDomains.updatedAt,
                 userId: emailDomains.userId
