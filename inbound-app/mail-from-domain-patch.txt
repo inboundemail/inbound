@@ -1,0 +1,32 @@
+MAIL FROM DOMAIN INTEGRATION PATCH
+==================================
+
+Changes needed for /workspace/inbound-app/app/api/v2/emails/route.ts:
+
+1. Add import after line 11:
+   import { getMailFromDomain } from '@/lib/domains-and-dns/mail-from-domain'
+
+2. Replace lines 308-311 with:
+            // Parse the from address to support display names
+            const fromParsed = parseEmailWithName(body.from)
+            const sourceEmail = fromParsed.email
+            const formattedFromAddress = formatEmailWithName(sourceEmail, fromParsed.name)
+            
+            // Get the configured MAIL FROM domain to eliminate "via amazonses.com"
+            const mailFromDomain = await getMailFromDomain(sourceEmail, userId)
+            const sourceForSes = mailFromDomain || sourceEmail
+            
+            console.log(`📧 Using SES Source: ${sourceForSes}${mailFromDomain ? ' (custom MAIL FROM domain)' : ' (sender email)'}`)
+
+3. Replace line 334:
+   FROM: Source: sourceEmail,
+   TO:   Source: sourceForSes,
+
+These changes will:
+- Import the mail-from-domain utility
+- Retrieve the configured MAIL FROM domain for the sender's domain
+- Use the MAIL FROM domain as the Source parameter in SES
+- Fall back to the sender email if no MAIL FROM domain is configured
+- Add logging to show which Source is being used
+
+This will eliminate the "via amazonses.com" text in sent emails.

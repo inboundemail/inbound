@@ -213,6 +213,14 @@ export async function POST(
         BehaviorOnMXFailure: 'UseDefaultValue'
       })
       await sesClient.send(mailFromCommand)
+      
+      // Store the MAIL FROM domain in database for use during email sending
+      await db.update(emailDomains)
+        .set({ 
+          mailFromDomain: fullMailFromDomain,
+          updatedAt: new Date()
+        })
+        .where(eq(emailDomains.id, id))
       records.push({
         type: 'MX',
         name: fullMailFromDomain,

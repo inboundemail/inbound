@@ -67,6 +67,8 @@ export const emailDomains = pgTable('email_domains', {
   providerConfidence: varchar('provider_confidence', { length: 20 }), // 'high', 'medium', 'low'
   lastDnsCheck: timestamp('last_dns_check'),
   lastSesCheck: timestamp('last_ses_check'),
+  // Domain authentication
+  mailFromDomain: varchar('mail_from_domain', { length: 255 }), // Custom MAIL FROM domain (e.g., mail.example.com) for eliminating "via amazonses.com"
   // Catch-all configuration
   isCatchAllEnabled: boolean('is_catch_all_enabled').default(false),
   catchAllWebhookId: varchar('catch_all_webhook_id', { length: 255 }), // Link to webhooks table for catch-all emails (legacy)

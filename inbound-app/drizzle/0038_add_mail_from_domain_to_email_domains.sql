@@ -1,0 +1,1 @@
+ALTER TABLE "email_domains" ADD COLUMN "mail_from_domain" varchar(255);
