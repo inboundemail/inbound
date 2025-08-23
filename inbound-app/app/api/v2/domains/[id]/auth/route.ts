@@ -191,11 +191,19 @@ export async function POST(
       })
 
       // DKIM
+      console.log('🔐 Configuring DKIM for domain:', domain.domain)
       const dkimCommand = new VerifyDomainDkimCommand({ Domain: domain.domain })
       const dkimResponse = await sesClient.send(dkimCommand)
       dkimTokens = dkimResponse.DkimTokens || []
       dkimEnabled = dkimTokens.length > 0
+      console.log('📋 DKIM tokens received:', dkimTokens.length, 'tokens:', dkimTokens)
+      
+      if (dkimTokens.length === 0) {
+        console.warn('⚠️ No DKIM tokens received from SES for domain:', domain.domain)
+      }
+      
       dkimTokens.forEach((token, index) => {
+        console.log(`📝 Adding DKIM CNAME record ${index + 1}:`, `${token}._domainkey.${domain.domain}`)
         records.push({
           type: 'CNAME',
           name: `${token}._domainkey.${domain.domain}`,
@@ -277,6 +285,9 @@ export async function POST(
     }
 
     // Store to DB
+    console.log('💾 Storing', records.length, 'DNS records to database')
+    console.log('📋 Records to store:', records.map(r => `${r.type}: ${r.name}`))
+    
     try {
       await db.delete(domainDnsRecords).where(eq(domainDnsRecords.domainId, id))
       const recordsToInsert = records.map(r => ({
@@ -289,7 +300,12 @@ export async function POST(
         isVerified: false,
         createdAt: new Date(),
       }))
-      if (recordsToInsert.length > 0) await db.insert(domainDnsRecords).values(recordsToInsert)
+      if (recordsToInsert.length > 0) {
+        await db.insert(domainDnsRecords).values(recordsToInsert)
+        console.log('✅ Successfully stored', recordsToInsert.length, 'DNS records')
+      } else {
+        console.warn('⚠️ No records to insert!')
+      }
     } catch (dbError) {
       console.error('❌ Database error storing DNS records:', dbError)
     }
