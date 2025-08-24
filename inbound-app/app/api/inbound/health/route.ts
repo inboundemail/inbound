@@ -62,6 +62,16 @@ export async function POST(request: NextRequest) {
     // Parse the SNS notification
     const parsedNotification = parseSNSNotification(body);
     
+    if (parsedNotification.messageType === 'SubscriptionConfirmation') {
+      console.log('SubscriptionConfirmation received');
+      console.log(body);
+      return NextResponse.json({ 
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        message: 'Subscription confirmation received'
+      });
+    }
+    
     // Log the parsed notification
     console.log('=== AWS SNS Health Notification ===');
     console.log('Timestamp:', new Date().toISOString());
