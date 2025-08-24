@@ -72,6 +72,8 @@ export const emailDomains = pgTable('email_domains', {
   catchAllWebhookId: varchar('catch_all_webhook_id', { length: 255 }), // Link to webhooks table for catch-all emails (legacy)
   catchAllEndpointId: varchar('catch_all_endpoint_id', { length: 255 }), // Link to endpoints table for catch-all emails (new unified system)
   catchAllReceiptRuleName: varchar('catch_all_receipt_rule_name', { length: 255 }),
+  // DMARC capture configuration - prevents DMARC reports from being processed through catch-all
+  isDmarcCaptureEnabled: boolean('is_dmarc_capture_enabled').default(true),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
   userId: varchar('user_id', { length: 255 }).notNull(),
