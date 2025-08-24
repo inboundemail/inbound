@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatDistanceToNow, format } from 'date-fns'
 import Link from 'next/link'
-import { useDomainsListV2Query } from '@/features/domains/hooks/useDomainV2Hooks'
+import { useDomainsListV2Query, useUpgradeDomainMailFromV2Mutation } from '@/features/domains/hooks/useDomainV2Hooks'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import { toast } from 'sonner'
 
 // Import Nucleo icons
 import Globe2 from '@/components/icons/globe-2'
@@ -20,10 +21,12 @@ import Magnifier2 from '@/components/icons/magnifier-2'
 import Filter2 from '@/components/icons/filter-2'
 import ArrowUpRight2 from '@/components/icons/arrow-up-right-2'
 import type { DomainWithStats } from '@/app/api/v2/domains/route'
+import Check2 from '@/components/icons/check-2'
 
 export default function EmailsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [upgradingDomains, setUpgradingDomains] = useState<Set<string>>(new Set())
 
   // Debounce inputs to reduce API calls
   const debouncedSearch = useDebouncedValue(searchQuery, 300)
@@ -36,6 +39,9 @@ export default function EmailsPage() {
     error,
     refetch: refetchDomains
   } = useDomainsListV2Query({ limit: 100 })
+
+  // MAIL FROM upgrade mutation
+  const upgradeMailFromMutation = useUpgradeDomainMailFromV2Mutation()
 
   // Helper functions for domain status
   const getDomainStatusDot = (domain: DomainWithStats) => {
@@ -55,6 +61,33 @@ export default function EmailsPage() {
       return "Verified"
     } else {
       return "Pending"
+    }
+  }
+
+  const handleUpgradeDomain = async (domainId: string, event: React.MouseEvent) => {
+    event.preventDefault() // Prevent navigation
+    event.stopPropagation()
+    
+    setUpgradingDomains(prev => new Set(prev).add(domainId))
+    
+    try {
+      const result = await upgradeMailFromMutation.mutateAsync({ domainId })
+      toast.success(
+        result.alreadyConfigured 
+          ? 'Domain already has MAIL FROM configured' 
+          : 'Domain upgraded! Check DNS records for mail.yourdomain.com',
+        { duration: 5000 }
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to upgrade domain'
+      )
+    } finally {
+      setUpgradingDomains(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(domainId)
+        return newSet
+      })
     }
   }
 
@@ -235,11 +268,39 @@ export default function EmailsPage() {
                   </Badge>
                 </div>
 
+                {/* MAIL FROM Status Badge */}
+                <div className="flex-shrink-0 w-32">
+                  {domain.status === 'verified' && !domain.mailFromDomain && (
+                    <Badge variant="outline">
+                      Upgrade Available
+                    </Badge>
+                  )}
+                  {/* {domain.mailFromDomain && (
+                    <Badge variant="secondary" className="text-xs">
+                      <Check2 width="12" height="12" className="mr-1 inline-block" />
+                      Enhanced Identity
+                    </Badge>
+                  )} */}
+                </div>
+
                 {/* Configuration Type */}
                 <div className="flex-1 min-w-0">
-                  <span className="text-sm text-muted-foreground">
-                    {domain.isCatchAllEnabled ? 'Catch-all enabled' : 'Individual addresses'}
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      {domain.isCatchAllEnabled ? 'Catch-all enabled' : 'Individual addresses'}
+                    </span>
+                    {domain.status === 'verified' && !domain.mailFromDomain && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={(e) => handleUpgradeDomain(domain.id, e)}
+                        disabled={upgradingDomains.has(domain.id)}
+                      >
+                        {upgradingDomains.has(domain.id) ? 'Upgrading...' : 'Upgrade'}
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Created */}

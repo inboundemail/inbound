@@ -47,17 +47,33 @@ export async function updateDomainSesVerification(
   domainId: string,
   verificationToken: string,
   sesStatus: string,
-  dnsRecords: Array<{ type: string; name: string; value: string }>
+  dnsRecords: Array<{ type: string; name: string; value: string; description?: string }>,
+  mailFromDomain?: string,
+  mailFromDomainStatus?: string
 ): Promise<EmailDomain> {
-  // Update the domain record
+  // Update the domain record with MAIL FROM domain information
+  const updateData: any = {
+    verificationToken,
+    status: sesStatus === 'Success' ? 'verified' : 'pending',
+    lastSesCheck: new Date(),
+    updatedAt: new Date(),
+  }
+
+  // Add MAIL FROM domain fields if provided
+  if (mailFromDomain) {
+    updateData.mailFromDomain = mailFromDomain
+  }
+  if (mailFromDomainStatus) {
+    updateData.mailFromDomainStatus = mailFromDomainStatus
+    // Set verification timestamp if MAIL FROM domain is verified
+    if (mailFromDomainStatus === 'Success') {
+      updateData.mailFromDomainVerifiedAt = new Date()
+    }
+  }
+
   const [updated] = await db
     .update(emailDomains)
-    .set({
-      verificationToken,
-      status: sesStatus === 'Success' ? 'verified' : 'pending',
-      lastSesCheck: new Date(),
-      updatedAt: new Date(),
-    })
+    .set(updateData)
     .where(eq(emailDomains.id, domainId))
     .returning()
 

@@ -58,6 +58,9 @@ export interface DomainWithStats {
     lastSesCheck: Date | null
     isCatchAllEnabled: boolean
     catchAllEndpointId: string | null
+    mailFromDomain: string | null
+    mailFromDomainStatus: string | null
+    mailFromDomainVerifiedAt: Date | null
     createdAt: Date
     updatedAt: Date
     userId: string
@@ -187,6 +190,9 @@ export async function GET(request: NextRequest) {
                 lastSesCheck: emailDomains.lastSesCheck,
                 isCatchAllEnabled: emailDomains.isCatchAllEnabled,
                 catchAllEndpointId: emailDomains.catchAllEndpointId,
+                mailFromDomain: emailDomains.mailFromDomain,
+                mailFromDomainStatus: emailDomains.mailFromDomainStatus,
+                mailFromDomainVerifiedAt: emailDomains.mailFromDomainVerifiedAt,
                 createdAt: emailDomains.createdAt,
                 updatedAt: emailDomains.updatedAt,
                 userId: emailDomains.userId
@@ -466,10 +472,13 @@ export interface PostDomainsResponse {
     hasMxRecords: boolean
     domainProvider: string | null
     providerConfidence: string | null
+    mailFromDomain?: string
+    mailFromDomainStatus?: string
     dnsRecords: Array<{
         type: string
         name: string
         value: string
+        description?: string
         isRequired: boolean
     }>
     createdAt: Date
@@ -640,10 +649,13 @@ export async function POST(request: NextRequest) {
             hasMxRecords: domainRecord.hasMxRecords || false,
             domainProvider: domainRecord.domainProvider,
             providerConfidence: domainRecord.providerConfidence,
+            mailFromDomain: verificationResult.mailFromDomain,
+            mailFromDomainStatus: verificationResult.mailFromDomainStatus,
             dnsRecords: verificationResult.dnsRecords.map(record => ({
                 type: record.type,
                 name: record.name,
                 value: record.value,
+                description: record.description,
                 isRequired: true
             })),
             createdAt: domainRecord.createdAt || new Date(),
