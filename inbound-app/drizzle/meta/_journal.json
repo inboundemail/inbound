@@ -267,6 +267,13 @@
       "when": 1755398268761,
       "tag": "0037_little_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1756050723354,
+      "tag": "0038_free_talon",
+      "breakpoints": true
     }
   ]
 }
