@@ -313,12 +313,41 @@ export async function POST(request: NextRequest) {
           awsRegion
         )
 
-        const receiptResult = await sesManager.configureEmailReceiving({
-          domain: domainResult[0].domain,
-          emailAddresses: [data.address],
-          lambdaFunctionArn: lambdaArn,
-          s3BucketName
-        })
+        let receiptResult: any
+
+        // Check if domain has catch-all enabled - if so, use mixed mode
+        if (domainResult[0].isCatchAllEnabled && domainResult[0].catchAllEndpointId) {
+          console.log(`🔀 POST /api/v1.1/email-addresses - Domain has catch-all enabled, using mixed mode`)
+          
+          // Get all existing email addresses for this domain
+          const allDomainEmails = await db
+            .select({ address: emailAddresses.address })
+            .from(emailAddresses)
+            .where(and(
+              eq(emailAddresses.domainId, data.domainId),
+              eq(emailAddresses.isActive, true)
+            ))
+
+          const mixedResult = await sesManager.configureMixedMode({
+            domain: domainResult[0].domain,
+            emailAddresses: allDomainEmails.map(e => e.address),
+            catchAllWebhookId: domainResult[0].catchAllEndpointId,
+            lambdaFunctionArn: lambdaArn,
+            s3BucketName
+          })
+          
+          receiptResult = mixedResult.individualRule || mixedResult.catchAllRule
+        } else {
+          // Use individual email rules only (legacy behavior)
+          console.log(`📧 POST /api/v1.1/email-addresses - Using individual email rules only`)
+          
+          receiptResult = await sesManager.configureEmailReceiving({
+            domain: domainResult[0].domain,
+            emailAddresses: [data.address],
+            lambdaFunctionArn: lambdaArn,
+            s3BucketName
+          })
+        }
         
         if (receiptResult.status === 'created' || receiptResult.status === 'updated') {
           // Update email record with receipt rule information

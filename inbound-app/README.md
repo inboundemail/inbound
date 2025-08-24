@@ -39,7 +39,7 @@ const response = await inbound.emailAddresses.create({
 Forward emails to existing addresses or other services. Perfect for routing customer emails to your team or integrating with external tools.
 
 ### 🎯 **Smart Routing**
-Route emails based on sender, subject, content, or any custom logic. Send support emails to your helpdesk, billing emails to your finance team, and everything else to a catch-all.
+Route emails with flexible mixed mode - configure specific email addresses for known patterns and catch-all for everything else. Send support emails to your helpdesk, billing emails to your finance team, and everything else to a catch-all endpoint. Works like a switch-case with default in your favorite programming language.
 
 ## 🚀 Coming Soon
 

@@ -245,8 +245,9 @@ export class AWSSESReceiptRuleManager {
   /**
    * Configure catch-all email receiving for a domain
    * This creates a receipt rule that captures ALL emails sent to the domain
+   * @param preserveIndividualRules - If true, keeps existing individual email rules (for mixed mode)
    */
-  async configureCatchAllDomain(config: CatchAllConfig): Promise<ReceiptRuleResult> {
+  async configureCatchAllDomain(config: CatchAllConfig & { preserveIndividualRules?: boolean }): Promise<ReceiptRuleResult> {
     const ruleSetName = config.ruleSetName || 'inbound-email-rules'
     const ruleName = `${config.domain}-catchall-rule`
     const individualRuleName = `${config.domain}-rule`
@@ -254,19 +255,25 @@ export class AWSSESReceiptRuleManager {
     try {
       console.log(`🌐 SES Rules - Configuring catch-all for domain: ${config.domain}`)
       console.log(`🪝 SES Rules - Webhook ID: ${config.webhookId}`)
+      console.log(`🔀 SES Rules - Preserve individual rules: ${config.preserveIndividualRules || false}`)
       
       // Ensure rule set exists
       await this.ensureRuleSetExists(ruleSetName)
 
-      // CRITICAL: Remove individual email rule if it exists
-      // This prevents rule precedence conflicts
-      const existingIndividualRule = await this.getRuleIfExists(ruleSetName, individualRuleName)
-      if (existingIndividualRule) {
-        console.log(`🗑️ SES Rules - Removing individual email rule to prevent conflicts: ${individualRuleName}`)
-        await this.sesClient.send(new DeleteReceiptRuleCommand({
-          RuleSetName: ruleSetName,
-          RuleName: individualRuleName
-        }))
+      // Only remove individual rules if not preserving them (backward compatibility)
+      if (!config.preserveIndividualRules) {
+        // CRITICAL: Remove individual email rule if it exists
+        // This prevents rule precedence conflicts (legacy behavior)
+        const existingIndividualRule = await this.getRuleIfExists(ruleSetName, individualRuleName)
+        if (existingIndividualRule) {
+          console.log(`🗑️ SES Rules - Removing individual email rule to prevent conflicts: ${individualRuleName}`)
+          await this.sesClient.send(new DeleteReceiptRuleCommand({
+            RuleSetName: ruleSetName,
+            RuleName: individualRuleName
+          }))
+        }
+      } else {
+        console.log(`🔄 SES Rules - Preserving existing individual email rules for mixed mode`)
       }
 
       // Create receipt rule for catch-all
@@ -389,6 +396,64 @@ export class AWSSESReceiptRuleManager {
     return {
       individualRule,
       catchAllRule
+    }
+  }
+
+  /**
+   * Configure mixed mode: both specific email addresses AND catch-all for a domain
+   * This creates both individual email rules and a catch-all rule with proper precedence
+   */
+  async configureMixedMode(config: {
+    domain: string
+    emailAddresses: string[]
+    catchAllWebhookId: string
+    lambdaFunctionArn: string
+    s3BucketName: string
+    ruleSetName?: string
+  }): Promise<{
+    individualRule?: ReceiptRuleResult
+    catchAllRule: ReceiptRuleResult
+  }> {
+    const ruleSetName = config.ruleSetName || 'inbound-email-rules'
+    
+    try {
+      console.log(`🔀 SES Rules - Configuring mixed mode for domain: ${config.domain}`)
+      console.log(`📧 SES Rules - Individual emails: ${config.emailAddresses.join(', ')}`)
+      console.log(`🌐 SES Rules - Catch-all webhook: ${config.catchAllWebhookId}`)
+      
+      let individualRule: ReceiptRuleResult | undefined
+      
+      // Step 1: Configure individual email rules if there are any
+      if (config.emailAddresses.length > 0) {
+        individualRule = await this.configureEmailReceiving({
+          domain: config.domain,
+          emailAddresses: config.emailAddresses,
+          lambdaFunctionArn: config.lambdaFunctionArn,
+          s3BucketName: config.s3BucketName,
+          ruleSetName
+        })
+        console.log(`✅ SES Rules - Individual email rules configured: ${individualRule.status}`)
+      }
+      
+      // Step 2: Configure catch-all rule (preserving individual rules)
+      const catchAllRule = await this.configureCatchAllDomain({
+        domain: config.domain,
+        webhookId: config.catchAllWebhookId,
+        lambdaFunctionArn: config.lambdaFunctionArn,
+        s3BucketName: config.s3BucketName,
+        ruleSetName,
+        preserveIndividualRules: true // This is the key - preserve existing individual rules
+      })
+      console.log(`✅ SES Rules - Catch-all rule configured: ${catchAllRule.status}`)
+      
+      return {
+        individualRule,
+        catchAllRule
+      }
+      
+    } catch (error) {
+      console.error(`❌ SES Rules - Error configuring mixed mode for ${config.domain}:`, error)
+      throw error
     }
   }
 

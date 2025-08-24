@@ -963,7 +963,7 @@ export default function DomainDetailPage() {
                                     </CardTitle>
                                     <CardDescription className="text-muted-foreground">
                                         {domainDetailsData?.isCatchAllEnabled
-                                            ? `Catch-all enabled - all emails to @${domain} are captured`
+                                            ? `Mixed routing: specific addresses + catch-all for @${domain}`
                                             : `Manage individual email addresses for @${domain}`
                                         }
                                     </CardDescription>
@@ -978,8 +978,7 @@ export default function DomainDetailPage() {
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            {/* Individual email addresses - only show if catch-all is disabled */}
-                            {!domainDetailsData?.isCatchAllEnabled && (
+                            {/* Individual email addresses - now supports mixed mode with catch-all */}
                                 <div className="space-y-4">
                                     {/* Add Email Form */}
                                     <div className="flex flex-col sm:flex-row gap-3 w-full">
@@ -1206,20 +1205,19 @@ export default function DomainDetailPage() {
                                         </Link>
                                     </div>
                                 </div>
-                            )}
 
                             {/* Catch-all toggle and configuration - moved below individual emails */}
                             {domainDetailsData && (
                                 <>
-                                    {!domainDetailsData.isCatchAllEnabled && <Separator />}
+                                    <Separator />
                                     <div className="space-y-3">
                                         <div className="flex items-center justify-between">
                                             <div>
                                                 <div className="font-medium text-foreground">Catch-all Configuration</div>
                                                 <div className="text-sm text-muted-foreground">
                                                     {domainDetailsData.isCatchAllEnabled
-                                                        ? 'All emails to any address are captured'
-                                                        : 'Capture emails to any address on this domain'
+                                                        ? 'Fallback for emails not matching specific addresses above'
+                                                        : 'Capture emails to any address on this domain (works with specific addresses)'
                                                     }
                                                 </div>
                                             </div>

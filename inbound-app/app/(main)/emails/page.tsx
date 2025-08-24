@@ -287,7 +287,7 @@ export default function EmailsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">
-                      {domain.isCatchAllEnabled ? 'Catch-all enabled' : 'Individual addresses'}
+                      {domain.isCatchAllEnabled ? 'Mixed routing (specific + catch-all)' : 'Individual addresses'}
                     </span>
                     {domain.status === 'verified' && !domain.mailFromDomain && (
                       <Button
