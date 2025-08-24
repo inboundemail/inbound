@@ -1,0 +1,81 @@
+---
+title: Mixed Email Routing - Specific Addresses + Catch-All
+date: 2025-08-24
+version: 1.10.0
+summary: Configure different webhooks for specific email addresses while having a catch-all for everything else
+---
+
+## Overview
+
+We've enhanced our email routing system to support mixed routing configurations. You can now configure specific email addresses to route to different webhooks while maintaining a catch-all webhook for all other emails to your domain. This works like a switch statement in programming.
+
+## What Changed
+
+### Infrastructure Updates
+- Enhanced email routing logic with clear priority system
+- Improved logging to show routing decisions
+- Better support for simultaneous specific and catch-all configurations
+
+### SDK Enhancement (v4.1.0)
+- Added new `configureMixedRouting()` method for easy setup
+- Simplified configuration of complex routing scenarios
+- Full TypeScript support for routing configuration
+
+### API Improvements
+- Existing endpoints already support mixed routing
+- Clear priority: specific email → catch-all → no routing
+- No breaking changes to existing configurations
+
+## How It Works
+
+The routing system follows this priority:
+
+```
+switch (email) {
+  case 'support@domain.com':
+    → support webhook
+  case 'sales@domain.com':
+    → sales webhook
+  default: // catch-all
+    → catch-all webhook
+}
+```
+
+## SDK Usage
+
+```typescript
+const { data } = await inbound.configureMixedRouting({
+  domain: 'yourdomain.com',
+  routes: {
+    'support@yourdomain.com': 'https://api.example.com/support',
+    'sales@yourdomain.com': 'https://api.example.com/sales',
+  },
+  catchAll: 'https://api.example.com/catch-all'
+})
+```
+
+## Benefits
+
+- **Flexible Routing**: Route different departments to different systems
+- **Catch-All Safety**: Never miss an email with catch-all fallback
+- **Easy Management**: Configure everything in one API call
+- **Backwards Compatible**: Existing configurations continue to work
+
+## Migration Guide
+
+No migration needed! Your existing configurations will continue to work exactly as before. The new mixed routing is an enhancement that you can adopt when needed.
+
+To start using mixed routing:
+
+1. Update to SDK v4.1.0 or use the API directly
+2. Call `configureMixedRouting()` with your desired configuration
+3. Test with a few emails to verify routing
+
+## Technical Details
+
+The routing priority system ensures predictable behavior:
+1. **Specific email address** takes highest priority
+2. **Catch-all** handles everything else for the domain
+3. **No routing** if neither is configured (email is stored but not forwarded)
+
+This allows maximum flexibility while maintaining simplicity and predictability.

@@ -597,6 +597,153 @@ export class InboundEmailClient {
   }
 
   /**
+   * Configure mixed email routing (specific emails + catch-all)
+   * 
+   * This allows you to route specific email addresses to different webhooks
+   * while having a catch-all for everything else, similar to a switch statement:
+   * 
+   * @example
+   * ```typescript
+   * const result = await inbound.configureMixedRouting({
+   *   domain: 'example.com', // or domain ID
+   *   routes: {
+   *     'support@example.com': 'https://api.example.com/support-webhook',
+   *     'sales@example.com': 'https://api.example.com/sales-webhook',
+   *   },
+   *   catchAll: 'https://api.example.com/catch-all-webhook'
+   * })
+   * ```
+   */
+  configureMixedRouting = async (params: {
+    domain: string,
+    routes?: Record<string, string>,
+    catchAll?: string
+  }): Promise<ApiResponse<any>> => {
+    const results: any = {
+      domain: null,
+      emailAddresses: [],
+      catchAll: null,
+      errors: []
+    }
+
+    try {
+      // Step 1: Find or verify the domain
+      let domainId: string | null = null
+      let domainData: any = null
+
+      // Check if domain parameter is a domain name or ID
+      if (params.domain.includes('.')) {
+        // It's a domain name, find it
+        const domainsResult = await this.domain.list({ domain: params.domain })
+        if (domainsResult.error) {
+          return { error: `Failed to find domain: ${domainsResult.error}` }
+        }
+        if (!domainsResult.data?.data?.[0]) {
+          return { error: `Domain ${params.domain} not found` }
+        }
+        domainData = domainsResult.data.data[0]
+        domainId = domainData.id
+      } else {
+        // It's a domain ID
+        domainId = params.domain
+        const domainResult = await this.domain.get(domainId)
+        if (domainResult.error) {
+          return { error: `Failed to get domain: ${domainResult.error}` }
+        }
+        domainData = domainResult.data
+      }
+
+      results.domain = domainData
+
+      // Step 2: Configure specific email routes
+      if (params.routes && Object.keys(params.routes).length > 0) {
+        for (const [email, webhookUrl] of Object.entries(params.routes)) {
+          // Create endpoint for this specific email
+          const endpointResult = await this.endpoint.create({
+            name: `${email} Webhook`,
+            type: 'webhook',
+            config: { url: webhookUrl }
+          })
+
+          if (endpointResult.error) {
+            results.errors.push(`Failed to create endpoint for ${email}: ${endpointResult.error}`)
+            continue
+          }
+
+          // Create or update email address with this endpoint
+          const emailResult = await this.emailAddress.create({
+            address: email,
+            domainId: domainId!,
+            endpointId: endpointResult.data!.id,
+            isActive: true
+          })
+
+          if (emailResult.error) {
+            // Try to update existing email address
+            const listResult = await this.emailAddress.list({ address: email })
+            if (listResult.data?.data?.[0]) {
+              const updateResult = await this.emailAddress.update(
+                listResult.data.data[0].id,
+                { endpointId: endpointResult.data!.id, isActive: true }
+              )
+              if (updateResult.error) {
+                results.errors.push(`Failed to update ${email}: ${updateResult.error}`)
+              } else {
+                results.emailAddresses.push(updateResult.data)
+              }
+            } else {
+              results.errors.push(`Failed to create ${email}: ${emailResult.error}`)
+            }
+          } else {
+            results.emailAddresses.push(emailResult.data)
+          }
+        }
+      }
+
+      // Step 3: Configure catch-all if provided
+      if (params.catchAll) {
+        // Create catch-all endpoint
+        const catchAllEndpointResult = await this.endpoint.create({
+          name: `${domainData.domain} Catch-All`,
+          type: 'webhook',
+          config: { url: params.catchAll }
+        })
+
+        if (catchAllEndpointResult.error) {
+          results.errors.push(`Failed to create catch-all endpoint: ${catchAllEndpointResult.error}`)
+        } else {
+          // Enable catch-all on the domain
+          const updateResult = await this.domain.update(domainId!, {
+            isCatchAllEnabled: true,
+            catchAllEndpointId: catchAllEndpointResult.data!.id
+          })
+
+          if (updateResult.error) {
+            results.errors.push(`Failed to enable catch-all: ${updateResult.error}`)
+          } else {
+            results.catchAll = updateResult.data
+          }
+        }
+      }
+
+      // Return results
+      if (results.errors.length > 0) {
+        return {
+          data: results,
+          error: `Some operations failed: ${results.errors.join(', ')}`
+        }
+      }
+
+      return { data: results }
+
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : 'Failed to configure mixed routing'
+      }
+    }
+  }
+
+  /**
    * Simple email forwarding setup
    */
   createForwarder = async (from: string, to: string): Promise<ApiResponse<any>> => {
