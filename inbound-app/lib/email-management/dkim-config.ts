@@ -8,6 +8,9 @@
 // DKIM signing domain - this should be configured in AWS SES
 export const INBOUND_DKIM_DOMAIN = process.env.INBOUND_DKIM_DOMAIN || 'mail.inbound.new'
 
+// Fallback verified email address for SES (should be verified in AWS SES)
+export const INBOUND_VERIFIED_EMAIL = process.env.INBOUND_VERIFIED_EMAIL || 'noreply@inbound.new'
+
 // Whether to use server-side DKIM signing (like Resend)
 export const USE_SERVER_SIDE_DKIM = process.env.USE_SERVER_SIDE_DKIM === 'true' || true
 
@@ -28,21 +31,22 @@ export function isServerSideDkimEnabled(): boolean {
 }
 
 /**
- * Get the appropriate Source domain for SES based on DKIM configuration
+ * Get the appropriate Source email address for SES based on DKIM configuration
  * 
  * @param senderEmail - The original sender email
  * @param customMailFromDomain - Custom MAIL FROM domain if configured
- * @returns The domain to use as SES Source
+ * @returns The email address to use as SES Source
  */
-export function getSesSourceDomain(senderEmail: string, customMailFromDomain?: string): string {
+export function getSesSourceEmail(senderEmail: string, customMailFromDomain?: string): string {
   if (customMailFromDomain) {
-    // Use custom MAIL FROM domain if configured
-    return customMailFromDomain
+    // Use custom MAIL FROM domain with noreply@ prefix
+    return `noreply@${customMailFromDomain}`
   }
   
   if (isServerSideDkimEnabled()) {
-    // Use Inbound's DKIM domain for server-side signing
-    return getDkimSigningDomain()
+    // Use verified Inbound email for server-side signing
+    // This ensures we have a verified email address in SES
+    return INBOUND_VERIFIED_EMAIL
   }
   
   // Fallback to sender email

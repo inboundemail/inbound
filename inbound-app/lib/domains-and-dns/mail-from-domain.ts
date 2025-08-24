@@ -1,7 +1,7 @@
 import { db } from '@/lib/db'
 import { emailDomains } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
-import { getSesSourceDomain, isServerSideDkimEnabled } from '@/lib/email-management/dkim-config'
+import { getSesSourceEmail, isServerSideDkimEnabled } from '@/lib/email-management/dkim-config'
 
 /**
  * Get the configured MAIL FROM domain for a sender domain
@@ -41,7 +41,7 @@ export async function getMailFromDomain(fromAddress: string, userId: string): Pr
         .limit(1)
 
       const customMailFromDomain = domainRecord[0]?.mailFromDomain || null
-      const sourceForSes = getSesSourceDomain(fromAddress, customMailFromDomain)
+      const sourceForSes = getSesSourceEmail(fromAddress, customMailFromDomain)
       
       console.log('🔐 Server-side DKIM enabled, using SES source:', sourceForSes)
       return sourceForSes
