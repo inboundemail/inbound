@@ -190,29 +190,16 @@ export async function POST(
         description: 'SES domain verification'
       })
 
-      // DKIM
-      console.log('🔐 Configuring DKIM for domain:', domain.domain)
-      const dkimCommand = new VerifyDomainDkimCommand({ Domain: domain.domain })
-      const dkimResponse = await sesClient.send(dkimCommand)
-      dkimTokens = dkimResponse.DkimTokens || []
-      dkimEnabled = dkimTokens.length > 0
-      console.log('📋 DKIM tokens received:', dkimTokens.length, 'tokens:', dkimTokens)
+      // DKIM - Use Inbound's server-side signing (like Resend)
+      // Instead of requiring users to add DKIM records, we'll sign emails with Inbound's DKIM keys
+      console.log('🔐 Using server-side DKIM signing (no user DKIM records required)')
       
-      if (dkimTokens.length === 0) {
-        console.warn('⚠️ No DKIM tokens received from SES for domain:', domain.domain)
-      }
+      // Note: We'll configure DKIM for inbound.new or mail.inbound.new once
+      // and use that for signing all emails, regardless of the user's domain
+      dkimEnabled = true // We handle DKIM server-side
+      dkimTokens = [] // No user DKIM tokens needed
       
-      dkimTokens.forEach((token, index) => {
-        console.log(`📝 Adding DKIM CNAME record ${index + 1}:`, `${token}._domainkey.${domain.domain}`)
-        records.push({
-          type: 'CNAME',
-          name: `${token}._domainkey.${domain.domain}`,
-          value: `${token}.dkim.amazonses.com`,
-          isRequired: true,
-          isVerified: false,
-          description: `DKIM authentication token ${index + 1}`
-        })
-      })
+      // Users don't need to add any DKIM records - we handle it server-side!
 
       // MAIL FROM
       const mailFromCommand = new SetIdentityMailFromDomainCommand({
@@ -246,15 +233,15 @@ export async function POST(
         description: 'SPF record for MAIL FROM domain (recommended)'
       })
 
-      // Optional SPF/DMARC
+      // Simplified SPF record (like Resend)
       if (generateSpf) {
         records.push({
           type: 'TXT',
           name: domain.domain,
-          value: 'v=spf1 include:amazonses.com ~all',
-          isRequired: false,
+          value: 'v=spf1 include:inbound.new ~all',
+          isRequired: true,
           isVerified: false,
-          description: 'SPF record for root domain (recommended)'
+          description: 'SPF record - authorizes Inbound to send emails for your domain'
         })
       }
       if (generateDmarc) {
