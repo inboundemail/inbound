@@ -328,4 +328,37 @@ export const useUpdateDomainCatchAllV2Mutation = () => {
             queryClient.invalidateQueries({ queryKey: domainV2Keys.detail(domainId) })
         },
     })
+}
+
+// Hook for upgrading domain with MAIL FROM configuration
+export const useUpgradeDomainMailFromV2Mutation = () => {
+    const queryClient = useQueryClient()
+
+    return useMutation<any, Error, { domainId: string }>({
+        mutationFn: async ({ domainId }) => {
+            const response = await fetch(`/api/v2/domains/${domainId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.error || 'Failed to upgrade domain with MAIL FROM configuration')
+            }
+            return response.json()
+        },
+        onSuccess: (data, { domainId }) => {
+            // Track MAIL FROM upgrade
+            track('Domain MAIL FROM Upgraded', {
+                domainId: domainId,
+                mailFromDomain: data.mailFromDomain,
+                mailFromDomainStatus: data.mailFromDomainStatus
+            })
+            
+            // Invalidate domain details and list to refresh MAIL FROM status
+            queryClient.invalidateQueries({ queryKey: domainV2Keys.detail(domainId) })
+            queryClient.invalidateQueries({ queryKey: domainV2Keys.all })
+        },
+    })
 } 

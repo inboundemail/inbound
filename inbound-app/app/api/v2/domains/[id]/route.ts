@@ -58,6 +58,9 @@ export interface GetDomainByIdResponse {
     lastSesCheck: Date | null
     isCatchAllEnabled: boolean
     catchAllEndpointId: string | null
+    mailFromDomain: string | null
+    mailFromDomainStatus: string | null
+    mailFromDomainVerifiedAt: Date | null
     createdAt: Date
     updatedAt: Date
     userId: string
@@ -214,6 +217,9 @@ export async function GET(
             lastSesCheck: domain.lastSesCheck,
             isCatchAllEnabled: domain.isCatchAllEnabled || false,
             catchAllEndpointId: domain.catchAllEndpointId,
+            mailFromDomain: domain.mailFromDomain,
+            mailFromDomainStatus: domain.mailFromDomainStatus,
+            mailFromDomainVerifiedAt: domain.mailFromDomainVerifiedAt,
             createdAt: domain.createdAt || new Date(),
             updatedAt: domain.updatedAt || new Date(),
             userId: domain.userId,
@@ -350,33 +356,44 @@ export async function GET(
                         mailFromVerified = mailFromStatus === 'Success'
                         
                         // Update domain status based on SES verification
+                        const updateData: any = {
+                            lastSesCheck: new Date()
+                        }
+
+                        // Update MAIL FROM status if it exists
+                        if (mailFromDomain && mailFromStatus) {
+                            updateData.mailFromDomain = mailFromDomain
+                            updateData.mailFromDomainStatus = mailFromStatus
+                            if (mailFromStatus === 'Success') {
+                                updateData.mailFromDomainVerifiedAt = new Date()
+                            }
+                            // Update response with latest MAIL FROM data
+                            response.mailFromDomain = mailFromDomain
+                            response.mailFromDomainStatus = mailFromStatus
+                            response.mailFromDomainVerifiedAt = mailFromStatus === 'Success' ? new Date() : response.mailFromDomainVerifiedAt
+                        }
+
                         if (sesStatus === 'Success' && domain.status !== 'verified') {
+                            updateData.status = 'verified'
+                            updateData.updatedAt = new Date()
                             await db
                                 .update(emailDomains)
-                                .set({
-                                    status: 'verified',
-                                    lastSesCheck: new Date(),
-                                    updatedAt: new Date()
-                                })
+                                .set(updateData)
                                 .where(eq(emailDomains.id, domain.id))
                             response.status = 'verified'
                         } else if (sesStatus === 'Failed' && domain.status !== 'failed') {
+                            updateData.status = 'failed'
+                            updateData.updatedAt = new Date()
                             await db
                                 .update(emailDomains)
-                                .set({
-                                    status: 'failed',
-                                    lastSesCheck: new Date(),
-                                    updatedAt: new Date()
-                                })
+                                .set(updateData)
                                 .where(eq(emailDomains.id, domain.id))
                             response.status = 'failed'
                         } else {
-                            // Just update last check time
+                            // Just update last check time and MAIL FROM status
                             await db
                                 .update(emailDomains)
-                                .set({
-                                    lastSesCheck: new Date()
-                                })
+                                .set(updateData)
                                 .where(eq(emailDomains.id, domain.id))
                         }
                     } catch (sesError) {

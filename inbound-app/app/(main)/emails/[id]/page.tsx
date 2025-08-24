@@ -71,6 +71,7 @@ import {
     useUpdateEmailEndpointV2Mutation,
     useUpdateDomainCatchAllV2Mutation,
     useDomainAuthVerifyV2Mutation,
+    useUpgradeDomainMailFromV2Mutation,
     domainV2Keys
 } from '@/features/domains/hooks/useDomainV2Hooks'
 
@@ -160,6 +161,7 @@ export default function DomainDetailPage() {
     const deleteEmailMutation = useDeleteEmailAddressV2Mutation()
     const updateEmailWebhookMutation = useUpdateEmailEndpointV2Mutation()
     const updateCatchAllMutation = useUpdateDomainCatchAllV2Mutation()
+    const upgradeMailFromMutation = useUpgradeDomainMailFromV2Mutation()
 
     // Local state for UI interactions
     const [newEmailAddress, setNewEmailAddress] = useState('')
@@ -520,6 +522,22 @@ export default function DomainDetailPage() {
         }
     }
 
+    const handleUpgradeDomain = async () => {
+        try {
+            const result = await upgradeMailFromMutation.mutateAsync({ domainId })
+            toast.success(
+                result.alreadyConfigured 
+                    ? 'Domain already has MAIL FROM configured' 
+                    : 'Domain upgraded! Additional DNS records have been added for mail.' + domainDetailsData?.domain,
+                { duration: 6000 }
+            )
+        } catch (error) {
+            toast.error(
+                error instanceof Error ? error.message : 'Failed to upgrade domain'
+            )
+        }
+    }
+
     // Loading state
     if (isDomainLoading) {
         return (
@@ -566,6 +584,13 @@ export default function DomainDetailPage() {
     }
 
     const { domain, status, stats = { totalEmailAddresses: 0, activeEmailAddresses: 0, emailsLast24h: 0, emailsLast7d: 0, emailsLast30d: 0 } } = domainDetailsData
+    
+    // Type assertion for MAIL FROM properties (until TypeScript cache refreshes)
+    const domainWithMailFrom = domainDetailsData as GetDomainByIdResponse & {
+        mailFromDomain?: string | null
+        mailFromDomainStatus?: string | null
+        mailFromDomainVerifiedAt?: Date | null
+    }
 
     // Helper functions for endpoint icons and colors
     const getEndpointIcon = (endpoint: any) => {
@@ -614,7 +639,7 @@ export default function DomainDetailPage() {
                 </div>
 
                 {/* Header */}
-                <div className="flex items-center justify-between bg-card text-card-foreground rounded-lg p-4 border border-border">
+                <div className="flex items-center justify-between bg-card text-card-foreground rounded-xl p-4 border border-border">
                     <div className="flex items-center gap-4">
                         <CustomInboundIcon
                             Icon={Globe2}
@@ -735,6 +760,29 @@ export default function DomainDetailPage() {
                             refetchDomainDetails()
                         }}
                     />
+                )}
+
+                {/* MAIL FROM Configuration Section - Show for verified domains without MAIL FROM */}
+                {status === DOMAIN_STATUS.VERIFIED && !domainWithMailFrom?.mailFromDomain && (
+                    <Card className="bg-card border-border rounded-xl">
+                        <CardContent className="pt-6">
+                            <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                    <CardTitle className="text-foreground text-lg mb-2">Enhanced Email Identity</CardTitle>
+                                    <CardDescription className="text-muted-foreground">
+                                        Eliminate "via amazonses.com" attribution and improve deliverability
+                                    </CardDescription>
+                                </div>
+                                <Button
+                                    onClick={handleUpgradeDomain}
+                                    disabled={upgradeMailFromMutation.isPending}
+                                    className="ml-4"
+                                >
+                                    {upgradeMailFromMutation.isPending ? 'Upgrading...' : 'Upgrade Identity'}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
                 )}
 
                 {/* Auth Recommendations for verified domains - only show if not fully verified */}
