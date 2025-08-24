@@ -159,6 +159,7 @@ export async function listDomains(
       lastDnsCheck: emailDomains.lastDnsCheck,
       lastSesCheck: emailDomains.lastSesCheck,
       isCatchAllEnabled: emailDomains.isCatchAllEnabled,
+      mailFromDomain: emailDomains.mailFromDomain,
       createdAt: emailDomains.createdAt,
       updatedAt: emailDomains.updatedAt,
       userId: emailDomains.userId

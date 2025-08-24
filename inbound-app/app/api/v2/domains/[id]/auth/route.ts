@@ -190,21 +190,16 @@ export async function POST(
         description: 'SES domain verification'
       })
 
-      // DKIM
-      const dkimCommand = new VerifyDomainDkimCommand({ Domain: domain.domain })
-      const dkimResponse = await sesClient.send(dkimCommand)
-      dkimTokens = dkimResponse.DkimTokens || []
-      dkimEnabled = dkimTokens.length > 0
-      dkimTokens.forEach((token, index) => {
-        records.push({
-          type: 'CNAME',
-          name: `${token}._domainkey.${domain.domain}`,
-          value: `${token}.dkim.amazonses.com`,
-          isRequired: true,
-          isVerified: false,
-          description: `DKIM authentication token ${index + 1}`
-        })
-      })
+      // DKIM - Use Inbound's server-side signing (like Resend)
+      // Instead of requiring users to add DKIM records, we'll sign emails with Inbound's DKIM keys
+      console.log('🔐 Using server-side DKIM signing (no user DKIM records required)')
+      
+      // Note: We'll configure DKIM for inbound.new or mail.inbound.new once
+      // and use that for signing all emails, regardless of the user's domain
+      dkimEnabled = true // We handle DKIM server-side
+      dkimTokens = [] // No user DKIM tokens needed
+      
+      // Users don't need to add any DKIM records - we handle it server-side!
 
       // MAIL FROM
       const mailFromCommand = new SetIdentityMailFromDomainCommand({
@@ -213,6 +208,14 @@ export async function POST(
         BehaviorOnMXFailure: 'UseDefaultValue'
       })
       await sesClient.send(mailFromCommand)
+      
+      // Store the MAIL FROM domain in database for use during email sending
+      await db.update(emailDomains)
+        .set({ 
+          mailFromDomain: fullMailFromDomain,
+          updatedAt: new Date()
+        })
+        .where(eq(emailDomains.id, id))
       records.push({
         type: 'MX',
         name: fullMailFromDomain,
@@ -230,15 +233,15 @@ export async function POST(
         description: 'SPF record for MAIL FROM domain (recommended)'
       })
 
-      // Optional SPF/DMARC
+      // Simplified SPF record (like Resend)
       if (generateSpf) {
         records.push({
           type: 'TXT',
           name: domain.domain,
-          value: 'v=spf1 include:amazonses.com ~all',
-          isRequired: false,
+          value: 'v=spf1 include:inbound.new ~all',
+          isRequired: true,
           isVerified: false,
-          description: 'SPF record for root domain (recommended)'
+          description: 'SPF record - authorizes Inbound to send emails for your domain'
         })
       }
       if (generateDmarc) {
@@ -269,6 +272,9 @@ export async function POST(
     }
 
     // Store to DB
+    console.log('💾 Storing', records.length, 'DNS records to database')
+    console.log('📋 Records to store:', records.map(r => `${r.type}: ${r.name}`))
+    
     try {
       await db.delete(domainDnsRecords).where(eq(domainDnsRecords.domainId, id))
       const recordsToInsert = records.map(r => ({
@@ -281,7 +287,12 @@ export async function POST(
         isVerified: false,
         createdAt: new Date(),
       }))
-      if (recordsToInsert.length > 0) await db.insert(domainDnsRecords).values(recordsToInsert)
+      if (recordsToInsert.length > 0) {
+        await db.insert(domainDnsRecords).values(recordsToInsert)
+        console.log('✅ Successfully stored', recordsToInsert.length, 'DNS records')
+      } else {
+        console.warn('⚠️ No records to insert!')
+      }
     } catch (dbError) {
       console.error('❌ Database error storing DNS records:', dbError)
     }

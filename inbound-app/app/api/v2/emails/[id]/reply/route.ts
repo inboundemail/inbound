@@ -9,6 +9,7 @@ import { eq, and } from 'drizzle-orm'
 import { Autumn as autumn } from 'autumn-js'
 import { nanoid } from 'nanoid'
 import { canUserSendFromEmail, extractEmailAddress, extractDomain } from '@/lib/email-management/agent-email-helper'
+import { getMailFromDomain } from '@/lib/domains-and-dns/mail-from-domain'
 
 /**
  * POST /api/v2/emails/[id]/reply
@@ -493,6 +494,12 @@ export async function POST(
         try {
             console.log('📤 Sending reply email via AWS SES')
             
+            // Get the configured MAIL FROM domain to eliminate "via amazonses.com"
+            const mailFromDomain = await getMailFromDomain(fromAddress, userId)
+            const sourceForSes = mailFromDomain || fromAddress
+            
+            console.log(`📧 Using SES Source: ${sourceForSes}${mailFromDomain ? ' (custom MAIL FROM domain)' : ' (sender email)'}`)
+            
             // Build raw email message with proper headers and attachments
             const rawMessage = buildRawEmailMessage({
                 from: formattedFromAddress,
@@ -516,7 +523,7 @@ export async function POST(
                 RawMessage: {
                     Data: Buffer.from(rawMessage)
                 },
-                Source: fromAddress,
+                Source: sourceForSes,
                 Destinations: [...toAddresses, ...ccAddresses, ...bccAddresses].map(extractEmailAddress)
             })
 
