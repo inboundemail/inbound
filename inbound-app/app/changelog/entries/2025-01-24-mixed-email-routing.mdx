@@ -1,0 +1,116 @@
+---
+title: Mixed Email Routing - Specific Addresses + Catch-All
+date: 2025-01-24
+version: 2.1.0
+summary: You can now configure both specific email addresses AND catch-all routing simultaneously for flexible email handling
+---
+
+## Overview
+
+We've enhanced our email routing system to support **mixed mode** - the ability to configure both specific email addresses and catch-all routing on the same domain simultaneously. This gives you the flexibility of a switch-case with default pattern for email routing.
+
+## What Changed
+
+### Switch-Case Email Routing Pattern
+You can now set up email routing like this:
+
+```javascript
+switch (email) {
+  case 'support@yourdomain.com':
+    webhook1  // Specific endpoint for support
+  case 'sales@yourdomain.com':
+    webhook2  // Specific endpoint for sales
+  default:    // catch-all
+    webhook3  // Fallback endpoint for all other emails
+}
+```
+
+### Key Improvements
+
+- **Mixed Mode Support**: Configure specific email addresses alongside catch-all routing
+- **Smart Precedence**: Specific email addresses take priority over catch-all rules
+- **AWS SES Optimization**: Updated SES rule configuration to support both rule types simultaneously
+- **Enhanced UI**: Email management interface now shows both specific addresses and catch-all configuration together
+- **Backward Compatibility**: Existing configurations continue to work without changes
+
+## Technical Details
+
+### Routing Priority
+The system now follows this priority order:
+1. **Specific email address endpoint** (highest priority)
+2. **Legacy webhook for specific email** (backward compatibility)
+3. **Catch-all endpoint** (fallback)
+4. **Legacy catch-all webhook** (backward compatibility)
+
+### AWS SES Configuration
+- Individual email rules and catch-all rules now coexist
+- More specific rules (individual addresses) automatically take precedence
+- Mixed mode uses optimized SES rule configuration for better performance
+
+### API Enhancements
+- Catch-all API now detects existing individual emails and uses mixed mode automatically
+- Email address creation API supports mixed mode when domain has catch-all enabled
+- New `configureMixedMode` method in AWS SES rule manager
+
+## UI Changes
+
+### Email Management Interface
+- **Before**: Individual email addresses were hidden when catch-all was enabled
+- **After**: Both sections are always visible and can be configured together
+- **New Description**: "Mixed routing: specific addresses + catch-all" when both are active
+
+### Visual Indicators
+- Clear separation between specific addresses and catch-all configuration
+- Updated descriptions explain the fallback behavior
+- Improved messaging throughout the interface
+
+## Impact
+
+### For Existing Users
+- **No Action Required**: All existing configurations continue to work
+- **Opt-in Enhancement**: Enable catch-all on domains with existing email addresses to use mixed mode
+- **Backward Compatible**: Legacy webhook configurations remain functional
+
+### For New Users
+- **Flexible Setup**: Configure email routing exactly how you need it
+- **Simplified Workflow**: No need to choose between specific addresses OR catch-all
+- **Better Organization**: Route known senders to specific endpoints, everything else to catch-all
+
+## Migration Guide
+
+### Enabling Mixed Mode
+If you currently have individual email addresses and want to add catch-all:
+
+1. Go to your domain's email management page
+2. Configure a catch-all endpoint in the "Catch-all Configuration" section
+3. Enable catch-all - your existing individual addresses will remain active
+4. The system automatically configures mixed mode routing
+
+### Example Configuration
+```typescript
+// Your domain now supports both:
+const specificEmails = [
+  { address: 'support@yourdomain.com', endpoint: 'support-webhook' },
+  { address: 'sales@yourdomain.com', endpoint: 'sales-webhook' }
+]
+
+const catchAllConfig = {
+  enabled: true,
+  endpoint: 'general-webhook'
+}
+
+// Routing behavior:
+// support@yourdomain.com → support-webhook
+// sales@yourdomain.com → sales-webhook  
+// anything-else@yourdomain.com → general-webhook
+```
+
+## Benefits
+
+1. **Flexible Routing**: Handle known email patterns specifically, catch everything else
+2. **Reduced Configuration**: No need to create individual addresses for every possible email
+3. **Better Organization**: Route important emails to dedicated endpoints
+4. **Scalable**: Easily handle both planned and unplanned email addresses
+5. **Cost Effective**: Fewer individual email addresses needed while maintaining control
+
+This enhancement makes Inbound's email routing system more powerful and flexible while maintaining the simplicity you expect.

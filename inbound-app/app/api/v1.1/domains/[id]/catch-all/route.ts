@@ -176,12 +176,43 @@ export async function PUT(
             awsRegion
           )
 
-          const receiptResult = await sesManager.configureCatchAllDomain({
-            domain: existingDomain[0].domain,
-            webhookId: endpointId,
-            lambdaFunctionArn: lambdaArn,
-            s3BucketName
-          })
+          // Check if there are existing individual email addresses
+          const existingEmails = await db
+            .select({
+              address: emailAddresses.address
+            })
+            .from(emailAddresses)
+            .where(and(
+              eq(emailAddresses.domainId, params.id),
+              eq(emailAddresses.isActive, true)
+            ))
+
+          let receiptResult: any
+
+          if (existingEmails.length > 0) {
+            // Use mixed mode: both individual emails AND catch-all
+            console.log(`🔀 PUT /api/v1.1/domains/${params.id}/catch-all - Using mixed mode with ${existingEmails.length} individual emails`)
+            
+            const mixedResult = await sesManager.configureMixedMode({
+              domain: existingDomain[0].domain,
+              emailAddresses: existingEmails.map(e => e.address),
+              catchAllWebhookId: endpointId,
+              lambdaFunctionArn: lambdaArn,
+              s3BucketName
+            })
+            
+            receiptResult = mixedResult.catchAllRule
+          } else {
+            // Use catch-all only mode (legacy behavior)
+            console.log(`🌐 PUT /api/v1.1/domains/${params.id}/catch-all - Using catch-all only mode`)
+            
+            receiptResult = await sesManager.configureCatchAllDomain({
+              domain: existingDomain[0].domain,
+              webhookId: endpointId,
+              lambdaFunctionArn: lambdaArn,
+              s3BucketName
+            })
+          }
           
           if (receiptResult.status === 'created' || receiptResult.status === 'updated') {
             receiptRuleName = receiptResult.ruleName
