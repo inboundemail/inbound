@@ -5,7 +5,7 @@ import { emailDomains, emailAddresses, endpoints, domainDnsRecords } from '@/lib
 import { eq, and, count } from 'drizzle-orm'
 import { AWSSESReceiptRuleManager } from '@/lib/aws-ses/aws-ses-rules'
 import { verifyDnsRecords } from '@/lib/domains-and-dns/dns'
-import { SESClient, GetIdentityVerificationAttributesCommand, GetIdentityDkimAttributesCommand, GetIdentityMailFromDomainAttributesCommand } from '@aws-sdk/client-ses'
+import { SESClient, GetIdentityVerificationAttributesCommand, GetIdentityDkimAttributesCommand, GetIdentityMailFromDomainAttributesCommand, SetIdentityMailFromDomainCommand } from '@aws-sdk/client-ses'
 
 // AWS SES Client setup
 const awsRegion = process.env.AWS_REGION || 'us-east-2'
@@ -967,4 +967,190 @@ export async function DELETE(
             { status: 500 }
         )
     }
+}
+
+/**
+ * PATCH /api/v2/domains/{id}
+ * Upgrade existing domain with MAIL FROM domain configuration
+ * This eliminates the "via amazonses.com" attribution in emails
+ */
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
+  console.log('🔧 PATCH /api/v2/domains/{id} - Upgrading domain with MAIL FROM configuration:', id)
+  
+  try {
+    console.log('🔐 Validating request authentication')
+    const { userId, error } = await validateRequest(request)
+    if (!userId) {
+      console.log('❌ Authentication failed:', error)
+      return NextResponse.json(
+        { error: error },
+        { status: 401 }
+      )
+    }
+    console.log('✅ Authentication successful for userId:', userId)
+
+    // Get domain record
+    const domainResult = await db
+      .select()
+      .from(emailDomains)
+      .where(and(eq(emailDomains.id, id), eq(emailDomains.userId, userId)))
+      .limit(1)
+
+    if (!domainResult[0]) {
+      console.log('❌ Domain not found:', id)
+      return NextResponse.json(
+        { error: 'Domain not found' },
+        { status: 404 }
+      )
+    }
+
+    const domain = domainResult[0]
+    console.log('📋 Found domain:', domain.domain)
+
+    // Check if AWS SES is configured
+    if (!sesClient) {
+      console.log('❌ AWS SES not configured')
+      return NextResponse.json(
+        { error: 'AWS SES not configured. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.' },
+        { status: 500 }
+      )
+    }
+
+    // Check if domain already has MAIL FROM domain configured
+    if (domain.mailFromDomain && domain.mailFromDomainStatus === 'Success') {
+      console.log('ℹ️ Domain already has MAIL FROM domain configured:', domain.mailFromDomain)
+      return NextResponse.json(
+        { 
+          success: true,
+          message: 'Domain already has MAIL FROM domain configured',
+          mailFromDomain: domain.mailFromDomain,
+          mailFromDomainStatus: domain.mailFromDomainStatus
+        },
+        { status: 200 }
+      )
+    }
+
+    // Set up MAIL FROM domain
+    const mailFromDomain = `mail.${domain.domain}`
+    let mailFromDomainStatus = 'pending'
+    
+    try {
+      console.log(`🔧 Setting up MAIL FROM domain: ${mailFromDomain}`)
+      const mailFromCommand = new SetIdentityMailFromDomainCommand({
+        Identity: domain.domain,
+        MailFromDomain: mailFromDomain,
+        BehaviorOnMXFailure: 'UseDefaultValue'
+      })
+      await sesClient.send(mailFromCommand)
+      
+      // Check MAIL FROM domain status
+      const mailFromStatusCommand = new GetIdentityMailFromDomainAttributesCommand({
+        Identities: [domain.domain]
+      })
+      const mailFromStatusResponse = await sesClient.send(mailFromStatusCommand)
+      const mailFromAttributes = mailFromStatusResponse.MailFromDomainAttributes?.[domain.domain]
+      mailFromDomainStatus = mailFromAttributes?.MailFromDomainStatus || 'pending'
+      
+      console.log(`✅ MAIL FROM domain configured: ${mailFromDomain} (status: ${mailFromDomainStatus})`)
+    } catch (mailFromError) {
+      console.error('❌ Failed to set up MAIL FROM domain:', mailFromError)
+      return NextResponse.json(
+        { 
+          error: 'Failed to configure MAIL FROM domain',
+          details: mailFromError instanceof Error ? mailFromError.message : 'Unknown error'
+        },
+        { status: 500 }
+      )
+    }
+
+    // Update domain record with MAIL FROM domain information
+    const updateData: any = {
+      mailFromDomain,
+      mailFromDomainStatus,
+      updatedAt: new Date()
+    }
+
+    if (mailFromDomainStatus === 'Success') {
+      updateData.mailFromDomainVerifiedAt = new Date()
+    }
+
+    const [updatedDomain] = await db
+      .update(emailDomains)
+      .set(updateData)
+      .where(eq(emailDomains.id, id))
+      .returning()
+
+    // Generate additional DNS records needed for MAIL FROM domain
+    const awsRegion = process.env.AWS_REGION || 'us-east-2'
+    const additionalDnsRecords = [
+      {
+        type: 'MX',
+        name: mailFromDomain,
+        value: `10 feedback-smtp.${awsRegion}.amazonses.com`,
+        description: 'MAIL FROM domain MX record (eliminates "via amazonses.com")',
+        isRequired: true,
+        isVerified: false
+      },
+      {
+        type: 'TXT',
+        name: mailFromDomain,
+        value: 'v=spf1 include:amazonses.com ~all',
+        description: 'SPF record for MAIL FROM domain',
+        isRequired: false,
+        isVerified: false
+      }
+    ]
+
+    // Add the new DNS records to the database
+    for (const record of additionalDnsRecords) {
+      const dnsRecord = {
+        id: `dns_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+        domainId: id,
+        recordType: record.type,
+        name: record.name,
+        value: record.value,
+        isRequired: record.isRequired,
+        isVerified: record.isVerified,
+        createdAt: new Date(),
+      }
+      
+      try {
+        await db.insert(domainDnsRecords).values(dnsRecord)
+        console.log(`✅ Added DNS record: ${record.type} ${record.name}`)
+      } catch (dnsError) {
+        console.error('⚠️ Failed to add DNS record (may already exist):', dnsError)
+        // Continue even if DNS record insertion fails (might already exist)
+      }
+    }
+
+    console.log('✅ Successfully upgraded domain with MAIL FROM configuration')
+
+    return NextResponse.json({
+      success: true,
+      message: 'Domain successfully upgraded with MAIL FROM domain configuration',
+      mailFromDomain,
+      mailFromDomainStatus,
+      additionalDnsRecords: additionalDnsRecords.map(record => ({
+        type: record.type,
+        name: record.name,
+        value: record.value,
+        description: record.description,
+        isRequired: record.isRequired
+      }))
+    }, { status: 200 })
+
+  } catch (error) {
+    console.error('❌ PATCH /api/v2/domains/{id} - Error:', error)
+    return NextResponse.json(
+      { 
+        error: 'Failed to upgrade domain',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    )
+  }
 }

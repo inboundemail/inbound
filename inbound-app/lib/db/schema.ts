@@ -67,6 +67,10 @@ export const emailDomains = pgTable('email_domains', {
   providerConfidence: varchar('provider_confidence', { length: 20 }), // 'high', 'medium', 'low'
   lastDnsCheck: timestamp('last_dns_check'),
   lastSesCheck: timestamp('last_ses_check'),
+  // MAIL FROM domain configuration for removing "via amazonses.com"
+  mailFromDomain: varchar('mail_from_domain', { length: 255 }), // e.g., "mail.example.com"
+  mailFromDomainStatus: varchar('mail_from_domain_status', { length: 50 }), // 'pending', 'verified', 'failed', 'not_set'
+  mailFromDomainVerifiedAt: timestamp('mail_from_domain_verified_at'),
   // Catch-all configuration
   isCatchAllEnabled: boolean('is_catch_all_enabled').default(false),
   catchAllWebhookId: varchar('catch_all_webhook_id', { length: 255 }), // Link to webhooks table for catch-all emails (legacy)

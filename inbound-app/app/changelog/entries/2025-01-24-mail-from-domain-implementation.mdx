@@ -1,0 +1,91 @@
+---
+title: MAIL FROM Domain Implementation
+date: 2025-01-24
+version: 1.10.0
+summary: Automatic MAIL FROM domain setup eliminates "via amazonses.com" attribution for enhanced email deliverability
+---
+
+## Overview
+We've implemented automatic MAIL FROM domain configuration to eliminate the "via amazonses.com" attribution that appears in email clients, significantly improving email deliverability and professional appearance.
+
+## What Changed
+- **Automatic Setup**: All new domains now automatically configure MAIL FROM domains (`mail.yourdomain.com`)
+- **Upgrade Option**: Existing domains can be upgraded with a single click to add MAIL FROM configuration
+- **Enhanced DNS Records**: Additional MX and SPF records are automatically generated for MAIL FROM domains
+- **Status Tracking**: New database fields track MAIL FROM domain verification status
+- **API Enhancements**: Domain creation and management APIs now include MAIL FROM domain information
+
+## Technical Details
+
+### New DNS Records
+When you add or upgrade a domain, these additional records are now generated:
+```
+Type: MX
+Name: mail.yourdomain.com
+Value: 10 feedback-smtp.us-east-2.amazonses.com
+
+Type: TXT
+Name: mail.yourdomain.com
+Value: v=spf1 include:amazonses.com ~all
+```
+
+### API Changes
+The `/api/v2/domains` endpoints now include:
+```json
+{
+  "mailFromDomain": "mail.example.com",
+  "mailFromDomainStatus": "Success",
+  "mailFromDomainVerifiedAt": "2025-01-24T10:00:00Z"
+}
+```
+
+### Database Schema
+New fields added to `email_domains` table:
+- `mailFromDomain`: The configured MAIL FROM domain
+- `mailFromDomainStatus`: Verification status ('pending', 'verified', 'failed', 'not_set')
+- `mailFromDomainVerifiedAt`: Timestamp when MAIL FROM domain was verified
+
+## Impact
+
+### For New Domains
+- MAIL FROM domains are automatically configured during domain creation
+- No additional action required from users
+- Enhanced deliverability from day one
+
+### For Existing Domains
+- Upgrade button available in domain management interface
+- One-click upgrade to add MAIL FROM configuration
+- Additional DNS records provided for manual setup
+
+### Email Deliverability Benefits
+- Eliminates "via amazonses.com" attribution in Gmail, Outlook, and other email clients
+- Improves sender reputation and trust
+- Reduces likelihood of emails being marked as spam
+- Professional appearance with your own domain in sender information
+
+## Migration Guide
+
+### Existing Domain Owners
+1. Navigate to your domain management page
+2. Look for domains without MAIL FROM configuration
+3. Click "Upgrade Identity" button for enhanced deliverability
+4. Add the provided DNS records to your domain provider
+5. Wait for verification (usually within 24 hours)
+
+### DNS Provider Setup
+Add these records to your DNS provider:
+1. **MX Record**: `mail.yourdomain.com` → `10 feedback-smtp.us-east-2.amazonses.com`
+2. **TXT Record**: `mail.yourdomain.com` → `v=spf1 include:amazonses.com ~all`
+
+## Backward Compatibility
+- Existing domains continue to work without changes
+- MAIL FROM upgrade is optional but recommended
+- No breaking changes to existing API endpoints
+- Graceful fallback to default behavior if MAIL FROM setup fails
+
+## Next Steps
+- Monitor MAIL FROM domain verification status in your dashboard
+- Upgrade existing domains for improved deliverability
+- Contact support if you encounter any issues with DNS setup
+
+This enhancement significantly improves the professional appearance and deliverability of emails sent through our platform while maintaining full backward compatibility.

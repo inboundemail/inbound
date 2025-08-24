@@ -1,4 +1,4 @@
-import { SESClient, VerifyDomainIdentityCommand, GetIdentityVerificationAttributesCommand, DeleteIdentityCommand } from '@aws-sdk/client-ses'
+import { SESClient, VerifyDomainIdentityCommand, GetIdentityVerificationAttributesCommand, DeleteIdentityCommand, SetIdentityMailFromDomainCommand, GetIdentityMailFromDomainAttributesCommand } from '@aws-sdk/client-ses'
 import { getDomainWithRecords, updateDomainSesVerification } from '@/lib/db/domains'
 
 // Check if AWS credentials are available
@@ -26,11 +26,14 @@ export interface DomainVerificationResult {
   verificationToken: string
   status: 'pending' | 'verified' | 'failed'
   sesStatus?: string
+  mailFromDomain?: string
+  mailFromDomainStatus?: string
   dnsRecords: Array<{
     type: string
     name: string
     value: string
     isVerified: boolean
+    description?: string
   }>
   canProceed: boolean
   error?: string
@@ -38,6 +41,7 @@ export interface DomainVerificationResult {
 
 /**
  * Initiate domain verification with AWS SES and generate DNS records
+ * Now automatically sets up MAIL FROM domain to remove "via amazonses.com"
  */
 export async function initiateDomainVerification(
   domain: string,
@@ -79,6 +83,33 @@ export async function initiateDomainVerification(
       verificationToken = verifyResponse.VerificationToken || ''
     }
 
+    // Set up MAIL FROM domain automatically to remove "via amazonses.com"
+    const mailFromDomain = `mail.${domain}`
+    let mailFromDomainStatus = 'pending'
+    
+    try {
+      console.log(`🔧 Setting up MAIL FROM domain: ${mailFromDomain}`)
+      const mailFromCommand = new SetIdentityMailFromDomainCommand({
+        Identity: domain,
+        MailFromDomain: mailFromDomain,
+        BehaviorOnMXFailure: 'UseDefaultValue'
+      })
+      await sesClient.send(mailFromCommand)
+      
+      // Check MAIL FROM domain status
+      const mailFromStatusCommand = new GetIdentityMailFromDomainAttributesCommand({
+        Identities: [domain]
+      })
+      const mailFromStatusResponse = await sesClient.send(mailFromStatusCommand)
+      const mailFromAttributes = mailFromStatusResponse.MailFromDomainAttributes?.[domain]
+      mailFromDomainStatus = mailFromAttributes?.MailFromDomainStatus || 'pending'
+      
+      console.log(`✅ MAIL FROM domain configured: ${mailFromDomain} (status: ${mailFromDomainStatus})`)
+    } catch (mailFromError) {
+      console.error('Failed to set up MAIL FROM domain:', mailFromError)
+      // Continue with verification even if MAIL FROM setup fails
+    }
+
     // Get current verification status from AWS
     const getAttributesCommand = new GetIdentityVerificationAttributesCommand({
       Identities: [domain]
@@ -97,37 +128,56 @@ export async function initiateDomainVerification(
       status = 'failed'
     }
 
-    // Prepare DNS records that need to be added
+    // Prepare DNS records that need to be added (including MAIL FROM domain records)
     const requiredDnsRecords = [
       {
         type: 'TXT',
         name: `_amazonses.${domain}`,
-        value: verificationToken || 'verification-token-not-available'
+        value: verificationToken || 'verification-token-not-available',
+        description: 'SES domain verification'
       },
       {
         type: 'MX',
         name: domain,
-        value: `10 inbound-smtp.${awsRegion}.amazonaws.com`
+        value: `10 inbound-smtp.${awsRegion}.amazonaws.com`,
+        description: 'Inbound email routing'
       },
       {
         type: 'TXT',
         name: domain,
-        value: 'v=spf1 include:amazonses.com ~all'
+        value: 'v=spf1 include:amazonses.com ~all',
+        description: 'SPF record for root domain'
       },
       {
         type: 'TXT',
         name: `_dmarc.${domain}`,
-        value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain}; ruf=mailto:dmarc@${domain}; fo=1; aspf=r; adkim=r`
+        value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain}; ruf=mailto:dmarc@${domain}; fo=1; aspf=r; adkim=r`,
+        description: 'DMARC policy record'
+      },
+      // MAIL FROM domain records to eliminate "via amazonses.com"
+      {
+        type: 'MX',
+        name: mailFromDomain,
+        value: `10 feedback-smtp.${awsRegion}.amazonses.com`,
+        description: 'MAIL FROM domain MX record (eliminates "via amazonses.com")'
+      },
+      {
+        type: 'TXT',
+        name: mailFromDomain,
+        value: 'v=spf1 include:amazonses.com ~all',
+        description: 'SPF record for MAIL FROM domain'
       }
     ]
 
-    // Update domain record in database with SES information
+    // Update domain record in database with SES information and MAIL FROM domain
     if (!domainRecord.verificationToken) {
       await updateDomainSesVerification(
         domainRecord.id,
         verificationToken,
         sesStatus,
-        requiredDnsRecords
+        requiredDnsRecords,
+        mailFromDomain,
+        mailFromDomainStatus
       )
     }
 
@@ -136,7 +186,8 @@ export async function initiateDomainVerification(
       type: record.type,
       name: record.name,
       value: record.value,
-      isVerified: false // New domains won't have verified DNS records yet
+      isVerified: false, // New domains won't have verified DNS records yet
+      description: record.description
     }))
 
     return {
@@ -145,6 +196,8 @@ export async function initiateDomainVerification(
       verificationToken: verificationToken || '',
       status,
       sesStatus,
+      mailFromDomain,
+      mailFromDomainStatus,
       dnsRecords,
       canProceed: status === 'verified'
     }

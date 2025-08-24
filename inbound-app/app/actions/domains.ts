@@ -940,3 +940,190 @@ export async function verifyDomain(domain: string) {
     }
   }
 }
+
+// ============================================================================
+// MAIL FROM DOMAIN UPGRADE
+// ============================================================================
+
+export async function upgradeDomainWithMailFrom(domainId: string) {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers()
+    })
+
+    if (!session?.user) {
+      return { success: false, error: 'Unauthorized' }
+    }
+
+    const userId = session.user.id
+
+    console.log(`🔧 Upgrade Domain - Starting MAIL FROM upgrade for domainId: ${domainId}`)
+
+    // Get domain record from database
+    const domainRecord = await db
+      .select()
+      .from(emailDomains)
+      .where(and(eq(emailDomains.id, domainId), eq(emailDomains.userId, userId)))
+      .limit(1)
+
+    if (!domainRecord[0]) {
+      console.log(`❌ Upgrade Domain - Domain not found: ${domainId}`)
+      return {
+        success: false,
+        error: 'Domain not found or access denied',
+        timestamp: new Date()
+      }
+    }
+
+    const domain = domainRecord[0]
+    console.log(`📋 Upgrade Domain - Found domain: ${domain.domain}`)
+
+    // Check if domain already has MAIL FROM configured and verified
+    if (domain.mailFromDomain && domain.mailFromDomainStatus === 'Success') {
+      console.log(`ℹ️ Upgrade Domain - Domain already has MAIL FROM configured: ${domain.mailFromDomain}`)
+      return {
+        success: true,
+        message: 'Domain already has MAIL FROM domain configured and verified',
+        mailFromDomain: domain.mailFromDomain,
+        mailFromDomainStatus: domain.mailFromDomainStatus,
+        alreadyConfigured: true,
+        timestamp: new Date()
+      }
+    }
+
+    // Check if AWS SES is configured
+    if (!sesClient) {
+      console.log(`❌ Upgrade Domain - AWS SES not configured`)
+      return {
+        success: false,
+        error: 'AWS SES not configured. Please contact support.',
+        timestamp: new Date()
+      }
+    }
+
+    // Set up MAIL FROM domain
+    const mailFromDomain = `mail.${domain.domain}`
+    let mailFromDomainStatus = 'pending'
+    
+    try {
+      console.log(`🔧 Upgrade Domain - Setting up MAIL FROM domain: ${mailFromDomain}`)
+      
+      // Import AWS SES commands
+      const { SetIdentityMailFromDomainCommand, GetIdentityMailFromDomainAttributesCommand } = await import('@aws-sdk/client-ses')
+      
+      const mailFromCommand = new SetIdentityMailFromDomainCommand({
+        Identity: domain.domain,
+        MailFromDomain: mailFromDomain,
+        BehaviorOnMXFailure: 'UseDefaultValue'
+      })
+      await sesClient.send(mailFromCommand)
+      
+      // Check MAIL FROM domain status
+      const mailFromStatusCommand = new GetIdentityMailFromDomainAttributesCommand({
+        Identities: [domain.domain]
+      })
+      const mailFromStatusResponse = await sesClient.send(mailFromStatusCommand)
+      const mailFromAttributes = mailFromStatusResponse.MailFromDomainAttributes?.[domain.domain]
+      mailFromDomainStatus = mailFromAttributes?.MailFromDomainStatus || 'pending'
+      
+      console.log(`✅ Upgrade Domain - MAIL FROM domain configured: ${mailFromDomain} (status: ${mailFromDomainStatus})`)
+    } catch (mailFromError) {
+      console.error('❌ Upgrade Domain - Failed to set up MAIL FROM domain:', mailFromError)
+      return {
+        success: false,
+        error: 'Failed to configure MAIL FROM domain with AWS SES',
+        details: mailFromError instanceof Error ? mailFromError.message : 'Unknown error',
+        timestamp: new Date()
+      }
+    }
+
+    // Update domain record with MAIL FROM domain information
+    const updateData: any = {
+      mailFromDomain,
+      mailFromDomainStatus,
+      updatedAt: new Date()
+    }
+
+    if (mailFromDomainStatus === 'Success') {
+      updateData.mailFromDomainVerifiedAt = new Date()
+    }
+
+    const [updatedDomain] = await db
+      .update(emailDomains)
+      .set(updateData)
+      .where(eq(emailDomains.id, domainId))
+      .returning()
+
+    // Generate additional DNS records needed for MAIL FROM domain
+    const awsRegion = process.env.AWS_REGION || 'us-east-2'
+    const additionalDnsRecords = [
+      {
+        type: 'MX',
+        name: mailFromDomain,
+        value: `10 feedback-smtp.${awsRegion}.amazonses.com`,
+        description: 'MAIL FROM domain MX record (eliminates "via amazonses.com")',
+        isRequired: true,
+        isVerified: false
+      },
+      {
+        type: 'TXT',
+        name: mailFromDomain,
+        value: 'v=spf1 include:amazonses.com ~all',
+        description: 'SPF record for MAIL FROM domain',
+        isRequired: false,
+        isVerified: false
+      }
+    ]
+
+    // Add the new DNS records to the database
+    for (const record of additionalDnsRecords) {
+      const dnsRecord = {
+        id: `dns_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+        domainId: domainId,
+        recordType: record.type,
+        name: record.name,
+        value: record.value,
+        isRequired: record.isRequired,
+        isVerified: record.isVerified,
+        createdAt: new Date(),
+      }
+      
+      try {
+        await db.insert(domainDnsRecords).values(dnsRecord)
+        console.log(`✅ Upgrade Domain - Added DNS record: ${record.type} ${record.name}`)
+      } catch (dnsError) {
+        console.error('⚠️ Upgrade Domain - Failed to add DNS record (may already exist):', dnsError)
+        // Continue even if DNS record insertion fails (might already exist)
+      }
+    }
+
+    console.log(`🏁 Upgrade Domain - Completed MAIL FROM upgrade for ${domain.domain}`)
+
+    // Revalidate relevant paths
+    revalidatePath('/mail')
+
+    return {
+      success: true,
+      message: 'Domain successfully upgraded with MAIL FROM domain configuration',
+      mailFromDomain,
+      mailFromDomainStatus,
+      additionalDnsRecords: additionalDnsRecords.map(record => ({
+        type: record.type,
+        name: record.name,
+        value: record.value,
+        description: record.description,
+        isRequired: record.isRequired
+      })),
+      alreadyConfigured: false,
+      timestamp: new Date()
+    }
+
+  } catch (error) {
+    console.error(`💥 Upgrade Domain - Error for domainId ${domainId}:`, error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to upgrade domain with MAIL FROM configuration',
+      timestamp: new Date()
+    }
+  }
+}
