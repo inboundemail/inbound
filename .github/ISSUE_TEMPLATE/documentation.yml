@@ -1,0 +1,80 @@
+name: 📖 Documentation Issue
+description: Report an issue with documentation or request documentation improvements
+title: "[Docs]: "
+labels: ["documentation"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve our documentation! 
+        
+        **Before submitting:** Please check if the documentation issue hasn't been reported already.
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Issue Type
+      description: What type of documentation issue is this?
+      options:
+        - Missing documentation
+        - Incorrect/outdated information
+        - Unclear explanation
+        - Broken link
+        - Typo/grammar error
+        - Code example doesn't work
+        - Suggestion for improvement
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Documentation Location
+      description: Where is the documentation issue located?
+      placeholder: e.g., https://docs.inbound.new/api/emails, README.md, specific page URL
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Issue Description
+      description: Clearly describe the documentation issue
+      placeholder: What's wrong or missing? What needs to be improved?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Documentation
+      description: What should the documentation say or include?
+      placeholder: Describe what the correct or improved documentation should contain.
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Fix
+      description: If you have specific suggestions for fixing the documentation
+      placeholder: Provide specific text, examples, or structure suggestions.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context that might help improve the documentation
+      placeholder: Screenshots, related documentation that works well, etc.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmation
+      description: Please confirm the following
+      options:
+        - label: I have checked that this documentation issue hasn't been reported already
+          required: true
+        - label: I have provided clear information about the documentation problem
+          required: true

@@ -1,0 +1,114 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement for Inbound
+title: "[Feature]: "
+labels: ["feature"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! 
+        
+        **Before submitting:** Please search existing issues to see if this has already been requested.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Feature Summary
+      description: A clear and concise description of the feature you'd like to see.
+      placeholder: Briefly describe the feature you're requesting.
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem/Use Case
+      description: What problem does this feature solve? What's your use case?
+      placeholder: Describe the problem you're trying to solve or the use case this feature would enable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How would you like this feature to work?
+      placeholder: Describe your ideal solution in detail.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component/Area
+      description: Which part of Inbound would this feature affect?
+      options:
+        - Email Sending
+        - Email Receiving/Webhooks
+        - Domain Management
+        - API/SDK
+        - Dashboard/UI
+        - Authentication
+        - Documentation
+        - Developer Experience
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions
+      description: Have you considered any alternative solutions or features?
+      placeholder: Describe any alternative approaches you've considered.
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples/References
+      description: Are there examples of this feature in other services or tools?
+      placeholder: Link to examples, similar features in other products, or provide code samples.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to your workflow?
+      options:
+        - Critical - Blocking current development
+        - High - Would significantly improve workflow
+        - Medium - Would be helpful to have
+        - Low - Nice to have enhancement
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: implementation
+    attributes:
+      label: Implementation
+      description: Are you interested in helping implement this feature?
+      options:
+        - label: I'd be willing to help implement this feature
+          required: false
+        - label: I'd be willing to provide additional feedback/testing
+          required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context, mockups, or information that might help
+      placeholder: Add any other context about the feature here. Mockups, diagrams, or detailed specifications are welcome!
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmation
+      description: Please confirm the following
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: This is a feature request, not a bug report or support question
+          required: true
