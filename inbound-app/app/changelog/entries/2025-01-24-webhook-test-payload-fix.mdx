@@ -1,0 +1,78 @@
+---
+title: Fixed Test Webhook Payload Structure
+date: 2025-01-24
+version: 1.9.2
+summary: Fixed test webhook payload to match the documented InboundWebhookPayload structure and pass isInboundWebhook validation
+---
+
+## Overview
+Fixed a critical issue where the "Test Webhook" functionality was sending payloads with an incorrect structure that didn't match the documented `InboundWebhookPayload` format, causing the `isInboundWebhook()` validation function to fail.
+
+## What Changed
+- **Test webhook payload structure**: Now matches the exact `InboundWebhookPayload` format from the SDK
+- **Event field**: Changed from `'webhook_test'` to `'email.received'` to match real payloads
+- **Payload structure**: Restructured to include proper `email` and `endpoint` objects
+- **Type validation**: Test payloads now pass `isInboundWebhook()` validation
+
+## Technical Details
+
+### Before (Incorrect Structure)
+```json
+{
+  "event": "webhook_test",
+  "timestamp": "2025-01-24T...",
+  "messageId": "test-123",
+  "source": "test@example.com",
+  "destination": ["webhook@test.com"],
+  "subject": "Test",
+  "body": { "text": "...", "html": "..." },
+  "test": true
+}
+```
+
+### After (Correct Structure)
+```json
+{
+  "event": "email.received",
+  "timestamp": "2025-01-24T...",
+  "email": {
+    "id": "test-email-123",
+    "messageId": "test-message-123@inbound.test",
+    "from": {
+      "text": "test@inbound.new",
+      "addresses": [{"name": "Inbound Test", "address": "test@inbound.new"}]
+    },
+    "to": {
+      "text": "webhook@test.com",
+      "addresses": [{"name": null, "address": "webhook@test.com"}]
+    },
+    "recipient": "webhook@test.com",
+    "subject": "Test webhook delivery from Inbound",
+    "receivedAt": "2025-01-24T...",
+    "parsedData": { /* full parsed email data */ },
+    "cleanedContent": { /* cleaned content structure */ }
+  },
+  "endpoint": {
+    "id": "webhook-id",
+    "name": "Webhook Name",
+    "type": "webhook"
+  }
+}
+```
+
+## Impact
+- **Test webhooks now work correctly**: The `isInboundWebhook()` function will properly validate test payloads
+- **Consistent payload structure**: Test and real webhook payloads now have identical structures
+- **Better debugging**: Developers can now properly test their webhook handlers with realistic payloads
+- **Backward compatible**: No changes to real email webhook payloads
+
+## Files Modified
+- `inbound-app/lib/webhooks/webhook-formats.ts` - Updated test payload generation
+- `inbound-app/app/actions/webhooks.ts` - Updated webhook test function
+- `@inboundemail/sdk/src/webhook-types.ts` - Type definitions (reference)
+
+## Migration Guide
+No action required for existing webhook endpoints. This fix only affects the test webhook functionality and makes it consistent with the documented payload structure.
+
+## Related Issue
+This resolves the user-reported issue where `isInboundWebhook()` was not conforming to the test webhook payload structure, while working correctly with real email payloads.

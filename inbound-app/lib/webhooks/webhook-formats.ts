@@ -1,10 +1,11 @@
 import type { WebhookFormat } from '@/lib/db/schema'
+import type { InboundWebhookPayload } from '@inboundemail/sdk'
 
 // Base email data structure that all formats will use
 export interface BaseEmailData {
   messageId: string
   from: string
-  to: string[]
+  to: string
   subject: string
   textBody?: string
   htmlBody?: string
@@ -15,34 +16,9 @@ export interface BaseEmailData {
   }>
   headers?: Record<string, any>
   timestamp: string
-  recipient: string
-}
-
-// Inbound webhook format (current format)
-export interface InboundWebhookPayload {
-  event: string
-  timestamp: string
-  messageId: string
-  source: string
-  destination: string[]
-  subject: string
-  body: {
-    text?: string
-    html?: string
-  }
-  attachments: Array<{
-    filename?: string
-    contentType?: string
-    size?: number
-    contentId?: string
-    contentDisposition?: string
-  }>
-  headers: Record<string, any>
-  endpoint?: {
-    id: string
-    name: string
-  }
-  test?: boolean
+  recipient?: string
+  endpointId?: string
+  endpointName?: string
 }
 
 // Discord webhook format
@@ -131,33 +107,114 @@ export const WEBHOOK_FORMAT_CONFIGS: Record<WebhookFormat, WebhookFormatConfig> 
     name: 'Inbound Webhook',
     description: 'Standard Inbound email webhook format with full email data',
     testPayload: (data: BaseEmailData): InboundWebhookPayload => ({
-      event: 'webhook_test',
+      event: 'email.received',
       timestamp: data.timestamp,
-      messageId: data.messageId,
-      source: data.from,
-      destination: data.to,
-      subject: data.subject,
-      body: {
-        text: data.textBody || 'This is a test email from the Inbound Email service to verify webhook functionality.',
-        html: data.htmlBody || '<p>This is a test email from the <strong>Inbound Email service</strong> to verify webhook functionality.</p>'
+      email: {
+        id: data.messageId || `test-email-${Date.now()}`,
+        messageId: data.messageId || null,
+        from: data.from ? {
+          text: data.from,
+          addresses: [{ name: null, address: data.from }]
+        } : null,
+        to: data.to ? {
+          text: data.to,
+          addresses: [{ name: null, address: data.to }]
+        } : null,
+        recipient: data.to || 'test@example.com',
+        subject: data.subject || null,
+        receivedAt: data.timestamp,
+        parsedData: {
+          messageId: data.messageId,
+          date: new Date(data.timestamp),
+          subject: data.subject,
+          from: data.from ? {
+            text: data.from,
+            addresses: [{ name: null, address: data.from }]
+          } : null,
+          to: data.to ? {
+            text: data.to,
+            addresses: [{ name: null, address: data.to }]
+          } : null,
+          cc: null,
+          bcc: null,
+          replyTo: null,
+          inReplyTo: undefined,
+          references: undefined,
+          textBody: data.textBody || 'This is a test email from the Inbound Email service to verify webhook functionality.',
+          htmlBody: data.htmlBody || '<p>This is a test email from the <strong>Inbound Email service</strong> to verify webhook functionality.</p>',
+          attachments: data.attachments || [],
+          headers: data.headers || {},
+          priority: undefined
+        },
+        cleanedContent: {
+          html: data.htmlBody || '<p>This is a test email from the <strong>Inbound Email service</strong> to verify webhook functionality.</p>',
+          text: data.textBody || 'This is a test email from the Inbound Email service to verify webhook functionality.',
+          hasHtml: !!(data.htmlBody || true),
+          hasText: !!(data.textBody || true),
+          attachments: data.attachments || [],
+          headers: data.headers || {}
+        }
       },
-      attachments: data.attachments || [],
-      headers: data.headers || {},
-      test: true
+      endpoint: {
+        id: 'test-endpoint',
+        name: 'Test Endpoint',
+        type: 'webhook'
+      }
     }),
     realPayload: (data: BaseEmailData): InboundWebhookPayload => ({
-      event: 'email_received',
+      event: 'email.received',
       timestamp: data.timestamp,
-      messageId: data.messageId,
-      source: data.from,
-      destination: data.to,
-      subject: data.subject,
-      body: {
-        text: data.textBody,
-        html: data.htmlBody
+      email: {
+        id: data.messageId || `email-${Date.now()}`,
+        messageId: data.messageId || null,
+        from: data.from ? {
+          text: data.from,
+          addresses: [{ name: null, address: data.from }]
+        } : null,
+        to: data.to ? {
+          text: data.to,
+          addresses: [{ name: null, address: data.to }]
+        } : null,
+        recipient: data.to || '',
+        subject: data.subject || null,
+        receivedAt: data.timestamp,
+        parsedData: {
+          messageId: data.messageId,
+          date: new Date(data.timestamp),
+          subject: data.subject,
+          from: data.from ? {
+            text: data.from,
+            addresses: [{ name: null, address: data.from }]
+          } : null,
+          to: data.to ? {
+            text: data.to,
+            addresses: [{ name: null, address: data.to }]
+          } : null,
+          cc: null,
+          bcc: null,
+          replyTo: null,
+          inReplyTo: undefined,
+          references: undefined,
+          textBody: data.textBody,
+          htmlBody: data.htmlBody,
+          attachments: data.attachments || [],
+          headers: data.headers || {},
+          priority: undefined
+        },
+        cleanedContent: {
+          html: data.htmlBody || null,
+          text: data.textBody || null,
+          hasHtml: !!data.htmlBody,
+          hasText: !!data.textBody,
+          attachments: data.attachments || [],
+          headers: data.headers || {}
+        }
       },
-      attachments: data.attachments || [],
-      headers: data.headers || {}
+      endpoint: {
+        id: data.endpointId || 'endpoint-id',
+        name: data.endpointName || 'Email Endpoint',
+        type: 'webhook'
+      }
     })
   },
   
