@@ -1,0 +1,34 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+This is an extremely important rule for client performance.
+
+This is an example of how we want data to be fetched:
+
+```tsx
+function StatsCard() {
+ return <Suspense=fallback{<Skeleton/>}>
+          <StatsCardInternal/>
+        </Suspense>
+};
+
+function StatsCardInternal(){
+    const data = await getData();
+    return <div>{...data}</div>;
+};
+```
+
+The reason this format is important is because it allows us to have a fallback UI while the data is loading, and a non-blocking experience for the user.
+
+Use react-query for data fetching and revalidation.
+
+Use the `useQuery` hook to fetch data.
+
+Use the `useMutation` hook to mutate data.
+
+Use the `useQueryClient` hook to get the query client.
+
+Use the `useQueryState` hook to get the query state.

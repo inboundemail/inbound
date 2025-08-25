@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Outfit, Geist_Mono } from "next/font/google";
+import { Outfit, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next"
 import { AutumnProvider } from "autumn-js/react";
@@ -12,6 +12,11 @@ const outfit = Outfit({
   variable: "--font-outfit",
   subsets: ["latin"],
   weight: ["400"], // Regular weight
+});
+
+const geist = Geist({
+  variable: "--font-geist",
+  subsets: ["latin"],
 });
 
 const geistMono = Geist_Mono({
@@ -37,7 +42,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className={typeof window === 'undefined' ? 'dark' : ''}>
       <head>
 
         <Script
@@ -60,9 +65,23 @@ export default function RootLayout({
 
       </head>
       <body
-        className={`${outfit.variable} ${geistMono.variable} antialiased`}
+        className={`${outfit.variable} ${geist.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function(){
+                try {
+                  var theme = localStorage.getItem('theme');
+                  var d = document.documentElement;
+                  if (theme === 'light') d.classList.remove('dark');
+                  else d.classList.add('dark');
+                } catch {}
+              })();
+            `,
+          }}
+        />
         {process.env.NODE_ENV === "test" && (
           <script
             crossOrigin="anonymous"

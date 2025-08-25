@@ -830,7 +830,7 @@ export default function AddDomainForm({
 
   return (
     <div className="flex flex-col">
-      <div className="w-full max-w-4xl px-2  mx-auto">
+      <div className="w-full px-2 mx-auto">
         <header className="mb-8 flex items-center space-x-4">
           {/* <div className="rounded-lg bg-iconBg">
             <Image src="/domain-icon.png" alt="Logo" width={48} height={48} className="p-2" />
@@ -893,7 +893,7 @@ export default function AddDomainForm({
         </div>
 
         {/* Main Content Area */}
-        <div className="w-full max-w-2xl mx-auto">
+        <div className="w-full mx-auto">
           <AnimatePresence mode="wait">
             <motion.div
               key={currentStepIdx}
@@ -1378,65 +1378,53 @@ export default function AddDomainForm({
                         </div>
                     )}
 
-                    {/* Verification Status Summary */}
+                    {/* Verification Status Summary / Success Banner */}
                     {dnsRecords.length > 0 && (
                         <div className="mb-4">
                             {(() => {
                                 const verifiedCount = dnsRecords.filter(r => r.isVerified).length
                                 const totalCount = dnsRecords.length
                                 const allVerified = verifiedCount === totalCount
-                                
-                                return (
-                                    <div className={cn(
-                                        "rounded-lg p-4 border",
-                                        allVerified 
-                                            ? "bg-green-500/10 border-green-500/20 dark:bg-green-500/5"
-                                            : verifiedCount > 0 
-                                                ? "bg-yellow-500/10 border-yellow-500/20 dark:bg-yellow-500/5"
-                                                : "bg-muted/50 border-border"
-                                    )}>
-                                        <div className="flex items-center gap-2">
-                                            {allVerified ? (
-                                                <>
-                                                    <CircleCheck width="20" height="20" className="text-green-600" />
-                                                    <div>
-                                                        <p className="font-medium text-green-700 dark:text-green-400">
-                                                            All DNS records verified!
-                                                        </p>
-                                                        <p className="text-sm text-green-600 dark:text-green-500">
-                                                            {verificationStatus === 'verified' 
-                                                                ? "Domain is fully verified and ready to receive emails."
-                                                                : "DNS records are configured correctly. Waiting for Email status to be verified."}
-                                                        </p>
-                                                    </div>
-                                                </>
-                                            ) : verifiedCount > 0 ? (
-                                                <>
-                                                    <Clock2 width="20" height="20" className="text-yellow-600" />
-                                                    <div>
-                                                        <p className="font-medium text-yellow-700 dark:text-yellow-400">
-                                                            Partial verification ({verifiedCount}/{totalCount} records verified)
-                                                        </p>
-                                                        <p className="text-sm text-yellow-600 dark:text-yellow-500">
-                                                            {dnsRecords.filter(r => !r.isVerified).map(r => r.type).join(', ')} record{dnsRecords.filter(r => !r.isVerified).length > 1 ? 's' : ''} still need{dnsRecords.filter(r => !r.isVerified).length > 1 ? '' : 's'} to be configured.
-                                                        </p>
-                                                    </div>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <CircleWarning2 width="20" height="20" className="text-muted-foreground" />
-                                                    <div>
-                                                        <p className="font-medium text-foreground">
-                                                            DNS records not yet verified
-                                                        </p>
-                                                        <p className="text-sm text-muted-foreground">
-                                                            Please add the DNS records below to your domain provider. Verification may take a few minutes after adding the records.
-                                                        </p>
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
+
+                                if (allVerified) {
+                                  return (
+                                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-primary">
+                                      Well done! All the DNS records are verified. You are ready to start building and sending emails with this domain.
                                     </div>
+                                  )
+                                }
+
+                                return (
+                                  <div className={cn(
+                                    "rounded-lg p-4 border",
+                                    verifiedCount > 0 
+                                      ? "bg-yellow-500/10 border-yellow-500/20 dark:bg-yellow-500/5"
+                                      : "bg-muted/50 border-border"
+                                  )}>
+                                    <div className="flex items-center gap-2">
+                                      {verifiedCount > 0 ? (
+                                        <>
+                                          <Clock2 width="20" height="20" className="text-yellow-600" />
+                                          <div>
+                                            <p className="font-medium text-yellow-700 dark:text-yellow-400">
+                                              Partial verification ({verifiedCount}/{totalCount} records verified)
+                                            </p>
+                                            <p className="text-sm text-yellow-600 dark:text-yellow-500">
+                                              {dnsRecords.filter(r => !r.isVerified).map(r => r.type).join(', ')} record{dnsRecords.filter(r => !r.isVerified).length > 1 ? 's' : ''} still need{dnsRecords.filter(r => !r.isVerified).length > 1 ? '' : 's'} to be configured.
+                                            </p>
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CircleWarning2 width="20" height="20" className="text-muted-foreground" />
+                                          <div>
+                                            <p className="font-medium text-foreground">DNS records not yet verified</p>
+                                            <p className="text-sm text-muted-foreground">Please add the DNS records below to your domain provider. Verification may take a few minutes after adding the records.</p>
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
                                 )
                             })()}
                         </div>

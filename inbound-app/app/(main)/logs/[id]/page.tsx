@@ -319,7 +319,7 @@ export default async function LogDetailPage({ params }: { params: Promise<{ id: 
               Back to Logs
             </Button>
           </Link>
-          <Badge className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${isInbound ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'}`}>
+          <Badge variant={isInbound ? "secondary" : "default"} className="px-2.5 py-0.5">
             {isInbound ? 'Inbound' : 'Outbound'}
           </Badge>
         </div>

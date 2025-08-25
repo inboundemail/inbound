@@ -4,10 +4,21 @@
 
 @layer base {
   :root {
-    --background: 100% 0 0;
-    --foreground: 15% 0.05 264;
-    --card: 100% 0 0;
-    --card-foreground: 15% 0.05 264;
+    /* Selection highlight (light mode) */
+    --selection-bg: #BE9DF7;
+    --selection-fg: #ffffff;
+    /* DNS table background */
+    --dns-table-bg: #FBFBFB;
+    --dns-table-radius: 11px;
+    /* Copy icon (light) */
+    --copy-icon-box: rgba(94, 94, 94, 0.4);
+    --copy-icon-bar: #212121;
+    /* Light mode app content background (#FBFBFB) */
+    --background: 0 0% 98.4%;
+    --foreground: 0 0% 25.5%; /* #414141 */
+    /* Light mode card surface & text */
+    --card: 0 0% 100%; /* #FFFFFF */
+    --card-foreground: 0 0% 25.5%; /* #414141 */
     --popover: 100% 0 0;
     --popover-foreground: 15% 0.05 264;
     --primary: 25% 0.08 264;
@@ -20,17 +31,28 @@
     --accent-foreground: 15% 0.05 264;
     --destructive: 65% 0.2 30;
     --destructive-foreground: 98% 0.02 240;
-    --border: 92% 0.02 240;
+    /* Light mode generic border (rgba(0,0,0,0.10)) */
+    --border: 0 0% 0% / 0.10;
     --input: 92% 0.02 240;
     --primary: 25% 0.08 264;
     --radius: 0.5rem;
-    --sidebar-background: 98% 0.005 240;
-    --sidebar-foreground: 35% 0.01 240;
+    /* Light mode sidebar background (#FFFFFF) */
+    --sidebar-background: 0 0% 100%;
+    /* Light mode selected item */
+    --sidebar-accent: 0 0% 95%; /* #F2F2F2 */
+    --sidebar-accent-foreground: 0 0% 25.5%;
+    --sidebar-accent-border: 0 0% 0% / 0.08;
+    /* Light mode hover item */
+    --sidebar-hover: 0 0% 98%; /* #FBFBFB */
+    --sidebar-hover-foreground: 0 0% 25.5%;
+    --sidebar-foreground: 0 0% 25.5%; /* #414141 */
     --sidebar-primary: 18% 0.01 240;
-    --sidebar-primary-foreground: 98% 0.005 240;
-    --sidebar-accent: 96% 0.005 240;
-    --sidebar-accent-foreground: 18% 0.01 240;
-    --sidebar-border: 91% 0.01 240;
+    --sidebar-primary-foreground: 0 0% 25.5%;
+    /* Light mode sidebar border (rgba(0,0,0,0.10)) */
+    --sidebar-border: 0 0% 0% / 0.10;
+    /* Brand radii */
+    --app-content-radius: 25px;
+    --sidebar-radius: 30px;
     --sidebar-ring: 65% 0.18 240;
     
     /* Inbound Custom Colors */
@@ -45,40 +67,92 @@
     --border-secondary: #f3f4f6;
     --bg-card: #ffffff;
     --bg-card-hover: #f9fafb;
+
+    /* Alert (light) - from Figma */
+    --alert-info-from: #ede8fe7a; /* semi-transparent violet */
+    --alert-info-to: #ffffff00;   /* transparent */
+    --alert-info-border: rgba(128, 97, 255, 0.13);
+    --alert-info-text: #7c3aed;   /* violet-600 */
+    /* Tabs (light) */
+    --tabs-bg: #ffffff;
+    --tabs-active-bg: #fbfbfb;
+    --tabs-border: rgba(0, 0, 0, 0.10);
+    --tabs-text: #000000;
+    --tabs-text-active: #000000;
+    --tabs-radius: 10px;
+    --tabs-pill-radius: 7px;
+    /* Badges (light) */
+    --badge-default-bg: rgba(108, 71, 255, 0.10);
+    --badge-default-text: #2e00e4;
+    --badge-default-border: transparent;
+
+    --badge-secondary-bg: rgba(255, 182, 99, 0.13);
+    --badge-secondary-text: #ff6a00;
+    --badge-secondary-border: transparent;
+
+    --badge-destructive-bg: rgba(255, 71, 74, 0.10);
+    --badge-destructive-text: #ed4e51;
+    --badge-destructive-border: transparent;
+
+    --badge-outline-bg: rgba(0, 0, 0, 0.03);
+    --badge-outline-text: #000000;
+    --badge-outline-border: rgba(0, 0, 0, 0.05);
   }
 
   .dark {
-    --background: 210 4% 11%;
-    --foreground: 240 7% 97%;
-    --card: 210 4% 11%;
-    --card-foreground: 240 7% 97%;
+    /* Selection highlight (dark mode) */
+    --selection-bg: #451E80;
+    --selection-fg: #ffffff;
+    /* DNS table background */
+    --dns-table-bg: #14021C;
+    --dns-table-radius: 13px;
+    /* Copy icon (dark) */
+    --copy-icon-box: rgba(255, 255, 255, 0.4);
+    --copy-icon-bar: #ffffff;
+    /* Dark mode app content background (#14021C) */
+    --background: 286 84% 7%;
+    --foreground: 0 0% 100%; /* #FFFFFF */
+    /* Card surface from Figma (#0f0114) */
+    --card: 284 90% 4%;
+    --card-foreground: 0 0% 100%;
     --popover: 210 4% 11%;
     --popover-foreground: 240 7% 97%;
     --primary: 240 7% 97%;
     --primary-foreground: 210 4% 11%;
     --secondary: 180 3% 18%;
-    --secondary-foreground: 240 7% 97%;
+    --secondary-foreground: 0 0% 100%;
     --muted: 180 3% 18%;
     --muted-foreground: 215 20.2% 65.1%;
     --accent: 180 3% 18%;
-    --accent-foreground: 240 7% 97%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 240 7% 97%;
-    --border: 180 1% 19%;
+    --destructive-foreground: 0 0% 100%;
+    /* Tinted border to match brand (#2a0b35) */
+    --border: 290 66% 12%;
     --input: 180 1% 19%;
-    --ring: 240 7% 97%;
+    --ring: 0 0% 100%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --sidebar-background: 210 4% 11%;
-    --sidebar-foreground: 240 7% 97%;
+    /* Dark mode sidebar background and item states */
+    --sidebar-background: 284 90% 4%; /* #0F0114 */
+    --sidebar-foreground: 0 0% 100%;
     --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 240 7% 97%;
-    --sidebar-accent: 180 3% 18%;
-    --sidebar-accent-foreground: 240 7% 97%;
-    --sidebar-border: 180 1% 19%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    /* Selected item */
+    --sidebar-accent: 286 84% 7%; /* ~#14021C */
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-accent-border: 0 0% 100% / 0.08; /* rgba(255,255,255,0.08) */
+    /* Hover item */
+     --sidebar-hover: 285 85% 6%;
+    --sidebar-hover-foreground: 0 0% 100%;
+    /* Dark mode sidebar border (rgba(255,255,255,0.10)) */
+    --sidebar-border: 0 0% 100% / 0.10;
+    /* Brand radii */
+    --app-content-radius: 25px;
+    --sidebar-radius: 30px;
     --sidebar-ring: 217.2 91.2% 59.8%;
     
     /* Inbound Custom Colors - Dark Mode */
@@ -93,6 +167,36 @@
     --border-secondary: #1f2937;
     --bg-card: #111827;
     --bg-card-hover: #1f2937;
+
+    /* Alert (dark) - subtle variant */
+    --alert-info-from: rgba(108, 71, 255, 0.08);
+    --alert-info-to: #00000000;
+    --alert-info-border: rgba(108, 71, 255, 0.20);
+    --alert-info-text: #bcacff;
+    /* Tabs (dark) */
+    --tabs-bg: #0f0114;
+    --tabs-active-bg: #14021c;
+    --tabs-border: #2a0b35;
+    --tabs-text: #ffffff;
+    --tabs-text-active: #ffffff;
+    --tabs-radius: 10px;
+    --tabs-pill-radius: 7px;
+    /* Badges (dark) */
+    --badge-default-bg: rgba(108, 71, 255, 0.10);
+    --badge-default-text: #bcacff;
+    --badge-default-border: transparent;
+
+    --badge-secondary-bg: rgba(255, 182, 99, 0.13);
+    --badge-secondary-text: #ff6a00;
+    --badge-secondary-border: transparent;
+
+    --badge-destructive-bg: rgba(109, 29, 29, 0.50);
+    --badge-destructive-text: #ffb9ba;
+    --badge-destructive-border: transparent;
+
+    --badge-outline-bg: rgba(255, 255, 255, 0.03);
+    --badge-outline-text: #ffffff;
+    --badge-outline-border: rgba(255, 255, 255, 0.05);
   }
 }
 
@@ -101,21 +205,25 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-sidebar text-foreground font-sans;
+    font-family: var(--font-outfit), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    letter-spacing: -0.04em; /* Geist -4% tracking for body */    
+    overscroll-behavior-y: none;
   }
   html {
     scroll-behavior: smooth;
+    background-color: hsl(var(--sidebar-background));
   }
   
   /* Text selection styling */
   ::selection {
-    background-color: hsl(240, 7%, 97%);
-    color: hsl(210, 4%, 11%);
+    background-color: var(--selection-bg);
+    color: var(--selection-fg);
   }
   
   ::-moz-selection {
-    background-color: hsl(240, 7%, 97%);
-    color: hsl(210, 4%, 11%);
+    background-color: var(--selection-bg);
+    color: var(--selection-fg);
   }
 }
 
@@ -145,6 +253,12 @@
       -webkit-text-fill-color: unset;
       color: inherit;
     }
+  }
+
+  /* Heading typography rules */
+  h1, h2, h3, h4, h5, h6, .heading, .title {
+    font-family: var(--font-outfit), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    letter-spacing: normal;
   }
   
   @keyframes scale-in {

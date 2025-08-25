@@ -10,15 +10,15 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-gradient-to-b from-[#8466ff] to-[#6C47FF] text-white disabled:cursor-default shadow-[0_4px_12px_rgba(0,0,0,0.3),inset_0_-1px_0.5px_1px_rgba(40,27,93,0.15),inset_0_1px_0.5px_1px_rgba(255,255,255,0.2)] border-none disabled:opacity-60 hover:from-[#7557ff] hover:to-[#5d3eff] active:from-[#6647ff] active:to-[#4e35ff] active:shadow-[0_2px_8px_rgba(0,0,0,0.4),inset_0_1px_2px_rgba(40,27,93,0.3)] focus-visible:ring-primary/50",
+          "bg-[#4a0198] text-white disabled:cursor-default border-none disabled:opacity-60 shadow-[1px_1.25px_2.3px_0px_inset_rgba(255,255,255,0.1)] hover:bg-[#5201a8] active:bg-[#3e017f] focus-visible:ring-primary/50",
         secondary:
-          "bg-secondary text-secondary-foreground border border-border disabled:cursor-default shadow-[0_4px_12px_rgba(0,0,0,0.1),inset_0_-1px_0.5px_1px_rgba(0,0,0,0.1),inset_0_1px_0.5px_1px_rgba(255,255,255,0.2)] disabled:opacity-60 hover:bg-accent/80 hover:text-accent-foreground hover:shadow-[0_6px_16px_rgba(0,0,0,0.15),inset_0_-1px_0.5px_1px_rgba(0,0,0,0.1),inset_0_1px_0.5px_1px_rgba(255,255,255,0.2)] active:bg-accent/90 active:shadow-[0_2px_8px_rgba(0,0,0,0.2),inset_0_1px_2px_rgba(0,0,0,0.2)] focus-visible:ring-secondary/50",
+          "bg-[#2a0b35] text-white border border-white/10 rounded-[9px] disabled:cursor-default disabled:opacity-60 shadow-[1px_1.25px_2.3px_0px_inset_rgba(255,255,255,0.08)] hover:bg-[#321142] active:bg-[#220b2b] focus-visible:ring-primary/50",
         outline:
           "border border-border bg-background text-foreground disabled:cursor-default shadow-[0_4px_12px_rgba(0,0,0,0.1),inset_0_-1px_0.5px_1px_rgba(0,0,0,0.05),inset_0_1px_0.5px_1px_rgba(255,255,255,0.1)] disabled:opacity-60 hover:bg-accent hover:text-accent-foreground hover:shadow-[0_6px_16px_rgba(0,0,0,0.15),inset_0_-1px_0.5px_1px_rgba(0,0,0,0.05),inset_0_1px_0.5px_1px_rgba(255,255,255,0.1)] active:bg-accent/90 active:shadow-[0_2px_8px_rgba(0,0,0,0.2),inset_0_1px_2px_rgba(0,0,0,0.15)] focus-visible:ring-border",
         ghost:
           "bg-transparent text-foreground disabled:cursor-default shadow-none border-none disabled:opacity-60 hover:bg-accent/50 hover:text-accent-foreground hover:shadow-[0_4px_12px_rgba(0,0,0,0.1),inset_0_-1px_0.5px_1px_rgba(0,0,0,0.05),inset_0_1px_0.5px_1px_rgba(255,255,255,0.1)] active:bg-accent/90 active:shadow-[0_2px_8px_rgba(0,0,0,0.15),inset_0_1px_2px_rgba(0,0,0,0.1)] focus-visible:ring-accent",
         destructive:
-          "bg-destructive text-destructive-foreground disabled:cursor-default shadow-[0_4px_12px_rgba(220,38,38,0.3),inset_0_-1px_0.5px_1px_rgba(153,27,27,0.15),inset_0_1px_0.5px_1px_rgba(255,255,255,0.2)] border-none disabled:opacity-60 hover:bg-destructive/90 hover:shadow-[0_6px_16px_rgba(220,38,38,0.4),inset_0_-1px_0.5px_1px_rgba(153,27,27,0.15),inset_0_1px_0.5px_1px_rgba(255,255,255,0.2)] active:bg-destructive/80 active:shadow-[0_2px_8px_rgba(220,38,38,0.5),inset_0_1px_2px_rgba(153,27,27,0.3)] focus-visible:ring-destructive/50",
+          "bg-[rgba(109,29,29,0.4)] text-[#ffb9ba] border border-white/10 rounded-[9px] disabled:cursor-default disabled:opacity-60 shadow-[1px_1.25px_2.3px_0px_inset_rgba(255,255,255,0.08)] hover:bg-[rgba(109,29,29,0.55)] active:bg-[rgba(109,29,29,0.35)] focus-visible:ring-destructive/50",
       },
       size: {
         default: "text-sm leading-5 px-4 py-2",

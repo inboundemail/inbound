@@ -76,7 +76,7 @@ import {
 } from '@/features/domains/hooks/useDomainV2Hooks'
 
 // v2 API types
-import type { 
+import type {
     GetDomainByIdResponse,
     PutDomainByIdRequest
 } from '@/app/api/v2/domains/[id]/route'
@@ -188,6 +188,8 @@ export default function DomainDetailPage() {
 
     // Email deletion confirmation state
     const [emailToDelete, setEmailToDelete] = useState<{ id: string; address: string } | null>(null)
+    // Copy feedback for DNS table
+    const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
     // Set catch-all endpoint ID when data loads
     useState(() => {
@@ -226,12 +228,12 @@ export default function DomainDetailPage() {
 
     const handleDomainCopy = async () => {
         if (!domainDetailsData?.domain) return
-        
+
         try {
             await navigator.clipboard.writeText(domainDetailsData.domain)
             setIsDomainCopied(true)
             toast.success('Domain copied to clipboard')
-            
+
             // Reset the checkmark after 2 seconds
             setTimeout(() => {
                 setIsDomainCopied(false)
@@ -262,17 +264,17 @@ export default function DomainDetailPage() {
                 const error = await response.json()
                 throw new Error(error.error || 'Failed to check domain verification')
             }
-            
+
             const updatedDomain = await response.json()
-            
+
             // Manually update the query cache with the fresh data
             queryClient.setQueryData(domainV2Keys.detail(domainId), updatedDomain)
-            
+
             // Refresh auth recommendations for verified domains
             if (domainDetailsData?.status === 'verified') {
                 refetchAuthRecommendations()
             }
-            
+
             // Check if status changed from pending to verified
             if (domainDetailsData?.status === 'pending' && updatedDomain.status === 'verified') {
                 toast.success('Domain verified successfully!')
@@ -287,7 +289,7 @@ export default function DomainDetailPage() {
                 if (updatedDomain.verificationCheck) {
                     const { dnsRecords, sesStatus } = updatedDomain.verificationCheck
                     const unverifiedRecords = dnsRecords?.filter((r: any) => !r.isVerified) || []
-                    
+
                     if (unverifiedRecords.length > 0) {
                         // Check for specific MX record issues
                         const mxRecord = unverifiedRecords.find((r: any) => r.type === 'MX')
@@ -295,7 +297,7 @@ export default function DomainDetailPage() {
                             // Check if the MX record has the domain appended
                             const expectedMx = mxRecord.value
                             const actualValues = mxRecord.error.match(/but found: \[(.*?)\]/)?.[1]
-                            
+
                             if (actualValues && actualValues.includes(`.${domainDetailsData?.domain || ''}`)) {
                                 toast.error(
                                     `MX record issue: Remove ".${domainDetailsData?.domain || ''}" from the end of your MX record value. It should be just "${expectedMx.split(' ')[1]}"`,
@@ -329,7 +331,7 @@ export default function DomainDetailPage() {
     // Auth verification handler
     const handleAuthVerification = async () => {
         if (!domainId) return
-        
+
         try {
             await authVerifyMutation.mutateAsync(domainId)
             toast.success('Authentication records verified successfully')
@@ -349,6 +351,31 @@ export default function DomainDetailPage() {
         } catch (error) {
             toast.error('Failed to copy to clipboard')
         }
+    }
+
+    const copyWithFeedback = async (key: string, value: string, label: string) => {
+        try {
+            await navigator.clipboard.writeText(value)
+            setCopiedKey(key)
+            setTimeout(() => {
+                setCopiedKey(prev => (prev === key ? null : prev))
+            }, 1200)
+            toast.success(`${label} copied to clipboard`)
+        } catch (error) {
+            toast.error('Failed to copy to clipboard')
+        }
+    }
+
+    const CopyIcon = ({ active = false, className = '' }: { active?: boolean; className?: string }) => {
+        if (active) {
+            return <CircleCheck width="15" height="14" className={className} />
+        }
+        return (
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="14" viewBox="0 0 15 14" fill="none" className={className}>
+                <path d="M4.80446 1.5708C3.51898 1.5708 2.47754 2.54051 2.47754 3.73745V11.2223C2.47754 12.4192 3.51898 13.3889 4.80446 13.3889H11.1506C12.4361 13.3889 13.4775 12.4192 13.4775 11.2223V3.73745C13.4775 2.54051 12.4361 1.5708 11.1506 1.5708H4.80446Z" fill="var(--copy-icon-box)"/>
+                <path fillRule="evenodd" clipRule="evenodd" d="M5.01611 1.7677C5.01611 1.00644 5.67932 0.388916 6.49688 0.388916H9.45842C10.276 0.388916 10.9392 1.00644 10.9392 1.7677C10.9392 2.52895 10.276 3.14647 9.45842 3.14647H6.49688C5.67932 3.14647 5.01611 2.52895 5.01611 1.7677Z" fill="var(--copy-icon-bar)"/>
+            </svg>
+        )
     }
 
     const addEmailAddressHandler = async () => {
@@ -453,7 +480,7 @@ export default function DomainDetailPage() {
             setIsEndpointDialogOpen(false)
             setSelectedEmailForEndpoint(null)
             setEndpointDialogSelectedId('none')
-            
+
             // Force refetch to ensure UI updates
             await refetchEmailAddresses()
         } catch (error) {
@@ -498,7 +525,7 @@ export default function DomainDetailPage() {
 
         try {
             if (domainDetailsData.isCatchAllEnabled) {
-                await updateCatchAllMutation.mutateAsync({ 
+                await updateCatchAllMutation.mutateAsync({
                     domainId,
                     isCatchAllEnabled: false,
                     catchAllEndpointId: null
@@ -526,8 +553,8 @@ export default function DomainDetailPage() {
         try {
             const result = await upgradeMailFromMutation.mutateAsync({ domainId })
             toast.success(
-                result.alreadyConfigured 
-                    ? 'Domain already has MAIL FROM configured' 
+                result.alreadyConfigured
+                    ? 'Domain already has MAIL FROM configured'
                     : 'Domain upgraded! Additional DNS records have been added for mail.' + domainDetailsData?.domain,
                 { duration: 6000 }
             )
@@ -584,7 +611,8 @@ export default function DomainDetailPage() {
     }
 
     const { domain, status, stats = { totalEmailAddresses: 0, activeEmailAddresses: 0, emailsLast24h: 0, emailsLast7d: 0, emailsLast30d: 0 } } = domainDetailsData
-    
+    const createdDistance = domainDetailsData.createdAt ? formatDistanceToNow(new Date(domainDetailsData.createdAt), { addSuffix: true }) : null
+
     // Type assertion for MAIL FROM properties (until TypeScript cache refreshes)
     const domainWithMailFrom = domainDetailsData as GetDomainByIdResponse & {
         mailFromDomain?: string | null
@@ -629,7 +657,7 @@ export default function DomainDetailPage() {
 
     return (
         <div className="h-full p-4 font-outfit">
-            <div className="max-w-4xl mx-auto space-y-4">
+            <div className="space-y-4">
                 {/* Back Button */}
                 <div className="flex items-center">
                     <Link href="/emails" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
@@ -638,14 +666,17 @@ export default function DomainDetailPage() {
                     </Link>
                 </div>
 
-                {/* Header */}
-                <div className="flex items-center justify-between bg-card text-card-foreground rounded-xl p-4 border border-border">
+                {/* Header (no card) */}
+                <div className="flex items-center justify-between p-2">
                     <div className="flex items-center gap-4">
-                        <CustomInboundIcon
-                            Icon={Globe2}
-                            size={40}
-                            backgroundColor="#3b82f6"
-                        />
+                        <div className="flex w-[46px] h-[46px] p-2 justify-center items-center gap-2.5 rounded-[10px] bg-[var(--badge-default-bg)]">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 31 30" fill="none">
+                                <path d="M15.5327 2.66663C22.344 2.66663 27.8665 8.18839 27.8667 14.9996C27.8667 21.811 22.3441 27.3336 15.5327 27.3336C8.72147 27.3334 3.19971 21.8109 3.19971 14.9996C3.19988 8.18849 8.72157 2.6668 15.5327 2.66663Z" fill="var(--purple-primary)" fillOpacity="0.4" stroke="var(--purple-dark)" strokeWidth="2" />
+                                <path d="M27.897 10C28.22 10.7979 28.468 11.6341 28.6323 12.5H2.43359C2.59786 11.6341 2.84584 10.7979 3.16883 10H27.897Z" fill="var(--purple-dark)" />
+                                <path d="M3.53998 20.8333C3.15376 20.0408 2.8438 19.2043 2.61963 18.3333H28.4462C28.222 19.2043 27.912 20.0408 27.5258 20.8333H3.53998Z" fill="var(--purple-dark)" />
+                                <path fillRule="evenodd" clipRule="evenodd" d="M12.6182 2.93898C13.4304 2.20468 14.4261 1.66663 15.5331 1.66663C16.64 1.66663 17.6357 2.20468 18.4479 2.93898C19.2677 3.68018 19.995 4.70164 20.5994 5.88873C21.8097 8.26639 22.6164 11.4842 22.6164 15C22.6164 18.5158 21.8097 21.7335 20.5994 24.1111C19.995 25.2983 19.2677 26.3198 18.4479 27.061C17.6357 27.7953 16.64 28.3333 15.5331 28.3333C14.4261 28.3333 13.4304 27.7953 12.6182 27.061C11.7984 26.3198 11.0711 25.2983 10.4668 24.1111C9.25642 21.7335 8.44971 18.5158 8.44971 15C8.44971 11.4842 9.25642 8.26639 10.4668 5.88873C11.0711 4.70164 11.7984 3.68018 12.6182 2.93898ZM12.6947 7.02286C11.6788 9.01853 10.9497 11.8424 10.9497 15C10.9497 18.1575 11.6788 20.9815 12.6947 22.9771C13.2036 23.9766 13.762 24.7248 14.2948 25.2065C14.8353 25.6951 15.2592 25.8333 15.5331 25.8333C15.8069 25.8333 16.2308 25.6951 16.7713 25.2065C17.304 24.7248 17.8625 23.9766 18.3714 22.9771C19.3874 20.9815 20.1164 18.1575 20.1164 15C20.1164 11.8424 19.3874 9.01853 18.3714 7.02286C17.8625 6.02328 17.304 5.27516 16.7713 4.79344C16.2308 4.30483 15.8069 4.16663 15.5331 4.16663C15.2592 4.16663 14.8353 4.30483 14.2948 4.79344C13.762 5.27516 13.2036 6.02328 12.6947 7.02286Z" fill="var(--purple-dark)" />
+                            </svg>
+                        </div>
                         <div>
                             <h1 className="text-xl font-semibold mb-1">{domain}</h1>
                             <div className="text-sm text-muted-foreground">
@@ -657,32 +688,32 @@ export default function DomainDetailPage() {
                     </div>
                     <div className="flex items-center gap-2">
                         {status === DOMAIN_STATUS.VERIFIED ? (
-                            <Badge className="bg-emerald-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
+                            <Badge className="px-2.5 py-0.5 text-xs" variant="default">
                                 <CircleCheck width="12" height="12" className="mr-1" />
                                 Verified
                             </Badge>
                         ) : status === DOMAIN_STATUS.PENDING ? (
-                            <Badge className="bg-amber-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
+                            <Badge className="px-2.5 py-0.5 text-xs" variant="secondary">
                                 <Clock2 width="12" height="12" className="mr-1" />
                                 Pending
                             </Badge>
                         ) : (
-                            <Badge className="bg-red-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
+                            <Badge className="px-2.5 py-0.5 text-xs" variant="destructive">
                                 <ObjRemove width="12" height="12" className="mr-1" />
                                 Failed
                             </Badge>
                         )}
-                        <Button 
-                            variant="secondary" 
-                            size="sm" 
+                        <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={refreshVerification}
                             disabled={isRefreshingVerification}
                             className="flex items-center gap-2"
                         >
-                            <Refresh2 
-                                width="16" 
-                                height="16" 
-                                className={isRefreshingVerification ? "animate-spin" : ""} 
+                            <Refresh2
+                                width="16"
+                                height="16"
+                                className={isRefreshingVerification ? "animate-spin" : ""}
                             />
                             {isRefreshingVerification ? 'Checking...' : 'Refresh'}
                         </Button>
@@ -742,6 +773,21 @@ export default function DomainDetailPage() {
                     </div>
                 </div>
 
+                {/* Meta row (no card) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-2">
+                    <div>
+                        <div className="text-[10px] tracking-wide text-muted-foreground/80">CREATED</div>
+                        <div className="text-sm text-foreground mt-1">{createdDistance || '—'}</div>
+                    </div>
+                </div>
+
+                {/* Success banner when all DNS records are verified */}
+                {status === DOMAIN_STATUS.VERIFIED && authRecommendationsData?.verificationCheck?.dnsRecords && authRecommendationsData.verificationCheck.dnsRecords.length > 0 && authRecommendationsData.verificationCheck.dnsRecords.every((r: any) => r.isVerified) && (
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-primary">
+                        Well done! All the DNS records are verified. You are ready to start building and sending emails with this domain.
+                    </div>
+                )}
+
                 {/* Show AddDomainForm for pending domains */}
                 {status === DOMAIN_STATUS.PENDING && (
                     <AddDomainForm
@@ -762,40 +808,37 @@ export default function DomainDetailPage() {
                     />
                 )}
 
-                {/* MAIL FROM Configuration Section - Show for verified domains without MAIL FROM */}
+                {/* MAIL FROM Configuration - no card */}
                 {status === DOMAIN_STATUS.VERIFIED && !domainWithMailFrom?.mailFromDomain && (
-                    <Card className="bg-card border-border rounded-xl">
-                        <CardContent className="pt-6">
-                            <div className="flex items-center justify-between">
-                                <div className="flex-1">
-                                    <CardTitle className="text-foreground text-lg mb-2">Enhanced Email Identity</CardTitle>
-                                    <CardDescription className="text-muted-foreground">
-                                        Eliminate "via amazonses.com" attribution and improve deliverability
-                                    </CardDescription>
+                    <div className="p-2">
+                        <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                                <div className="text-foreground text-lg font-medium mb-2">Enhanced Email Identity</div>
+                                <div className="text-sm text-muted-foreground">
+                                    Eliminate "via amazonses.com" attribution and improve deliverability
                                 </div>
-                                <Button
-                                    onClick={handleUpgradeDomain}
-                                    disabled={upgradeMailFromMutation.isPending}
-                                    className="ml-4"
-                                >
-                                    {upgradeMailFromMutation.isPending ? 'Upgrading...' : 'Upgrade Identity'}
-                                </Button>
                             </div>
-                        </CardContent>
-                    </Card>
+                            <Button
+                                onClick={handleUpgradeDomain}
+                                disabled={upgradeMailFromMutation.isPending}
+                                className="ml-4"
+                            >
+                                {upgradeMailFromMutation.isPending ? 'Upgrading...' : 'Upgrade Identity'}
+                            </Button>
+                        </div>
+                    </div>
                 )}
 
-                {/* Auth Recommendations for verified domains - only show if not fully verified */}
+                {/* Auth Recommendations - no card */}
                 {status === DOMAIN_STATUS.VERIFIED && authRecommendationsData?.authRecommendations && Object.values(authRecommendationsData.authRecommendations).some(rec => rec !== undefined) && (
-                    <Card className="bg-card border-border rounded-xl">
-                        <CardHeader className="pb-4">
+                    <div className="space-y-2">
+                        <div className="pb-2">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <BoltLightning width="20" height="20" className="text-primary" />
-                                    <CardTitle className="text-foreground text-lg">Improve Deliverability</CardTitle>
+                                    <div className="text-foreground text-lg font-medium">Improve Deliverability</div>
                                 </div>
                                 {(() => {
-                                    // Check if all recommended records are verified
                                     const allVerified = Object.entries(authRecommendationsData.authRecommendations).every(([_, recommendation]) => {
                                         const recordName = recommendation.name
                                         const verificationData = authRecommendationsData?.verificationCheck?.dnsRecords?.find(
@@ -803,10 +846,9 @@ export default function DomainDetailPage() {
                                         )
                                         return verificationData?.isVerified
                                     })
-                                    
                                     if (allVerified) {
                                         return (
-                                            <Badge className="bg-green-600 text-white">
+                                            <Badge variant="default">
                                                 <CircleCheck width="12" height="12" className="mr-1" />
                                                 Fully Verified
                                             </Badge>
@@ -815,158 +857,153 @@ export default function DomainDetailPage() {
                                     return null
                                 })()}
                             </div>
-                            <CardDescription className="text-muted-foreground">
+                            <div className="text-sm text-muted-foreground">
                                 Add these DNS records to improve email delivery rates and authentication
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            {/* DNS Records Table Header */}
-                            <div className="rounded-lg border border-border overflow-hidden">
-                                <div className="bg-muted/50 px-4 py-3 border-b border-border">
-                                    <div className="flex">
-                                        <div className="w-[20%] pr-4">
-                                            <span className="text-sm font-medium text-muted-foreground">Name</span>
-                                        </div>
-                                        <div className="w-[10%] pr-4">
-                                            <span className="text-sm font-medium text-muted-foreground">Type</span>
-                                        </div>
-                                        <div className="w-[30%] pr-4">
-                                            <span className="text-sm font-medium text-muted-foreground">Value</span>
-                                        </div>
-                                        <div className="w-[10%] pr-4">
-                                            <span className="text-sm font-medium text-muted-foreground">TTL</span>
-                                        </div>
-                                        <div className="w-[15%] pr-4">
-                                            <span className="text-sm font-medium text-muted-foreground">Priority</span>
-                                        </div>
-                                        <div className="w-[15%]">
-                                            <span className="text-sm font-medium text-muted-foreground">Status</span>
-                                        </div>
+                            </div>
+                        </div>
+                        {/* DNS Records Table Header */}
+                        <div className="overflow-hidden">
+                            <div className="bg-muted/50 px-4 py-3 border-b border-border">
+                                <div className="flex">
+                                    <div className="w-[20%] pr-4">
+                                        <span className="text-sm font-medium text-muted-foreground">Name</span>
+                                    </div>
+                                    <div className="w-[10%] pr-4">
+                                        <span className="text-sm font-medium text-muted-foreground">Type</span>
+                                    </div>
+                                    <div className="w-[30%] pr-4">
+                                        <span className="text-sm font-medium text-muted-foreground">Value</span>
+                                    </div>
+                                    <div className="w-[10%] pr-4">
+                                        <span className="text-sm font-medium text-muted-foreground">TTL</span>
+                                    </div>
+                                    <div className="w-[15%] pr-4">
+                                        <span className="text-sm font-medium text-muted-foreground">Priority</span>
+                                    </div>
+                                    <div className="w-[15%]">
+                                        <span className="text-sm font-medium text-muted-foreground">Status</span>
                                     </div>
                                 </div>
-                                
-                                {/* DNS Records Body */}
-                                <div className="bg-card">
-                                    {Object.entries(authRecommendationsData.authRecommendations).map(([type, recommendation], index) => (
-                                        <div key={index} className={cn(
-                                            "flex items-center transition-colors px-4 py-3 bg-card hover:bg-muted/50",
-                                            {
-                                                "border-b border-border/50": index < Object.keys(authRecommendationsData.authRecommendations || {}).length - 1
-                                            }
-                                        )}>
-                                            <div className="w-[20%] pr-4">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="font-mono text-sm truncate">
-                                                        {recommendation.name}
-                                                    </span>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => copyToClipboard(recommendation.name, `${type} name`)}
-                                                        className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
-                                                    >
-                                                        <Clipboard2 width="16" height="16" className="text-muted-foreground" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                            <div className="w-[10%] pr-4">
-                                                <div className="flex items-center justify-between">
-                                                    <Badge variant="secondary" className="text-xs font-mono">
-                                                        TXT
-                                                    </Badge>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => copyToClipboard("TXT", "DNS record type")}
-                                                        className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
-                                                    >
-                                                        <Clipboard2 width="16" height="16" className="text-muted-foreground" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                            <div className="w-[30%] pr-4 min-w-0">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="font-mono text-sm truncate text-foreground min-w-0 flex-1">
-                                                        {recommendation.value}
-                                                    </span>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => copyToClipboard(recommendation.value, type)}
-                                                        className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
-                                                    >
-                                                        <Clipboard2 width="16" height="16" className="text-muted-foreground" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                            <div className="w-[10%] pr-4">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-sm text-muted-foreground">Auto</span>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => copyToClipboard("Auto", "TTL")}
-                                                        className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
-                                                    >
-                                                        <Clipboard2 width="16" height="16" className="text-muted-foreground" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                            <div className="w-[15%] pr-4">
-                                                <span className="text-sm text-muted-foreground">-</span>
-                                            </div>
-                                            <div className="w-[15%]">
-                                                {(() => {
-                                                    // Check if we have verification data for this record type
-                                                    const recordName = recommendation.name
-                                                    const verificationData = authRecommendationsData?.verificationCheck?.dnsRecords?.find(
-                                                        (record: any) => record.name === recordName && record.type === 'TXT'
-                                                    )
-                                                    
-                                                    if (verificationData?.isVerified) {
-                                                        return (
-                                                            <Badge variant="default" className="text-xs bg-green-600 text-white">
-                                                                Verified
-                                                            </Badge>
-                                                        )
-                                                    } else if (verificationData && !verificationData.isVerified) {
-                                                        return (
-                                                            <Badge variant="destructive" className="text-xs">
-                                                                Failed
-                                                            </Badge>
-                                                        )
-                                                    } else {
-                                                        return (
-                                                            <Badge variant="outline" className="text-xs">
-                                                                Pending
-                                                            </Badge>
-                                                        )
-                                                    }
-                                                })()}
+                            </div>
+                            {/* DNS Records Body */}
+                            <div className="">
+                                {Object.entries(authRecommendationsData.authRecommendations).map(([type, recommendation], index) => (
+                                    <div key={index} className={cn(
+                                        "flex items-center transition-colors px-4 py-3 hover:bg-muted/50",
+                                        {
+                                            "border-b border-border/50": index < Object.keys(authRecommendationsData.authRecommendations || {}).length - 1
+                                        }
+                                    )}>
+                                        <div className="w-[20%] pr-4">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-mono text-sm truncate">
+                                                    {recommendation.name}
+                                                </span>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => copyToClipboard(recommendation.name, `${type} name`)}
+                                                    className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                >
+                                                    <Clipboard2 width="16" height="16" className="text-muted-foreground" />
+                                                </Button>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
+                                        <div className="w-[10%] pr-4">
+                                            <div className="flex items-center justify-between">
+                                                <Badge variant="outline" className="text-xs font-mono">
+                                                    TXT
+                                                </Badge>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => copyToClipboard("TXT", "DNS record type")}
+                                                    className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                >
+                                                    <Clipboard2 width="16" height="16" className="text-muted-foreground" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div className="w-[30%] pr-4 min-w-0">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-mono text-sm truncate text-foreground min-w-0 flex-1">
+                                                    {recommendation.value}
+                                                </span>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => copyToClipboard(recommendation.value, type)}
+                                                    className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                >
+                                                    <Clipboard2 width="16" height="16" className="text-muted-foreground" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div className="w-[10%] pr-4">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-sm text-muted-foreground">Auto</span>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => copyToClipboard("Auto", "TTL")}
+                                                    className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                >
+                                                    <Clipboard2 width="16" height="16" className="text-muted-foreground" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div className="w-[15%] pr-4">
+                                            <span className="text-sm text-muted-foreground">-</span>
+                                        </div>
+                                        <div className="w-[15%]">
+                                            {(() => {
+                                                const recordName = recommendation.name
+                                                const verificationData = authRecommendationsData?.verificationCheck?.dnsRecords?.find(
+                                                    (record: any) => record.name === recordName && record.type === 'TXT'
+                                                )
+                                                if (verificationData?.isVerified) {
+                                                    return (
+                                                        <Badge variant="default" className="text-xs">
+                                                            Verified
+                                                        </Badge>
+                                                    )
+                                                } else if (verificationData && !verificationData.isVerified) {
+                                                    return (
+                                                        <Badge variant="destructive" className="text-xs">
+                                                            Failed
+                                                        </Badge>
+                                                    )
+                                                } else {
+                                                    return (
+                                                        <Badge variant="secondary" className="text-xs">
+                                                            Pending
+                                                        </Badge>
+                                                    )
+                                                }
+                                            })()}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
                 )}
 
-                {/* Email Management Section - Only show for verified domains */}
+                {/* Email Management Section - Only show for verified domains (no card) */}
                 {showEmailSection && (
-                    <Card className="bg-card border-border rounded-xl">
-                        <CardHeader className="pb-4">
+                    <div className="">
+                        <div className="pb-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <CardTitle className="flex items-center gap-2 text-foreground text-lg">
+                                    <div className="flex items-center gap-2 text-foreground text-lg font-medium">
                                         Email Management
-                                    </CardTitle>
-                                    <CardDescription className="text-muted-foreground">
+                                    </div>
+                                    <div className="text-muted-foreground text-sm">
                                         {domainDetailsData?.isCatchAllEnabled
                                             ? `Mixed routing: specific addresses + catch-all for @${domain}`
                                             : `Manage individual email addresses for @${domain}`
                                         }
-                                    </CardDescription>
+                                    </div>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                     <Envelope2 width="16" height="16" />
@@ -976,237 +1013,237 @@ export default function DomainDetailPage() {
                                     {stats.emailsLast24h} emails (24h)
                                 </div>
                             </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
+                        </div>
+                        <div className="space-y-4">
                             {/* Individual email addresses - now supports mixed mode with catch-all */}
-                                <div className="space-y-4">
-                                    {/* Add Email Form */}
-                                    <div className="flex flex-col sm:flex-row gap-3 w-full">
-                                        <div className="w-full sm:flex-1">
-                                            <div className="flex items-center border border-input rounded-xl bg-background h-10 w-full">
-                                                <Input
-                                                    type="text"
-                                                    placeholder="username"
-                                                    value={newEmailAddress}
-                                                    onChange={(e) => setNewEmailAddress(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter' && newEmailAddress.trim()) {
-                                                            addEmailAddressHandler()
-                                                        }
-                                                    }}
-                                                    className="border-0 rounded-r-none focus:ring-0 flex-1 h-full"
-                                                />
-                                                <div className="px-3 bg-muted border-l border-border text-sm text-muted-foreground rounded-r-lg flex items-center h-full whitespace-nowrap">
-                                                    @{domain}
-                                                </div>
+                            <div className="space-y-4">
+                                {/* Add Email Form */}
+                                <div className="flex flex-col sm:flex-row gap-3 w-full">
+                                    <div className="w-full sm:flex-1">
+                                        <div className="flex items-center border border-border rounded-xl bg-background h-10 w-full">
+                                            <Input
+                                                type="text"
+                                                placeholder="username"
+                                                value={newEmailAddress}
+                                                onChange={(e) => setNewEmailAddress(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && newEmailAddress.trim()) {
+                                                        addEmailAddressHandler()
+                                                    }
+                                                }}
+                                                className="border-0 rounded-r-none focus:ring-0 flex-1 h-full"
+                                            />
+                                            <div className="px-3 border-l border-l-[var(--badge-outline-border)] text-sm rounded-r-lg flex items-center h-full whitespace-nowrap bg-[var(--badge-outline-bg)] text-[var(--badge-outline-text)]">
+                                                @{domain}
                                             </div>
-                                        </div>
-                                        <div className="flex gap-2 w-full sm:flex-1">
-                                            <Select
-                                                value={selectedEndpointId}
-                                                onValueChange={handleEndpointSelection}
-                                                disabled={isEndpointsLoading}
-                                            >
-                                                <SelectTrigger className="flex-1 h-10 min-w-0">
-                                                    <SelectValue placeholder="Endpoint (optional)" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="none">Store in Inbound</SelectItem>
-                                                    <SelectItem value="create-new" className="text-blue-600 font-medium">
-                                                        <div className="flex items-center gap-2">
-                                                            <CirclePlus width="16" height="16" />
-                                                            Create Endpoint
-                                                        </div>
-                                                    </SelectItem>
-                                                    {userEndpoints.length > 0 && (
-                                                        <>
-                                                            <div className="px-2 py-1 text-xs font-medium text-muted-foreground border-t">
-                                                                Endpoints
-                                                            </div>
-                                                            {userEndpoints.map((endpoint) => (
-                                                                <SelectItem key={endpoint.id} value={endpoint.id}>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <CustomInboundIcon
-                                                                            Icon={getEndpointIcon(endpoint)}
-                                                                            size={16}
-                                                                            backgroundColor={getEndpointIconColor(endpoint)}
-                                                                        />
-                                                                        {endpoint.name} ({endpoint.type})
-                                                                    </div>
-                                                                </SelectItem>
-                                                            ))}
-                                                        </>
-                                                    )}
-                                                </SelectContent>
-                                            </Select>
-                                            <Button
-                                                onClick={addEmailAddressHandler}
-                                                disabled={!newEmailAddress.trim()}
-                                                className="shrink-0 h-10 w-10"
-                                            >
-                                                <CirclePlus width="16" height="16" />
-                                            </Button>
                                         </div>
                                     </div>
-                                    {emailError && (
-                                        <p className="text-sm text-red-600">{emailError}</p>
-                                    )}
+                                    <div className="flex gap-2 w-full sm:flex-1">
+                                        <Select
+                                            value={selectedEndpointId}
+                                            onValueChange={handleEndpointSelection}
+                                            disabled={isEndpointsLoading}
+                                        >
+                                            <SelectTrigger className="flex-1 h-10 min-w-0">
+                                                <SelectValue placeholder="Endpoint (optional)" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">Store in Inbound</SelectItem>
+                                                <SelectItem value="create-new" className="text-blue-600 font-medium">
+                                                    <div className="flex items-center gap-2">
+                                                        <CirclePlus width="16" height="16" />
+                                                        Create Endpoint
+                                                    </div>
+                                                </SelectItem>
+                                                {userEndpoints.length > 0 && (
+                                                    <>
+                                                        <div className="px-2 py-1 text-xs font-medium text-muted-foreground border-t">
+                                                            Endpoints
+                                                        </div>
+                                                        {userEndpoints.map((endpoint) => (
+                                                            <SelectItem key={endpoint.id} value={endpoint.id}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <CustomInboundIcon
+                                                                        Icon={getEndpointIcon(endpoint)}
+                                                                        size={16}
+                                                                        backgroundColor={getEndpointIconColor(endpoint)}
+                                                                    />
+                                                                    {endpoint.name} ({endpoint.type})
+                                                                </div>
+                                                            </SelectItem>
+                                                        ))}
+                                                    </>
+                                                )}
+                                            </SelectContent>
+                                        </Select>
+                                        <Button
+                                            onClick={addEmailAddressHandler}
+                                            disabled={!newEmailAddress.trim()}
+                                            className="shrink-0 h-10 w-10"
+                                        >
+                                            <CirclePlus width="16" height="16" />
+                                        </Button>
+                                    </div>
+                                </div>
+                                {emailError && (
+                                    <p className="text-sm text-red-600">{emailError}</p>
+                                )}
 
-                                    <Separator />
+                                <Separator />
 
-                                    {/* Email Addresses List */}
-                                    {emailAddresses.length === 0 ? (
-                                        <div className="text-center py-8">
-                                            <Envelope2 width="32" height="32" className="text-muted-foreground mx-auto mb-2" />
-                                            <p className="text-muted-foreground">No email addresses configured</p>
+                                {/* Email Addresses List */}
+                                {emailAddresses.length === 0 ? (
+                                    <div className="text-center py-8">
+                                        <Envelope2 width="32" height="32" className="text-muted-foreground mx-auto mb-2" />
+                                        <p className="text-muted-foreground">No email addresses configured</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {/* Select All Checkbox with Bulk Actions */}
+                                        <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">
+                                            <div className="flex items-center gap-3">
+                                                <Checkbox
+                                                    checked={emailAddresses.length > 0 && selectedEmailIds.size === emailAddresses.length}
+                                                    onCheckedChange={toggleSelectAll}
+                                                    className="h-4 w-4"
+                                                />
+                                                <span className="text-sm font-medium text-foreground">
+                                                    Select all ({emailAddresses.length})
+                                                    {selectedEmailIds.size > 0 && (
+                                                        <span className="text-blue-600 ml-2">
+                                                            • {selectedEmailIds.size} selected
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {selectedEmailIds.size > 0 && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={clearSelection}
+                                                        className="text-muted-foreground hover:text-foreground h-8 px-3"
+                                                    >
+                                                        Clear
+                                                    </Button>
+                                                )}
+                                                <Button
+                                                    variant="destructive"
+                                                    size="sm"
+                                                    onClick={() => setIsBulkDeleteDialogOpen(true)}
+                                                    disabled={selectedEmailIds.size === 0}
+                                                    className="h-8"
+                                                >
+                                                    <Trash2 width="16" height="16" className="mr-2" />
+                                                    Delete Selected
+                                                </Button>
+                                            </div>
                                         </div>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            {/* Select All Checkbox with Bulk Actions */}
-                                            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">
+
+                                        {emailAddresses.map((email) => (
+                                            <div
+                                                key={email.id}
+                                                className={`flex items-center justify-between p-3 rounded-lg border border-border transition-colors ${selectedEmailIds.has(email.id)
+                                                    ? 'bg-accent/50 border-accent'
+                                                    : 'bg-muted/30 border-border'
+                                                    }`}
+                                            >
                                                 <div className="flex items-center gap-3">
                                                     <Checkbox
-                                                        checked={emailAddresses.length > 0 && selectedEmailIds.size === emailAddresses.length}
-                                                        onCheckedChange={toggleSelectAll}
+                                                        checked={selectedEmailIds.has(email.id)}
+                                                        onCheckedChange={() => toggleEmailSelection(email.id)}
                                                         className="h-4 w-4"
                                                     />
-                                                    <span className="text-sm font-medium text-foreground">
-                                                        Select all ({emailAddresses.length})
-                                                        {selectedEmailIds.size > 0 && (
-                                                            <span className="text-blue-600 ml-2">
-                                                                • {selectedEmailIds.size} selected
-                                                            </span>
-                                                        )}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    {selectedEmailIds.size > 0 && (
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={clearSelection}
-                                                            className="text-muted-foreground hover:text-foreground h-8 px-3"
-                                                        >
-                                                            Clear
-                                                        </Button>
-                                                    )}
+                                                    <div className="font-mono text-sm">{email.address}</div>
                                                     <Button
-                                                        variant="destructive"
+                                                        variant="ghost"
                                                         size="sm"
-                                                        onClick={() => setIsBulkDeleteDialogOpen(true)}
-                                                        disabled={selectedEmailIds.size === 0}
-                                                        className="h-8"
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(email.address)
+                                                            toast.success('Copied to clipboard')
+                                                        }}
+                                                        className="h-6 w-6 p-0"
                                                     >
-                                                        <Trash2 width="16" height="16" className="mr-2" />
-                                                        Delete Selected
+                                                        <Clipboard2 width="12" height="12" />
                                                     </Button>
                                                 </div>
-                                            </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="text-sm text-muted-foreground">
+                                                        {(() => {
+                                                            console.log('🔍 Routing:', email.routing)
+                                                            // Use the routing information from the email
+                                                            const routing = email.routing
 
-                                            {emailAddresses.map((email) => (
-                                                <div
-                                                    key={email.id}
-                                                    className={`flex items-center justify-between p-3 rounded-lg border border-border transition-colors ${selectedEmailIds.has(email.id)
-                                                            ? 'bg-accent/50 border-accent'
-                                                            : 'bg-muted/30 border-border'
-                                                        }`}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <Checkbox
-                                                            checked={selectedEmailIds.has(email.id)}
-                                                            onCheckedChange={() => toggleEmailSelection(email.id)}
-                                                            className="h-4 w-4"
-                                                        />
-                                                        <div className="font-mono text-sm">{email.address}</div>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => {
-                                                                navigator.clipboard.writeText(email.address)
-                                                                toast.success('Copied to clipboard')
-                                                            }}
-                                                            className="h-6 w-6 p-0"
-                                                        >
-                                                            <Clipboard2 width="12" height="12" />
-                                                        </Button>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="text-sm text-muted-foreground">
-                                                            {(() => {
-                                                                console.log('🔍 Routing:', email.routing)
-                                                                // Use the routing information from the email
-                                                                const routing = email.routing
-
-                                                                if (routing.type === 'endpoint' && routing.id) {
-                                                                    const endpoint = userEndpoints.find(ep => ep.id === routing.id)
-                                                                    if (endpoint) {
-                                                                        const EndpointIcon = getEndpointIcon(endpoint)
-                                                                        return (
-                                                                            <div className="flex items-center gap-1.5">
-                                                                                <CustomInboundIcon
-                                                                                    Icon={EndpointIcon}
-                                                                                    size={25}
-                                                                                    backgroundColor={getEndpointIconColor(endpoint)}
-                                                                                />
-                                                                                <span className={`font-medium`} style={{ color: getEndpointIconColor(endpoint) }}>
-                                                                                    {routing.name}
-                                                                                </span>
-                                                                            </div>
-                                                                        )
-                                                                    }
-                                                                } else if (routing.type === 'webhook' && routing.id) {
+                                                            if (routing.type === 'endpoint' && routing.id) {
+                                                                const endpoint = userEndpoints.find(ep => ep.id === routing.id)
+                                                                if (endpoint) {
+                                                                    const EndpointIcon = getEndpointIcon(endpoint)
                                                                     return (
                                                                         <div className="flex items-center gap-1.5">
                                                                             <CustomInboundIcon
-                                                                                Icon={BoltLightning}
-                                                                                size={14}
-                                                                                backgroundColor="#8b5cf6"
+                                                                                Icon={EndpointIcon}
+                                                                                size={25}
+                                                                                backgroundColor={getEndpointIconColor(endpoint)}
                                                                             />
-                                                                            <span className="text-amber-600 font-medium">
-                                                                                {routing.name || 'Legacy Webhook'}
+                                                                            <span className={`font-medium`} style={{ color: getEndpointIconColor(endpoint) }}>
+                                                                                {routing.name}
                                                                             </span>
                                                                         </div>
                                                                     )
                                                                 }
-                                                                
-                                                                return <span className="text-muted-foreground">Store in Inbound</span>
-                                                            })()}
-                                                        </div>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => openEndpointDialog(email)}
-                                                            className="h-8 w-8 p-0"
-                                                        >
-                                                            <Gear2 width="16" height="16" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => deleteEmailAddressHandler(email.id, email.address)}
-                                                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                                        >
-                                                            <Trash2 width="16" height="16" />
-                                                        </Button>
+                                                            } else if (routing.type === 'webhook' && routing.id) {
+                                                                return (
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <CustomInboundIcon
+                                                                            Icon={BoltLightning}
+                                                                            size={14}
+                                                                            backgroundColor="#8b5cf6"
+                                                                        />
+                                                                        <span className="text-amber-600 font-medium">
+                                                                            {routing.name || 'Legacy Webhook'}
+                                                                        </span>
+                                                                    </div>
+                                                                )
+                                                            }
+
+                                                            return <span className="text-muted-foreground">Store in Inbound</span>
+                                                        })()}
                                                     </div>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => openEndpointDialog(email)}
+                                                        className="h-8 w-8 p-0"
+                                                    >
+                                                        <Gear2 width="16" height="16" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => deleteEmailAddressHandler(email.id, email.address)}
+                                                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                                    >
+                                                        <Trash2 width="16" height="16" />
+                                                    </Button>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {/* Link to manage endpoints */}
-                                    <div className="flex items-center justify-center pt-2">
-                                        <Link
-                                            href="/endpoints"
-                                            className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
-                                        >
-                                            <ExternalLink2 width="12" height="12" />
-                                            Manage all endpoints
-                                        </Link>
+                                            </div>
+                                        ))}
                                     </div>
-                                </div>
+                                )}
 
-                            {/* Catch-all toggle and configuration - moved below individual emails */}
+                                {/* Link to manage endpoints */}
+                                <div className="flex items-center justify-center pt-2">
+                                    <Link
+                                        href="/endpoints"
+                                        className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                                    >
+                                        <ExternalLink2 width="12" height="12" />
+                                        Manage all endpoints
+                                    </Link>
+                                </div>
+                            </div>
+
+                            {/* Catch-all toggle and configuration */}
                             {domainDetailsData && (
                                 <>
                                     <Separator />
@@ -1238,8 +1275,8 @@ export default function DomainDetailPage() {
                                                             <SelectItem value="none">Store in Inbound</SelectItem>
                                                             <SelectItem value="create-new" className="text-blue-600 font-medium">
                                                                 <div className="flex items-center gap-2">
-                                                                                                                                    <CirclePlus width="16" height="16" />
-                                                                Create Endpoint
+                                                                    <CirclePlus width="16" height="16" />
+                                                                    Create Endpoint
                                                                 </div>
                                                             </SelectItem>
                                                             {userEndpoints.length > 0 && (
@@ -1279,8 +1316,8 @@ export default function DomainDetailPage() {
                                     </div>
                                 </>
                             )}
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
                 )}
 
                 {/* DNS Records Overview - Show all DNS records for verified domains */}
@@ -1293,27 +1330,28 @@ export default function DomainDetailPage() {
                                     <CardTitle className="text-foreground text-lg">DNS Records</CardTitle>
                                 </div>
                                 {(() => {
-                                    // Check if ALL DNS records are verified
                                     const allRecords = authRecommendationsData.verificationCheck.dnsRecords || []
                                     const verifiedCount = allRecords.filter((r: any) => r.isVerified).length
                                     const totalCount = allRecords.length
                                     const allVerified = totalCount > 0 && verifiedCount === totalCount
-                                    
+                                    const anyFailed = totalCount > 0 && verifiedCount < totalCount
+
                                     if (allVerified) {
                                         return (
-                                            <Badge className="bg-green-600 text-white">
+                                            <Badge variant="default">
                                                 <CircleCheck width="12" height="12" className="mr-1" />
                                                 Fully Verified
                                             </Badge>
                                         )
-                                    } else if (verifiedCount > 0) {
+                                    }
+                                    if (anyFailed) {
                                         return (
-                                            <Badge variant="secondary">
-                                                {verifiedCount}/{totalCount} Verified
-                                            </Badge>
+                                            <Badge variant="destructive">Failed to verify records</Badge>
                                         )
                                     }
-                                    return null
+                                    return (
+                                        <Badge variant="outline">No records</Badge>
+                                    )
                                 })()}
                             </div>
                             <CardDescription className="text-muted-foreground">
@@ -1321,17 +1359,17 @@ export default function DomainDetailPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="rounded-lg border border-border overflow-hidden">
-                                <div className="bg-muted/50 px-4 py-3 border-b border-border">
+                            <div className="rounded-[11px] md:rounded-[13px] overflow-hidden bg-[var(--dns-table-bg)]">
+                                <div className="px-4 py-3">
                                     <div className="flex">
                                         <div className="w-[20%] pr-4">
                                             <span className="text-sm font-medium text-muted-foreground">Name</span>
                                         </div>
-                                        <div className="w-[10%] pr-4">
-                                            <span className="text-sm font-medium text-muted-foreground">Type</span>
-                                        </div>
                                         <div className="w-[35%] pr-4">
                                             <span className="text-sm font-medium text-muted-foreground">Value</span>
+                                        </div>
+                                        <div className="w-[10%] pr-4">
+                                            <span className="text-sm font-medium text-muted-foreground">Type</span>
                                         </div>
                                         <div className="w-[15%] pr-4">
                                             <span className="text-sm font-medium text-muted-foreground">Purpose</span>
@@ -1344,8 +1382,8 @@ export default function DomainDetailPage() {
                                         </div>
                                     </div>
                                 </div>
-                                
-                                <div className="bg-card">
+
+                                <div className="px-4 py-2">
                                     {authRecommendationsData.verificationCheck.dnsRecords.map((record: any, index: number) => {
                                         // Determine the purpose of the record
                                         const getPurpose = () => {
@@ -1360,19 +1398,12 @@ export default function DomainDetailPage() {
                                             if (record.type === 'MX') return 'Receive Mail'
                                             return 'Other'
                                         }
-                                        
+
                                         const purpose = getPurpose()
                                         const isRequired = record.type === 'MX' || record.type === 'TXT' && record.value?.includes('amazonses')
-                                        
+
                                         return (
-                                            <div key={index} className={cn(
-                                                "flex items-center transition-colors px-4 py-3",
-                                                {
-                                                    "bg-green-500/5 hover:bg-green-500/10": record.isVerified,
-                                                    "bg-card hover:bg-muted/50": !record.isVerified,
-                                                    "border-b border-border/50": index < (authRecommendationsData.verificationCheck?.dnsRecords?.length || 0) - 1
-                                                }
-                                            )}>
+                                            <div key={index} className="flex items-center transition-colors py-3">
                                                 <div className="w-[20%] pr-4">
                                                     <div className="flex items-center justify-between">
                                                         <span className="font-mono text-sm truncate">
@@ -1381,17 +1412,12 @@ export default function DomainDetailPage() {
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            onClick={() => copyToClipboard(record.name, `${purpose} name`)}
-                                                            className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                            onClick={() => copyWithFeedback(`dns-name-${index}`, record.name, `${purpose} name`)}
+                                                            className="h-8 w-8 p-0 flex items-center justify-center ml-2"
                                                         >
-                                                            <Clipboard2 width="16" height="16" className="text-muted-foreground" />
+                                                            <CopyIcon active={copiedKey === `dns-name-${index}`} />
                                                         </Button>
                                                     </div>
-                                                </div>
-                                                <div className="w-[10%] pr-4">
-                                                    <Badge variant="secondary" className="text-xs font-mono">
-                                                        {record.type}
-                                                    </Badge>
                                                 </div>
                                                 <div className="w-[35%] pr-4 min-w-0">
                                                     <div className="flex items-center justify-between">
@@ -1401,12 +1427,17 @@ export default function DomainDetailPage() {
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            onClick={() => copyToClipboard(record.value, record.type)}
-                                                            className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                            onClick={() => copyWithFeedback(`dns-value-${index}`, record.value, record.type)}
+                                                            className="h-8 w-8 p-0 flex items-center justify-center ml-2"
                                                         >
-                                                            <Clipboard2 width="16" height="16" className="text-muted-foreground" />
+                                                            <CopyIcon active={copiedKey === `dns-value-${index}`} />
                                                         </Button>
                                                     </div>
+                                                </div>
+                                                <div className="w-[10%] pr-4">
+                                                    <Badge variant="outline" className="text-xs font-mono">
+                                                        {record.type}
+                                                    </Badge>
                                                 </div>
                                                 <div className="w-[15%] pr-4">
                                                     <Badge variant="outline" className="text-xs">
@@ -1420,11 +1451,11 @@ export default function DomainDetailPage() {
                                                 </div>
                                                 <div className="w-[10%]">
                                                     {record.isVerified ? (
-                                                        <Badge className="text-xs bg-green-600 text-white">
+                                                        <Badge variant="default" className="text-xs">
                                                             Verified
                                                         </Badge>
                                                     ) : (
-                                                        <Badge variant="outline" className="text-xs">
+                                                        <Badge variant="secondary" className="text-xs">
                                                             Pending
                                                         </Badge>
                                                     )}

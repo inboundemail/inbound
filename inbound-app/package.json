@@ -35,6 +35,7 @@
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@dotlottie/react-player": "^1.6.19",
     "@inboundemail/sdk": "^2.0.1",
     "@lordicon/react": "^1.11.0",
     "@mdx-js/loader": "^3.1.0",
