@@ -48,7 +48,7 @@ export default async function MarketingHeader() {
       <div className="flex items-center justify-between max-w-6xl mx-auto">
         <div className="flex items-center gap-2 min-w-0">
           <a href="/" className="flex items-center gap-2 min-w-0">
-            <InboundIcon variant="primary" width={32} height={32} />
+            <InboundIcon width={32} height={32} />
             <div className="flex flex-col items-start gap-0 min-w-0">
               <span className="text-xl sm:text-2xl font-bold text-black truncate">inbound</span>
               <span className="text-xs text-gray-500 -mt-2 hidden sm:block">by exon</span>

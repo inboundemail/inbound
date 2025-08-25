@@ -25,7 +25,7 @@ export default function LoginPage() {
         <BackgroundSvg />
         <div className="w-full max-w-sm z-10 px-4 sm:px-0">
           <div className="flex flex-col items-center gap-6">
-            <InboundIcon variant="primary" width={44} height={44} />
+            <InboundIcon  width={44} height={44} />
             <div className="flex items-center gap-2 text-foreground">
               <span className="text-xl">Loading...</span>
             </div>
@@ -48,7 +48,7 @@ export default function LoginPage() {
         {/* Logo section */}
         <Link href="/">
           <div className="flex flex-col items-center gap-3 mb-8">
-            <InboundIcon variant="primary" width={44} height={44} />
+            <InboundIcon  width={44} height={44} />
 
             <div className="flex flex-col items-center gap-2">
               <p className="text-3xl font-semibold text-foreground">Welcome Back!</p>

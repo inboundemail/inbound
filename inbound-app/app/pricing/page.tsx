@@ -109,7 +109,7 @@ export default function PricingPage() {
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center gap-3 mb-4 md:mb-0">
-              <InboundIcon variant="primary" width={32} height={32} />
+              <InboundIcon width={32} height={32} />
               <span className="text-xl font-semibold text-[var(--text-primary)]">inbound</span>
             </div>
             <div className="flex gap-8 text-sm text-[var(--text-muted)]">

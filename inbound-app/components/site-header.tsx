@@ -22,7 +22,7 @@ export function SiteHeader() {
     <header className="border-b border-[var(--border-primary)] bg-[#1B1C1D]/90 backdrop-blur-sm sticky top-0 z-50 relative">
       <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
         <Link href="/" className="flex items-center gap-3">
-          <InboundIcon variant="primary" width={20} height={20} />
+          <InboundIcon width={20} height={20} />
           <span className="text-2xl font-semibold text-[var(--text-primary)] -ml-2">inbound</span>
         </Link>
         <nav className="hidden md:flex items-center gap-8 text-sm">

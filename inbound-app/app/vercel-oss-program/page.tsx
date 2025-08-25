@@ -79,7 +79,7 @@ function VercelOssProgramContent() {
         {/* Header - matching app/page.tsx */}
         <header className="flex items-center justify-between py-3 sm:py-4 lg:py-6 w-full">
           <Link href="/" className="flex items-center gap-2 sm:gap-3">
-            <InboundIcon variant="primary" width={24} height={24} />
+            <InboundIcon width={24} height={24} />
             <span className="font-semibold text-xl sm:text-2xl lg:text-3xl text-foreground">inbound</span>
           </Link>
           <div className="flex items-center gap-2 sm:gap-4">
