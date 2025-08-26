@@ -25,8 +25,9 @@
     --primary-foreground: 98% 0.02 240;
     --secondary: 96% 0.02 240;
     --secondary-foreground: 15% 0.05 264;
-    --muted: 96% 0.02 240;
-    --muted-foreground: 55% 0.02 240;
+    /* Muted surfaces (light): subtle brand-tinted purple */
+    --muted: 270 100% 97%; /* very light lavender */
+    --muted-foreground: 264 32% 34%; /* readable purple foreground */
     --accent: 96% 0.02 240;
     --accent-foreground: 15% 0.05 264;
     --destructive: 65% 0.2 30;
@@ -97,6 +98,13 @@
     --badge-outline-bg: rgba(0, 0, 0, 0.03);
     --badge-outline-text: #000000;
     --badge-outline-border: rgba(0, 0, 0, 0.05);
+
+    /* Button (light) */
+    --button-primary-bg: #8161FF;
+    --button-primary-shadow-top: rgba(0, 0, 0, 0.25);
+    --button-primary-shadow-bottom: rgba(255, 255, 255, 0.26);
+    --button-secondary-bg: #FFFFFF;
+    --button-destructive-bg: #FFEDED;
   }
 
   .dark {
@@ -121,8 +129,9 @@
     --primary-foreground: 210 4% 11%;
     --secondary: 180 3% 18%;
     --secondary-foreground: 0 0% 100%;
-    --muted: 180 3% 18%;
-    --muted-foreground: 215 20.2% 65.1%;
+    /* Muted surfaces (dark): brand-tinted deep purple */
+    --muted: 286 40% 12%;
+    --muted-foreground: 265 55% 82%;
     --accent: 180 3% 18%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 62.8% 30.6%;

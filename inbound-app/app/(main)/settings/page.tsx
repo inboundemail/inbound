@@ -266,7 +266,7 @@ export default function SettingsPage() {
         <div className="space-y-6">
         <div className="h-4 border-b border-slate-800"></div>
         {/* Subscription Management */}
-        <Card className="border-none p-0 w-full">
+        <Card className="border-none p-0 w-full bg-transparent">
           <CardContent className="p-0">
             {isLoadingCustomer ? (
               <div className="flex items-center justify-between">
@@ -429,11 +429,11 @@ export default function SettingsPage() {
         <div className="h-4 border-b border-slate-800"></div>
 
         {/* API Keys Management */}
-        <Card className="border-none">
-          <CardHeader className="p-0">
+        <Card className="border-none bg-transparent">
+          <CardHeader className="p-0 mb-4">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 mb-2">
                   <Key2 width="20" height="20" className="text-purple-600" />
                   API Keys
                 </CardTitle>
@@ -501,7 +501,7 @@ export default function SettingsPage() {
               </Dialog>
             </div>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 bg-transparent mb-4">
             {apiKeysError ? (
               <div className="text-center py-8">
                 <Key2 width="32" height="32" className="text-red-500 mx-auto mb-2" />
@@ -613,8 +613,8 @@ export default function SettingsPage() {
 
         <div className="h-4 border-b border-slate-800"></div>
 
-        <Card className="border-none">
-          <CardHeader className="p-0">
+        <Card className="border-none bg-transparent">
+          <CardHeader className="p-0 mb-4">
             <CardTitle>Profile Information</CardTitle>
             <CardDescription>
               Update your profile details and personal information
@@ -663,8 +663,8 @@ export default function SettingsPage() {
 
         <div className="h-4 border-b border-slate-800"></div>
 
-        <Card className="border-none">
-          <CardHeader className="p-0">
+        <Card className="border-none bg-transparent">
+          <CardHeader className="p-0 mb-4">
             <CardTitle>Account Status</CardTitle>
             <CardDescription>
               Your account verification and status information

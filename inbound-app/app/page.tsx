@@ -7,8 +7,7 @@ import { VideoText } from "@/components/magicui/video-text";
 import Image from 'next/image'
 import { CustomInboundIcon } from "@/components/icons/customInbound"
 import { Button } from "@/components/ui/button"
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { CodeBlock } from '@/components/ui/code-block'
 import { BackgroundBeams } from "@/components/ui/background-beams"
 import { Boxes } from "@/components/ui/background-boxes"
 import { TextGenerateEffect } from '@/components/ui/text-generate-effect';
@@ -21,59 +20,7 @@ import PaperPlane2 from '@/components/icons/paper-plane-2';
 import { SiteHeader } from "@/components/site-header";
 import InboundIcon from '@/components/icons/inbound';
 
-// High-contrast Monokai theme with Monaspace Neon
-const monokaiTheme = {
-  ...tomorrow,
-  'code[class*="language-"]': {
-    ...tomorrow['code[class*="language-"]'],
-    color: '#ffffff',
-    background: '#1e1f20',
-    fontFamily: '"Monaspace Neon", ui-monospace, SFMono-Regular, "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-    fontSize: '0.75rem',
-    lineHeight: '1.5',
-    fontWeight: '500'
-  },
-  'pre[class*="language-"]': {
-    ...tomorrow['pre[class*="language-"]'],
-    color: '#ffffff',
-    background: '#1e1f20',
-    margin: 0,
-    padding: '1.5rem',
-    overflow: 'auto',
-    borderRadius: '0',
-    fontFamily: '"Monaspace Neon", ui-monospace, SFMono-Regular, "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-    fontWeight: '500'
-  },
-  'comment': { color: '#8a8a8a' },
-  'prolog': { color: '#8a8a8a' },
-  'doctype': { color: '#8a8a8a' },
-  'cdata': { color: '#8a8a8a' },
-  'punctuation': { color: '#ffffff' },
-  'property': { color: '#ff6b9d' },
-  'tag': { color: '#ff6b9d' },
-  'constant': { color: '#c792ea' },
-  'symbol': { color: '#c792ea' },
-  'deleted': { color: '#c792ea' },
-  'boolean': { color: '#c792ea' },
-  'number': { color: '#c792ea' },
-  'selector': { color: '#c3e88d' },
-  'attr-name': { color: '#c3e88d' },
-  'string': { color: '#ffcb6b' },
-  'char': { color: '#ffcb6b' },
-  'builtin': { color: '#c3e88d' },
-  'inserted': { color: '#c3e88d' },
-  'operator': { color: '#ff6b9d' },
-  'entity': { color: '#ffffff' },
-  'url': { color: '#ffffff' },
-  'variable': { color: '#ffffff' },
-  'atrule': { color: '#ffcb6b' },
-  'attr-value': { color: '#ffcb6b' },
-  'function': { color: '#82aaff' },
-  'class-name': { color: '#82aaff' },
-  'keyword': { color: '#ff6b9d' },
-  'regex': { color: '#ffcb6b' },
-  'important': { color: '#ff6b9d' }
-}
+// Monaspace font-face for inline code in examples
 
 export default function PSLandingPage() {
   const [animatedText, setAnimatedText] = useState('')
@@ -239,20 +186,17 @@ export async function POST(request: NextRequest) {
   ]
 
   return (
-    <div className="min-h-screen bg-[#1B1C1D] text-[#e5e5e5] font-['Outfit',sans-serif] relative">
+    <div className="min-h-screen relative">
       {/* CSS Variables for theme */}
       <style jsx global>{`
-                @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100;200;300;400;500;600;700;800;900&display=swap');
-                
-                @font-face {
-                font-family: 'Monaspace Neon';
-                src: url('/MonaspaceNeon-Medium.woff') format('woff');
-                font-weight: 500;
-                font-style: normal;
-                font-display: swap;
-                }
-                
-            `}
+        @font-face {
+          font-family: 'Monaspace Neon';
+          src: url('/MonaspaceNeon-Medium.woff') format('woff');
+          font-weight: 500;
+          font-style: normal;
+          font-display: swap;
+        }
+      `}
       </style>
 
       <SiteHeader />
@@ -260,47 +204,47 @@ export async function POST(request: NextRequest) {
       {/* Hero Section */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-20 relative z-10 overflow-hidden">
         <div className="text-center mb-16 relative z-20 flex flex-col items-center min-h-[60vh] sm:min-h-[75vh] justify-center">
-          <div className="mb-6 sm:mb-8 bg-[#272822] rounded-lg overflow-hidden relative border-0.5 border-[#6C47FF]" style={{
-            boxShadow: '0 0 0 1px #6C47FF, 0 0 20px rgba(108, 71, 255, 0.4), 0 0 40px rgba(108, 71, 255, 0.2)'
+          <div className="mb-6 sm:mb-8 bg-card rounded-lg overflow-hidden relative border border-primary" style={{
+            boxShadow: '0 0 0 1px var(--purple-primary), 0 0 20px rgba(108, 71, 255, 0.4), 0 0 40px rgba(108, 71, 255, 0.2)'
           }}>
-            <img src="/vercel-oss.svg" alt="Vercel OSS" className="h-6 sm:h-8 p-2 sm:p-3 color-white" />
+            <img src="/vercel-oss.svg" alt="Vercel OSS" className="h-6 sm:h-8 p-2 sm:p-3 dark:invert-0 invert" />
           </div>
           
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 sm:mb-6 leading-tight">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 sm:mb-6 leading-tight text-foreground">
             <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-2">
               <PaperPlane2 width={24} height={24} className="sm:w-[30px] sm:h-[30px] shrink-0" />
               <span>email platform for</span>
               <Settings3 width={24} height={24} className="sm:w-[30px] sm:h-[30px] shrink-0" />
-              <Highlighter action="underline" color="#6C47FF">builders</Highlighter>
+              <Highlighter action="underline" color="var(--purple-primary)">builders</Highlighter>
             </div>
             <TextGenerateEffect
               words="focus on your product, not configs"
-              className="text-xl sm:text-2xl md:text-3xl font-bold leading-tight text-[#A18AFF] mt-1 sm:-mt-2"
+              className="text-xl sm:text-2xl md:text-3xl font-bold leading-tight text-[var(--purple-primary)] mt-1 sm:-mt-2"
               duration={0.5}
             />
           </h1>
-          <p className="text-sm sm:text-base text-[var(--text-secondary)] max-w-2xl mx-auto mb-4 leading-relaxed px-4">
+          <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto mb-4 leading-relaxed px-4">
             stop messing with multiple providers and ancient sdks
             <br className="hidden sm:block" />
             <span className="sm:hidden"> </span>
             inbound is the easiest way to send, receive, and reply to emails in your app
           </p>
-          <div className="relative bg-[#272822] border border-[var(--border-primary)] rounded-md overflow-hidden mb-6 sm:mb-8 mx-auto" style={{ width: 'fit-content' }}>
+          <div className="relative bg-card border border-border rounded-md overflow-hidden mb-6 sm:mb-8 mx-auto" style={{ width: 'fit-content' }}>
             <div className="flex items-center pr-8 sm:pr-10">
               <pre className="px-2 py-1.5 sm:px-3 sm:py-2">
-                <code className="text-[#ffffff] font-mono text-[10px] sm:text-xs whitespace-nowrap">npm i @inboundemail/sdk</code>
+                <code className="text-foreground font-mono text-[10px] sm:text-xs whitespace-nowrap">bun add @inboundemail/sdk</code>
               </pre>
               <button
-                onClick={() => copyToClipboard('npm i @inboundemail/sdk', -1)}
-                className="absolute top-1/2 right-1.5 sm:right-2 -translate-y-1/2 p-1 sm:p-1.5 rounded hover:bg-[#3a3a3a] transition-colors duration-200 flex items-center justify-center"
+                onClick={() => copyToClipboard('bun add @inboundemail/sdk', -1)}
+                className="absolute top-1/2 right-1.5 sm:right-2 -translate-y-1/2 p-1 sm:p-1.5 rounded hover:bg-accent transition-colors duration-200 flex items-center justify-center"
                 title={copiedStates[-1] ? "Copied!" : "Copy to clipboard"}
                 aria-label="Copy to clipboard"
               >
                 <div className={`transition-all duration-300 ease-in-out ${copiedStates[-1] ? 'scale-110' : 'scale-100'}`}>
                   {copiedStates[-1] ? (
-                    <Check2 width={12} height={12} className="sm:w-3.5 sm:h-3.5 text-green-400" />
+                    <Check2 width={12} height={12} className="sm:w-3.5 sm:h-3.5 text-green-500" />
                   ) : (
-                    <Copy2 width={12} height={12} className="sm:w-3.5 sm:h-3.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)]" />
+                    <Copy2 width={12} height={12} className="sm:w-3.5 sm:h-3.5 text-muted-foreground hover:text-foreground" />
                   )}
                 </div>
               </button>
@@ -309,15 +253,16 @@ export async function POST(request: NextRequest) {
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center w-full max-w-sm sm:max-w-none">
             <Button
               size="lg"
-              className="bg-[var(--purple-primary)] hover:bg-[var(--purple-dark)] text-white border-0 px-6 sm:px-8 py-3 w-full sm:w-auto"
+              variant="primary"
+              className="w-full sm:w-auto"
               asChild
             >
-              <Link href="/logs" className="text-white">start building</Link>
+              <Link href="/logs">start building</Link>
             </Button>
             <Button
               size="lg"
               variant="outline"
-              className="border-[var(--purple-primary)] text-[var(--purple-primary)] hover:bg-[var(--purple-primary)] hover:text-white font-medium px-6 sm:px-8 py-3 w-full sm:w-auto"
+              className="w-full sm:w-auto"
               asChild
             >
               <Link href="https://docs.inbound.new">view docs</Link>
@@ -379,46 +324,42 @@ export async function POST(request: NextRequest) {
                   <p className="text-lg text-[var(--text-secondary)] leading-relaxed">{story.description}</p>
                 </div>
                 <div className={`md:col-span-2 ${i % 2 === 1 ? 'md:order-1' : ''}`}>
-                  <div className="bg-[#1e1f20] border border-[var(--border-primary)] rounded-lg overflow-hidden">
-                    <div className="py-1.5 px-4 bg-[#2a2b2c] border-b border-[var(--border-primary)] font-mono text-xs flex items-center gap-2 font-bold text-[var(--text-secondary)] justify-between">
+                  <div className="bg-card border border-border rounded-lg overflow-hidden">
+                    <div className="py-1.5 px-4 bg-muted/30 border-b border-border font-mono text-xs flex items-center gap-2 font-bold text-muted-foreground justify-between">
                       <div className='flex items-center gap-2'>
                         <Image src="/nodejs.png" alt="node.js" width={16} height={16} />
                         <span>node.js</span>
                       </div>
                       <button
                         onClick={() => copyToClipboard(story.code, i)}
-                        className="p-1 rounded hover:bg-[#3a3a3a] transition-colors duration-200 flex items-center justify-center"
+                        className="p-1 rounded hover:bg-accent transition-colors duration-200 flex items-center justify-center"
                         title={copiedStates[i] ? "Copied!" : "Copy code"}
                       >
                         <div className={`transition-all duration-300 ease-in-out ${copiedStates[i] ? 'scale-110' : 'scale-100'}`}>
                           {copiedStates[i] ? (
-                            <Check2 width={12} height={12} className="text-green-400" />
+                            <Check2 width={12} height={12} className="text-green-500" />
                           ) : (
-                            <Copy2 width={12} height={12} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]" />
+                            <Copy2 width={12} height={12} className="text-muted-foreground hover:text-foreground" />
                           )}
                         </div>
                       </button>
                     </div>
-                    <SyntaxHighlighter
+                    <CodeBlock
+                      code={story.code}
                       language="javascript"
-                      style={monokaiTheme}
-                      customStyle={{
-                        margin: 0,
-                        borderRadius: 0,
-                        background: '#1e1f20',
-                        fontSize: '12px',
-                      }}
-                      className="md:w-full w-[90vw] overflow-x-auto"
-                    >
-                      {story.code}
-                    </SyntaxHighlighter>
+                      syntaxHighlighting
+                      copy={false}
+                      variant="ghost"
+                      size="lg"
+                      className="rounded-none border-0 m-0"
+                    />
                   </div>
                 </div>
               </div>
 
               {/* Connecting Arrow between stories */}
               {i < problemStories.length - 1 && (
-                <div className={`hidden md:flex ${i % 2 === 0 ? 'justify-end pr-[15%]' : 'justify-start pl-[15%]'} py-4`}>
+                <div className={`hidden md:flex ${i % 2 === 0 ? 'justify-end pr-[15%]' : 'justify-start pl-[15%]'}`}>
                   <ConnectingArrow
                     color="#FFFFFF"
                     width={100}
@@ -462,77 +403,68 @@ export async function POST(request: NextRequest) {
             </section> */}
 
       {/* Reality Check Section */}
-      <section id="examples" className="bg-[#0f0f0f] py-20 relative z-10 overflow-hidden">
+      <section id="examples" className="bg-card py-20 relative z-10 overflow-hidden">
         {/* Background Boxes */}
         <div className="absolute inset-0 z-0">
           <Boxes />
         </div>
         <div className="max-w-6xl mx-auto px-6 relative z-10">
-          <h2 className="text-3xl font-bold text-center mb-12">let's be honest about email</h2>
+          <h2 className="text-3xl font-bold text-center mb-12 text-foreground">let's be honest about email</h2>
 
           <div className="grid md:grid-cols-4 gap-8 items-center">
             {/* What You're Probably Doing Now */}
             <div className="space-y-4 md:col-span-2">
-              <h3 className="text-2xl font-bold text-red-400">What You're Probably Doing Now</h3>
-              <div className="bg-[#2a2b2c] border border-[var(--border-secondary)] rounded-lg p-6 space-y-2 leading-relaxed">
+              <h3 className="text-2xl font-bold text-foreground">What You're Probably Doing Now</h3>
+              <div className="bg-muted/40 border border-border rounded-lg p-6 space-y-2 leading-relaxed text-foreground">
                 <p>• Googling "how to send email in Node.js" for the 17th time</p>
                 <p>• Wrestling with nodemailer configuration that breaks in production</p>
                 <p>• Manually parsing email headers like it's 1995</p>
                 <p>• Building your own webhook endpoint and hoping it works</p>
                 <p>• Spending more time on email than your actual product</p>
-                <p>• <Highlighter action="underline" color="#6C47FF">inbound</Highlighter> to the rescue</p>
+                <p>• <Highlighter action="underline" color="var(--purple-primary)">inbound</Highlighter> to the rescue</p>
               </div>
             </div>
 
             {/* What You Could Be Doing */}
             <div className="md:col-span-2">
               <div className="space-y-4 mb-4">
-                <h3 className="text-2xl font-bold text-green-400">What You Could Be Doing</h3>
+                <h3 className="text-2xl font-bold text-foreground">What You Could Be Doing</h3>
               </div>
-              <div className="bg-[#1e1f20] border border-[var(--border-primary)] rounded-lg overflow-hidden">
-                <div className="py-1.5 px-4 bg-[#2a2b2c] border-b border-[var(--border-primary)] font-mono text-xs flex items-center gap-2 font-bold text-[var(--text-secondary)] justify-between">
+              <div className="bg-card border border-border rounded-lg overflow-hidden">
+                <div className="py-1.5 px-4 bg-muted/30 border-b border-border font-mono text-xs flex items-center gap-2 font-bold text-muted-foreground justify-between">
                   <div className='flex items-center gap-2'>
                     <Image src="/nodejs.png" alt="node.js" width={16} height={16} />
                     <span>node.js</span>
                   </div>
                   <button
                     onClick={() => copyToClipboard(`// Install once
-npm install @inboundemail/sdk
+bun add @inboundemail/sdk
 
 // Send emails forever  
 await inbound.emails.send(emailData)
 
 // That's it. Seriously.`, 999)}
-                    className="p-1 rounded hover:bg-[#3a3a3a] transition-colors duration-200 flex items-center justify-center"
+                    className="p-1 rounded hover:bg-accent transition-colors duration-200 flex items-center justify-center"
                     title={copiedStates[999] ? "Copied!" : "Copy code"}
                   >
                     <div className={`transition-all duration-300 ease-in-out ${copiedStates[999] ? 'scale-110' : 'scale-100'}`}>
                       {copiedStates[999] ? (
-                        <Check2 width={12} height={12} className="text-green-400" />
+                        <Check2 width={12} height={12} className="text-green-500" />
                       ) : (
-                        <Copy2 width={12} height={12} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]" />
+                        <Copy2 width={12} height={12} className="text-muted-foreground hover:text-foreground" />
                       )}
                     </div>
                   </button>
                 </div>
-                <SyntaxHighlighter
+                <CodeBlock
+                  code={`// Install once\nbun add @inboundemail/sdk\n\n// Send emails forever ♾️\nawait inbound.emails.send(emailData)\n\n// That's it. Seriously.`}
                   language="javascript"
-                  style={monokaiTheme}
-                  customStyle={{
-                    margin: 0,
-                    borderRadius: 0,
-                    background: '#1e1f20',
-                  }}
-                  className="md:w-full w-[90vw] overflow-x-auto"
-                >
-                  {`// Install once
-npm install @inboundemail/sdk
-
-// Send emails forever ♾️
-await inbound.emails.send(emailData)
-
-// That's it. Seriously.`}
-                </SyntaxHighlighter>
+                  syntaxHighlighting
+                  copy={false}
+                  variant="ghost"
+                  size="lg"
+                  className="rounded-none border-0 m-0"
+                />
               </div>
             </div>
           </div>
@@ -572,13 +504,13 @@ await inbound.emails.send(emailData)
             </section> */}
 
       {/* SDK Highlight */}
-      <section className="bg-[#0f0f0f] py-20 relative z-10">
+      <section className="bg-card py-20 relative z-10">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold mb-8">
-              <span className="font-mono p-2 bg-[#1a1a1a] rounded-lg">@inboundemail/sdk</span>
+            <h2 className="text-3xl font-bold mb-8 text-foreground">
+              <span className="font-mono p-2 bg-muted rounded-lg">@inboundemail/sdk</span>
             </h2>
-            <p className="text-lg text-[var(--text-secondary)] leading-relaxed">
+            <p className="text-lg text-muted-foreground leading-relaxed">
               The simplest way to handle email in your applications.
               Send, receive, and reply with full TypeScript support.
             </p>
@@ -587,12 +519,12 @@ await inbound.emails.send(emailData)
             {/* Send Email Example */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">
-                <Highlighter action="underline" color="#6C47FF">
+                <Highlighter action="underline" color="var(--purple-primary)">
                   Send
                 </Highlighter>
               </h3>
-              <div className="bg-[#1e1f20] border border-[var(--border-primary)] rounded-lg overflow-hidden">
-                <div className="py-1.5 px-4 bg-[#2a2b2c] border-b border-[var(--border-primary)] font-mono text-xs flex items-center gap-2 font-bold text-[var(--text-secondary)] justify-between">
+              <div className="bg-card border border-border rounded-lg overflow-hidden">
+                <div className="py-1.5 px-4 bg-muted/30 border-b border-border font-mono text-xs flex items-center gap-2 font-bold text-muted-foreground justify-between">
                   <div className='flex items-center gap-2'>
                     <Image src="/nodejs.png" alt="node.js" width={16} height={16} />
                     <span>send.js</span>
@@ -604,49 +536,38 @@ await inbound.emails.send(emailData)
   subject: 'Welcome!',
   html: '<h1>Thanks for signing up!</h1>'
 })`, 1001)}
-                    className="p-1 rounded hover:bg-[#3a3a3a] transition-colors duration-200 flex items-center justify-center"
+                    className="p-1 rounded hover:bg-accent transition-colors duration-200 flex items-center justify-center"
                     title={copiedStates[1001] ? "Copied!" : "Copy code"}
                   >
                     <div className={`transition-all duration-300 ease-in-out ${copiedStates[1001] ? 'scale-110' : 'scale-100'}`}>
                       {copiedStates[1001] ? (
-                        <Check2 width={12} height={12} className="text-green-400" />
+                        <Check2 width={12} height={12} className="text-green-500" />
                       ) : (
-                        <Copy2 width={12} height={12} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]" />
+                        <Copy2 width={12} height={12} className="text-muted-foreground hover:text-foreground" />
                       )}
                     </div>
                   </button>
                 </div>
-                <SyntaxHighlighter
+                <CodeBlock
+                  code={`await inbound.emails.send({\n  from: 'hello@yourdomain.com',\n  to: 'user@example.com',\n  subject: 'Welcome!',\n  html: '<h1>Thanks for signing up!</h1>'\n})`}
                   language="javascript"
-                  style={monokaiTheme}
-                  customStyle={{
-                    margin: 0,
-                    borderRadius: 0,
-                    background: '#1e1f20',
-                    fontSize: '0.7rem',
-                    padding: '1rem'
-                  }}
-                  className="md:w-full w-[90vw] overflow-x-auto"
-                >
-                  {`await inbound.emails.send({
-  from: 'hello@yourdomain.com',
-  to: 'user@example.com',
-  subject: 'Welcome!',
-  html: '<h1>Thanks for signing up!</h1>'
-})`}
-                </SyntaxHighlighter>
+                  copy={false}
+                  variant="ghost"
+                  size="lg"
+                  className="rounded-none border-0 m-0"
+                />
               </div>
             </div>
 
             {/* Receive Example */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">
-                <Highlighter action="underline" color="#6C47FF">
+                <Highlighter action="underline" color="var(--purple-primary)">
                   Receive
                 </Highlighter>
               </h3>
-              <div className="bg-[#1e1f20] border border-[var(--border-primary)] rounded-lg overflow-hidden">
-                <div className="py-1.5 px-4 bg-[#2a2b2c] border-b border-[var(--border-primary)] font-mono text-xs flex items-center gap-2 font-bold text-[var(--text-secondary)] justify-between">
+              <div className="bg-card border border-border rounded-lg overflow-hidden">
+                <div className="py-1.5 px-4 bg-muted/30 border-b border-border font-mono text-xs flex items-center gap-2 font-bold text-muted-foreground justify-between">
                   <div className='flex items-center gap-2'>
                     <Image src="/nodejs.png" alt="node.js" width={16} height={16} />
                     <span>receive.js</span>
@@ -660,51 +581,39 @@ await inbound.emails.send(emailData)
   
   return Response.json({ success: true })
 }`, 1002)}
-                    className="p-1 rounded hover:bg-[#3a3a3a] transition-colors duration-200 flex items-center justify-center"
+                    className="p-1 rounded hover:bg-accent transition-colors duration-200 flex items-center justify-center"
                     title={copiedStates[1002] ? "Copied!" : "Copy code"}
                   >
                     <div className={`transition-all duration-300 ease-in-out ${copiedStates[1002] ? 'scale-110' : 'scale-100'}`}>
                       {copiedStates[1002] ? (
-                        <Check2 width={12} height={12} className="text-green-400" />
+                        <Check2 width={12} height={12} className="text-green-500" />
                       ) : (
-                        <Copy2 width={12} height={12} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]" />
+                        <Copy2 width={12} height={12} className="text-muted-foreground hover:text-foreground" />
                       )}
                     </div>
                   </button>
                 </div>
-                <SyntaxHighlighter
+                <CodeBlock
+                  code={`export async function POST(req: Request) {\n  const { email } = await req.json()\n  \n  // Email parsed & ready to use\n  console.log(email.subject, email.html)\n  \n  return Response.json({ success: true })\n}`}
                   language="javascript"
-                  style={monokaiTheme}
-                  customStyle={{
-                    margin: 0,
-                    borderRadius: 0,
-                    background: '#1e1f20',
-                    fontSize: '0.7rem',
-                    padding: '1rem'
-                  }}
-                  className="md:w-full w-[90vw] overflow-x-auto"
-                >
-                  {`export async function POST(req: Request) {
-  const { email } = await req.json()
-  
-  // Email parsed & ready to use
-  console.log(email.subject, email.html)
-  
-  return Response.json({ success: true })
-}`}
-                </SyntaxHighlighter>
+                  syntaxHighlighting
+                  copy={false}
+                  variant="ghost"
+                  size="lg"
+                  className="rounded-none border-0 m-0"
+                />
               </div>
             </div>
 
             {/* Reply Example */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">
-                <Highlighter action="underline" color="#6C47FF">
+                <Highlighter action="underline" color="var(--purple-primary)">
                   Reply
                 </Highlighter>
               </h3>
-              <div className="bg-[#1e1f20] border border-[var(--border-primary)] rounded-lg overflow-hidden">
-                <div className="py-1.5 px-4 bg-[#2a2b2c] border-b border-[var(--border-primary)] font-mono text-xs flex items-center gap-2 font-bold text-[var(--text-secondary)] justify-between">
+              <div className="bg-card border border-border rounded-lg overflow-hidden">
+                <div className="py-1.5 px-4 bg-muted/30 border-b border-border font-mono text-xs flex items-center gap-2 font-bold text-muted-foreground justify-between">
                   <div className='flex items-center gap-2'>
                     <Image src="/nodejs.png" alt="node.js" width={16} height={16} />
                     <span>reply.js</span>
@@ -715,36 +624,27 @@ await inbound.emails.send(emailData)
   text: 'Thanks for your message!',
   tags: [{ name: 'type', value: 'auto-reply' }]
 })`, 1003)}
-                    className="p-1 rounded hover:bg-[#3a3a3a] transition-colors duration-200 flex items-center justify-center"
+                    className="p-1 rounded hover:bg-accent transition-colors duration-200 flex items-center justify-center"
                     title={copiedStates[1003] ? "Copied!" : "Copy code"}
                   >
                     <div className={`transition-all duration-300 ease-in-out ${copiedStates[1003] ? 'scale-110' : 'scale-100'}`}>
                       {copiedStates[1003] ? (
-                        <Check2 width={12} height={12} className="text-green-400" />
+                        <Check2 width={12} height={12} className="text-green-500" />
                       ) : (
-                        <Copy2 width={12} height={12} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]" />
+                        <Copy2 width={12} height={12} className="text-muted-foreground hover:text-foreground" />
                       )}
                     </div>
                   </button>
                 </div>
-                <SyntaxHighlighter
+                <CodeBlock
+                  code={`await inbound.reply(email, {\n  from: 'support@yourdomain.com',\n  text: 'Thanks for your message!',\n  tags: [{ name: 'type', value: 'auto-reply' }]\n})`}
                   language="javascript"
-                  style={monokaiTheme}
-                  customStyle={{
-                    margin: 0,
-                    borderRadius: 0,
-                    background: '#1e1f20',
-                    fontSize: '0.7rem',
-                    padding: '1rem'
-                  }}
-                  className="md:w-full w-[90vw] overflow-x-auto"
-                >
-                  {`await inbound.reply(email, {
-  from: 'support@yourdomain.com',
-  text: 'Thanks for your message!',
-  tags: [{ name: 'type', value: 'auto-reply' }]
-})`}
-                </SyntaxHighlighter>
+                  syntaxHighlighting
+                  copy={false}
+                  variant="ghost"
+                  size="lg"
+                  className="rounded-none border-0 m-0"
+                />
               </div>
             </div>
           </div>
@@ -753,13 +653,14 @@ await inbound.emails.send(emailData)
 
       {/* CTA Section */}
       <section className="max-w-4xl mx-auto px-6 py-20 text-center relative z-10">
-        <h2 className="text-3xl font-bold mb-4">ready to escape email hell?</h2>
-        <p className="text-lg text-[var(--text-secondary)] mb-12">
+        <h2 className="text-3xl font-bold mb-4 text-foreground">ready to escape email hell?</h2>
+        <p className="text-lg text-muted-foreground mb-12">
           Stop wasting time on email infrastructure. Start building features that matter.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button
             size="lg"
+            variant="primary"
             asChild
           >
             <Link href="/login">start free</Link>
@@ -775,21 +676,21 @@ await inbound.emails.send(emailData)
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-[var(--border-secondary)] bg-[#0a0a0a] py-12 relative z-10">
+      <footer className="border-t border-border bg-sidebar py-12 relative z-10">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center gap-3 mb-4 md:mb-0">
               <InboundIcon width={32} height={32} />
-              <span className="text-xl font-semibold text-[var(--text-primary)]">inbound</span>
+              <span className="text-xl font-semibold text-foreground">inbound</span>
             </div>
-            <div className="flex gap-8 text-sm text-[var(--text-muted)]">
-              <Link href="https://docs.inbound.new" className="hover:text-[var(--purple-primary)] transition-colors">docs</Link>
-              <Link href="https://inbound.new/privacy" className="hover:text-[var(--purple-primary)] transition-colors">privacy</Link>
-              <Link href="https://inbound.new/terms" className="hover:text-[var(--purple-primary)] transition-colors">terms</Link>
-              <a href="mailto:support@inbound.new" className="hover:text-[var(--purple-primary)] transition-colors">support</a>
+            <div className="flex gap-8 text-sm text-muted-foreground">
+              <Link href="https://docs.inbound.new" className="hover:text-foreground transition-colors">docs</Link>
+              <Link href="https://inbound.new/privacy" className="hover:text-foreground transition-colors">privacy</Link>
+              <Link href="https://inbound.new/terms" className="hover:text-foreground transition-colors">terms</Link>
+              <a href="mailto:support@inbound.new" className="hover:text-foreground transition-colors">support</a>
             </div>
           </div>
-          <div className="mt-8 pt-8 border-t border-[var(--border-secondary)] text-center text-sm text-[var(--text-muted)]">
+          <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
             © {new Date().getFullYear()} inbound (by exon). The all-in-one email toolkit for developers.
           </div>
         </div>
