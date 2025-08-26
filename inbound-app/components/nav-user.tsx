@@ -102,8 +102,6 @@ export function NavUser({
       console.error("Logout error:", error)
     }
   }
-
-  // Use the fetched subscription plan or fallback to the passed plan or "Free"
   const displayPlan = isLoadingSubscription ? "..." : subscriptionPlan
 
   return (
