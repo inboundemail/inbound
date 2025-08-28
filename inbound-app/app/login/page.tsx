@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { LoginForm } from "@/components/login-form";
@@ -8,7 +8,8 @@ import InboundIcon from "@/components/icons/inbound";
 import { useSession } from "@/lib/auth/auth-client";
 import { Button } from "@/components/ui/button";
 
-export default function LoginPage() {
+// Component that handles search params logic
+function LoginContent() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -208,6 +209,27 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Main component with Suspense boundary
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center" style={{ overscrollBehaviorY: "none" }}>
+        <BackgroundSvg />
+        <div className="w-full max-w-sm z-10 px-4 sm:px-0">
+          <div className="flex flex-col items-center gap-6">
+            <InboundIcon width={44} height={44} />
+            <div className="flex items-center gap-2 text-foreground">
+              <span className="text-xl">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }
 

@@ -197,10 +197,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Inbound client using system API key for sending payment requests
-    const inbound = new Inbound({
-      apiKey: process.env.INBOUND_API_KEY!, // Use system API key
-      defaultReplyFrom: 'payments@inbound.new'
-    })
+    const inbound = new Inbound(process.env.INBOUND_API_KEY!)
 
     // Get user's account-level Stripe key
     const userAccount = await db
@@ -298,7 +295,7 @@ export async function POST(request: NextRequest) {
     })
     
     await inbound.reply(email, {
-      from: 'payments@inbound.new',
+      from: 'Payments <payments@inbound.new>',
       subject: `Payment Required: ${email.subject}`,
       html: emailHtml,
       text: `Payment Required to Deliver Your Email
