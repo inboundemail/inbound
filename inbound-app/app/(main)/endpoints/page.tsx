@@ -1,31 +1,30 @@
 "use client"
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { useEndpointsQuery, useMigrationMutation } from '@/features/endpoints/hooks'
-import { CreateEndpointDialog, EditEndpointDialog, DeleteEndpointDialog, DeleteMultipleEndpointsDialog, TestEndpointDialog } from '@/components/endpoints'
+import { useEndpointsQuery, useMigrationMutation, useUpdateEndpointMutation } from '@/features/endpoints/hooks'
+import { CreateEndpointDialog, EditEndpointDialog, DeleteEndpointDialog, TestEndpointDialog } from '@/components/endpoints'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
 import CircleCheck from '@/components/icons/circle-check'
 import ObjRemove from '@/components/icons/obj-remove'
 import CirclePlus from '@/components/icons/circle-plus'
 import Refresh2 from '@/components/icons/refresh-2'
 import BoltLightning from '@/components/icons/bolt-lightning'
-import Envelope2 from '@/components/icons/envelope-2'
-import UserGroup from '@/components/icons/user-group'
+import Envelope from '@/components/icons/envelope'
+import Users6 from '@/components/icons/users-6'
 import Globe2 from '@/components/icons/globe-2'
 import CirclePlay from '@/components/icons/circle-play'
 import Gear2 from '@/components/icons/gear-2'
 import Trash2 from '@/components/icons/trash-2'
-import Clipboard2 from '@/components/icons/clipboard-2'
-import CloudDownload from '@/components/icons/cloud-download'
 import Magnifier2 from '@/components/icons/magnifier-2'
-import Filter2 from '@/components/icons/filter-2'
-import { CustomInboundIcon } from '@/components/icons/customInbound'
-import { formatDistanceToNow } from 'date-fns'
+import ChatBubble2 from '@/components/icons/chat-bubble-2'
+import BadgeCheck2 from '@/components/icons/badge-check-2'
+import Ban2 from '@/components/icons/ban-2'
+// import { CustomInboundIcon } from '@/components/icons/customInbound'
+// import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { Endpoint } from '@/features/endpoints/types'
 
@@ -35,6 +34,7 @@ type FilterStatus = 'all' | 'active' | 'disabled'
 export default function EndpointsPage() {
   const { data: endpoints = [], isLoading, error, refetch, migrationInProgress, migrationChecked } = useEndpointsQuery()
   const migrationMutation = useMigrationMutation()
+  const updateMutation = useUpdateEndpointMutation()
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
   const [showMigrationSuccess, setShowMigrationSuccess] = useState(false)
 
@@ -43,9 +43,7 @@ export default function EndpointsPage() {
   const [filterType, setFilterType] = useState<FilterType>('all')
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
 
-  // Selection state
-  const [selectedEndpoints, setSelectedEndpoints] = useState<Set<string>>(new Set())
-  const [selectAll, setSelectAll] = useState(false)
+  // Selection state removed in new design
 
   const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | null>(null)
 
@@ -116,33 +114,7 @@ export default function EndpointsPage() {
     })
   }, [endpoints, searchQuery, filterType, filterStatus, getConfigSummary])
 
-  // Handle select all - simplified to prevent infinite loops
-  useEffect(() => {
-    if (filteredEndpoints.length === 0 && selectedEndpoints.size > 0) {
-      setSelectedEndpoints(new Set())
-      setSelectAll(false)
-    }
-  }, [filteredEndpoints.length, selectedEndpoints.size])
-
-  // Update select all state when selection changes
-  const allSelected = useMemo(() => {
-    if (filteredEndpoints.length === 0) return false
-    return filteredEndpoints.every(endpoint => selectedEndpoints.has(endpoint.id))
-  }, [filteredEndpoints, selectedEndpoints])
-
-  useEffect(() => {
-    setSelectAll(allSelected)
-  }, [allSelected])
-
-  const copyUrl = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url)
-      setCopiedUrl(url)
-      setTimeout(() => setCopiedUrl(null), 2000)
-    } catch (err) {
-      console.error("Failed to copy URL:", err)
-    }
-  }
+  // removed bulk selection & clipboard interactions for simplified UI
 
   const handleTestEndpoint = (endpoint: Endpoint) => {
     setSelectedEndpoint(endpoint)
@@ -159,113 +131,30 @@ export default function EndpointsPage() {
     setDeleteDialogOpen(true)
   }
 
-  const handleSelectEndpoint = (endpointId: string, checked: boolean) => {
-    const newSelected = new Set(selectedEndpoints)
-    if (checked) {
-      newSelected.add(endpointId)
-    } else {
-      newSelected.delete(endpointId)
-    }
-    setSelectedEndpoints(newSelected)
-  }
+  // bulk handlers removed
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedEndpoints(new Set(filteredEndpoints.map(e => e.id)))
-    } else {
-      setSelectedEndpoints(new Set())
-    }
-  }
+  const getStatusBadge = (endpoint: Endpoint) => (
+    <Badge variant={endpoint.isActive ? 'secondary' : 'destructive'} className="rounded-md">
+      {endpoint.isActive ? 'Active' : 'Inactive'}
+    </Badge>
+  )
 
-  const handleDeleteMultiple = () => {
-    if (selectedEndpoints.size === 0) {
-      toast.error('No endpoints selected')
-      return
-    }
-    setDeleteMultipleDialogOpen(true)
-  }
-
-  const clearSelection = () => {
-    setSelectedEndpoints(new Set())
-    setSelectAll(false)
-  }
-
-  const getStatusBadge = (endpoint: Endpoint) => {
-    if (endpoint.isActive) {
-      return (
-        <Badge
-          className="bg-emerald-500 text-white rounded-full px-0.5 py-0.5 text-xs font-medium shadow-sm"
-          title="Active"
-        >
-          <CircleCheck width="12" height="12" />
-        </Badge>
-      )
-    } else {
-      return (
-        <Badge
-          className="bg-gray-400 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm"
-          title="Not Active"
-        >
-          <ObjRemove width="12" height="12" />
-        </Badge>
-      )
-    }
-  }
-
-  const getEndpointIcon = (endpoint: Endpoint) => {
+  const getTypeSpec = (endpoint: Endpoint) => {
     switch (endpoint.type) {
-      case 'webhook':
-        return BoltLightning
       case 'email':
-        return Envelope2
+        return { Icon: Envelope, bg: 'rgba(128, 97, 255, 0.13)' } //  #8061FF @ 13%
+      case 'webhook':
+        return { Icon: BoltLightning, bg: 'rgba(43, 102, 235, 0.60)' } // #2B66EB @ 8%
       case 'email_group':
-        return UserGroup
+        return { Icon: Users6, bg: 'rgba(34, 163, 77, 0.60)' } // #22A34D @ 8%
       default:
-        return Globe2
+        return { Icon: Globe2, bg: 'rgba(120,120,120,0.60)' }
     }
   }
 
-  const getEndpointTypeLabel = (endpoint: Endpoint) => {
-    switch (endpoint.type) {
-      case 'webhook':
-        return 'Webhook'
-      case 'email':
-        return 'Email Forward'
-      case 'email_group':
-        return 'Email Group'
-      default:
-        return 'Endpoint'
-    }
-  }
+  
 
-  const getEndpointTypeBadge = (endpoint: Endpoint) => {
-    switch (endpoint.type) {
-      case 'webhook':
-        return (
-          <Badge className="bg-purple-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-            Webhook
-          </Badge>
-        )
-      case 'email':
-        return (
-          <Badge className="bg-blue-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-            Email Forward
-          </Badge>
-        )
-      case 'email_group':
-        return (
-          <Badge className="bg-green-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-            Email Group
-          </Badge>
-        )
-      default:
-        return (
-          <Badge className="bg-gray-500 text-white rounded-full px-2.5 py-0.5 text-xs font-medium shadow-sm pointer-events-none">
-            Endpoint
-          </Badge>
-        )
-    }
-  }
+  
 
   const getEndpointIconColor = (endpoint: Endpoint) => {
     if (!endpoint.isActive) return 'hsl(var(--muted-foreground))'
@@ -290,7 +179,7 @@ export default function EndpointsPage() {
   const emailCount = endpoints.filter(e => e.type === 'email').length
   const emailGroupCount = endpoints.filter(e => e.type === 'email_group').length
 
-  const selectedEndpointsArray = endpoints.filter(e => selectedEndpoints.has(e.id))
+  // legacy selection array removed in new design
 
   if (isLoading || migrationInProgress) {
     return (
@@ -351,13 +240,13 @@ export default function EndpointsPage() {
                 )}
                 {emailCount > 0 && (
                   <span className="flex items-center gap-1">
-                    <Envelope2 width="12" height="12" />
+                    <Envelope width="12" height="12" />
                     {emailCount} email forwards
                   </span>
                 )}
                 {emailGroupCount > 0 && (
                   <span className="flex items-center gap-1">
-                    <UserGroup width="12" height="12" />
+                    <Users6 width="12" height="12" />
                     {emailGroupCount} email groups
                   </span>
                 )}
@@ -422,50 +311,7 @@ export default function EndpointsPage() {
               </div>
             </div>
 
-            {/* Bulk Selection Controls */}
-            {filteredEndpoints.length > 0 && (
-              <Card className="bg-card border-border rounded-xl mb-2">
-                <CardContent className="py-2 px-4">
-                  <div className="flex items-center justify-between min-h-[32px]">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={selectAll}
-                        onCheckedChange={handleSelectAll}
-                        id="select-all"
-                      />
-                      <label htmlFor="select-all" className="text-sm font-medium text-foreground cursor-pointer">
-                        {selectedEndpoints.size > 0
-                          ? `${selectedEndpoints.size} of ${filteredEndpoints.length} endpoints selected`
-                          : `Select all (${filteredEndpoints.length}) endpoints`
-                        }
-                      </label>
-                    </div>
-
-                    <div className={`flex items-center gap-2 transition-opacity duration-200 ${selectedEndpoints.size > 0 ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                      }`}>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={clearSelection}
-                        disabled={selectedEndpoints.size === 0}
-                      >
-                        Clear
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={handleDeleteMultiple}
-                        className="bg-red-600 hover:bg-red-700"
-                        disabled={selectedEndpoints.size === 0}
-                      >
-                        <Trash2 width="12" height="12" className="mr-1" />
-                        Delete ({selectedEndpoints.size})
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {/* Bulk selection removed per new design */}
           </div>
 
           <hr className="my-4 border-border" />
@@ -498,12 +344,13 @@ export default function EndpointsPage() {
               <Card className="bg-card border-border rounded-xl">
                 <CardContent className="p-8">
                   <div className="text-center">
-                    <CustomInboundIcon
-                      Icon={searchQuery || filterType !== 'all' || filterStatus !== 'all' ? Magnifier2 : Globe2}
-                      size={48}
-                      backgroundColor="hsl(var(--muted-foreground))"
-                      className="mx-auto mb-4"
-                    />
+                    <div className="mx-auto mb-4 flex items-center justify-center rounded-[12px]" style={{ width: 48, height: 48, background: 'rgba(120,120,120,0.13)' }}>
+                      {(searchQuery || filterType !== 'all' || filterStatus !== 'all') ? (
+                        <Magnifier2 width={22} height={22} />
+                      ) : (
+                        <Globe2 width={22} height={22} />
+                      )}
+                    </div>
                     <p className="text-sm text-muted-foreground mb-4">
                       {searchQuery || filterType !== 'all' || filterStatus !== 'all'
                         ? 'No endpoints match your search criteria'
@@ -567,106 +414,42 @@ export default function EndpointsPage() {
                 </CardContent>
               </Card>
             ) : (
-              filteredEndpoints.map((endpoint: Endpoint) => {
-                const EndpointIcon = getEndpointIcon(endpoint)
-                const configSummary = getConfigSummary(endpoint)
-                const isSelected = selectedEndpoints.has(endpoint.id)
-
-                return (
-                  <Card
-                    key={endpoint.id}
-                    className={`bg-card/95 backdrop-blur-sm shadow-sm hover:shadow-lg transition-all duration-300 border rounded-xl group ${isSelected ? 'border-primary bg-primary/5' : 'border-border'
-                      }`}
-                  >
-                    <CardContent className="p-0">
-                      <div className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3 flex-1 min-w-0">
-                            <Checkbox
-                              checked={isSelected}
-                              onCheckedChange={(checked) => handleSelectEndpoint(endpoint.id, checked as boolean)}
-                              className="flex-shrink-0"
-                            />
-                            <CustomInboundIcon
-                              Icon={EndpointIcon}
-                              size={36}
-                              backgroundColor={getEndpointIconColor(endpoint)}
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center space-x-2 mb-1">
-                                <h3 className="text-base font-semibold text-foreground tracking-tight truncate">{endpoint.name}</h3>
-                                {/* {getEndpointTypeBadge(endpoint)} */}
-                              </div>
-                              {/* <div className="flex items-center space-x-3 text-sm">
-                                <div className="flex items-center space-x-2 text-gray-600">
-                                  <span className="font-mono truncate">
-                                    {configSummary}
-                                  </span>
-                                  {endpoint.type === 'webhook' && configSummary && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-1 h-auto hover:bg-gray-100 rounded hover:scale-105 active:scale-95"
-                                      onClick={() => {
-                                        try {
-                                          const config = JSON.parse(endpoint.config)
-                                          copyUrl(config.url)
-                                        } catch {}
-                                      }}
-                                    >
-                                      {copiedUrl && endpoint.config && JSON.parse(endpoint.config).url === copiedUrl ? (
-                                        <CircleCheck width="14" height="14" className="text-emerald-500" />
-                                      ) : (
-                                        <Clipboard2 width="14" height="14" className="text-gray-400 transition-all duration-150 hover:text-gray-600" />
-                                      )}
-                                    </Button>
-                                  )}
-                                </div>
-                                {endpoint.description && (
-                                  <span className="text-gray-500 text-xs truncate">{endpoint.description}</span>
-                                )}
-                                <span className="text-gray-400 text-xs">
-                                  Added {endpoint.createdAt ? formatDistanceToNow(new Date(endpoint.createdAt), { addSuffix: true }) : 'recently'}
-                                </span>
-                              </div> */}
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
+              <div className="space-y-2">
+                {filteredEndpoints.map((endpoint: Endpoint) => {
+                  const { Icon, bg } = getTypeSpec(endpoint)
+                  return (
+                    <div key={endpoint.id} className="flex items-center justify-between rounded-[13px] border border-border bg-background/60 px-4 py-3 transition-colors hover:bg-accent/20">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex items-center justify-center rounded-[9px]" style={{ width: 36, height: 36, background: bg }}>
+                          <Icon width={16} height={16} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm font-medium text-foreground truncate">{endpoint.name}</span>
                             {getStatusBadge(endpoint)}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="p-1.5 hover:bg-muted rounded-lg transition-colors"
-                              onClick={() => handleTestEndpoint(endpoint)}
-                              title="Test endpoint"
-                            >
-                              <CirclePlay width="16" height="16" className="text-muted-foreground hover:text-foreground" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="p-1.5 hover:bg-muted rounded-lg transition-colors"
-                              onClick={() => handleEditEndpoint(endpoint)}
-                              title="Configure endpoint"
-                            >
-                              <Gear2 width="16" height="16" className="text-muted-foreground hover:text-foreground" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="p-1.5 hover:bg-muted rounded-lg transition-colors"
-                              onClick={() => handleDeleteEndpoint(endpoint)}
-                              title="Delete endpoint"
-                            >
-                              <Trash2 width="16" height="16" className="text-muted-foreground hover:text-foreground" />
-                            </Button>
+                            <ChatBubble2 width="14" height="14" className="opacity-70" />
+                            <ChatBubble2 width="14" height="14" className="opacity-40" />
                           </div>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                )
-              })
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => updateMutation.mutate({ id: endpoint.id, data: { isActive: !endpoint.isActive } })} title={endpoint.isActive ? 'Disable' : 'Enable'}>
+                          {endpoint.isActive ? <BadgeCheck2 width="16" height="16" /> : <Ban2 width="16" height="16" />}
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleTestEndpoint(endpoint)} title="Test">
+                          <CirclePlay width="16" height="16" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleDeleteEndpoint(endpoint)} title="Delete">
+                          <Trash2 width="16" height="16" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleEditEndpoint(endpoint)} title="Settings">
+                          <Gear2 width="16" height="16" />
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </div>
         </div>
@@ -687,13 +470,6 @@ export default function EndpointsPage() {
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         endpoint={selectedEndpoint}
-      />
-
-      <DeleteMultipleEndpointsDialog
-        open={deleteMultipleDialogOpen}
-        onOpenChange={setDeleteMultipleDialogOpen}
-        endpoints={selectedEndpointsArray}
-        onSuccess={clearSelection}
       />
 
       <TestEndpointDialog

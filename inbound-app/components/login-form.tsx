@@ -9,15 +9,19 @@ import { useState } from "react";
 import { toast } from "sonner";
 import Envelope2 from "@/components/icons/envelope-2";
 
+interface LoginFormProps extends React.ComponentPropsWithoutRef<"form"> {
+  onMagicLinkSent?: (email: string) => void;
+}
+
 export function LoginForm({
   className,
+  onMagicLinkSent,
   ...props
-}: React.ComponentPropsWithoutRef<"form">) {
+}: LoginFormProps) {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isGitHubLoading, setIsGitHubLoading] = useState(false);
   const [isMagicLinkLoading, setIsMagicLinkLoading] = useState(false);
   const [email, setEmail] = useState("");
-  const [magicLinkSent, setMagicLinkSent] = useState(false);
 
   const handleGitHubSignIn = async () => {
     setIsGitHubLoading(true);
@@ -66,14 +70,14 @@ export function LoginForm({
     try {
       const { data, error } = await authClient.signIn.magicLink({
         email: email.trim(),
-        callbackURL: "/logs", // Main layout will handle onboarding redirect
+        callbackURL: "/login?success=magic_link", // Will show success state before redirect
       });
 
       if (error) {
         throw new Error(error.message || "Failed to send magic link");
       }
 
-      setMagicLinkSent(true);
+      onMagicLinkSent?.(email.trim());
       toast.success(
         `Magic link sent to ${email}! Check your email to sign in.`
       );
@@ -89,52 +93,6 @@ export function LoginForm({
 
   // Disable buttons if any login is in progress
   const isAnyLoading = isGoogleLoading || isGitHubLoading || isMagicLinkLoading;
-
-  if (magicLinkSent) {
-    return (
-      <div className={cn("flex flex-col gap-6", className)}>
-        <div className="flex flex-col items-center gap-4 text-center">
-          <div className="w-16 h-16 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-8 w-8 text-green-600 dark:text-green-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-              />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-foreground">check your email</h1>
-          <p className="text-balance text-sm text-muted-foreground">
-            We've sent a magic link to <strong className="text-foreground">{email}</strong>. Click the link
-            in your email to sign in.
-          </p>
-          {process.env.NODE_ENV === "development" && (
-            <p className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 p-2 rounded">
-              <strong>Dev mode:</strong> Check your console for the magic link
-              URL
-            </p>
-          )}
-        </div>
-        <Button
-          variant="secondary"
-          className="w-full"
-          onClick={() => {
-            setMagicLinkSent(false);
-            setEmail("");
-          }}
-        >
-          Try a different email
-        </Button>
-      </div>
-    );
-  }
 
   return (
     <form
