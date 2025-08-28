@@ -99,9 +99,12 @@ export default function RootLayout({
           </AutumnProvider>
         </QueryProvider>
       </body>
-      <DubAnalytics domainsConfig={{
-        refer: "inbd.link"
-      }} />
+            <DubAnalytics domainsConfig={{
+              refer: "inbd.link"
+            }} />
+          </AutumnProvider>
+        </QueryProvider>
+      </body>
     </html>
   );
 }
