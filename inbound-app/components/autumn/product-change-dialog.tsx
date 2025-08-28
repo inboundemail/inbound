@@ -14,7 +14,7 @@ import {
 
 import { getProductChangeTexts } from "@/lib/autumn/get-product-change-texts";
 import { type CheckProductFormattedPreview } from "autumn-js";
-import { useAutumn } from "autumn-js/react";
+import { useAutumn, useCustomer } from "autumn-js/react";
 
 export interface ProductChangeDialogProps {
   open: boolean;
@@ -25,6 +25,7 @@ export interface ProductChangeDialogProps {
 
 export default function ProductChangeDialog(params?: ProductChangeDialogProps) {
   const { attach } = useAutumn();
+  const { customer } = useCustomer();
   const [loading, setLoading] = useState(false);
   const [prepaidTotals, setPrepaidTotals] = useState(0);
   const [optionsInput, setOptionsInput] = useState<
@@ -120,6 +121,9 @@ export default function ProductChangeDialog(params?: ProductChangeDialogProps) {
               if (!error_on_attach) {
                 await attach({
                   productId: preview.product_id,
+                  metadata: {
+                    dubCustomerId: customer?.id || "",
+                  },
                   options: optionsInput.map((option) => ({
                     featureId: option.feature_id,
                     quantity: option.quantity || 0,

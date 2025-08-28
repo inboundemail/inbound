@@ -1,5 +1,7 @@
 import { betterAuth } from "better-auth";
 import { db } from "../db/index";
+import { Dub } from "dub";
+import { dubAnalytics } from "@dub/better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { stripe } from "@better-auth/stripe";
 import { admin, apiKey, oAuthProxy } from "better-auth/plugins";
@@ -10,6 +12,8 @@ import Stripe from "stripe";
 import * as schema from "../db/schema";
 import { nanoid } from "nanoid";
 import { Resend } from "resend";
+
+const dub = new Dub();
 
 const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -63,6 +67,9 @@ export const auth = betterAuth({
         }
     },
     plugins: [
+        dubAnalytics({
+            dubClient: dub,
+          }),
         oAuthProxy({
             productionURL: process.env.BETTER_AUTH_URL || "https://inbound.new",
             currentURL: process.env.NODE_ENV === 'development' 

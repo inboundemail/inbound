@@ -60,7 +60,7 @@ export default function VipPageClient({
   const { attach } = useAutumn()
   const router = useRouter()
   const searchParams = useSearchParams()
-
+  const { customer } = useCustomer()  
   const handleToggleVip = async (emailAddressId: string, isEnabled: boolean) => {
     setIsUpdating(emailAddressId)
     try {
@@ -141,6 +141,9 @@ export default function VipPageClient({
       await attach({
         productId: "inbound_vip",
         successUrl: `${window.location.origin}/vip?upgrade=true`,
+        metadata: {
+          dubCustomerId: customer?.id || "",
+        },
         dialog: ProductChangeDialog,
       })
     } catch (error) {

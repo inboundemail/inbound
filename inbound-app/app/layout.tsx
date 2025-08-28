@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Outfit, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next"
+import { Analytics as DubAnalytics } from '@dub/analytics/react';
 import { AutumnProvider } from "autumn-js/react";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { SpeedInsights } from "@vercel/speed-insights/next"
@@ -98,6 +99,9 @@ export default function RootLayout({
           </AutumnProvider>
         </QueryProvider>
       </body>
+      <DubAnalytics domainsConfig={{
+        refer: "inbd.link"
+      }} />
     </html>
   );
 }
