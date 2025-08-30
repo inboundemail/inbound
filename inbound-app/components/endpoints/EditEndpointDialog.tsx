@@ -106,11 +106,17 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
 
       let parsedConfig = {}
       if (endpoint.config) {
-        try {
-          parsedConfig = JSON.parse(endpoint.config)
-        } catch (e) {
-          console.error('Failed to parse endpoint config:', e)
-          parsedConfig = {}
+        // Check if config is already parsed (object) or needs parsing (string)
+        if (typeof endpoint.config === 'string') {
+          try {
+            parsedConfig = JSON.parse(endpoint.config)
+          } catch (e) {
+            console.error('Failed to parse endpoint config:', e)
+            parsedConfig = {}
+          }
+        } else {
+          // Config is already parsed as an object
+          parsedConfig = endpoint.config
         }
       }
 
