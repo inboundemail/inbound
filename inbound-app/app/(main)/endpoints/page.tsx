@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { format } from 'date-fns'
 import CircleCheck from '@/components/icons/circle-check'
 import ObjRemove from '@/components/icons/obj-remove'
 import CirclePlus from '@/components/icons/circle-plus'
@@ -20,6 +21,7 @@ import CirclePlay from '@/components/icons/circle-play'
 import Gear2 from '@/components/icons/gear-2'
 import Trash2 from '@/components/icons/trash-2'
 import Magnifier2 from '@/components/icons/magnifier-2'
+import Filter2 from '@/components/icons/filter-2'
 import ChatBubble2 from '@/components/icons/chat-bubble-2'
 import BadgeCheck2 from '@/components/icons/badge-check-2'
 import Ban2 from '@/components/icons/ban-2'
@@ -134,10 +136,16 @@ export default function EndpointsPage() {
   // bulk handlers removed
 
   const getStatusBadge = (endpoint: Endpoint) => (
-    <Badge variant={endpoint.isActive ? 'secondary' : 'destructive'} className="rounded-md">
+    <Badge variant={endpoint.isActive ? 'default' : 'secondary'} className="rounded-md">
       {endpoint.isActive ? 'Active' : 'Inactive'}
     </Badge>
   )
+
+  const getEndpointStatusDot = (endpoint: Endpoint) => {
+    return endpoint.isActive
+      ? <div className="w-2 h-2 rounded-full bg-green-500" />
+      : <div className="w-2 h-2 rounded-full bg-red-500" />
+  }
 
   const getTypeSpec = (endpoint: Endpoint) => {
     switch (endpoint.type) {
@@ -184,7 +192,7 @@ export default function EndpointsPage() {
   if (isLoading || migrationInProgress) {
     return (
       <div className="min-h-screen p-4 font-outfit">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
               <div className="text-muted-foreground mb-2">
@@ -205,7 +213,7 @@ export default function EndpointsPage() {
   if (error) {
     return (
       <div className="min-h-screen p-4 font-outfit">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           <Card className="border-destructive/50 bg-destructive/10">
             <CardContent className="p-6">
               <div className="flex items-center gap-2 text-destructive">
@@ -225,7 +233,7 @@ export default function EndpointsPage() {
   return (
     <>
       <div className="min-h-screen p-4 font-outfit">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between rounded-lg mb-6 mt-4">
             <div>
               <h1 className="text-2xl font-semibold mb-1">Endpoint Management</h1>
@@ -272,49 +280,59 @@ export default function EndpointsPage() {
 
           <div className="mb-2">
             {/* Search and Filter Controls */}
-            <div className="flex flex-col sm:flex-row gap-1 mb-2">
-              <div className="flex-1">
-                <div className="relative">
-                  <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search endpoints by name, description, or configuration..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 bg-card border-border rounded-xl"
-                  />
-                </div>
+            <div className="flex items-center gap-3 flex-wrap mb-2">
+              <div className="relative flex-1 min-w-[200px]">
+                <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search endpoints..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-9 rounded-xl"
+                />
               </div>
 
-              <div className="flex gap-1">
-                <Select value={filterType} onValueChange={(value: FilterType) => setFilterType(value)}>
-                  <SelectTrigger className="w-40 bg-card border-border rounded-xl">
-                    <SelectValue placeholder="Type" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-card border-border rounded-xl">
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="webhook">Webhooks</SelectItem>
-                    <SelectItem value="email">Email Forwards</SelectItem>
-                    <SelectItem value="email_group">Email Groups</SelectItem>
-                  </SelectContent>
-                </Select>
+              <Select value={filterType} onValueChange={(value: FilterType) => setFilterType(value)}>
+                <SelectTrigger className="w-[140px] h-9 rounded-xl">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="webhook">Webhooks</SelectItem>
+                  <SelectItem value="email">Email Forwards</SelectItem>
+                  <SelectItem value="email_group">Email Groups</SelectItem>
+                </SelectContent>
+              </Select>
 
-                <Select value={filterStatus} onValueChange={(value: FilterStatus) => setFilterStatus(value)}>
-                  <SelectTrigger className="w-32 bg-card border-border rounded-xl">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-card border-border rounded-xl">
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="disabled">Disabled</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Select value={filterStatus} onValueChange={(value: FilterStatus) => setFilterStatus(value)}>
+                <SelectTrigger className="w-[140px] h-9 rounded-xl">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="disabled">Disabled</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {(searchQuery || filterType !== 'all' || filterStatus !== 'all') && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSearchQuery('')
+                    setFilterType('all')
+                    setFilterStatus('all')
+                  }}
+                  className="h-9"
+                >
+                  <Filter2 width="14" height="14" className="mr-2" />
+                  Clear
+                </Button>
+              )}
             </div>
 
             {/* Bulk selection removed per new design */}
           </div>
-
-          <hr className="my-4 border-border" />
 
           <div className="space-y-2">
             {/* Migration Success Banner */}
@@ -414,23 +432,41 @@ export default function EndpointsPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-2">
+              <div className="border border-border rounded-[13px] bg-card">
                 {filteredEndpoints.map((endpoint: Endpoint) => {
-                  const { Icon, bg } = getTypeSpec(endpoint)
+                  const { Icon } = getTypeSpec(endpoint)
+                  const configSummary = getConfigSummary(endpoint)
                   return (
-                    <div key={endpoint.id} className="flex items-center justify-between rounded-[13px] border border-border bg-background/60 px-4 py-3 transition-colors hover:bg-accent/20">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="flex items-center justify-center rounded-[9px]" style={{ width: 36, height: 36, background: bg }}>
-                          <Icon width={16} height={16} />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-sm font-medium text-foreground truncate">{endpoint.name}</span>
-                            {getStatusBadge(endpoint)}
-                          </div>
+                    <div
+                      key={endpoint.id}
+                      className="flex items-center gap-4 px-5 py-4 transition-colors cursor-pointer hover:bg-muted/50"
+                    >
+                      {/* Endpoint Icon with Status */}
+                      <div className="flex-shrink-0">
+                        <div className="relative p-[8px] rounded-md bg-muted">
+                          <Icon width="23" height="23" className="text-[#735ACF]" />
+                          <div className="absolute -top-1 -right-1">{getEndpointStatusDot(endpoint)}</div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1">
+
+                      {/* Endpoint Name and Details */}
+                      <div className="flex-shrink-0 w-64 flex flex-col gap-[2px]">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{endpoint.name}</span>
+                          {getStatusBadge(endpoint)}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs opacity-60">{configSummary || (endpoint.type === 'email_group' ? 'Email group' : endpoint.type.charAt(0).toUpperCase() + endpoint.type.slice(1))}</span>
+                        </div>
+                      </div>
+
+                      {/* Created Date */}
+                      <div className="flex-shrink-0 text-xs text-muted-foreground w-20 text-right ml-auto">
+                        {endpoint.createdAt ? format(new Date(endpoint.createdAt as any), 'MMM d') : ''}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-1 ml-4">
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => updateMutation.mutate({ id: endpoint.id, data: { isActive: !endpoint.isActive } })} title={endpoint.isActive ? 'Disable' : 'Enable'}>
                           {endpoint.isActive ? <BadgeCheck2 width="16" height="16" /> : <Ban2 width="16" height="16" />}
                         </Button>

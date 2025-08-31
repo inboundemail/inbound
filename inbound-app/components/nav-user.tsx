@@ -137,7 +137,7 @@ export function NavUser({
               </div>
               <svg xmlns="http://www.w3.org/2000/svg" width="21" height="20" viewBox="0 0 21 20" fill="none" className="ml-auto size-4">
                 <g opacity="0.4">
-                  <path d="M7.19995 13.3334L10.5333 16.6667L13.8666 13.3334M7.19995 6.66671L10.5333 3.33337L13.8666 6.66671" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M7.19995 13.3334L10.5333 16.6667L13.8666 13.3334M7.19995 6.66671L10.5333 3.33337L13.8666 6.66671" stroke="currentColor" stroke-width="2" stroke-linecap="round" strokeLinejoin="round"/>
                 </g>
               </svg>
             </SidebarMenuButton>

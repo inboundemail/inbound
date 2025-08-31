@@ -78,7 +78,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <SidebarMenuItem>
                 <Button
                   variant="primary"
-                  className="w-full rounded-[9px] bg-[#8161FF] text-white shadow-[0_-1px_1.25px_0_rgba(0,0,0,0.25)_inset,1px_1.25px_2.3px_0_rgba(255,255,255,0.26)_inset] hover:bg-[#8161FF] active:bg-[#7758ff] px-[18px] dark:bg-[#4a0198] dark:hover:bg-[#5201a8] dark:active:bg-[#3e017f] dark:shadow-[1px_1.25px_2.3px_0px_inset_rgba(255,255,255,0.1)]"
+                  // className="w-full rounded-[9px] bg-[#8161FF] text-white shadow-[0_-1px_1.25px_0_rgba(0,0,0,0.25)_inset,1px_1.25px_2.3px_0_rgba(255,255,255,0.26)_inset] hover:bg-[#8161FF] active:bg-[#7758ff] px-[18px] dark:bg-[#4a0198] dark:hover:bg-[#5201a8] dark:active:bg-[#3e017f] dark:shadow-[1px_1.25px_2.3px_0px_inset_rgba(255,255,255,0.1)]"
                   asChild
                 >
                   <a href="/add" className="flex items-center gap-2 w-full justify-between">
