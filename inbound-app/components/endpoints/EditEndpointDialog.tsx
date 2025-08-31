@@ -389,28 +389,24 @@ export function EditEndpointDialog({ open, onOpenChange, endpoint }: EditEndpoin
                     <Label>Webhook Format</Label>
                     <div className="grid gap-3">
                       {Object.entries(WEBHOOK_FORMAT_CONFIGS).map(([format, config]) => {
-                        const isDisabled = format === 'slack'
+                        const isDisabled = false
                         return (
                         <div
                           key={format}
                           className={`relative rounded-lg border p-4 transition-all ${
-                            isDisabled 
-                              ? 'border-border bg-muted cursor-not-allowed opacity-60'
-                              : webhookFormat === format
-                                ? 'border-primary bg-accent ring-1 ring-primary cursor-pointer'
-                                : 'border-border hover:border-muted-foreground cursor-pointer'
+                            webhookFormat === format
+                              ? 'border-primary bg-accent ring-1 ring-primary cursor-pointer'
+                              : 'border-border hover:border-muted-foreground cursor-pointer'
                           }`}
-                          onClick={() => !isDisabled && setWebhookFormat(format as WebhookFormat)}
+                          onClick={() => setWebhookFormat(format as WebhookFormat)}
                         >
                           <div className="flex items-start gap-3">
                             <div className={`mt-0.5 h-4 w-4 rounded-full border-2 transition-colors ${
-                              isDisabled
-                                ? 'border-muted-foreground bg-muted'
-                                : webhookFormat === format
-                                  ? 'border-primary bg-primary'
-                                  : 'border-muted-foreground'
+                              webhookFormat === format
+                                ? 'border-primary bg-primary'
+                                : 'border-muted-foreground'
                             }`}>
-                              {webhookFormat === format && !isDisabled && (
+                              {webhookFormat === format && (
                                 <div className="h-full w-full rounded-full bg-white scale-50" />
                               )}
                             </div>
