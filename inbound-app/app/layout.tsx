@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { Outfit, Geist_Mono } from "next/font/google";
+import { Outfit, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next"
+import { Analytics as DubAnalytics } from '@dub/analytics/react';
 import { AutumnProvider } from "autumn-js/react";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { SpeedInsights } from "@vercel/speed-insights/next"
@@ -12,6 +13,11 @@ const outfit = Outfit({
   variable: "--font-outfit",
   subsets: ["latin"],
   weight: ["400"], // Regular weight
+});
+
+const geist = Geist({
+  variable: "--font-geist",
+  subsets: ["latin"],
 });
 
 const geistMono = Geist_Mono({
@@ -60,9 +66,23 @@ export default function RootLayout({
 
       </head>
       <body
-        className={`${outfit.variable} ${geistMono.variable} antialiased`}
+        className={`${outfit.variable} ${geist.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function(){
+                try {
+                  var theme = localStorage.getItem('theme');
+                  var d = document.documentElement;
+                  if (theme === 'light') d.classList.remove('dark');
+                  else d.classList.add('dark');
+                } catch {}
+              })();
+            `,
+          }}
+        />
         {process.env.NODE_ENV === "test" && (
           <script
             crossOrigin="anonymous"
@@ -79,6 +99,9 @@ export default function RootLayout({
           </AutumnProvider>
         </QueryProvider>
       </body>
+      <DubAnalytics domainsConfig={{
+        refer: "inbd.link"
+      }} />
     </html>
   );
 }

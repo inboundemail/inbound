@@ -14,13 +14,13 @@ export async function submitVercelOssApplication(formData: FormData) {
       throw new Error("User not authenticated");
     }
 
-    const inbound = new Inbound({ apiKey: process.env.INBOUND_API_KEY! });
+    const inbound = new Inbound(process.env.INBOUND_API_KEY!);
     
-    const { id } = await inbound.emails.send({
+    const { data: response, error: errorResponse } = await inbound.emails.send({
       from: 'Vercel OSS Program Applications<noreply@inbound.new>',
       to: 'ryan@inbound.new',
       subject: 'New Vercel OSS Program Application',
-      reply_to: session.user.email,
+      replyTo: session.user.email,
       text: `User ${session.user.name || session.user.email} has applied for the Vercel OSS Program.\n\nUser Details:\n- ID: ${session.user.id}\n- Email: ${session.user.email}\n- Name: ${session.user.name || 'Not provided'}`,
       html: `
         <h2>New Vercel OSS Program Application</h2>
@@ -35,7 +35,7 @@ export async function submitVercelOssApplication(formData: FormData) {
       `
     });
 
-    console.log('Application email sent:', id);
+    console.log('Application email sent:', response?.id);
     
     return { success: true };
   } catch (error) {

@@ -10,7 +10,7 @@ import DollarCircle from '@/components/icons/subscription-2'
 import BugIcon from '@/components/icons/bug'
 import SparklesIcon from '@/components/icons/sparkle-3'
 import GithubIcon from '@/components/icons/github'
-import InboundIcon from '@/components/InboundIcon'
+import InboundIcon from '@/components/icons/inbound'
 import Link from 'next/link'
 import ReactMarkdown, { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -528,7 +528,7 @@ export default function BountiesPage() {
         <div className="w-full max-w-6xl mx-auto px-4 pt-8">
           <Link href="/">
             <div className="flex items-center gap-3 mb-8">
-              <InboundIcon variant="white" width={44} height={44} />
+              <InboundIcon width={44} height={44} />
               <div className="flex flex-col">
                 <p className="text-2xl font-semibold text-foreground">Bounty Program</p>
                 <p className="text-sm text-muted-foreground">

@@ -52,17 +52,12 @@ export async function POST(request: NextRequest) {
     console.log('🔑 Using API key (first 8 chars):', body.apiKey.slice(0, 8))
 
     // Initialize SDK with provided API key
-    const inbound = new Inbound({ 
-      apiKey: body.apiKey,
-      baseUrl: process.env.NODE_ENV === 'development' 
-        ? 'http://localhost:3000/api/v2' 
-        : 'https://inbound.new/api/v2'
-    })
+    const inbound = new Inbound(body.apiKey)
     
     console.log('🔧 SDK configured with baseURL:', process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'https://inbound.new')
 
     // Send email using SDK
-    const { id } = await inbound.emails.send({
+    const { data: response, error: errorResponse } = await inbound.emails.send({
       from: 'Inbound Agent <agent@inbnd.dev>',
       to: body.to,
       subject: 'Welcome to Inbound - Reply to Complete Onboarding!',
@@ -70,7 +65,16 @@ export async function POST(request: NextRequest) {
       html: '<p>Thanks for signing up!</p><p><strong>Please reply to this email with your favorite email client.</strong></p>'
     })
 
-    console.log('✅ Demo email sent successfully:', id)
+    if (errorResponse) {
+      console.error('❌ Demo email error:', errorResponse)
+      return NextResponse.json(
+        { error: errorResponse },
+        { status: 500 }
+      )
+    }
+
+    console.log('✅ Demo email sent successfully:', response?.id)
+    console.log('📧 Message ID:', response?.id)
 
     // Get the messageId from the sent email record for proper reply matching
     console.log('🔍 Fetching messageId from sent email record...')
@@ -82,7 +86,7 @@ export async function POST(request: NextRequest) {
     const sentEmailRecord = await db
       .select({ messageId: sentEmails.messageId })
       .from(sentEmails)
-      .where(eq(sentEmails.id, id))
+      .where(eq(sentEmails.id, response?.id!))
       .limit(1)
 
     if (sentEmailRecord.length > 0 && sentEmailRecord[0].messageId) {
@@ -97,14 +101,14 @@ export async function POST(request: NextRequest) {
     await db.insert(onboardingDemoEmails).values({
       id: demoEmailId,
       userId,
-      emailId: id,
+      emailId: response?.id!,
       messageId,
       recipientEmail: body.to,
       sentAt: new Date()
     })
 
     console.log('📝 Tracked demo email for reply matching:', { demoEmailId, messageId })
-    return NextResponse.json({ id }, { status: 200 })
+    return NextResponse.json({ id: response?.id }, { status: 200 })
 
   } catch (error) {
     console.error('❌ Demo email error:', error)

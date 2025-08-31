@@ -6,13 +6,13 @@ import {
 } from "@/components/autumn/pricing-table";
 import Loader from "@/components/icons/loader";
 
-import { useAutumn, usePricingTable } from "autumn-js/react";
+import { useAutumn, useCustomer, usePricingTable } from "autumn-js/react";
 import ProductChangeDialog from "./product-change-dialog";
 
 export const PricingTable = () => {
   const { attach } = useAutumn();
   const { products, isLoading, error } = usePricingTable();
-
+  const { customer } = useCustomer();
   // only allow the scale, pro, and free_tier product ids
   const allowedProductIds = ["scale", "pro", "free_tier"];
   const filteredProducts = products?.filter((product) => allowedProductIds.includes(product.id));
@@ -42,6 +42,9 @@ export const PricingTable = () => {
                   await attach({
                     productId: product.id,
                     successUrl: `${process.env.NEXT_PUBLIC_BETTER_AUTH_URL}/settings?upgrade=true&product=${product.id}`,
+                    metadata: {
+                      dubCustomerId: customer?.id || "",
+                    },
                     dialog: ProductChangeDialog,
                   });
                 },

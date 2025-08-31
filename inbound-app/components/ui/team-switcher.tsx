@@ -2,6 +2,7 @@
 import * as React from "react"
 import DoubleChevronDown from "@/components/icons/double-chevron-down"
 import CirclePlus from "@/components/icons/circle-plus"
+import { DotLottiePlayer, Controls } from "@dotlottie/react-player"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +18,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import InboundIcon from "../icons/inbound"
 export function TeamSwitcher({
   teams,
   enabled,
@@ -32,6 +32,19 @@ export function TeamSwitcher({
 }) {
   const { isMobile } = useSidebar()
   const [activeTeam, setActiveTeam] = React.useState(teams[0])
+  const playerRef = React.useRef<any>(null)
+  const toggleTheme = React.useCallback(() => {
+    if (typeof document === "undefined") return
+    const root = document.documentElement
+    const isDark = root.classList.contains("dark")
+    if (isDark) {
+      root.classList.remove("dark")
+      try { localStorage.setItem("theme", "light") } catch {}
+    } else {
+      root.classList.add("dark")
+      try { localStorage.setItem("theme", "dark") } catch {}
+    }
+  }, [])
   if (!activeTeam) {
     return null
   }
@@ -41,10 +54,29 @@ export function TeamSwitcher({
       <SidebarMenu>
         <SidebarMenuItem>
           <div className="flex items-center justify-center gap-2 w-full mx-auto">
-            {/* <InboundIcon className="h-8 w-8 group-data-[collapsible=icon]:h-6 group-data-[collapsible=icon]:w-6" variant="white" /> */}
-            <InboundIcon variant="white" width={32} height={32} />
+            <button
+              type="button"
+              aria-label="Play inbound animation"
+              className="h-12 w-12 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              onClick={() => {
+                const p = playerRef.current
+                if (!p) return
+                try { p.seek?.(0) } catch {}
+                p.play?.()
+                toggleTheme()
+              }}
+            >
+              <DotLottiePlayer
+                ref={playerRef}
+                src="/inbound.lottie"
+                style={{ width: 48, height: 48 }}
+                autoplay={true}
+                loop={false}
+                className="pointer-events-none"
+              />
+            </button>
             <div className="text-left text-xl leading-tight group-data-[collapsible=icon]:hidden">
-              <span className="truncate font-semibold font-outfit text-3xl">
+              <span className="truncate font-semibold text-3xl -ml-2" style={{ fontFamily: 'Outfit' }}>
                 inbound
               </span>
             </div>

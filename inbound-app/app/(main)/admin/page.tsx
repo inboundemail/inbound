@@ -48,6 +48,7 @@ import Trash2 from "@/components/icons/trash-2"
 import CircleUser from "@/components/icons/circle-user"
 import UserGroup from "@/components/icons/user-group"
 import Crown from "@/components/icons/crown"
+import { ApiIdLabel } from '@/components/api-id-label'
 import { getAllDomainsForAdmin, getDomainEmailAddressesForAdmin } from "@/app/actions/primary"
 import { addFeatureFlag, removeFeatureFlag, getUserFeatureFlags } from "@/app/actions/feature-flags"
 
@@ -891,6 +892,7 @@ export default function AdminPage() {
                               <Globe2 className="h-4 w-4" />
                               <div>
                                 <div className="font-medium">{domain.domain}</div>
+                                <ApiIdLabel id={domain.id} size="sm" />
                                 {domain.isCatchAllEnabled && (
                                   <div className="text-xs text-blue-600">Catch-all enabled</div>
                                 )}

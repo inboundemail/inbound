@@ -427,7 +427,7 @@ await client.domains.setCatchAll({
       <footer className="border-t border-gray-100 px-6 py-8">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between">
           <div className="flex items-center gap-2 mb-4 md:mb-0">
-            <InboundIcon variant="primary" width={24} height={24} />
+            <InboundIcon width={24} height={24} />
             <span className="text-lg font-bold text-gray-900">inbound</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-gray-500">

@@ -9,7 +9,7 @@ import { Inbound } from '@inboundemail/sdk'
 
 // Initialize Resend client
 const resend = new Resend(process.env.RESEND_API_KEY)
-const inbound = new Inbound({ apiKey: process.env.INBOUND_API_KEY! })
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
 
 export interface FeedbackData {
   feedback: string

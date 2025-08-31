@@ -12,5 +12,10 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@dub/analytics": "^0.0.30",
+    "@dub/better-auth": "^0.0.4",
+    "dub": "^0.66.1"
   }
 }

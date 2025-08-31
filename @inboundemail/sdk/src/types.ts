@@ -230,6 +230,7 @@ export interface DomainWithStats {
   lastSesCheck: Date | null
   isCatchAllEnabled: boolean
   catchAllEndpointId: string | null
+  receiveDmarcEmails: boolean
   createdAt: Date
   updatedAt: Date
   userId: string

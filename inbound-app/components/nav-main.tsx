@@ -24,20 +24,6 @@ export function NavMain({
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-2">
         <SidebarMenu>
-          <SidebarMenuItem className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              className="w-full"
-              asChild
-            >
-              <a href="/add" className="flex items-center gap-2">
-                <EnvelopePlus className="h-4 w-4" />
-                <span className="group-data-[collapsible=icon]:hidden">new inbound</span>
-              </a>
-            </Button>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        <SidebarMenu>
           {items.map((item) => {
             const isActive = isNavigationItemActive(item.url, currentPath)
             return (
@@ -46,10 +32,10 @@ export function NavMain({
                   <SidebarMenuButton 
                     tooltip={item.title} 
                     isActive={true}
-                    className="cursor-default"
+                    className="cursor-default opacity-80"
                   >
                     {item.icon && <item.icon className="h-4 w-4" />}
-                    <span>{item.title}</span>
+                    <span className="opacity-80">{item.title}</span>
                   </SidebarMenuButton>
                 ) : (
                   <SidebarMenuButton 
@@ -58,8 +44,12 @@ export function NavMain({
                     isActive={false}
                   >
                     <OptimizedLink href={item.url}>
-                      {item.icon && <item.icon className={`h-4 w-4 ${item.customTailwind}`} />}
-                      <span className={item.customTailwind}>{item.title}</span>
+                      {item.icon && (
+                        <item.icon
+                          className={`h-4 w-4 ${item.title === 'Inbound VIP' ? 'opacity-80' : 'opacity-50'} text-black dark:text-white`}
+                        />
+                      )}
+                      <span className={`${item.title === 'Inbound VIP' ? 'opacity-80' : 'opacity-50'} text-black dark:text-white`}>{item.title}</span>
                     </OptimizedLink>
                   </SidebarMenuButton>
                 )}

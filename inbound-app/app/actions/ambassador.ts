@@ -3,7 +3,7 @@
 import { Inbound } from '@inboundemail/sdk'
 
 // Initialize Inbound client
-const inbound = new Inbound({ apiKey: process.env.INBOUND_API_KEY! })
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
 
 export interface AmbassadorApplicationData {
   name: string
@@ -105,25 +105,33 @@ Submitted: ${new Date().toLocaleDateString('en-US', {
     `.trim()
 
     // Send the email using Inbound
-    const response = await inbound.emails.send({
+    const { data: response, error: errorResponse } = await inbound.emails.send({
       from: 'New Ambassador Application <notifications@inbound.new>',
       to: 'ryan@mandarin3d.com',
-      reply_to: data.email.trim(),
+      replyTo: data.email.trim(),
       subject: `🎯 New Ambassador Application from ${data.name.trim()} - Inbound`,
       text: plainTextContent,
     })
 
+    if (errorResponse) {
+      console.error('❌ submitAmbassadorApplication - Inbound API error:', errorResponse)
+      return {
+        success: false,
+        error: `Email sending failed: ${errorResponse}`
+      }
+    }
+
     // Check if the response indicates success
-    if (!response.id) {
+    if (!response?.id) {
       console.error('❌ submitAmbassadorApplication - Inbound API error:', response)
       return {
         success: false,
-        error: `Email sending failed: ${response.id || 'Unknown error'}`
+        error: `Email sending failed: ${response?.id || 'Unknown error'}`
       }
     }
 
     console.log(`✅ submitAmbassadorApplication - Ambassador application sent successfully from ${data.email}`)
-    console.log(`   📧 Message ID: ${response.id}`)
+    console.log(`   📧 Message ID: ${response?.id}`)
 
     return {
       success: true,

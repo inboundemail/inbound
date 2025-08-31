@@ -517,7 +517,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                     <Label>Webhook Format</Label>
                     <div className="grid gap-3">
                       {Object.entries(WEBHOOK_FORMAT_CONFIGS).map(([format, config]) => {
-                        const isDisabled = format === 'slack'
+                        const isDisabled = false
                         return (
                         <div
                           key={format}
@@ -528,7 +528,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                                 ? 'border-primary bg-primary/5 ring-1 ring-primary cursor-pointer'
                                 : 'border-border hover:border-border/80 cursor-pointer'
                           }`}
-                          onClick={() => !isDisabled && setWebhookFormat(format as WebhookFormat)}
+                          onClick={() => setWebhookFormat(format as WebhookFormat)}
                         >
                           <div className="flex items-start gap-3">
                             <div className={`mt-0.5 h-4 w-4 rounded-full border-2 transition-colors ${
@@ -552,7 +552,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                               )}
                               {format === 'slack' && (
                                 <div className="mt-2 text-xs text-muted-foreground">
-                                  Coming soon - Slack-compatible format
+                                  Slack-compatible format with attachments
                                 </div>
                               )}
                             </div>

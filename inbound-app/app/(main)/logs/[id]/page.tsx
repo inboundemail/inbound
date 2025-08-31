@@ -29,7 +29,7 @@ import type { GetEmailByIdResponse } from '@/app/api/v2/emails/[id]/route'
 
 // Import the attachment list component
 import { AttachmentList } from '@/components/logs/attachment-list'
-import { CopyEmailId } from '@/components/logs/copy-email-id'
+import { CodeBlock } from '@/components/ui/code-block'
 
 export default async function LogDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -319,7 +319,7 @@ export default async function LogDetailPage({ params }: { params: Promise<{ id: 
               Back to Logs
             </Button>
           </Link>
-          <Badge className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${isInbound ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'}`}>
+          <Badge variant={isInbound ? "secondary" : "default"} className="px-2.5 py-0.5">
             {isInbound ? 'Inbound' : 'Outbound'}
           </Badge>
         </div>
@@ -424,7 +424,11 @@ export default async function LogDetailPage({ params }: { params: Promise<{ id: 
                           {delivery.responseData && (
                             <div className="mt-3">
                               <div className="text-muted-foreground text-xs mb-1">Response Data:</div>
-                              <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">{JSON.stringify(delivery.responseData, null, 2)}</pre>
+                              <CodeBlock
+                                code={JSON.stringify(delivery.responseData, null, 2)}
+                                size="sm"
+                                variant="default"
+                              />
                             </div>
                           )}
                         </div>
@@ -443,15 +447,19 @@ export default async function LogDetailPage({ params }: { params: Promise<{ id: 
                 <div className="space-y-4 text-sm">
                   {/* Email ID - prominently displayed at the top */}
                   <div className="pb-2 border-b border-border space-y-3">
-                    <CopyEmailId 
-                      emailId={id} 
-                      label={isInbound ? "Inbound Email ID" : "Outbound Email ID"}
-                    />
+                    <div>
+                      <span className="text-muted-foreground">{isInbound ? "Inbound Email ID" : "Outbound Email ID"}:</span>
+                      <div className="mt-1">
+                        <CodeBlock code={id} size="lg" />
+                      </div>
+                    </div>
                     {((isInbound && inboundDetails?.messageId) || (outboundDetails && 'id' in outboundDetails)) && (
-                      <CopyEmailId 
-                        emailId={isInbound ? inboundDetails?.messageId || '' : outboundDetails?.id || ''} 
-                        label="Message ID"
-                      />
+                      <div>
+                        <span className="text-muted-foreground">Message ID:</span>
+                        <div className="mt-1">
+                          <CodeBlock code={isInbound ? inboundDetails?.messageId || '' : outboundDetails?.id || ''} size="lg" />
+                        </div>
+                      </div>
                     )}
                   </div>
                   

@@ -32,6 +32,13 @@ export async function routeEmail(emailId: string): Promise<void> {
     if (!emailData.recipient) {
       throw new Error('Email recipient not found')
     }
+
+    // Check if this is a DMARC email and handle according to domain settings
+    const isDmarcEmail = await checkIfDmarcEmail(emailData.recipient, emailData.userId)
+    if (isDmarcEmail) {
+      console.log(`📊 routeEmail - DMARC email detected for ${emailData.recipient}, checking domain settings`)
+      return // Email is stored but not routed based on domain configuration
+    }
     
     // Pass userId to findEndpointForEmail to ensure proper filtering
     const endpoint = await findEndpointForEmail(emailData.recipient, emailData.userId)
@@ -571,5 +578,58 @@ async function trackEndpointDelivery(
   } catch (error) {
     console.error('❌ trackEndpointDelivery - Error tracking delivery:', error)
     // Don't throw here as this is just tracking
+  }
+}
+
+/**
+ * Check if this is a DMARC email and whether it should be routed based on domain settings
+ * Returns true if it's a DMARC email AND routing should be skipped (receiveDmarcEmails = false)
+ */
+async function checkIfDmarcEmail(recipient: string, userId: string): Promise<boolean> {
+  try {
+    // Check if the recipient is a DMARC email (dmarc@domain)
+    if (!recipient.toLowerCase().startsWith('dmarc@')) {
+      return false // Not a DMARC email, proceed with normal routing
+    }
+
+    // Extract the domain from the recipient
+    const domain = recipient.split('@')[1]
+    if (!domain) {
+      console.warn(`⚠️ checkIfDmarcEmail - Invalid email format: ${recipient}`)
+      return false // Invalid format, proceed with normal routing
+    }
+
+    console.log(`🔍 checkIfDmarcEmail - Checking DMARC settings for domain: ${domain}`)
+
+    // Look up the domain in the emailDomains table
+    const domainRecord = await db
+      .select({
+        receiveDmarcEmails: emailDomains.receiveDmarcEmails
+      })
+      .from(emailDomains)
+      .where(and(
+        eq(emailDomains.domain, domain),
+        eq(emailDomains.userId, userId)
+      ))
+      .limit(1)
+
+    if (!domainRecord[0]) {
+      console.warn(`⚠️ checkIfDmarcEmail - Domain ${domain} not found in user's domains, proceeding with normal routing`)
+      return false // Domain not found, proceed with normal routing
+    }
+
+    const shouldReceiveDmarcEmails = domainRecord[0].receiveDmarcEmails || false
+
+    if (!shouldReceiveDmarcEmails) {
+      console.log(`🚫 checkIfDmarcEmail - DMARC emails disabled for domain ${domain}, skipping routing`)
+      return true // Skip routing - email will be stored but not forwarded
+    } else {
+      console.log(`✅ checkIfDmarcEmail - DMARC emails enabled for domain ${domain}, proceeding with normal routing`)
+      return false // Proceed with normal routing
+    }
+
+  } catch (error) {
+    console.error(`❌ checkIfDmarcEmail - Error checking DMARC settings:`, error)
+    return false // On error, proceed with normal routing to be safe
   }
 } 

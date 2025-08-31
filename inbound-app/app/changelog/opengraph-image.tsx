@@ -100,7 +100,7 @@ export default async function Image() {
               alignItems: 'center',
             }}
           >
-            <InboundIcon variant="white" width={39} height={39} />
+            <InboundIcon width={39} height={39} />
             inbound
           </div>
         </div>

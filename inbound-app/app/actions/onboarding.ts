@@ -95,7 +95,7 @@ export async function getOnboardingStatus(userId?: string) {
     const [onboarding] = await db
       .select()
       .from(userOnboarding)
-      .where(eq(userOnboarding.userId, targetUserId))
+      .where(eq(userOnboarding.userId, targetUserId!))
       .limit(1)
 
     if (!onboarding) {
