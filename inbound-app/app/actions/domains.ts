@@ -1127,3 +1127,63 @@ export async function upgradeDomainWithMailFrom(domainId: string) {
     }
   }
 }
+
+export async function updateDomainDmarcSettings(domainId: string, receiveDmarcEmails: boolean) {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers()
+    })
+
+    if (!session?.user) {
+      return { success: false, error: 'Unauthorized' }
+    }
+
+    const userId = session.user.id
+
+    console.log(`🔧 updateDomainDmarcSettings - Updating DMARC settings for domain ${domainId}: receiveDmarcEmails=${receiveDmarcEmails}`)
+
+    // Verify domain ownership
+    const domainRecord = await db
+      .select()
+      .from(emailDomains)
+      .where(and(eq(emailDomains.id, domainId), eq(emailDomains.userId, userId)))
+      .limit(1)
+
+    if (!domainRecord[0]) {
+      console.log(`❌ updateDomainDmarcSettings - Domain not found: ${domainId}`)
+      return {
+        success: false,
+        error: 'Domain not found or access denied'
+      }
+    }
+
+    // Update the domain's DMARC email settings
+    await db
+      .update(emailDomains)
+      .set({
+        receiveDmarcEmails,
+        updatedAt: new Date()
+      })
+      .where(eq(emailDomains.id, domainId))
+
+    console.log(`✅ updateDomainDmarcSettings - Successfully updated DMARC settings for domain ${domainId}`)
+
+    // Revalidate pages that might show this setting
+    revalidatePath('/domains')
+    revalidatePath(`/domains/${domainId}`)
+
+    return {
+      success: true,
+      domainId,
+      receiveDmarcEmails,
+      message: `DMARC email delivery ${receiveDmarcEmails ? 'enabled' : 'disabled'} successfully`
+    }
+
+  } catch (error) {
+    console.error(`❌ updateDomainDmarcSettings - Error updating DMARC settings for domain ${domainId}:`, error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update DMARC settings'
+    }
+  }
+}

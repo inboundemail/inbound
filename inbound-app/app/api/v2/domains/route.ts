@@ -61,6 +61,7 @@ export interface DomainWithStats {
     mailFromDomain: string | null
     mailFromDomainStatus: string | null
     mailFromDomainVerifiedAt: Date | null
+    receiveDmarcEmails: boolean
     createdAt: Date
     updatedAt: Date
     userId: string
@@ -193,6 +194,7 @@ export async function GET(request: NextRequest) {
                 mailFromDomain: emailDomains.mailFromDomain,
                 mailFromDomainStatus: emailDomains.mailFromDomainStatus,
                 mailFromDomainVerifiedAt: emailDomains.mailFromDomainVerifiedAt,
+                receiveDmarcEmails: emailDomains.receiveDmarcEmails,
                 createdAt: emailDomains.createdAt,
                 updatedAt: emailDomains.updatedAt,
                 userId: emailDomains.userId

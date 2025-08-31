@@ -427,8 +427,6 @@ export default function EndpointsPage() {
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="text-sm font-medium text-foreground truncate">{endpoint.name}</span>
                             {getStatusBadge(endpoint)}
-                            <ChatBubble2 width="14" height="14" className="opacity-70" />
-                            <ChatBubble2 width="14" height="14" className="opacity-40" />
                           </div>
                         </div>
                       </div>

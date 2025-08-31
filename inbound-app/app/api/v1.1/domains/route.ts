@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
         catchAllEndpointId: emailDomains.catchAllEndpointId,
         verificationToken: emailDomains.verificationToken,
         domainProvider: emailDomains.domainProvider,
+        receiveDmarcEmails: emailDomains.receiveDmarcEmails,
         createdAt: emailDomains.createdAt,
         updatedAt: emailDomains.updatedAt
       })

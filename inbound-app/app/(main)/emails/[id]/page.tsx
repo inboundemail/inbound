@@ -84,6 +84,7 @@ import type {
     GetEmailAddressesResponse,
     EmailAddressWithDomain
 } from '@/app/api/v2/email-addresses/route'
+import { updateDomainDmarcSettings } from '@/app/actions/domains'
 
 export default function DomainDetailPage() {
     const { data: session } = useSession()
@@ -546,6 +547,25 @@ export default function DomainDetailPage() {
             }
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to toggle catch-all')
+        }
+    }
+
+    const toggleDmarcEmails = async () => {
+        if (!domainDetailsData) return
+
+        try {
+            const newValue = !domainDetailsData.receiveDmarcEmails
+            const result = await updateDomainDmarcSettings(domainId, newValue)
+            
+            if (result.success) {
+                toast.success(result.message || 'DMARC email settings updated successfully')
+                // Refresh domain details to get updated data
+                refetchDomainDetails()
+            } else {
+                toast.error(result.error || 'Failed to update DMARC settings')
+            }
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to update DMARC settings')
         }
     }
 
@@ -1316,6 +1336,32 @@ export default function DomainDetailPage() {
                                     </div>
                                 </>
                             )}
+                        </div>
+                    </div>
+                )}
+
+                {/* DMARC Configuration - Only show for verified domains */}
+                {showEmailSection && (
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between border border-border rounded-xl p-4">
+                            <div>
+                                <div className="font-medium text-foreground">DMARC Email Delivery</div>
+                                <div className="text-sm text-muted-foreground">
+                                    {domainDetailsData?.receiveDmarcEmails
+                                        ? 'DMARC reports (dmarc@' + domain + ') will be processed and routed like normal emails'
+                                        : 'DMARC reports (dmarc@' + domain + ') will be stored but not delivered to endpoints'
+                                    }
+                                </div>
+                            </div>
+                            <div className="w-full sm:w-auto sm:min-w-[140px]">
+                                <Button
+                                    variant={domainDetailsData?.receiveDmarcEmails ? "destructive" : "secondary"}
+                                    className="h-10 w-full sm:w-auto"
+                                    onClick={toggleDmarcEmails}
+                                >
+                                    {domainDetailsData?.receiveDmarcEmails ? 'Disable Routing' : 'Enable Routing'}
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 )}
