@@ -33,6 +33,14 @@ export function TestEndpointDialog({ open, onOpenChange, endpoint }: TestEndpoin
   const [selectedWebhookFormat, setSelectedWebhookFormat] = useState<WebhookFormat>('inbound')
   const testEndpointMutation = useTestEndpointMutation()
 
+  // Default the webhook test format to the endpoint's configured format when endpoint changes
+  useEffect(() => {
+    if (endpoint?.type === 'webhook') {
+      const configured = (endpoint.webhookFormat as WebhookFormat) || 'inbound'
+      setSelectedWebhookFormat(configured)
+    }
+  }, [endpoint])
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
