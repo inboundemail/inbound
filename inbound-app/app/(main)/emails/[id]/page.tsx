@@ -554,7 +554,7 @@ export default function DomainDetailPage() {
         if (!domainDetailsData) return
 
         try {
-            const newValue = !domainDetailsData.receiveDmarcEmails
+            const newValue = !domainWithMailFrom.receiveDmarcEmails
             const result = await updateDomainDmarcSettings(domainId, newValue)
             
             if (result.success) {
@@ -638,6 +638,7 @@ export default function DomainDetailPage() {
         mailFromDomain?: string | null
         mailFromDomainStatus?: string | null
         mailFromDomainVerifiedAt?: Date | null
+        receiveDmarcEmails?: boolean
     }
 
     // Helper functions for endpoint icons and colors
@@ -802,11 +803,11 @@ export default function DomainDetailPage() {
                 </div>
 
                 {/* Success banner when all DNS records are verified */}
-                {status === DOMAIN_STATUS.VERIFIED && authRecommendationsData?.verificationCheck?.dnsRecords && authRecommendationsData.verificationCheck.dnsRecords.length > 0 && authRecommendationsData.verificationCheck.dnsRecords.every((r: any) => r.isVerified) && (
+                {/* {status === DOMAIN_STATUS.VERIFIED && authRecommendationsData?.verificationCheck?.dnsRecords && authRecommendationsData.verificationCheck.dnsRecords.length > 0 && authRecommendationsData.verificationCheck.dnsRecords.every((r: any) => r.isVerified) && (
                     <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-primary">
                         Well done! All the DNS records are verified. You are ready to start building and sending emails with this domain.
                     </div>
-                )}
+                )} */}
 
                 {/* Show AddDomainForm for pending domains */}
                 {status === DOMAIN_STATUS.PENDING && (
@@ -1347,7 +1348,7 @@ export default function DomainDetailPage() {
                             <div>
                                 <div className="font-medium text-foreground">DMARC Email Delivery</div>
                                 <div className="text-sm text-muted-foreground">
-                                    {domainDetailsData?.receiveDmarcEmails
+                                    {domainWithMailFrom?.receiveDmarcEmails
                                         ? 'DMARC reports (dmarc@' + domain + ') will be processed and routed like normal emails'
                                         : 'DMARC reports (dmarc@' + domain + ') will be stored but not delivered to endpoints'
                                     }
@@ -1355,11 +1356,11 @@ export default function DomainDetailPage() {
                             </div>
                             <div className="w-full sm:w-auto sm:min-w-[140px]">
                                 <Button
-                                    variant={domainDetailsData?.receiveDmarcEmails ? "destructive" : "secondary"}
+                                    variant={domainWithMailFrom?.receiveDmarcEmails ? "destructive" : "secondary"}
                                     className="h-10 w-full sm:w-auto"
                                     onClick={toggleDmarcEmails}
                                 >
-                                    {domainDetailsData?.receiveDmarcEmails ? 'Disable Routing' : 'Enable Routing'}
+                                    {domainWithMailFrom?.receiveDmarcEmails ? 'Disable Routing' : 'Enable Routing'}
                                 </Button>
                             </div>
                         </div>
