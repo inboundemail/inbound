@@ -85,6 +85,7 @@ import type {
     EmailAddressWithDomain
 } from '@/app/api/v2/email-addresses/route'
 import { updateDomainDmarcSettings } from '@/app/actions/domains'
+import { ApiIdLabel } from '@/components/api-id-label'
 
 export default function DomainDetailPage() {
     const { data: session } = useSession()
@@ -700,6 +701,7 @@ export default function DomainDetailPage() {
                         </div>
                         <div>
                             <h1 className="text-xl font-semibold mb-1">{domain}</h1>
+                            <ApiIdLabel id={domainId} size="sm" className="mb-2" />
                             <div className="text-sm text-muted-foreground">
                                 {status === DOMAIN_STATUS.PENDING && "Add DNS records to complete verification"}
                                 {status === DOMAIN_STATUS.VERIFIED && "Domain verified - manage email addresses below"}

@@ -21,6 +21,7 @@ import Magnifier2 from '@/components/icons/magnifier-2'
 import Filter2 from '@/components/icons/filter-2'
 
 import type { DomainWithStats } from '@/app/api/v2/domains/route'
+import { ApiIdLabel } from '@/components/api-id-label'
 
 export default function EmailsPage() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -223,6 +224,8 @@ export default function EmailsPage() {
                       {getDomainStatusText(domain)}
                     </Badge>
                   </div>
+                  
+                  <ApiIdLabel id={domain.id} size="sm" />
 
                   <div className="flex items-center gap-2">
                     <Envelope2 width="14" height="12" className="text-muted-foreground -mr-[4px]" />

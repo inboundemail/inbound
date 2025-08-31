@@ -29,6 +29,7 @@ import Ban2 from '@/components/icons/ban-2'
 // import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { Endpoint } from '@/features/endpoints/types'
+import { ApiIdLabel } from '@/components/api-id-label'
 
 type FilterType = 'all' | 'webhook' | 'email' | 'email_group'
 type FilterStatus = 'all' | 'active' | 'disabled'
@@ -263,7 +264,7 @@ export default function EndpointsPage() {
             <div className="flex items-center gap-2">
               <Button
                 variant="secondary"
-                size="sm"
+                size="default"
                 onClick={() => refetch()}
                 disabled={isLoading}
                 className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
@@ -271,7 +272,7 @@ export default function EndpointsPage() {
                 <Refresh2 width="12" height="12" className="mr-1" />
                 Refresh
               </Button>
-              <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+              <Button size="default" onClick={() => setCreateDialogOpen(true)}>
                 <CirclePlus width="12" height="12" className="mr-1" />
                 Add Endpoint
               </Button>
@@ -455,6 +456,7 @@ export default function EndpointsPage() {
                           <span className="text-sm font-medium">{endpoint.name}</span>
                           {getStatusBadge(endpoint)}
                         </div>
+                        <ApiIdLabel id={endpoint.id} size="sm" />
                         <div className="flex items-center gap-2">
                           <span className="text-xs opacity-60">{configSummary || (endpoint.type === 'email_group' ? 'Email group' : endpoint.type.charAt(0).toUpperCase() + endpoint.type.slice(1))}</span>
                         </div>

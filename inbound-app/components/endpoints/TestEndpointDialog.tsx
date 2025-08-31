@@ -297,7 +297,7 @@ export function TestEndpointDialog({ open, onOpenChange, endpoint }: TestEndpoin
             </div>
           )}
 
-          <div className="bg-muted rounded-lg p-3">
+          {/* <div className="bg-muted rounded-lg p-3">
             <div className="flex items-center gap-2 mb-2">
               <CirclePlay width="16" height="16" className="text-muted-foreground" />
               <h4 className="text-sm font-medium text-foreground">Test Information</h4>
@@ -318,7 +318,7 @@ export function TestEndpointDialog({ open, onOpenChange, endpoint }: TestEndpoin
                 <p>• For email forwards, we'll validate the configuration without sending actual emails</p>
               )}
             </div>
-          </div>
+          </div> */}
         </div>
 
         <DialogFooter className="flex items-center justify-between">
