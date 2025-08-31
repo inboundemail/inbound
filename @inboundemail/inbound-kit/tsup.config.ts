@@ -3,7 +3,7 @@ import { defineConfig } from 'tsup'
 export default defineConfig({
   entry: ['src/index.ts', 'src/cli.ts'],
   format: ['cjs', 'esm'],
-  dts: true,
+  dts: false, // Temporarily disable for testing
   splitting: false,
   sourcemap: true,
   clean: true,
@@ -11,7 +11,5 @@ export default defineConfig({
   target: 'es2020',
   outDir: 'dist',
   shims: true, // Add shims for __dirname, __filename
-  banner: {
-    js: '#!/usr/bin/env node', // Add shebang for CLI
-  },
+  // Don't add banner globally - it breaks CJS modules
 })

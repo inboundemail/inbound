@@ -67,10 +67,10 @@ export async function validateAuth(auth: AuthConfig): Promise<boolean> {
     const client = new Inbound(auth.apiKey, auth.baseUrl)
     
     // Try to list domains as a simple auth check
-    const { error } = await client.domain.list({ limit: 1 })
+    const result = await client.domains.list({ limit: 1 })
     
-    if (error) {
-      console.error(chalk.red('❌ Authentication failed:'), error)
+    if (result.error) {
+      console.error(chalk.red('❌ Authentication failed:'), result.error)
       return false
     }
     

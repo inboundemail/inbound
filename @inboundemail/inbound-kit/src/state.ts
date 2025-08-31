@@ -25,9 +25,9 @@ export async function fetchCurrentState(client: Inbound): Promise<InboundState> 
   try {
     // Fetch all resources in parallel
     const [domainsResult, emailAddressesResult, endpointsResult] = await Promise.all([
-      client.domain.list({ limit: 100 }),
-      client.email.address.list({ limit: 100 }),
-      client.endpoint.list({ limit: 100 })
+      client.domains.list({ limit: 100 }),
+      client.emailAddresses.list({ limit: 100 }),
+      client.endpoints.list({ limit: 100 })
     ])
 
     // Handle API errors
@@ -259,7 +259,7 @@ async function applyEmailAddressChange(client: Inbound, change: Change, currentS
     }
 
     // Create email address
-    const result = await client.email.address.create({
+    const result = await client.emailAddresses.create({
       address: emailAddress,
       domainId: domainState.id,
       endpointId: endpointId,
@@ -276,7 +276,7 @@ async function applyEmailAddressChange(client: Inbound, change: Change, currentS
     
     const endpointId = await findOrCreateEndpoint(client, change.desired.endpoint, currentState)
     
-    const result = await client.email.address.update(change.current.id, {
+    const result = await client.emailAddresses.update(change.current.id, {
       endpointId: endpointId,
       isActive: true
     })
@@ -289,7 +289,7 @@ async function applyEmailAddressChange(client: Inbound, change: Change, currentS
   } else if (change.type === 'delete') {
     console.log(chalk.yellow(`📧 Deleting email address: ${emailAddress}`))
     
-    const result = await client.email.address.delete(change.current.id)
+    const result = await client.emailAddresses.delete(change.current.id)
 
     if (result.error) {
       throw new Error(`Failed to delete email address: ${result.error}`)
@@ -324,7 +324,7 @@ async function applyDomainChange(client: Inbound, change: Change, currentState: 
       catchAllEndpointId = await findOrCreateEndpoint(client, change.desired.catchAll, currentState)
     }
 
-    const result = await client.domain.update(domainState.id, {
+    const result = await client.domains.update(domainState.id, {
       isCatchAllEnabled: catchAllEnabled,
       catchAllEndpointId: catchAllEndpointId
     })
@@ -354,7 +354,7 @@ async function findOrCreateEndpoint(client: Inbound, endpointConfig: EndpointCon
   const endpointName = generateEndpointName(endpointConfig)
   const apiConfig = convertToApiEndpointConfig(endpointConfig)
 
-  const result = await client.endpoint.create({
+  const result = await client.endpoints.create({
     name: endpointName,
     type: apiConfig.type as any,
     config: apiConfig.config
