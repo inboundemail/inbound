@@ -14,11 +14,4 @@ export default defineConfig({
   banner: {
     js: '#!/usr/bin/env node', // Add shebang for CLI
   },
-  esbuildOptions(options) {
-    if (options.entryPoints?.includes('src/cli.ts')) {
-      options.banner = {
-        js: '#!/usr/bin/env node'
-      }
-    }
-  }
 })
