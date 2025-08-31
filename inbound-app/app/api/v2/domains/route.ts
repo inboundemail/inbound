@@ -266,6 +266,7 @@ export async function GET(request: NextRequest) {
                     canReceiveEmails: domain.canReceiveEmails || false,
                     hasMxRecords: domain.hasMxRecords || false,
                     isCatchAllEnabled: domain.isCatchAllEnabled || false,
+                    receiveDmarcEmails: domain.receiveDmarcEmails || false,
                     createdAt: domain.createdAt || new Date(),
                     updatedAt: domain.updatedAt || new Date(),
                     stats: {

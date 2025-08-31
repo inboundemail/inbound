@@ -162,6 +162,7 @@ export async function listDomains(
       mailFromDomainStatus: emailDomains.mailFromDomainStatus,
       mailFromDomainVerifiedAt: emailDomains.mailFromDomainVerifiedAt,
       isCatchAllEnabled: emailDomains.isCatchAllEnabled,
+      receiveDmarcEmails: emailDomains.receiveDmarcEmails,
       createdAt: emailDomains.createdAt,
       updatedAt: emailDomains.updatedAt,
       userId: emailDomains.userId
