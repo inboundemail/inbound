@@ -725,7 +725,7 @@ export default function LogsPage() {
             </div>
             <Button
               variant="outline"
-              size="sm"
+              size="default"
               onClick={() => refetch()}
               disabled={isLoading}
             >

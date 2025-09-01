@@ -1,0 +1,241 @@
+name: Cursor CLI Agent
+
+on:
+  pull_request:
+    paths:
+      # Trigger when API routes are changed
+      - 'inbound-app/app/api/**'
+      # Trigger when SDK is changed
+      - '@inboundemail/sdk/**'
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      api-changed: ${{ steps.filter.outputs.api }}
+      sdk-changed: ${{ steps.filter.outputs.sdk }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Detect Changed Files
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'inbound-app/app/api/**'
+            sdk:
+              - '@inboundemail/sdk/**'
+
+  run-cursor-cli-agent:
+    name: Run Cursor CLI Agent
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.api-changed == 'true' || needs.detect-changes.outputs.sdk-changed == 'true'
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for better context
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: |
+          cd inbound-app
+          bun install
+
+      - name: Install Cursor CLI
+        run: |
+          curl https://cursor.com/install -fsS | bash
+          echo "$HOME/.cursor/bin" >> $GITHUB_PATH
+
+      - name: Setup Git Configuration
+        run: |
+          git config --global user.name "inbound-agent[bot]"
+          git config --global user.email "cursor-agent[bot]@users.noreply.github.com"
+
+      - name: Analyze Changes and Update Documentation
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 Analyzing changes and updating documentation..."
+          
+          # Create a comprehensive prompt for the Cursor agent
+          PROMPT="You are a technical documentation expert. Your task is to:
+
+          1. ANALYZE the changes made in this PR to either the API routes (inbound-app/app/api/**) or the SDK (@inboundemail/sdk/**).
+
+          2. EXAMINE the current documentation in docs.inbound.new/ directory to understand the existing structure.
+
+          3. UPDATE the documentation files in docs.inbound.new/ to reflect any changes, additions, or modifications made to:
+             - API endpoints and their parameters
+             - Request/response schemas  
+             - SDK methods and interfaces
+             - Code examples and usage patterns
+             - Error handling and status codes
+
+          4. ENSURE documentation follows Mintlify format and includes:
+             - Proper MDX frontmatter
+             - Code examples with syntax highlighting
+             - Parameter descriptions using ParamField components
+             - Response examples using ResponseField components
+             - Proper use of callout components (Note, Tip, Warning, Info)
+
+          5. MAINTAIN consistency with existing documentation style and structure.
+
+          6. DO NOT modify any files outside of docs.inbound.new/ directory.
+          7. DO NOT create git commits, branches, or push changes - only modify files in working directory.
+
+          Changed areas detected:
+          - API Changes: ${{ needs.detect-changes.outputs.api-changed == 'true' && 'YES' || 'NO' }}
+          - SDK Changes: ${{ needs.detect-changes.outputs.sdk-changed == 'true' && 'YES' || 'NO' }}
+
+          Please analyze the git diff and update the documentation accordingly."
+
+          # Run Cursor agent with restricted autonomy
+          cursor-agent -p "$PROMPT" --model gpt-5
+
+      - name: Check for Documentation Changes
+        id: docs-changes
+        run: |
+          if git diff --quiet docs.inbound.new/; then
+            echo "changes=false" >> $GITHUB_OUTPUT
+            echo "No documentation changes needed."
+          else
+            echo "changes=true" >> $GITHUB_OUTPUT
+            echo "Documentation changes detected:"
+            git diff --name-only docs.inbound.new/
+          fi
+
+      - name: Create Documentation Update Branch
+        if: steps.docs-changes.outputs.changes == 'true'
+        run: |
+          # Create a new branch for documentation updates
+          DOCS_BRANCH="docs/update-pr-${{ github.event.number }}"
+          git checkout -b "$DOCS_BRANCH"
+          
+          # Add all documentation changes
+          git add docs.inbound.new/
+          
+          # Create commit with detailed message
+          COMMIT_MSG="docs: update documentation for PR #${{ github.event.number }}
+
+          Automated documentation update based on changes to:
+          $(if [[ "${{ needs.detect-changes.outputs.api-changed }}" == "true" ]]; then echo "- API routes"; fi)
+          $(if [[ "${{ needs.detect-changes.outputs.sdk-changed }}" == "true" ]]; then echo "- SDK"; fi)
+
+          Generated by cursor-agent based on PR changes."
+          
+          git commit -m "$COMMIT_MSG"
+          
+          # Push the documentation branch
+          git push origin "$DOCS_BRANCH"
+          
+          echo "docs_branch=$DOCS_BRANCH" >> $GITHUB_ENV
+
+      - name: Create Documentation PR
+        if: steps.docs-changes.outputs.changes == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Install GitHub CLI if not available
+          if ! command -v gh &> /dev/null; then
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt update
+            sudo apt install gh -y
+          fi
+
+          # Create PR for documentation updates
+          gh pr create \
+            --title "📚 Update documentation for PR #${{ github.event.number }}" \
+            --body "## 🤖 Automated Documentation Update
+
+          This PR contains documentation updates generated by the Cursor CLI agent based on changes in PR #${{ github.event.number }}.
+
+          ### Changes Detected
+          - **API Changes**: ${{ needs.detect-changes.outputs.api-changed == 'true' && '✅ Yes' || '❌ No' }}
+          - **SDK Changes**: ${{ needs.detect-changes.outputs.sdk-changed == 'true' && '✅ Yes' || '❌ No' }}
+
+          ### Files Modified
+          \`\`\`
+          $(git diff --name-only origin/main...HEAD docs.inbound.new/)
+          \`\`\`
+
+          ### Review Notes
+          Please review the updated documentation to ensure:
+          - [ ] All new API endpoints are properly documented
+          - [ ] SDK changes are reflected in examples
+          - [ ] Code samples are accurate and tested
+          - [ ] Mintlify components are used correctly
+
+          ---
+          *This PR was automatically created by the cursor-agent workflow.*" \
+            --head "${{ env.docs_branch }}" \
+            --base main \
+            --label "documentation" \
+            --label "automated"
+
+      - name: Comment on Original PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Create comment body based on whether docs were updated
+            const docsChanged = '${{ steps.docs-changes.outputs.changes }}' === 'true';
+            
+            let commentBody = `## 🤖 Cursor CLI Agent Analysis
+
+            This PR triggered the Cursor CLI Agent because it contains changes to:
+            
+            ### Changed Areas
+            - **API Changes**: ${{ needs.detect-changes.outputs.api-changed == 'true' && '✅ Detected' || '❌ None' }}
+            - **SDK Changes**: ${{ needs.detect-changes.outputs.sdk-changed == 'true' && '✅ Detected' || '❌ None' }}
+            `;
+            
+            if (docsChanged) {
+              commentBody += `
+            ### 📚 Documentation Update
+            ✅ The Cursor agent has analyzed your changes and created a documentation update PR.
+            
+            **Next Steps:**
+            1. Review the automatically generated documentation PR
+            2. Merge the documentation PR after verification
+            3. The documentation will be automatically deployed
+            
+            ---
+            *Documentation updates were automatically generated by the cursor-agent workflow.*`;
+            } else {
+              commentBody += `
+            ### 📚 Documentation Status
+            ✅ No documentation updates needed - your changes don't require doc modifications.
+            
+            ---
+            *This analysis was automatically performed by the cursor-agent workflow.*`;
+            }
+            
+            // Post comment on original PR
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: commentBody
+            });

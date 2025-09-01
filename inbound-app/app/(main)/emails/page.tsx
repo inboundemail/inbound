@@ -107,7 +107,7 @@ export default function EmailsPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button size="sm" asChild>
+              <Button size="default" asChild>
                 <Link href="/add">
                   <CirclePlus width="12" height="12" className="mr-1" />
                   Add Domain
@@ -115,7 +115,7 @@ export default function EmailsPage() {
               </Button>
               <Button
                 variant="outline"
-                size="sm"
+                size="default"
                 onClick={() => refetchDomains()}
                 disabled={isLoading}
               >

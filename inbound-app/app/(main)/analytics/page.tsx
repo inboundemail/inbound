@@ -139,7 +139,7 @@ export default async function AnalyticsPage() {
         <div className="flex items-center gap-2">
           <Button
             variant="secondary"
-            size="sm"
+            size="default"
             asChild
           >
             <Link href="/analytics">
@@ -147,7 +147,7 @@ export default async function AnalyticsPage() {
               Refresh
             </Link>
           </Button>
-          <Button size="sm" asChild>
+          <Button size="default" asChild>
             <Link href="/analytics?export=true">
               <File2 width="12" height="12" className="mr-1" />
               Export Logs
