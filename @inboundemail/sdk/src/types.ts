@@ -375,6 +375,7 @@ export interface PostEmailAddressesRequest {
   address: string
   domainId: string
   endpointId?: string
+  webhookId?: string
   isActive?: boolean
 }
 
@@ -417,6 +418,7 @@ export interface GetEmailAddressByIdResponse {
 export interface PutEmailAddressByIdRequest {
   isActive?: boolean
   endpointId?: string | null
+  webhookId?: string | null
 }
 
 export interface PutEmailAddressByIdResponse {

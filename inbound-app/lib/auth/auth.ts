@@ -5,7 +5,7 @@ import { dubAnalytics } from "@dub/better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { stripe } from "@better-auth/stripe";
 import { admin, apiKey, oAuthProxy } from "better-auth/plugins";
-import { magicLink } from "better-auth/plugins";
+import { magicLink, lastLoginMethod } from "better-auth/plugins";
 import { createAuthMiddleware } from "better-auth/api";
 import { eq, and } from "drizzle-orm";
 import Stripe from "stripe";
@@ -255,6 +255,9 @@ export const auth = betterAuth({
                     throw error;
                 }
             }
+        }),
+        lastLoginMethod({
+            storeInDatabase: false // Store in cookies only for better performance
         }),
         stripe({
             stripeClient,
