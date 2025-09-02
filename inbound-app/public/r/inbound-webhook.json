@@ -1,0 +1,36 @@
+{
+    "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+    "name": "inbound-webhook-example",
+    "type": "registry:page",
+    "title": "Inbound Webhook Example",
+    "description": "Complete Next.js webhook route example with TypeScript types for handling Inbound email webhooks. Includes validation, error handling, and examples for different email types (support, sales, unsubscribe).",
+    "author": "Inbound Email",
+    "dependencies": [
+        "@inboundemail/sdk"
+    ],
+    "registryDependencies": [],
+    "files": [
+        {
+            "path": "inbound.new/r/inbound-webhook-example/route.ts",
+            "type": "registry:page",
+            "target": "app/api/webhooks/inbound/route.ts"
+        }
+    ],
+    "docs": "This webhook handler demonstrates how to:\n\n1. **Validate webhook payloads** using `isInboundWebhook()` type guard\n2. **Handle different email types** based on recipient or subject\n3. **Process attachments** and email content (text/HTML)\n4. **Implement proper error handling** with detailed logging\n5. **Return appropriate HTTP responses** for webhook reliability\n\n**Setup:**\n1. Install the SDK: `npm install @inboundemail/sdk`\n2. Configure your webhook endpoint in the Inbound dashboard\n3. Update the handler functions with your business logic\n4. Test with the included GET handler for verification\n\n**Environment Variables:**\nNo environment variables required for basic functionality. Add your own as needed for database connections, API keys, etc.\n\n**Next Steps:**\n- Replace TODO comments with your actual database/CRM integration\n- Add authentication if your webhook endpoint needs protection\n- Implement retry logic for external API calls\n- Add webhook signature verification for production use",
+    "categories": [
+        "webhook",
+        "api",
+        "email"
+    ],
+    "meta": {
+        "framework": "Next.js",
+        "typescript": true,
+        "sdk": "@inboundemail/sdk",
+        "examples": [
+            "support",
+            "sales",
+            "unsubscribe",
+            "general"
+        ]
+    }
+}
