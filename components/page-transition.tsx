@@ -1,6 +1,6 @@
 "use client"
 
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence, Transition } from "framer-motion"
 import { usePathname } from "next/navigation"
 import { ReactNode, useEffect, useState, useMemo } from "react"
 
@@ -33,7 +33,7 @@ const pageVariants = {
 }
 
 const pageTransition = {
-  type: "tween",
+  type: "tween" as const,
   ease: "easeInOut",
   duration: 0.08, // Significantly faster transition for better performance
 }
@@ -64,7 +64,7 @@ export function PageTransition({ children, className = "" }: PageTransitionProps
         animate="in"
         exit="out"
         variants={pageVariants}
-        transition={pageTransition}
+        transition={pageTransition as any as Transition}
         className={`page-transition-container ${className}`}
       >
         {children}
@@ -128,7 +128,7 @@ export function EnhancedPageTransition({
         animate="in"
         exit="out"
         variants={variants}
-        transition={pageTransition}
+        transition={pageTransition as any as Transition}
         className={`enhanced-page-transition ${className}`}
       >
         {children}

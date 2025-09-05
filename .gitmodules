@@ -1,6 +1,0 @@
-[submodule "mintlify-docs"]
-	path = mintlify-docs
-	url = https://github.com/R44VC0RP/docs.git
-[submodule "docs.inbound.new"]
-	path = docs.inbound.new
-	url = https://github.com/R44VC0RP/docs.inbound.new.git

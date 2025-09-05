@@ -1,8 +1,0 @@
-# Exclude the separate inbound-whop-app from main app deployment
-
-# Other common exclusions
-aws/
-scripts/
-mintlify-docs/
-new-scripts/
-drizzle/ 

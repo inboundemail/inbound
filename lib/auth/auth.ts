@@ -5,7 +5,7 @@ import { dubAnalytics } from "@dub/better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { stripe } from "@better-auth/stripe";
 import { admin, apiKey, oAuthProxy } from "better-auth/plugins";
-import { magicLink, lastLoginMethod } from "better-auth/plugins";
+import { magicLink } from "better-auth/plugins";
 import { createAuthMiddleware } from "better-auth/api";
 import { eq, and } from "drizzle-orm";
 import Stripe from "stripe";
@@ -131,7 +131,7 @@ export const auth = betterAuth({
                                     }
                                 </style>
                             </head>
-                            <body style="margin: 0; padding: 20px; font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; letter-spacing: -0.04em; background: linear-gradient(135deg, #f8fafc, #f1f5f9);">
+                            <body style="margin: 0; padding: 20px; font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; letter-spacing: -0.04em;">
                                 <!-- Light Mode Version -->
                                 <div class="light-mode" style="display: block;">
                                     <div style="max-width: 600px; margin: 0 auto; background: linear-gradient(135deg, rgba(248, 250, 252, 0.6), rgba(241, 245, 249, 0.4)); border-radius: 30px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
@@ -255,10 +255,7 @@ export const auth = betterAuth({
                     throw error;
                 }
             }
-        }),
-        lastLoginMethod({
-            storeInDatabase: false // Store in cookies only for better performance
-        }),
+        }),        
         stripe({
             stripeClient,
             stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,

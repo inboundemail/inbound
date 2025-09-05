@@ -1,8 +1,0 @@
----
-alwaysApply: true
----
-
-Never create examples in the SDK on how to use the SDK. 
-
-All tests should be in the tests folder.
-
