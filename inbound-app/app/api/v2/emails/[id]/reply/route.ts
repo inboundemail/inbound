@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateRequest } from '../../../helper/main'
 import { processAttachments, attachmentsToStorageFormat, type AttachmentInput } from '../../../helper/attachment-processor'
 import { buildRawEmailMessage } from '../../../helper/email-builder'
-import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses'
+import { SESClient, SendRawEmailCommand, SendEmailCommand } from '@aws-sdk/client-ses'
 import { db } from '@/lib/db'
 import { sentEmails, emailDomains, structuredEmails, SENT_EMAIL_STATUS } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
@@ -35,6 +35,7 @@ export interface PostEmailReplyRequest {
     attachments?: AttachmentInput[]
     include_original?: boolean    // snake_case (legacy)
     includeOriginal?: boolean     // camelCase (Resend-compatible)
+    simple?: boolean        // Use simplified reply mode (faster, lighter)
     tags?: Array<{  // Resend-compatible tags
         name: string
         value: string
@@ -147,6 +148,257 @@ if (awsAccessKeyId && awsSecretAccessKey) {
     })
 } else {
     console.warn('⚠️ AWS credentials not configured. Email sending will not work.')
+}
+
+/**
+ * Simplified reply handler for basic use cases
+ * Uses SES SendEmailCommand (simpler API) with minimal overhead
+ */
+async function handleSimpleReply(
+    userId: string,
+    emailId: string,
+    originalEmail: any,
+    body: PostEmailReplyRequest,
+    idempotencyKey?: string
+): Promise<NextResponse> {
+    console.log('🚀 Using simplified reply mode')
+    
+    // Parse original email data
+    let originalFromData = null
+    if (originalEmail.fromData) {
+        try {
+            originalFromData = JSON.parse(originalEmail.fromData)
+        } catch (e) {
+            console.error('Failed to parse original fromData:', e)
+        }
+    }
+
+    // Determine reply recipients
+    const originalSenderAddress = originalFromData?.addresses?.[0]?.address
+    if (!originalSenderAddress && !body.to) {
+        console.log('⚠️ Cannot determine recipient for reply')
+        return NextResponse.json(
+            { error: 'Cannot determine recipient email address' },
+            { status: 400 }
+        )
+    }
+
+    // Set default values (simplified)
+    const toAddresses = body.to ? toArray(body.to) : [originalFromData?.text || originalSenderAddress]
+    const subject = body.subject || `Re: ${originalEmail.subject || 'No Subject'}`
+    
+    // Extract sender information
+    const fromAddress = extractEmailAddress(body.from)
+    const fromDomain = extractDomain(body.from)
+    const formattedFromAddress = formatSenderAddress(fromAddress, body.from_name)
+    
+    console.log('📧 Simple reply details:', { 
+        from: body.from, 
+        to: toAddresses,
+        subject,
+        originalMessageId: originalEmail.messageId
+    })
+
+    // Domain verification (keep security checks)
+    const { isAgentEmail } = canUserSendFromEmail(body.from)
+    
+    if (!isAgentEmail) {
+        console.log('🔍 Verifying domain ownership for:', fromDomain)
+        const userDomain = await db
+            .select()
+            .from(emailDomains)
+            .where(
+                and(
+                    eq(emailDomains.userId, userId),
+                    eq(emailDomains.domain, fromDomain),
+                    eq(emailDomains.status, 'verified')
+                )
+            )
+            .limit(1)
+
+        if (userDomain.length === 0) {
+            console.log('❌ User does not own the sender domain:', fromDomain)
+            return NextResponse.json(
+                { error: `You don't have permission to send from domain: ${fromDomain}` },
+                { status: 403 }
+            )
+        }
+    }
+
+    // Check Autumn for email sending limits (keep existing logic)
+    console.log('🔍 Checking email sending limits with Autumn')
+    const { data: emailCheck, error: emailCheckError } = await autumn.check({
+        customer_id: userId,
+        feature_id: "emails_sent"
+    })
+
+    if (emailCheckError) {
+        console.error('❌ Autumn email check error:', emailCheckError)
+        return NextResponse.json(
+            { error: 'Failed to check email sending limits' },
+            { status: 500 }
+        )
+    }
+
+    if (!emailCheck.allowed) {
+        console.log('❌ Email sending limit reached for user:', userId)
+        return NextResponse.json(
+            { error: 'Email sending limit reached. Please upgrade your plan to send more emails.' },
+            { status: 429 }
+        )
+    }
+
+    // Create basic email record
+    const replyEmailId = nanoid()
+    const messageId = `${replyEmailId}@${fromDomain}`
+    
+    console.log('💾 Creating simple email record:', replyEmailId)
+    
+    const sentEmailRecord = await db.insert(sentEmails).values({
+        id: replyEmailId,
+        from: formattedFromAddress,
+        fromAddress,
+        fromDomain,
+        to: JSON.stringify(toAddresses),
+        cc: null, // Simplified - no CC/BCC support in simple mode
+        bcc: null,
+        replyTo: null,
+        subject,
+        textBody: body.text || '',
+        htmlBody: body.html || null,
+        headers: JSON.stringify({
+            'In-Reply-To': originalEmail.messageId ? `<${originalEmail.messageId}>` : null,
+            'References': originalEmail.messageId ? `<${originalEmail.messageId}>` : null,
+            ...(body.headers || {})
+        }),
+        attachments: null, // Simplified - no attachments in simple mode
+        tags: body.tags ? JSON.stringify(body.tags) : null,
+        status: SENT_EMAIL_STATUS.PENDING,
+        messageId,
+        userId,
+        idempotencyKey,
+        createdAt: new Date(),
+        updatedAt: new Date()
+    }).returning()
+
+    // Check if SES is configured
+    if (!sesClient) {
+        console.log('❌ AWS SES not configured')
+        
+        await db
+            .update(sentEmails)
+            .set({
+                status: SENT_EMAIL_STATUS.FAILED,
+                failureReason: 'AWS SES not configured',
+                updatedAt: new Date()
+            })
+            .where(eq(sentEmails.id, replyEmailId))
+        
+        return NextResponse.json(
+            { error: 'Email service not configured. Please contact support.' },
+            { status: 500 }
+        )
+    }
+
+    try {
+        console.log('📤 Sending simple reply email via AWS SES')
+        
+        // Use SES SendEmailCommand (simpler API)
+        const emailParams = {
+            Source: fromAddress,
+            Destination: {
+                ToAddresses: toAddresses.map(extractEmailAddress)
+            },
+            Message: {
+                Subject: {
+                    Data: subject,
+                    Charset: 'UTF-8'
+                },
+                Body: {
+                    ...(body.text ? {
+                        Text: {
+                            Data: body.text,
+                            Charset: 'UTF-8'
+                        }
+                    } : {}),
+                    ...(body.html ? {
+                        Html: {
+                            Data: body.html,
+                            Charset: 'UTF-8'
+                        }
+                    } : {})
+                }
+            },
+            // Add basic threading headers
+            ...(originalEmail.messageId ? {
+                ReplyToAddresses: [fromAddress],
+                Tags: [
+                    ...(body.tags?.map(tag => ({ Name: tag.name, Value: tag.value })) || []),
+                    { Name: 'InReplyTo', Value: originalEmail.messageId },
+                    { Name: 'SimpleMode', Value: 'true' }
+                ]
+            } : {})
+        }
+        
+        const sesCommand = new SendEmailCommand(emailParams)
+        const sesResponse = await sesClient.send(sesCommand)
+        const sesMessageId = sesResponse.MessageId
+
+        console.log('✅ Simple reply sent successfully via SES:', sesMessageId)
+
+        // Update email record with success
+        await db
+            .update(sentEmails)
+            .set({
+                status: SENT_EMAIL_STATUS.SENT,
+                providerResponse: JSON.stringify(sesResponse),
+                sentAt: new Date(),
+                updatedAt: new Date()
+            })
+            .where(eq(sentEmails.id, replyEmailId))
+
+        // Track email usage with Autumn (keep existing logic)
+        if (!emailCheck.unlimited) {
+            console.log('📊 Tracking email usage with Autumn')
+            const { error: trackError } = await autumn.track({
+                customer_id: userId,
+                feature_id: "emails_sent",
+                value: 1,
+            })
+
+            if (trackError) {
+                console.error('❌ Failed to track email usage:', trackError)
+                // Don't fail the request if tracking fails
+            }
+        }
+
+        console.log('✅ Simple reply processing complete')
+        const response: PostEmailReplyResponse = {
+            id: replyEmailId,
+            messageId: messageId,
+            awsMessageId: sesMessageId || ''
+        }
+        return NextResponse.json(response, { status: 200 })
+
+    } catch (sesError) {
+        console.error('❌ SES send error in simple mode:', sesError)
+        
+        // Update email status to failed
+        await db
+            .update(sentEmails)
+            .set({
+                status: SENT_EMAIL_STATUS.FAILED,
+                failureReason: sesError instanceof Error ? sesError.message : 'Unknown SES error',
+                providerResponse: JSON.stringify(sesError),
+                updatedAt: new Date()
+            })
+            .where(eq(sentEmails.id, replyEmailId))
+        
+        return NextResponse.json(
+            { error: 'Failed to send reply. Please try again later.' },
+            { status: 500 }
+        )
+    }
 }
 
 export async function POST(
@@ -372,6 +624,12 @@ export async function POST(
                 { error: 'Email sending limit reached. Please upgrade your plan to send more emails.' },
                 { status: 429 }
             )
+        }
+
+        // Check if simple mode is requested
+        if (body.simple) {
+            console.log('🚀 Simple mode requested, delegating to handleSimpleReply')
+            return await handleSimpleReply(userId, emailId, original, body, idempotencyKey || undefined)
         }
 
         // Build threading headers

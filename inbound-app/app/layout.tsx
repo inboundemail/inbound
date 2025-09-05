@@ -26,9 +26,91 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "inbound",
-  description: "inbound email management platform",
+  title: {
+    default: "inbound - email infrastructure, redefined",
+    template: "%s | inbound"
+  },
+  description: "the modern email infrastructure platform for developers. receive, parse, and manage inbound emails with powerful apis, webhooks, and real-time processing. built for scale.",
+  keywords: [
+    "email infrastructure",
+    "inbound email",
+    "email API",
+    "webhook email",
+    "email parsing",
+    "developer tools",
+    "email management",
+    "SMTP",
+    "email automation",
+    "transactional email",
+    "email routing"
+  ],
+  authors: [{ name: "inbound team" }],
+  creator: "inbound",
+  publisher: "inbound",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
   metadataBase: new URL(process.env.BETTER_AUTH_URL || 'http://localhost:3000'),
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "/",
+    title: "inbound - email infrastructure, redefined",
+    description: "the modern email infrastructure platform for developers. receive, parse, and manage inbound emails with powerful apis, webhooks, and real-time processing.",
+    siteName: "inbound",
+    images: [
+      {
+        url: "/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "inbound - email infrastructure platform",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "inbound - email infrastructure, redefined",
+    description: "the modern email infrastructure platform for developers. receive, parse, and manage inbound emails with powerful apis, webhooks, and real-time processing.",
+    images: ["/twitter-image.png"],
+    creator: "@inboundemail",
+    site: "@inboundemail",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  icons: {
+    icon: [
+      {
+        media: '(prefers-color-scheme: light)',
+        url: '/images/icon-light.png',
+        href: '/images/icon-light.png',
+      },
+      {
+        media: '(prefers-color-scheme: dark)',
+        url: '/images/icon-dark.png',
+        href: '/images/icon-dark.png',
+      },
+    ],
+    shortcut: "/favicon.ico",
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
+  manifest: "/site.webmanifest",
+  category: "technology",
 };
 
 export const viewport = {
@@ -45,7 +127,40 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
+        {/* Structured Data for SEO */}
+        <Script
+          id="structured-data"
+          type="application/ld+json"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              "name": "inbound",
+              "description": "the modern email infrastructure platform for developers. receive, parse, and manage inbound emails with powerful apis, webhooks, and real-time processing.",
+              "url": process.env.BETTER_AUTH_URL || "https://inbound.new",
+              "applicationCategory": "DeveloperApplication",
+              "operatingSystem": "Web",
+              "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "USD"
+              },
+              "author": {
+                "@type": "Organization",
+                "name": "inbound",
+                "url": process.env.BETTER_AUTH_URL || "https://inbound.new"
+              },
+              "publisher": {
+                "@type": "Organization",
+                "name": "inbound",
+                "url": process.env.BETTER_AUTH_URL || "https://inbound.new"
+              }
+            })
+          }}
+        />
 
+        {/* Twitter Conversion Tracking */}
         <Script
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
