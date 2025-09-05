@@ -306,14 +306,60 @@ export async function testWebhook(id: string) {
       return { error: 'Webhook is disabled' }
     }
 
-    // Prepare test payload
+    // Prepare test payload using the proper Inbound webhook format
     const testPayload = {
-      event: 'webhook_test',
+      event: 'email.received',
       timestamp: new Date().toISOString(),
-      webhook_id: webhook.id,
-      test: true,
-      data: {
-        message: 'This is a test webhook delivery from Inbound'
+      email: {
+        id: `test-email-${Date.now()}`,
+        messageId: `test-message-${Date.now()}@inbound.test`,
+        from: {
+          text: 'test@inbound.new',
+          addresses: [{ name: 'Inbound Test', address: 'test@inbound.new' }]
+        },
+        to: {
+          text: webhook.name || 'webhook@test.com',
+          addresses: [{ name: null, address: webhook.name || 'webhook@test.com' }]
+        },
+        recipient: webhook.name || 'webhook@test.com',
+        subject: 'Test webhook delivery from Inbound',
+        receivedAt: new Date().toISOString(),
+        parsedData: {
+          messageId: `test-message-${Date.now()}@inbound.test`,
+          date: new Date(),
+          subject: 'Test webhook delivery from Inbound',
+          from: {
+            text: 'test@inbound.new',
+            addresses: [{ name: 'Inbound Test', address: 'test@inbound.new' }]
+          },
+          to: {
+            text: webhook.name || 'webhook@test.com',
+            addresses: [{ name: null, address: webhook.name || 'webhook@test.com' }]
+          },
+          cc: null,
+          bcc: null,
+          replyTo: null,
+          inReplyTo: undefined,
+          references: undefined,
+          textBody: 'This is a test webhook delivery from Inbound to verify your endpoint is working correctly.',
+          htmlBody: '<p>This is a test webhook delivery from <strong>Inbound</strong> to verify your endpoint is working correctly.</p>',
+          attachments: [],
+          headers: {},
+          priority: undefined
+        },
+        cleanedContent: {
+          html: '<p>This is a test webhook delivery from <strong>Inbound</strong> to verify your endpoint is working correctly.</p>',
+          text: 'This is a test webhook delivery from Inbound to verify your endpoint is working correctly.',
+          hasHtml: true,
+          hasText: true,
+          attachments: [],
+          headers: {}
+        }
+      },
+      endpoint: {
+        id: webhook.id,
+        name: webhook.name,
+        type: 'webhook' as const
       }
     }
 
