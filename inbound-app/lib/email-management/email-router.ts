@@ -151,13 +151,23 @@ async function getEmailWithStructuredData(emailId: string) {
 
 /**
  * Find endpoint configuration for an email recipient
- * Priority: endpointId → webhookId → catch-all endpoint → catch-all webhook
+ * 
+ * Routing Priority (like a switch statement):
+ * 1. Specific email address → Use its configured endpoint/webhook
+ * 2. No specific email but catch-all enabled → Use catch-all endpoint/webhook
+ * 3. Neither → No routing (email stored but not forwarded)
+ * 
+ * This allows users to configure:
+ * - email1@domain.com → webhook1
+ * - email2@domain.com → webhook2
+ * - *@domain.com (catch-all) → webhook3
  */
 async function findEndpointForEmail(recipient: string, userId: string): Promise<Endpoint | null> {
   try {
     console.log(`🔍 findEndpointForEmail - Looking for endpoint for ${recipient} (userId: ${userId})`)
+    console.log(`📋 Routing priority: specific email → catch-all → none`)
     
-    // Step 1: Look up the email address to find the configured endpoint
+    // Step 1: Look up the specific email address to find its configured endpoint
     const emailAddressRecord = await db
       .select({
         endpointId: emailAddresses.endpointId,
@@ -177,7 +187,7 @@ async function findEndpointForEmail(recipient: string, userId: string): Promise<
     if (emailAddressRecord[0]) {
       const { endpointId, webhookId } = emailAddressRecord[0]
 
-      // Priority 1: Use endpointId if available
+      // Priority 1: Specific email with endpointId
       if (endpointId) {
         const endpointRecord = await db
           .select()
@@ -190,16 +200,21 @@ async function findEndpointForEmail(recipient: string, userId: string): Promise<
           .limit(1)
 
         if (endpointRecord[0]) {
-          console.log(`📍 findEndpointForEmail - Found email-specific endpoint: ${endpointRecord[0].name} for ${recipient}`)
+          console.log(`✅ findEndpointForEmail - SPECIFIC EMAIL MATCH: ${recipient} → ${endpointRecord[0].name} (endpoint)`)
           return endpointRecord[0]
         }
       }
 
-      // Priority 2: Fall back to webhookId for backward compatibility
+      // Priority 2: Specific email with legacy webhookId
       if (webhookId) {
-        console.log(`🔄 findEndpointForEmail - Using legacy webhook ${webhookId} for ${recipient}`)
+        console.log(`✅ findEndpointForEmail - SPECIFIC EMAIL MATCH: ${recipient} → webhook ${webhookId} (legacy)`)
         return null // Return null to trigger legacy webhook processing
       }
+      
+      // Email exists but has no endpoint configured - continue to check catch-all
+      console.log(`📧 findEndpointForEmail - Email ${recipient} exists but has no endpoint configured, checking catch-all...`)
+    } else {
+      console.log(`🔍 findEndpointForEmail - No specific configuration for ${recipient}, checking catch-all...`)
     }
 
     // Step 2: Check for domain-level catch-all configuration
@@ -228,9 +243,9 @@ async function findEndpointForEmail(recipient: string, userId: string): Promise<
 
     if (domainRecord[0]) {
       const { catchAllEndpointId, catchAllWebhookId } = domainRecord[0]
-      console.log(`🌐 findEndpointForEmail - Found catch-all domain: ${domain}, endpointId: ${catchAllEndpointId}, webhookId: ${catchAllWebhookId}`)
+      console.log(`🌐 findEndpointForEmail - Catch-all is enabled for ${domain}`)
 
-      // Priority 3: Use catch-all endpoint
+      // Priority 3: Catch-all endpoint
       if (catchAllEndpointId) {
         const catchAllEndpointRecord = await db
           .select()
@@ -243,23 +258,25 @@ async function findEndpointForEmail(recipient: string, userId: string): Promise<
           .limit(1)
 
         if (catchAllEndpointRecord[0]) {
-          console.log(`🌐 findEndpointForEmail - Found catch-all endpoint: ${catchAllEndpointRecord[0].name} for ${recipient}`)
+          console.log(`✅ findEndpointForEmail - CATCH-ALL MATCH: ${recipient} → ${catchAllEndpointRecord[0].name} (catch-all endpoint)`)
           return catchAllEndpointRecord[0]
         } else {
           console.warn(`⚠️ findEndpointForEmail - Catch-all endpoint ${catchAllEndpointId} not found or inactive`)
         }
       }
 
-      // Priority 4: Fall back to catch-all webhook for backward compatibility
+      // Priority 4: Catch-all legacy webhook
       if (catchAllWebhookId) {
-        console.log(`🔄 findEndpointForEmail - Using catch-all legacy webhook ${catchAllWebhookId} for ${recipient}`)
+        console.log(`✅ findEndpointForEmail - CATCH-ALL MATCH: ${recipient} → webhook ${catchAllWebhookId} (catch-all legacy)`)
         return null // Return null to trigger legacy webhook processing
       }
+      
+      console.warn(`⚠️ findEndpointForEmail - Catch-all is enabled but no endpoint/webhook configured`)
     } else {
-      console.warn(`⚠️ findEndpointForEmail - No catch-all domain configuration found for ${domain} (userId: ${userId})`)
+      console.log(`ℹ️ findEndpointForEmail - No catch-all configuration for domain ${domain}`)
     }
 
-    console.warn(`⚠️ findEndpointForEmail - No endpoint, webhook, or catch-all configuration found for ${recipient}`)
+    console.log(`📭 findEndpointForEmail - NO MATCH: ${recipient} will be stored but not routed`)
     return null
 
   } catch (error) {

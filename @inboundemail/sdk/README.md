@@ -205,6 +205,16 @@ const { data: setup } = await inbound.setupDomain(
   'https://yourapp.com/webhook'
 )
 
+// Configure mixed routing (specific emails + catch-all)
+const { data: routing } = await inbound.configureMixedRouting({
+  domain: 'yourdomain.com',
+  routes: {
+    'support@yourdomain.com': 'https://api.example.com/support-webhook',
+    'sales@yourdomain.com': 'https://api.example.com/sales-webhook',
+  },
+  catchAll: 'https://api.example.com/catch-all-webhook'
+})
+
 // Create email forwarder
 const { data: forwarder } = await inbound.createForwarder(
   'info@yourdomain.com',
@@ -372,6 +382,63 @@ await inbound.email.reply('email-123', {
   text: 'This reply will only be sent once'
 }, {
   idempotencyKey: 'reply-789'
+})
+```
+
+## 🔀 Mixed Email Routing (Specific + Catch-All)
+
+Configure different webhooks for specific email addresses while having a catch-all for everything else. This works like a switch statement:
+
+```typescript
+// Configure mixed routing for your domain
+const { data, error } = await inbound.configureMixedRouting({
+  domain: 'yourdomain.com',  // or use domain ID
+  
+  // Specific email routes
+  routes: {
+    'support@yourdomain.com': 'https://api.example.com/support-webhook',
+    'sales@yourdomain.com': 'https://api.example.com/sales-webhook',
+    'billing@yourdomain.com': 'https://api.example.com/billing-webhook',
+  },
+  
+  // Catch-all for any other email to this domain
+  catchAll: 'https://api.example.com/catch-all-webhook'
+})
+
+// The routing works like:
+// - support@yourdomain.com → support-webhook
+// - sales@yourdomain.com → sales-webhook  
+// - billing@yourdomain.com → billing-webhook
+// - anything-else@yourdomain.com → catch-all-webhook
+```
+
+### Routing Priority
+
+The system follows this priority order:
+1. **Specific email address** - If configured, routes to its webhook
+2. **Catch-all** - If no specific route, uses catch-all webhook
+3. **No routing** - If neither configured, email is stored but not forwarded
+
+### Update Existing Routes
+
+```typescript
+// Add or update specific routes
+const { data } = await inbound.configureMixedRouting({
+  domain: 'yourdomain.com',
+  routes: {
+    'new@yourdomain.com': 'https://api.example.com/new-webhook',
+  }
+})
+
+// Enable only catch-all (no specific routes)
+const { data } = await inbound.configureMixedRouting({
+  domain: 'yourdomain.com',
+  catchAll: 'https://api.example.com/all-emails-webhook'
+})
+
+// Disable catch-all but keep specific routes
+const { data } = await inbound.domain.update('domain-id', {
+  isCatchAllEnabled: false
 })
 ```
 

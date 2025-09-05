@@ -1,6 +1,6 @@
 {
   "name": "@inboundemail/sdk",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Official SDK for Inbound Email API",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
