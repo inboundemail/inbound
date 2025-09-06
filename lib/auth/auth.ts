@@ -26,19 +26,10 @@ const inbound = new Inbound(process.env.INBOUND_API_KEY!);
 export const auth = betterAuth({
     baseURL: process.env.NODE_ENV === 'development'
         ? "http://localhost:3000"
-        : process.env.VERCEL_URL
-            ? `https://${process.env.VERCEL_URL}`
-            : process.env.VERCEL_BRANCH_URL
-                ? `https://${process.env.VERCEL_BRANCH_URL}`
-                : "https://inbound.new",
+        : "https://inbound.new",
     trustedOrigins: process.env.NODE_ENV === 'development' 
         ? ["http://localhost:3000"] 
-        : [
-            "https://inbound.new",
-            process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "",
-            process.env.VERCEL_BRANCH_URL ? `https://${process.env.VERCEL_BRANCH_URL}` : "",
-            process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : ""
-        ].filter(Boolean),
+        : ["https://inbound.new"],
     database: drizzleAdapter(db, {
         provider: "pg",
         schema: schema

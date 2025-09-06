@@ -112,6 +112,38 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
   const hasCustomMessageId = customHeaders && 
     Object.keys(customHeaders).some(key => key.toLowerCase() === 'message-id')
   
+  // Ensure Message-ID has angle brackets and proper format
+  let formattedMessageId = ''
+  if (!hasCustomMessageId && messageId) {
+    // Check if messageId already contains @ (full format) or needs domain appended
+    if (messageId.includes('@')) {
+      // Already has domain, just ensure angle brackets
+      formattedMessageId = messageId.startsWith('<') ? messageId : `<${messageId}>`
+      formattedMessageId = formattedMessageId.endsWith('>') ? formattedMessageId : `${formattedMessageId}>`
+    } else {
+      // Need to append domain
+      formattedMessageId = `<${messageId}@${extractDomain(from)}>`
+    }
+  }
+  
+  // Ensure In-Reply-To has angle brackets
+  let formattedInReplyTo = ''
+  if (inReplyTo) {
+    formattedInReplyTo = inReplyTo.startsWith('<') ? inReplyTo : `<${inReplyTo}>`
+    formattedInReplyTo = formattedInReplyTo.endsWith('>') ? formattedInReplyTo : `${formattedInReplyTo}>`
+  }
+  
+  // Ensure each reference has angle brackets
+  let formattedReferences: string[] = []
+  if (references && references.length > 0) {
+    formattedReferences = references.map(ref => {
+      let formatted = ref.trim()
+      if (!formatted.startsWith('<')) formatted = `<${formatted}`
+      if (!formatted.endsWith('>')) formatted = `${formatted}>`
+      return formatted
+    })
+  }
+  
   // Build headers
   const headers = [
     `From: ${from}`,
@@ -120,9 +152,9 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
     replyTo && replyTo.length > 0 ? `Reply-To: ${replyTo.join(', ')}` : null,
     `Subject: ${subject}`,
     // Only add Message-ID if not provided in custom headers
-    !hasCustomMessageId && messageId ? `Message-ID: <${messageId}@${extractDomain(from)}>` : null,
-    inReplyTo ? `In-Reply-To: ${inReplyTo}` : null,
-    references && references.length > 0 ? `References: ${references.join(' ')}` : null,
+    formattedMessageId ? `Message-ID: ${formattedMessageId}` : null,
+    formattedInReplyTo ? `In-Reply-To: ${formattedInReplyTo}` : null,
+    formattedReferences.length > 0 ? `References: ${formattedReferences.join(' ')}` : null,
     `Date: ${formatEmailDate(date)}`,
     'MIME-Version: 1.0',
   ].filter((header): header is string => header !== null)

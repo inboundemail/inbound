@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateRequest } from '../../../helper/main'
 import { processAttachments, attachmentsToStorageFormat, type AttachmentInput } from '../../../helper/attachment-processor'
 import { buildRawEmailMessage } from '../../../helper/email-builder'
-import { SESClient, SendRawEmailCommand, SendEmailCommand } from '@aws-sdk/client-ses'
+import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses'
 import { db } from '@/lib/db'
 import { sentEmails, emailDomains, structuredEmails, SENT_EMAIL_STATUS } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
@@ -309,44 +309,112 @@ async function handleSimpleReply(
     try {
         console.log('📤 Sending simple reply email via AWS SES')
         
-        // Use SES SendEmailCommand (simpler API)
-        const emailParams = {
-            Source: fromAddress,
-            Destination: {
-                ToAddresses: toAddresses.map(extractEmailAddress)
-            },
-            Message: {
-                Subject: {
-                    Data: subject,
-                    Charset: 'UTF-8'
-                },
-                Body: {
-                    ...(body.text ? {
-                        Text: {
-                            Data: body.text,
-                            Charset: 'UTF-8'
-                        }
-                    } : {}),
-                    ...(body.html ? {
-                        Html: {
-                            Data: body.html,
-                            Charset: 'UTF-8'
-                        }
-                    } : {})
-                }
-            },
-            // Add basic threading headers
-            ...(originalEmail.messageId ? {
-                ReplyToAddresses: [fromAddress],
-                Tags: [
-                    ...(body.tags?.map(tag => ({ Name: tag.name, Value: sanitizeTagValue(tag.value) })) || []),
-                    { Name: 'InReplyTo', Value: sanitizeTagValue(originalEmail.messageId) },
-                    { Name: 'SimpleMode', Value: 'true' }
-                ]
-            } : {})
+        // Build threading headers for RFC 5322 compliance
+        // Ensure proper angle bracket formatting
+        const formatMessageId = (id: string) => {
+            if (!id) return ''
+            id = id.trim()
+            if (!id.startsWith('<')) id = `<${id}`
+            if (!id.endsWith('>')) id = `${id}>`
+            return id
         }
         
-        const sesCommand = new SendEmailCommand(emailParams)
+        const inReplyTo = originalEmail.messageId ? formatMessageId(originalEmail.messageId) : undefined
+        let references: string[] = []
+        
+        // Parse existing references if available
+        if (originalEmail.references) {
+            try {
+                const parsedRefs = JSON.parse(originalEmail.references)
+                if (Array.isArray(parsedRefs)) {
+                    // Ensure each reference has angle brackets
+                    references = parsedRefs.map(ref => formatMessageId(ref))
+                }
+            } catch (e) {
+                console.error('Failed to parse references:', e)
+            }
+        }
+        
+        // Add the original message ID to references chain
+        if (originalEmail.messageId) {
+            const formattedId = formatMessageId(originalEmail.messageId)
+            // Only add if not already in references (avoid duplicates)
+            if (!references.includes(formattedId)) {
+                references.push(formattedId)
+            }
+        }
+        
+        // Build a simplified raw email message for threading support
+        const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).substring(2)}`
+        let rawMessage = ''
+        
+        // Ensure Message-ID has proper format
+        const formattedMessageId = formatMessageId(messageId)
+        
+        // Log threading information for debugging
+        console.log('📧 Threading headers:', {
+            messageId: formattedMessageId,
+            inReplyTo: inReplyTo,
+            references: references,
+            originalMessageId: originalEmail.messageId
+        })
+        
+        // Add headers
+        rawMessage += `From: ${formattedFromAddress}\r\n`
+        rawMessage += `To: ${toAddresses.join(', ')}\r\n`
+        rawMessage += `Subject: ${subject}\r\n`
+        rawMessage += `Message-ID: ${formattedMessageId}\r\n`
+        
+        // Add threading headers if we have them
+        if (inReplyTo) {
+            rawMessage += `In-Reply-To: ${inReplyTo}\r\n`
+        }
+        if (references.length > 0) {
+            rawMessage += `References: ${references.join(' ')}\r\n`
+        }
+        
+        rawMessage += `Date: ${formatEmailDate(new Date())}\r\n`
+        rawMessage += `MIME-Version: 1.0\r\n`
+        
+        // Handle content based on what's provided
+        if (body.html && body.text) {
+            // Multipart alternative
+            rawMessage += `Content-Type: multipart/alternative; boundary="${boundary}"\r\n\r\n`
+            
+            // Text part
+            rawMessage += `--${boundary}\r\n`
+            rawMessage += `Content-Type: text/plain; charset=UTF-8\r\n`
+            rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`
+            rawMessage += `${body.text}\r\n`
+            
+            // HTML part
+            rawMessage += `--${boundary}\r\n`
+            rawMessage += `Content-Type: text/html; charset=UTF-8\r\n`
+            rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`
+            rawMessage += `${body.html}\r\n`
+            
+            rawMessage += `--${boundary}--\r\n`
+        } else if (body.html) {
+            // HTML only
+            rawMessage += `Content-Type: text/html; charset=UTF-8\r\n`
+            rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`
+            rawMessage += `${body.html}\r\n`
+        } else {
+            // Text only
+            rawMessage += `Content-Type: text/plain; charset=UTF-8\r\n`
+            rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`
+            rawMessage += `${body.text}\r\n`
+        }
+        
+        // Use SendRawEmailCommand for proper header support
+        const sesCommand = new SendRawEmailCommand({
+            RawMessage: {
+                Data: Buffer.from(rawMessage)
+            },
+            Source: fromAddress,
+            Destinations: toAddresses.map(extractEmailAddress)
+        })
+        
         const sesResponse = await sesClient.send(sesCommand)
         const sesMessageId = sesResponse.MessageId
 
@@ -485,7 +553,39 @@ export async function POST(
         console.log('✅ Found original email:', original.subject)
 
         console.log('📝 Parsing request body')
-        const body: PostEmailReplyRequest = await request.json()
+        let body: PostEmailReplyRequest
+        try {
+            const rawBody = await request.text()
+            console.log('📄 Raw request body:', rawBody.substring(0, 500)) // Log first 500 chars for debugging
+            
+            // Try to clean up common JSON issues
+            let cleanedBody = rawBody
+            
+            // Remove trailing commas before closing braces/brackets
+            cleanedBody = cleanedBody.replace(/,(\s*[}\]])/g, '$1')
+            
+            try {
+                body = JSON.parse(cleanedBody)
+            } catch (firstError) {
+                // If cleaning didn't help, try original error for better message
+                body = JSON.parse(rawBody)
+            }
+        } catch (jsonError) {
+            console.log('❌ Invalid JSON in request body:', jsonError)
+            
+            // Provide more helpful error message
+            let errorMessage = 'Invalid JSON in request body.'
+            if (jsonError instanceof SyntaxError && jsonError.message.includes('trailing comma')) {
+                errorMessage += ' Remove trailing commas from your JSON.'
+            } else if (jsonError instanceof SyntaxError && jsonError.message.includes('Expected double-quoted')) {
+                errorMessage += ' Ensure all property names are double-quoted and remove any trailing commas.'
+            }
+            
+            return NextResponse.json(
+                { error: errorMessage },
+                { status: 400 }
+            )
+        }
         
         // Parse original email data
         let originalFromData = null
@@ -638,8 +738,17 @@ export async function POST(
             return await handleSimpleReply(userId, emailId, original, body, idempotencyKey || undefined)
         }
 
+        // Helper to ensure proper Message-ID format with angle brackets
+        const formatMessageIdForThreading = (id: string) => {
+            if (!id) return ''
+            id = id.trim()
+            if (!id.startsWith('<')) id = `<${id}`
+            if (!id.endsWith('>')) id = `${id}>`
+            return id
+        }
+        
         // Build threading headers
-        const inReplyTo = original.messageId ? `<${original.messageId}>` : undefined
+        const inReplyTo = original.messageId ? formatMessageIdForThreading(original.messageId) : undefined
         let references: string[] = []
         
         // Parse existing references
@@ -647,7 +756,8 @@ export async function POST(
             try {
                 const parsedRefs = JSON.parse(original.references)
                 if (Array.isArray(parsedRefs)) {
-                    references = parsedRefs
+                    // Ensure each reference has angle brackets
+                    references = parsedRefs.map(ref => formatMessageIdForThreading(ref))
                 }
             } catch (e) {
                 console.error('Failed to parse references:', e)
@@ -656,9 +766,13 @@ export async function POST(
         
         // Add the original message ID to references
         if (original.messageId) {
-            references.push(`<${original.messageId}>`)
+            const formattedId = formatMessageIdForThreading(original.messageId)
+            // Only add if not already in references (avoid duplicates)
+            if (!references.includes(formattedId)) {
+                references.push(formattedId)
+            }
         }
-
+        
         // Add quoted original message to text body
         let finalTextBody = body.text || ''
         if (includeOriginal && body.text) {
@@ -702,6 +816,14 @@ export async function POST(
                 messageId = body.headers[messageIdKey].replace(/^<|>$/g, '')
             }
         }
+        
+        // Log threading info for debugging
+        console.log('📧 Full mode threading headers:', {
+            messageId: messageId,
+            inReplyTo: inReplyTo,
+            references: references,
+            originalMessageId: original.messageId
+        })
         
         console.log('💾 Creating sent email record:', replyEmailId)
         
