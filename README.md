@@ -1,9 +1,19 @@
 # 📬 Inbound - Email Infrastructure Made Simple
 <img width="2912" height="1363" alt="Frame 2" src="https://github.com/user-attachments/assets/a9ca6121-869c-4a00-84fb-24e5c08207bc" />
 
-**Stop juggling email providers. Start building.**
+## What is Inbound?
 
-Inbound gives you programmable email addresses that automatically process incoming messages and trigger webhooks in your app. Think of it as email infrastructure that actually works the way you'd want it to.
+**Inbound is an email infrastructure platform that makes email handling as simple as making API calls.**
+
+Instead of juggling multiple email providers, configuring SMTP servers, and parsing raw email content, Inbound provides a unified TypeScript SDK that handles both sending and receiving emails through webhooks.
+
+**Perfect for:**
+- 🤖 Building AI email agents and automated responses
+- 📧 Adding email functionality to your SaaS application  
+- 🔗 Processing inbound emails as structured webhook data
+- ⚡ Rapid email integration without infrastructure overhead
+
+**Stop juggling email providers. Start building.**
 
 <a href="https://vercel.com/oss?utm_source=inbound&utm_medium=referral&utm_campaign=oss">
   <img alt="Vercel OSS Program" src="https://vercel.com/oss/program-badge.svg" />
@@ -149,6 +159,31 @@ We're building email infrastructure that doesn't suck. Want to help?
 2. Make your changes
 3. Test with `bun run inbound-webhook-test`
 4. Submit a pull request
+
+## Frequently Asked Questions
+
+### What is the purpose of this project?
+
+Inbound solves the email infrastructure problem that every developer faces. Instead of spending weeks configuring SMTP servers, parsing email headers, and building webhook endpoints, you get a simple API that handles both sending and receiving emails. Think of it as "Stripe for email" - it just works.
+
+### How is this different from SendGrid/Mailgun/Resend?
+
+Traditional email providers only handle **sending** emails. Inbound handles both sending AND receiving emails as structured webhook data. This makes it perfect for building email-based applications, AI agents, and automated workflows.
+
+### Who should use Inbound?
+
+- **SaaS developers** adding email functionality to their apps
+- **AI/bot builders** creating email-based automation
+- **Startups** needing rapid email integration
+- **Anyone tired of email infrastructure complexity**
+
+### Is this production ready?
+
+Yes! Inbound is built on AWS infrastructure (SES, Lambda, S3) and handles everything from deliverability to spam filtering. It's designed to scale from 10 emails/day to 10M emails/day with the same simple API.
+
+### Can I self-host this?
+
+While the codebase is open source, Inbound is designed as a managed service to handle the complexity of email infrastructure, DNS management, and deliverability. However, you can explore the code to understand how modern email systems work.
 
 ---
 
