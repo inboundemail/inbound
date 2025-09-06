@@ -13,6 +13,10 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'inbound.new',
       },
+      {
+        protocol: 'https',
+        hostname: 'assets.basehub.com',
+      }
     ],
   },
   async headers() {

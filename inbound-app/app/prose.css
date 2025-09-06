@@ -1,0 +1,194 @@
+.prose {
+  @apply max-w-none leading-7 flex flex-col gap-6;
+}
+
+.prose h1 {
+  @apply text-4xl font-bold tracking-tight text-foreground;
+}
+
+.prose h2 {
+  @apply text-3xl font-semibold tracking-tight text-foreground;
+}
+
+.prose h3 {
+  @apply text-xl font-semibold tracking-tight text-foreground;
+}
+
+.prose h4 {
+  @apply text-xl font-semibold tracking-tight text-foreground;
+}
+
+.prose h5 {
+  @apply text-lg font-semibold tracking-tight text-foreground;
+}
+
+.prose h6 {
+  @apply text-base font-semibold tracking-tight text-foreground;
+}
+
+.prose p {
+  @apply leading-7 text-base text-left;
+}
+
+.prose strong {
+  @apply font-semibold;
+}
+
+.prose ul {
+  @apply mb-4 ml-6 list-disc text-muted-foreground;
+}
+
+.prose ol {
+  @apply mb-4 ml-6 list-decimal text-muted-foreground;
+}
+
+.prose blockquote {
+  @apply my-6 border-l-2 border-border pl-6 italic text-muted-foreground;
+}
+
+.prose pre {
+  @apply my-4 overflow-x-auto p-4 text-sm;
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d8 transparent;
+}
+.prose pre::-webkit-scrollbar {
+  height: 6px;
+  background: transparent;
+}
+.prose pre::-webkit-scrollbar-thumb {
+  background: #9b9b9b;
+  border-radius: 4px;
+}
+
+.prose code {
+  @apply bg-muted  py-0.5 text-sm;
+}
+
+.prose a {
+  @apply font-medium text-blue-500 underline underline-offset-4 hover:text-blue-500/80;
+}
+
+.prose img {
+  @apply border border-border;
+}
+
+.prose hr {
+  @apply my-8 border-border;
+}
+
+.prose pre[class*="language-"] {
+  @apply my-4 overflow-x-auto p-4;
+}
+
+/* Table styles */
+.prose table {
+  @apply my-6 w-full overflow-y-auto;
+}
+
+.prose table th {
+  @apply border px-4 py-2 text-left font-semibold;
+}
+
+.prose table td {
+  @apply border px-4 py-2;
+}
+
+/* Footnotes */
+.prose .footnotes {
+  @apply mt-12 border-t pt-4 text-sm;
+}
+
+.prose .footnotes ol {
+  @apply ml-4;
+}
+
+.prose .footnotes li {
+  @apply text-muted-foreground;
+}
+
+/* Task lists */
+.prose ul li[type="checkbox"] {
+  @apply list-none;
+}
+
+.prose ul li[type="checkbox"]::before {
+  @apply hidden;
+}
+
+/* Emoji */
+.prose .emoji {
+  @apply inline-block align-text-bottom;
+}
+
+/* Abbreviations */
+.prose abbr[title] {
+  @apply cursor-help border-dotted border-b;
+}
+
+.prose ins {
+  @apply bg-green-100 dark:bg-green-900/30 no-underline;
+}
+
+/* Marked text */
+.prose mark {
+  @apply bg-yellow-100 dark:bg-yellow-900/30 px-1;
+}
+
+/* Custom containers */
+
+.prose .alert {
+  @apply my-6 border-l-4 border-red-500 bg-red-50 p-4 dark:bg-red-900/20 [&>p]:m-0;
+}
+
+.prose .warning {
+  @apply my-6 border-l-4 border-yellow-500 bg-yellow-50 p-4 dark:bg-yellow-900/20 [&>p]:m-0;
+}
+
+.prose .info {
+  @apply my-6 border-l-4 border-blue-500 bg-blue-50 p-4 dark:bg-blue-900/20 [&>p]:m-0;
+}
+
+/* New containers */
+.prose .note {
+  @apply my-6 border-l-4 border-purple-500 bg-purple-50 p-4 dark:bg-purple-900/20 [&>p]:m-0;
+}
+
+.prose .tip {
+  @apply my-6 border-l-4 border-green-500 bg-green-50 p-4 dark:bg-green-900/20 [&>p]:m-0;
+}
+
+/* Abbreviations */
+.prose abbr {
+  @apply cursor-help border-dotted border-b border-muted-foreground;
+}
+
+/* Table of Contents styles */
+.prose .table-of-contents {
+  @apply my-8  border border-border bg-card p-6;
+}
+
+.prose .table-of-contents ul {
+  @apply mt-4 list-none pl-0;
+}
+
+.prose .table-of-contents ul ul {
+  @apply ml-4;
+}
+
+.prose .table-of-contents li {
+  @apply my-2 text-muted-foreground hover:text-foreground;
+}
+
+.prose .anchor {
+  @apply ml-2 text-muted-foreground no-underline opacity-0 transition-opacity hover:text-foreground;
+}
+
+.prose img {
+  @apply max-w-full h-auto w-full;
+}
+
+.prose h1:hover .anchor,
+.prose h2:hover .anchor,
+.prose h3:hover .anchor {
+  @apply opacity-100;
+}

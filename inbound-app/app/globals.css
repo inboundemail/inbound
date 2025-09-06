@@ -5,10 +5,10 @@
 @layer base {
   :root {
     /* Selection highlight (light mode) */
-    --selection-bg: #BE9DF7;
+    --selection-bg: #be9df7;
     --selection-fg: #ffffff;
     /* DNS table background */
-    --dns-table-bg: #FBFBFB;
+    --dns-table-bg: #fbfbfb;
     --dns-table-radius: 11px;
     /* Copy icon (light) */
     --copy-icon-box: rgba(94, 94, 94, 0.4);
@@ -33,7 +33,7 @@
     --destructive: 65% 0.2 30;
     --destructive-foreground: 98% 0.02 240;
     /* Light mode generic border (rgba(0,0,0,0.10)) */
-    --border: 0 0% 0% / 0.10;
+    --border: 0 0% 0% / 0.1;
     --input: 92% 0.02 240;
     --primary: 25% 0.08 264;
     --radius: 0.5rem;
@@ -50,12 +50,12 @@
     --sidebar-primary: 18% 0.01 240;
     --sidebar-primary-foreground: 0 0% 25.5%;
     /* Light mode sidebar border (rgba(0,0,0,0.10)) */
-    --sidebar-border: 0 0% 0% / 0.10;
+    --sidebar-border: 0 0% 0% / 0.1;
     /* Brand radii */
     --app-content-radius: 25px;
     --sidebar-radius: 30px;
     --sidebar-ring: 65% 0.18 240;
-    
+
     /* Inbound Custom Colors */
     --purple-primary: #8b5cf6;
     --purple-dark: #7c3aed;
@@ -71,19 +71,19 @@
 
     /* Alert (light) - from Figma */
     --alert-info-from: #ede8fe7a; /* semi-transparent violet */
-    --alert-info-to: #ffffff00;   /* transparent */
+    --alert-info-to: #ffffff00; /* transparent */
     --alert-info-border: rgba(128, 97, 255, 0.13);
-    --alert-info-text: #7c3aed;   /* violet-600 */
+    --alert-info-text: #7c3aed; /* violet-600 */
     /* Tabs (light) */
     --tabs-bg: #ffffff;
     --tabs-active-bg: #fbfbfb;
-    --tabs-border: rgba(0, 0, 0, 0.10);
+    --tabs-border: rgba(0, 0, 0, 0.1);
     --tabs-text: #000000;
     --tabs-text-active: #000000;
     --tabs-radius: 10px;
     --tabs-pill-radius: 7px;
     /* Badges (light) */
-    --badge-default-bg: rgba(108, 71, 255, 0.10);
+    --badge-default-bg: rgba(108, 71, 255, 0.1);
     --badge-default-text: #2e00e4;
     --badge-default-border: transparent;
 
@@ -91,7 +91,7 @@
     --badge-secondary-text: #ff6a00;
     --badge-secondary-border: transparent;
 
-    --badge-destructive-bg: rgba(255, 71, 74, 0.10);
+    --badge-destructive-bg: rgba(255, 71, 74, 0.1);
     --badge-destructive-text: #ed4e51;
     --badge-destructive-border: transparent;
 
@@ -100,19 +100,19 @@
     --badge-outline-border: rgba(0, 0, 0, 0.05);
 
     /* Button (light) */
-    --button-primary-bg: #8161FF;
+    --button-primary-bg: #8161ff;
     --button-primary-shadow-top: rgba(0, 0, 0, 0.25);
     --button-primary-shadow-bottom: rgba(255, 255, 255, 0.26);
-    --button-secondary-bg: #FFFFFF;
-    --button-destructive-bg: #FFEDED;
+    --button-secondary-bg: #ffffff;
+    --button-destructive-bg: #ffeded;
   }
 
   .dark {
     /* Selection highlight (dark mode) */
-    --selection-bg: #451E80;
+    --selection-bg: #451e80;
     --selection-fg: #ffffff;
     /* DNS table background */
-    --dns-table-bg: #14021C;
+    --dns-table-bg: #14021c;
     --dns-table-radius: 13px;
     /* Copy icon (dark) */
     --copy-icon-box: rgba(255, 255, 255, 0.4);
@@ -155,15 +155,15 @@
     --sidebar-accent-foreground: 0 0% 100%;
     --sidebar-accent-border: 0 0% 100% / 0.08; /* rgba(255,255,255,0.08) */
     /* Hover item */
-     --sidebar-hover: 285 85% 6%;
+    --sidebar-hover: 285 85% 6%;
     --sidebar-hover-foreground: 0 0% 100%;
     /* Dark mode sidebar border (rgba(255,255,255,0.10)) */
-    --sidebar-border: 0 0% 100% / 0.10;
+    --sidebar-border: 0 0% 100% / 0.1;
     /* Brand radii */
     --app-content-radius: 25px;
     --sidebar-radius: 30px;
     --sidebar-ring: 217.2 91.2% 59.8%;
-    
+
     /* Inbound Custom Colors - Dark Mode */
     --purple-primary: #8b5cf6;
     --purple-dark: #7c3aed;
@@ -180,7 +180,7 @@
     /* Alert (dark) - subtle variant */
     --alert-info-from: rgba(108, 71, 255, 0.08);
     --alert-info-to: #00000000;
-    --alert-info-border: rgba(108, 71, 255, 0.20);
+    --alert-info-border: rgba(108, 71, 255, 0.2);
     --alert-info-text: #bcacff;
     /* Tabs (dark) */
     --tabs-bg: #0f0114;
@@ -191,7 +191,7 @@
     --tabs-radius: 10px;
     --tabs-pill-radius: 7px;
     /* Badges (dark) */
-    --badge-default-bg: rgba(108, 71, 255, 0.10);
+    --badge-default-bg: rgba(108, 71, 255, 0.1);
     --badge-default-text: #bcacff;
     --badge-default-border: transparent;
 
@@ -199,7 +199,7 @@
     --badge-secondary-text: #ff6a00;
     --badge-secondary-border: transparent;
 
-    --badge-destructive-bg: rgba(109, 29, 29, 0.50);
+    --badge-destructive-bg: rgba(109, 29, 29, 0.5);
     --badge-destructive-text: #ffb9ba;
     --badge-destructive-border: transparent;
 
@@ -215,21 +215,30 @@
   }
   body {
     @apply bg-sidebar text-foreground font-sans;
-    font-family: var(--font-outfit), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    letter-spacing: -0.04em; /* Geist -4% tracking for body */    
+    font-family:
+      var(--font-outfit),
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      Roboto,
+      Arial,
+      sans-serif;
+    letter-spacing: -0.04em; /* Geist -4% tracking for body */
     overscroll-behavior-y: none;
   }
   html {
     scroll-behavior: smooth;
     background-color: hsl(var(--sidebar-background));
   }
-  
+
   /* Text selection styling */
   ::selection {
     background-color: var(--selection-bg);
     color: var(--selection-fg);
   }
-  
+
   ::-moz-selection {
     background-color: var(--selection-bg);
     color: var(--selection-fg);
@@ -240,20 +249,20 @@
   .text-balance {
     text-wrap: balance;
   }
-  
+
   /* Mobile touch improvements */
   @media (hover: none) and (pointer: coarse) {
     .hover\:scale-105:hover {
       transform: scale(1.02);
     }
-    
+
     /* Reduce animations on mobile for better performance */
     * {
       animation-duration: 0.2s !important;
       transition-duration: 0.2s !important;
     }
   }
-  
+
   /* Improve text readability on mobile */
   @media (max-width: 640px) {
     .text-gradient {
@@ -265,11 +274,34 @@
   }
 
   /* Heading typography rules */
-  h1, h2, h3, h4, h5, h6, .heading, .title {
-    font-family: var(--font-outfit), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  .heading,
+  .title {
+    font-family:
+      var(--font-outfit),
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      Roboto,
+      Arial,
+      sans-serif;
     letter-spacing: normal;
   }
-  
+
+  pre,
+  code {
+    font-family:
+      var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+      Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+
   @keyframes scale-in {
     from {
       transform: scale(1.1);
@@ -278,7 +310,7 @@
       transform: scale(1);
     }
   }
-  
+
   @keyframes fadeIn {
     from {
       opacity: 0;
@@ -289,9 +321,10 @@
       transform: translateY(0);
     }
   }
-  
+
   @keyframes gradientGlow {
-    0%, 100% {
+    0%,
+    100% {
       background-position: 0% 50%;
     }
     50% {
