@@ -1,10 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { checkMigrationNeeded, migrateWebhooksToEndpoints } from '@/app/actions/endpoints'
-import type { Endpoint } from '../types'
+import type { EndpointWithStats } from '../types'
 
-async function fetchEndpoints(): Promise<Endpoint[]> {
-  const response = await fetch('/api/v2/endpoints')
+async function fetchEndpoints(sortBy?: 'newest' | 'oldest'): Promise<EndpointWithStats[]> {
+  const params = new URLSearchParams()
+  if (sortBy) params.set('sortBy', sortBy)
+  
+  const response = await fetch(`/api/v2/endpoints${params.toString() ? `?${params}` : ''}`)
   
   if (!response.ok) {
     throw new Error('Failed to fetch endpoints')
@@ -14,14 +17,14 @@ async function fetchEndpoints(): Promise<Endpoint[]> {
   return data.data || []
 }
 
-export const useEndpointsQuery = () => {
+export const useEndpointsQuery = (sortBy?: 'newest' | 'oldest') => {
   const queryClient = useQueryClient()
   const [migrationChecked, setMigrationChecked] = useState(false)
   const [migrationInProgress, setMigrationInProgress] = useState(false)
 
   const endpointsQuery = useQuery({
-    queryKey: ['endpoints'],
-    queryFn: fetchEndpoints,
+    queryKey: ['endpoints', sortBy],
+    queryFn: () => fetchEndpoints(sortBy),
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
 

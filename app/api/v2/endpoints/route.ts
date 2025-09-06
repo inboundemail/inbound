@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateRequest } from '../helper/main'
 import { db } from '@/lib/db'
 import { endpoints, emailGroups, endpointDeliveries } from '@/lib/db/schema'
-import { eq, and, desc, count } from 'drizzle-orm'
+import { eq, and, desc, asc, count } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import type { CreateEndpointData, Endpoint, EndpointConfig } from '@/features/endpoints/types'
 
@@ -21,6 +21,7 @@ export interface GetEndpointsRequest {
     offset?: number
     type?: 'webhook' | 'email' | 'email_group'
     active?: 'true' | 'false'
+    sortBy?: 'newest' | 'oldest'
 }
 
 export interface EndpointWithStats {
@@ -74,12 +75,14 @@ export async function GET(request: NextRequest) {
         const offset = parseInt(searchParams.get('offset') || '0')
         const type = searchParams.get('type')
         const active = searchParams.get('active')
+        const sortBy = searchParams.get('sortBy') as 'newest' | 'oldest' | null
 
         console.log('📊 Query parameters:', {
             limit,
             offset,
             type,
-            active
+            active,
+            sortBy
         })
 
         // Validate parameters
@@ -116,6 +119,10 @@ export async function GET(request: NextRequest) {
         const whereConditions = conditions.length > 1 ? and(...conditions) : conditions[0]
 
         console.log('🔍 Querying endpoints from database')
+        
+        // Determine sort order - default to newest first
+        const sortOrder = sortBy === 'oldest' ? asc(endpoints.createdAt) : desc(endpoints.createdAt)
+        
         // Get endpoints
         const userEndpoints = await db
             .select({
@@ -131,7 +138,7 @@ export async function GET(request: NextRequest) {
             })
             .from(endpoints)
             .where(whereConditions)
-            .orderBy(desc(endpoints.createdAt))
+            .orderBy(sortOrder)
             .limit(limit)
             .offset(offset)
 

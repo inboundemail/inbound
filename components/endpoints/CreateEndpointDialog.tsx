@@ -5,6 +5,7 @@ import { useCreateEndpointMutation } from '@/features/endpoints/hooks'
 import { useDomainsStatsQuery } from '@/features/domains/hooks/useDomainsQuery'
 import { CreateEndpointData, WebhookConfig, EmailForwardConfig, EmailGroupConfig } from '@/features/endpoints/types'
 import { WEBHOOK_FORMAT_CONFIGS, getWebhookFormatConfig } from '@/lib/webhooks/webhook-formats'
+import { extractWebhookNameFromUrl, isValidUrl } from '@/lib/utils/webhook-url-parser'
 import type { WebhookFormat } from '@/lib/db/schema'
 import {
   Dialog,
@@ -53,6 +54,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
     retryAttempts: 3,
     headers: {}
   })
+  const [webhookUrlBasic, setWebhookUrlBasic] = useState('') // URL field for basic step
   const [headerKey, setHeaderKey] = useState('')
   const [headerValue, setHeaderValue] = useState('')
   
@@ -86,10 +88,38 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
         event.preventDefault()
-        if (currentStep === 'config' && !createEndpointMutation.isPending && selectedType && validateCurrentStep()) {
-          handleSubmit(event as any)
-        } else if (canProceedToNextStep()) {
-          handleNext()
+        
+        // Clear any existing errors before validation
+        setErrors({})
+        
+        // Check if current step is valid
+        const isCurrentStepValid = (() => {
+          if (currentStep === 'type') return selectedType !== null
+          if (currentStep === 'basic') {
+            const hasName = formData.name.trim() !== ''
+            if (selectedType === 'email') {
+              const hasValidEmail = emailConfig.forwardTo.trim() !== '' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailConfig.forwardTo)
+              return hasName && hasValidEmail
+            }
+            if (selectedType === 'webhook') {
+              const hasValidUrl = webhookUrlBasic.trim() !== '' && isValidUrl(webhookUrlBasic.trim())
+              return hasName && hasValidUrl
+            }
+            return hasName
+          }
+          if (currentStep === 'config') return validateCurrentStep()
+          return false
+        })()
+
+        if (isCurrentStepValid) {
+          if (currentStep === 'config' && !createEndpointMutation.isPending && selectedType) {
+            handleSubmit(event as any)
+          } else if (currentStep !== 'config') {
+            handleNext()
+          }
+        } else {
+          // Run validation to show errors
+          validateCurrentStep()
         }
       }
     }
@@ -101,7 +131,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [open, currentStep, createEndpointMutation.isPending, selectedType, formData, webhookConfig, emailConfig, emailGroupConfig])
+  }, [open, currentStep, createEndpointMutation.isPending, selectedType, formData, webhookConfig, webhookUrlBasic, emailConfig, emailGroupConfig])
 
   const validateCurrentStep = (): boolean => {
     const newErrors: Record<string, string> = {}
@@ -117,6 +147,15 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
         newErrors.name = 'Name is required'
       }
       
+      // For webhooks, validate URL in basic step (required)
+      if (selectedType === 'webhook') {
+        if (!webhookUrlBasic.trim()) {
+          newErrors.webhookUrlBasic = 'Webhook URL is required'
+        } else if (!isValidUrl(webhookUrlBasic.trim())) {
+          newErrors.webhookUrlBasic = 'Please enter a valid URL'
+        }
+      }
+      
       // For email forwards, validate email in basic step
       if (selectedType === 'email') {
         if (!emailConfig.forwardTo.trim()) {
@@ -129,16 +168,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
 
     if (currentStep === 'config' && selectedType) {
       if (selectedType === 'webhook') {
-        if (!webhookConfig.url.trim()) {
-          newErrors.url = 'URL is required'
-        } else {
-          try {
-            new URL(webhookConfig.url)
-          } catch {
-            newErrors.url = 'Please enter a valid URL'
-          }
-        }
-
+        // URL is handled in basic step, so no validation needed here
         if (webhookConfig.timeout && (webhookConfig.timeout < 1 || webhookConfig.timeout > 300)) {
           newErrors.timeout = 'Timeout must be between 1 and 300 seconds'
         }
@@ -175,6 +205,10 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
         const hasValidEmail = emailConfig.forwardTo.trim() !== '' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailConfig.forwardTo)
         return hasName && hasValidEmail
       }
+      if (selectedType === 'webhook') {
+        const hasValidUrl = webhookUrlBasic.trim() !== '' && isValidUrl(webhookUrlBasic.trim())
+        return hasName && hasValidUrl
+      }
       return hasName
     }
     return false
@@ -186,6 +220,10 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
     if (currentStep === 'type') {
       setCurrentStep('basic')
     } else if (currentStep === 'basic') {
+      // When moving from basic to config for webhooks, copy the URL
+      if (selectedType === 'webhook' && webhookUrlBasic.trim()) {
+        setWebhookConfig(prev => ({ ...prev, url: webhookUrlBasic.trim() }))
+      }
       setCurrentStep('config')
     }
   }
@@ -209,7 +247,19 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
 
     switch (selectedType) {
       case 'webhook':
-        config = webhookConfig
+        // Ensure URL is set (should be from basic step)
+        const finalWebhookConfig = { ...webhookConfig }
+        if (!finalWebhookConfig.url && webhookUrlBasic.trim()) {
+          finalWebhookConfig.url = webhookUrlBasic.trim()
+        }
+        
+        // Validate URL is present
+        if (!finalWebhookConfig.url) {
+          toast.error('Webhook URL is required')
+          return
+        }
+        
+        config = finalWebhookConfig
         break
       case 'email':
         config = emailConfig
@@ -249,6 +299,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
       retryAttempts: 3,
       headers: {}
     })
+    setWebhookUrlBasic('')
     setEmailConfig({
       forwardTo: '',
       includeAttachments: true,
@@ -310,6 +361,16 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
       ...prev,
       emails: prev.emails.filter(e => e !== email)
     }))
+  }
+
+  const handleWebhookUrlBasicChange = (url: string) => {
+    setWebhookUrlBasic(url)
+    
+    // Auto-populate name from URL if name is empty or matches previous URL extraction
+    const extractedName = extractWebhookNameFromUrl(url)
+    if (extractedName && (!formData.name.trim() || formData.name.endsWith('Webhook') || formData.name === extractedName)) {
+      setFormData(prev => ({ ...prev, name: extractedName }))
+    }
   }
 
   const getDialogIcon = () => {
@@ -387,7 +448,7 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
 
         {renderStepIndicator()}
 
-        <form id="endpoint-form" onSubmit={handleSubmit} className="min-h-[300px]">
+        <form id="endpoint-form" onSubmit={(e) => e.preventDefault()} className="min-h-[300px]">
           {/* Step 1: Type Selection */}
           {currentStep === 'type' && (
             <div className="space-y-4">
@@ -402,6 +463,26 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
           {/* Step 2: Basic Information */}
           {currentStep === 'basic' && (
             <div className="space-y-4">
+              {/* For webhooks, show URL field first */}
+              {selectedType === 'webhook' && (
+                <div className="space-y-2">
+                  <Label htmlFor="webhookUrlBasic">Webhook URL *</Label>
+                  <Input
+                    id="webhookUrlBasic"
+                    type="url"
+                    value={webhookUrlBasic}
+                    onChange={(e) => handleWebhookUrlBasicChange(e.target.value)}
+                    placeholder="https://your-app.com/webhooks/inbound"
+                    className={errors.webhookUrlBasic ? 'border-red-500' : ''}
+                    autoFocus
+                  />
+                  {errors.webhookUrlBasic && <p className="text-sm text-red-500">{errors.webhookUrlBasic}</p>}
+                  <p className="text-xs text-muted-foreground">
+                    Paste your webhook URL here and we'll auto-generate a name. You can configure format and other settings in the next step.
+                  </p>
+                </div>
+              )}
+
               {/* For email forwards, show email field first */}
               {selectedType === 'email' && (
                 <div className="space-y-2">
@@ -432,11 +513,16 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
                   id="name"
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder={`${selectedType === 'webhook' ? 'Production Webhook' : selectedType === 'email' ? 'Auto-filled from email above' : 'Team Email Group'}`}
+                  placeholder={`${selectedType === 'webhook' ? 'Auto-generated from URL above' : selectedType === 'email' ? 'Auto-filled from email above' : 'Team Email Group'}`}
                   className={errors.name ? 'border-red-500' : ''}
-                  autoFocus={selectedType !== 'email'}
+                  autoFocus={selectedType !== 'email' && selectedType !== 'webhook'}
                 />
                 {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
+                {selectedType === 'webhook' && (
+                  <p className="text-xs text-muted-foreground">
+                    This name will be editable and is auto-generated from the URL above
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -499,67 +585,33 @@ export function CreateEndpointDialog({ open, onOpenChange }: CreateEndpointDialo
             <div className="space-y-4">
               {selectedType === 'webhook' && (
                 <>
-                  <div className="space-y-2">
-                    <Label htmlFor="url">URL *</Label>
-                    <Input
-                      id="url"
-                      type="url"
-                      value={webhookConfig.url}
-                      onChange={(e) => setWebhookConfig(prev => ({ ...prev, url: e.target.value }))}
-                      placeholder="https://your-app.com/webhooks/inbound"
-                      className={errors.url ? 'border-red-500' : ''}
-                      autoFocus
-                    />
-                    {errors.url && <p className="text-sm text-red-500">{errors.url}</p>}
-                  </div>
-
                   <div className="space-y-3">
                     <Label>Webhook Format</Label>
-                    <div className="grid gap-3">
-                      {Object.entries(WEBHOOK_FORMAT_CONFIGS).map(([format, config]) => {
-                        const isDisabled = false
-                        return (
+                    <div className="space-y-2">
+                      {Object.entries(WEBHOOK_FORMAT_CONFIGS).map(([format, config]) => (
                         <div
                           key={format}
-                          className={`relative rounded-lg border p-4 transition-all ${
-                            isDisabled 
-                              ? 'border-border bg-muted cursor-not-allowed opacity-60'
-                              : webhookFormat === format
-                                ? 'border-primary bg-primary/5 ring-1 ring-primary cursor-pointer'
-                                : 'border-border hover:border-border/80 cursor-pointer'
+                          className={`flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-all ${
+                            webhookFormat === format
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border hover:border-border/80'
                           }`}
                           onClick={() => setWebhookFormat(format as WebhookFormat)}
                         >
-                          <div className="flex items-start gap-3">
-                            <div className={`mt-0.5 h-4 w-4 rounded-full border-2 transition-colors ${
-                               isDisabled
-                                 ? 'border-muted-foreground bg-muted'
-                                 : webhookFormat === format
-                                   ? 'border-primary bg-primary'
-                                   : 'border-muted-foreground'
-                             }`}>
-                              {webhookFormat === format && !isDisabled && (
-                                 <div className="h-full w-full rounded-full bg-background scale-50" />
-                               )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-medium text-foreground">{config.name}</h4>
-                              <p className="text-sm text-muted-foreground mt-1">{config.description}</p>
-                              {format === 'discord' && (
-                                <div className="mt-2 text-xs text-muted-foreground">
-                                  Perfect for Discord channels with rich embeds
-                                </div>
-                              )}
-                              {format === 'slack' && (
-                                <div className="mt-2 text-xs text-muted-foreground">
-                                  Slack-compatible format with attachments
-                                </div>
-                              )}
-                            </div>
+                          <div className={`h-4 w-4 rounded-full border-2 transition-colors ${
+                            webhookFormat === format
+                              ? 'border-primary bg-primary'
+                              : 'border-muted-foreground'
+                          }`}>
+                            {webhookFormat === format && (
+                              <div className="h-full w-full rounded-full bg-background scale-50" />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <span className="font-medium text-foreground">{config.name}</span>
                           </div>
                         </div>
-                       )
-                       })}
+                      ))}
                     </div>
                   </div>
 

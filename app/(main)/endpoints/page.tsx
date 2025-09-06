@@ -28,27 +28,29 @@ import Ban2 from '@/components/icons/ban-2'
 // import { CustomInboundIcon } from '@/components/icons/customInbound'
 // import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
-import { Endpoint } from '@/features/endpoints/types'
+import { EndpointWithStats } from '@/features/endpoints/types'
 import { ApiIdLabel } from '@/components/api-id-label'
 
 type FilterType = 'all' | 'webhook' | 'email' | 'email_group'
 type FilterStatus = 'all' | 'active' | 'disabled'
+type SortBy = 'newest' | 'oldest'
 
 export default function EndpointsPage() {
-  const { data: endpoints = [], isLoading, error, refetch, migrationInProgress, migrationChecked } = useEndpointsQuery()
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterType, setFilterType] = useState<FilterType>('all')
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
+  const [sortBy, setSortBy] = useState<SortBy>('newest')
+
+  const { data: endpoints = [], isLoading, error, refetch, migrationInProgress, migrationChecked } = useEndpointsQuery(sortBy)
   const migrationMutation = useMigrationMutation()
   const updateMutation = useUpdateEndpointMutation()
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
   const [showMigrationSuccess, setShowMigrationSuccess] = useState(false)
 
-  // Search and filter state
-  const [searchQuery, setSearchQuery] = useState('')
-  const [filterType, setFilterType] = useState<FilterType>('all')
-  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
-
   // Selection state removed in new design
 
-  const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | null>(null)
+  const [selectedEndpoint, setSelectedEndpoint] = useState<EndpointWithStats | null>(null)
 
   // Show migration success when automatic migration completes
   useEffect(() => {
@@ -73,7 +75,7 @@ export default function EndpointsPage() {
 
   // Memoize getConfigSummary to prevent recreations
   const getConfigSummary = useMemo(() => {
-    return (endpoint: Endpoint) => {
+    return (endpoint: EndpointWithStats) => {
       if (!endpoint.config) return null
 
       try {
@@ -100,10 +102,53 @@ export default function EndpointsPage() {
     return endpoints.filter(endpoint => {
       // Search filter
       const configSummary = getConfigSummary(endpoint)
+      let searchableContent = [
+        endpoint.name,
+        endpoint.description || '',
+        configSummary || ''
+      ]
+
+      // Add config-specific searchable content
+      if (endpoint.config) {
+        try {
+          // Check if config is already parsed (from API) or still a string
+          const config = typeof endpoint.config === 'string' 
+            ? JSON.parse(endpoint.config)
+            : endpoint.config
+          
+          switch (endpoint.type) {
+            case 'webhook':
+              // Add full URL for webhook endpoints
+              if (config.url) {
+                searchableContent.push(config.url)
+              }
+              break
+            case 'email':
+              // Add forward-to email address
+              if (config.forwardTo) {
+                searchableContent.push(config.forwardTo)
+              }
+              break
+            case 'email_group':
+              // Add all email addresses in the group - check both config.emails and groupEmails
+              if (config.emails && Array.isArray(config.emails)) {
+                searchableContent.push(...config.emails)
+              }
+              // Also check if groupEmails is available from API response
+              if (endpoint.groupEmails && Array.isArray(endpoint.groupEmails)) {
+                searchableContent.push(...endpoint.groupEmails)
+              }
+              break
+          }
+        } catch {
+          // If config parsing fails, continue with basic search
+        }
+      }
+
       const searchMatch = searchQuery === '' ||
-        endpoint.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        endpoint.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        configSummary?.toLowerCase().includes(searchQuery.toLowerCase())
+        searchableContent.some(content => 
+          content.toLowerCase().includes(searchQuery.toLowerCase())
+        )
 
       // Type filter
       const typeMatch = filterType === 'all' || endpoint.type === filterType
@@ -119,36 +164,36 @@ export default function EndpointsPage() {
 
   // removed bulk selection & clipboard interactions for simplified UI
 
-  const handleTestEndpoint = (endpoint: Endpoint) => {
+  const handleTestEndpoint = (endpoint: EndpointWithStats) => {
     setSelectedEndpoint(endpoint)
     setTestDialogOpen(true)
   }
 
-  const handleEditEndpoint = (endpoint: Endpoint) => {
+  const handleEditEndpoint = (endpoint: EndpointWithStats) => {
     setSelectedEndpoint(endpoint)
     setEditDialogOpen(true)
   }
 
-  const handleDeleteEndpoint = (endpoint: Endpoint) => {
+  const handleDeleteEndpoint = (endpoint: EndpointWithStats) => {
     setSelectedEndpoint(endpoint)
     setDeleteDialogOpen(true)
   }
 
   // bulk handlers removed
 
-  const getStatusBadge = (endpoint: Endpoint) => (
+  const getStatusBadge = (endpoint: EndpointWithStats) => (
     <Badge variant={endpoint.isActive ? 'default' : 'secondary'} className="rounded-md">
       {endpoint.isActive ? 'Active' : 'Inactive'}
     </Badge>
   )
 
-  const getEndpointStatusDot = (endpoint: Endpoint) => {
+  const getEndpointStatusDot = (endpoint: EndpointWithStats) => {
     return endpoint.isActive
       ? <div className="w-2 h-2 rounded-full bg-green-500" />
       : <div className="w-2 h-2 rounded-full bg-red-500" />
   }
 
-  const getTypeSpec = (endpoint: Endpoint) => {
+  const getTypeSpec = (endpoint: EndpointWithStats) => {
     switch (endpoint.type) {
       case 'email':
         return { Icon: Envelope, bg: 'rgba(128, 97, 255, 0.13)' } //  #8061FF @ 13%
@@ -165,7 +210,7 @@ export default function EndpointsPage() {
 
   
 
-  const getEndpointIconColor = (endpoint: Endpoint) => {
+  const getEndpointIconColor = (endpoint: EndpointWithStats) => {
     if (!endpoint.isActive) return 'hsl(var(--muted-foreground))'
 
     switch (endpoint.type) {
@@ -285,7 +330,7 @@ export default function EndpointsPage() {
               <div className="relative flex-1 min-w-[200px]">
                 <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search endpoints..."
+                  placeholder="Search endpoints, URLs, or emails..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 h-9 rounded-xl"
@@ -315,7 +360,17 @@ export default function EndpointsPage() {
                 </SelectContent>
               </Select>
 
-              {(searchQuery || filterType !== 'all' || filterStatus !== 'all') && (
+              <Select value={sortBy} onValueChange={(value: SortBy) => setSortBy(value)}>
+                <SelectTrigger className="w-[140px] h-9 rounded-xl">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Newest First</SelectItem>
+                  <SelectItem value="oldest">Oldest First</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {(searchQuery || filterType !== 'all' || filterStatus !== 'all' || sortBy !== 'newest') && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -323,6 +378,7 @@ export default function EndpointsPage() {
                     setSearchQuery('')
                     setFilterType('all')
                     setFilterStatus('all')
+                    setSortBy('newest')
                   }}
                   className="h-9"
                 >
@@ -384,6 +440,7 @@ export default function EndpointsPage() {
                             setSearchQuery('')
                             setFilterType('all')
                             setFilterStatus('all')
+                            setSortBy('newest')
                           }}
                         >
                           Clear Filters
@@ -434,7 +491,7 @@ export default function EndpointsPage() {
               </Card>
             ) : (
               <div className="border border-border rounded-[13px] bg-card">
-                {filteredEndpoints.map((endpoint: Endpoint) => {
+                {filteredEndpoints.map((endpoint: EndpointWithStats) => {
                   const { Icon } = getTypeSpec(endpoint)
                   const configSummary = getConfigSummary(endpoint)
                   return (

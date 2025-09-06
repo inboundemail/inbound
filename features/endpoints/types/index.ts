@@ -9,6 +9,17 @@ export type NewEmailGroup = typeof emailGroups.$inferInsert
 export type EndpointDelivery = typeof endpointDeliveries.$inferSelect
 export type NewEndpointDelivery = typeof endpointDeliveries.$inferInsert
 
+// Enhanced endpoint type with API-only properties
+export type EndpointWithStats = Endpoint & {
+  groupEmails?: string[] | null
+  deliveryStats?: {
+    total: number
+    successful: number
+    failed: number
+    lastDelivery: string | null
+  }
+}
+
 // Endpoint configuration types
 export type WebhookConfig = {
   url: string
