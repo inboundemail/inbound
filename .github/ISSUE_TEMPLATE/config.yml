@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 Documentation
+    url: https://docs.inbound.new
+    about: Check our documentation for help and guides
+  - name: 💬 Support
+    url: mailto:support@inbound.new
+    about: Contact our support team for help with your account or service issues
+  - name: 💼 Commercial Support
+    url: https://inbound.new/contact
+    about: Get in touch for enterprise support and custom solutions
+  - name: 🌟 Feature Discussions
+    url: https://github.com/R44VC0RP/inbound/discussions
+    about: Discuss ideas and features with the community

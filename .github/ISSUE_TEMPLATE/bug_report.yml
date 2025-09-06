@@ -1,0 +1,159 @@
+name: 🐛 Bug Report
+description: Report a bug or issue with Inbound
+title: "[Bug]: "
+labels: ["bug"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! 
+        
+        **Before submitting:** Please search existing issues to avoid duplicates.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe what happened and what you expected to happen instead.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component/Area
+      description: Which part of Inbound is affected?
+      options:
+        - Email Sending
+        - Email Receiving/Webhooks
+        - Domain Management
+        - API/SDK
+        - Dashboard/UI
+        - Authentication
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the bug
+      placeholder: |
+        1. Go to...
+        2. Click on...
+        3. Enter...
+        4. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened?
+      placeholder: Describe the expected outcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: Describe what actually occurred, including any error messages.
+    validations:
+      required: true
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Code Sample (if applicable)
+      description: If relevant, provide a minimal code sample that demonstrates the issue
+      render: javascript
+      placeholder: |
+        // Your code here
+        const inbound = new Inbound(apiKey);
+        // ...
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Messages/Logs
+      description: Include any error messages, stack traces, or relevant logs
+      render: shell
+      placeholder: |
+        Error: Something went wrong
+        at function (file:line:column)
+
+  - type: input
+    id: sdk-version
+    attributes:
+      label: SDK Version
+      description: If using the SDK, which version? (check package.json or npm list @inboundemail/sdk)
+      placeholder: e.g., 2.0.1
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      description: Where are you experiencing this issue?
+      options:
+        - Production (inbound.new)
+        - Development/Local
+        - Testing/Staging
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser/Runtime (if applicable)
+      description: Which browser or Node.js runtime version?
+      placeholder: e.g., Chrome 120, Node.js 18.x, Bun 1.x
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Impact/Priority
+      description: How severely does this affect your usage of Inbound?
+      options:
+        - Critical - Complete service failure
+        - High - Major functionality broken
+        - Medium - Some functionality affected
+        - Low - Minor inconvenience
+        - Enhancement - Nice to have fix
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround
+      description: Have you found any temporary solutions or workarounds?
+      placeholder: Describe any workarounds you've discovered.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context, screenshots, or information that might help
+      placeholder: Add any other context about the problem here. Screenshots are welcome!
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmation
+      description: Please confirm the following
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I have provided all the required information above
+          required: true
+        - label: I understand this is a bug report, not a support request (for support, please contact support@inbound.new)
+          required: true
