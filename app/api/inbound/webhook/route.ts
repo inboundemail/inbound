@@ -7,6 +7,7 @@ import { nanoid } from 'nanoid'
 import { eq, and } from 'drizzle-orm'
 import { Autumn as autumn } from 'autumn-js'
 import { createHmac } from 'crypto'
+import { generateWebhookSignature } from '@/lib/webhooks/signature-validation'
 import { parseEmail, sanitizeHtml, type ParsedEmailData } from '@/lib/email-management/email-parser'
 import { type SESEvent, type SESRecord } from '@/lib/aws-ses/aws-ses'
 import { isEmailBlocked } from '@/lib/email-management/email-blocking'
@@ -522,9 +523,8 @@ export async function triggerEmailAction(emailId: string): Promise<{ success: bo
     // Create webhook signature if secret exists
     let signature = null
     if (webhook.secret) {
-      const hmac = createHmac('sha256', webhook.secret)
-      hmac.update(payloadString)
-      signature = `sha256=${hmac.digest('hex')}`
+      // Use the new signature generation with timestamp
+      signature = generateWebhookSignature(payloadString, webhook.secret)
     }
 
     // Prepare headers
