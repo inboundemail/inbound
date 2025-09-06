@@ -86,6 +86,12 @@ function formatEmailDate(date: Date): string {
     return `${day}, ${dayNum} ${month} ${year} ${hours}:${minutes}:${seconds} +0000`
 }
 
+// Sanitize tag values for AWS SES compliance
+// SES only allows alphanumeric ASCII characters, '_', '-', '.', '@' in tag values
+function sanitizeTagValue(value: string): string {
+    return value.replace(/[^a-zA-Z0-9_\-\.@]/g, '_')
+}
+
 // Quote the original message for reply
 function quoteMessage(originalEmail: any, includeOriginal: boolean = true): string {
     if (!includeOriginal) return ''
@@ -333,8 +339,8 @@ async function handleSimpleReply(
             ...(originalEmail.messageId ? {
                 ReplyToAddresses: [fromAddress],
                 Tags: [
-                    ...(body.tags?.map(tag => ({ Name: tag.name, Value: tag.value })) || []),
-                    { Name: 'InReplyTo', Value: originalEmail.messageId },
+                    ...(body.tags?.map(tag => ({ Name: tag.name, Value: sanitizeTagValue(tag.value) })) || []),
+                    { Name: 'InReplyTo', Value: sanitizeTagValue(originalEmail.messageId) },
                     { Name: 'SimpleMode', Value: 'true' }
                 ]
             } : {})
