@@ -41,6 +41,20 @@ export function extractEmailAddress(email: string): string {
 }
 
 /**
+ * Extract name from formatted email (removes email part)
+ */
+export function extractEmailName(email: string): string | null {
+  // Handle "Name <email@domain.com>" format
+  const nameMatch = email.match(/^(.+?)\s*<[^>]+>$/)
+  if (nameMatch) {
+    return nameMatch[1].trim().replace(/^["']|["']$/g, '') // Remove quotes if present
+  }
+  
+  // No name part found
+  return null
+}
+
+/**
  * Check if a user can send from a given email address
  * Returns true if:
  * 1. The email is agent@inbnd.dev (allowed for all users)

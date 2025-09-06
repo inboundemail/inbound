@@ -8,7 +8,7 @@ import { sentEmails, emailDomains, structuredEmails, SENT_EMAIL_STATUS } from '@
 import { eq, and } from 'drizzle-orm'
 import { Autumn as autumn } from 'autumn-js'
 import { nanoid } from 'nanoid'
-import { canUserSendFromEmail, extractEmailAddress, extractDomain } from '@/lib/email-management/agent-email-helper'
+import { canUserSendFromEmail, extractEmailAddress, extractDomain, extractEmailName } from '@/lib/email-management/agent-email-helper'
 
 /**
  * POST /api/v2/emails/[id]/reply
@@ -196,7 +196,9 @@ async function handleSimpleReply(
     // Extract sender information
     const fromAddress = extractEmailAddress(body.from)
     const fromDomain = extractDomain(body.from)
-    const formattedFromAddress = formatSenderAddress(fromAddress, body.from_name)
+    // Use provided from_name, or extract name from combined format, or no name
+    const senderName = body.from_name || extractEmailName(body.from) || undefined
+    const formattedFromAddress = formatSenderAddress(fromAddress, senderName)
     
     console.log('📧 Simple reply details:', { 
         from: body.from, 
@@ -633,7 +635,9 @@ export async function POST(
         // Extract sender information and format with name if provided
         const fromAddress = extractEmailAddress(body.from)
         const fromDomain = extractDomain(body.from)
-        const formattedFromAddress = formatSenderAddress(fromAddress, body.from_name)
+        // Use provided from_name, or extract name from combined format, or no name
+        const senderName = body.from_name || extractEmailName(body.from) || undefined
+        const formattedFromAddress = formatSenderAddress(fromAddress, senderName)
         
         console.log('📧 Reply details:', { 
             from: body.from, 
