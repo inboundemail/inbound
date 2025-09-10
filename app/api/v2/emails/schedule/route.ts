@@ -7,10 +7,12 @@ import { eq, and, desc, count, lte } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { canUserSendFromEmail, extractEmailAddress, extractDomain } from '@/lib/email-management/agent-email-helper'
 import { parseScheduledAt, validateScheduledDate, formatScheduledDate } from '@/lib/utils/date-parser'
+import { emailScheduler } from '@/lib/qstash'
 
 /**
  * POST /api/v2/emails/schedule
  * Schedule an email to be sent at a future time (Resend-compatible)
+ * Now powered by QStash for precise scheduling instead of database polling
  * Supports both session-based auth and API key auth
  * Has tests? ❌ (TODO)
  * Has logging? ✅
@@ -238,45 +240,39 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Create scheduled email record
-        const scheduledEmailId = nanoid()
-        console.log('💾 Creating scheduled email record:', scheduledEmailId)
-
-        const scheduledEmailData = {
-            id: scheduledEmailId,
+        // Schedule email via QStash (replaces simple database insertion)
+        console.log('🚀 Scheduling email via QStash')
+        const qstashResult = await emailScheduler.scheduleEmail({
             userId,
+            emailData: {
+                from: body.from,
+                to: toAddresses,
+                cc: ccAddresses.length > 0 ? ccAddresses : undefined,
+                bcc: bccAddresses.length > 0 ? bccAddresses : undefined,
+                replyTo: replyToAddresses.length > 0 ? replyToAddresses : undefined,
+                subject: body.subject,
+                textBody: body.text,
+                htmlBody: body.html,
+                headers: body.headers,
+                attachments: processedAttachments.length > 0 ? attachmentsToStorageFormat(processedAttachments) : undefined,
+            },
             scheduledAt: parsedDate.date,
             timezone: parsedDate.timezone,
-            status: SCHEDULED_EMAIL_STATUS.SCHEDULED,
-            fromAddress: body.from,
-            fromDomain,
-            toAddresses: JSON.stringify(toAddresses),
-            ccAddresses: ccAddresses.length > 0 ? JSON.stringify(ccAddresses) : null,
-            bccAddresses: bccAddresses.length > 0 ? JSON.stringify(bccAddresses) : null,
-            replyToAddresses: replyToAddresses.length > 0 ? JSON.stringify(replyToAddresses) : null,
-            subject: body.subject,
-            textBody: body.text || null,
-            htmlBody: body.html || null,
-            headers: body.headers ? JSON.stringify(body.headers) : null,
-            attachments: processedAttachments.length > 0 ? JSON.stringify(attachmentsToStorageFormat(processedAttachments)) : null,
-            tags: body.tags ? JSON.stringify(body.tags) : null,
             idempotencyKey,
-            createdAt: new Date(),
-            updatedAt: new Date()
-        }
+            tags: body.tags,
+        });
 
-        const [createdScheduledEmail] = await db
-            .insert(scheduledEmails)
-            .values(scheduledEmailData)
-            .returning()
-
-        console.log('✅ Scheduled email created successfully:', scheduledEmailId)
+        console.log('✅ Email scheduled successfully via QStash:', {
+            scheduledEmailId: qstashResult.id,
+            qstashMessageId: qstashResult.qstashMessageId,
+            scheduledAt: qstashResult.scheduledAt.toISOString(),
+        });
 
         const response: PostScheduleEmailResponse = {
-            id: createdScheduledEmail.id,
-            scheduled_at: formatScheduledDate(createdScheduledEmail.scheduledAt),
+            id: qstashResult.id,
+            scheduled_at: formatScheduledDate(qstashResult.scheduledAt),
             status: 'scheduled',
-            timezone: createdScheduledEmail.timezone || 'UTC'
+            timezone: parsedDate.timezone
         }
 
         return NextResponse.json(response, { status: 201 })
@@ -319,24 +315,21 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Offset must be non-negative' }, { status: 400 })
         }
 
-        console.log('🔍 Querying scheduled emails:', { limit, offset, statusFilter })
+        console.log('🔍 Querying scheduled emails via QStash scheduler:', { limit, offset, statusFilter })
 
-        // Build query conditions
+        // Use the QStash-aware email scheduler for listing
+        const scheduledEmailsList = await emailScheduler.listScheduledEmails(userId, {
+            status: statusFilter || undefined,
+            limit,
+            offset,
+        });
+
+        // Get total count for pagination
         const conditions = [eq(scheduledEmails.userId, userId)]
         if (statusFilter) {
             conditions.push(eq(scheduledEmails.status, statusFilter))
         }
 
-        // Get scheduled emails
-        const scheduledEmailsList = await db
-            .select()
-            .from(scheduledEmails)
-            .where(and(...conditions))
-            .orderBy(desc(scheduledEmails.scheduledAt))
-            .limit(limit)
-            .offset(offset)
-
-        // Get total count
         const totalResult = await db
             .select({ count: count() })
             .from(scheduledEmails)

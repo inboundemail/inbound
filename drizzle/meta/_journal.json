@@ -302,6 +302,13 @@
       "when": 1757444484943,
       "tag": "0042_slippery_maestro",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1757512412197,
+      "tag": "0043_loose_sway",
+      "breakpoints": true
     }
   ]
 }

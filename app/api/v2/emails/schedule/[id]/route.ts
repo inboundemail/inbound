@@ -4,13 +4,14 @@ import { db } from '@/lib/db'
 import { scheduledEmails, SCHEDULED_EMAIL_STATUS } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { formatScheduledDate } from '@/lib/utils/date-parser'
+import { emailScheduler } from '@/lib/qstash'
 
 /**
  * GET /api/v2/emails/schedule/[id]
- * Get details of a specific scheduled email
+ * Get details of a specific scheduled email (QStash-aware)
  * 
  * DELETE /api/v2/emails/schedule/[id] 
- * Cancel a scheduled email (only if status is 'scheduled')
+ * Cancel a scheduled email via QStash (only if status is 'scheduled')
  * 
  * Has tests? ❌ (TODO)
  * Has logging? ✅
@@ -69,25 +70,17 @@ export async function GET(
         }
         console.log('✅ Authentication successful for userId:', userId)
 
-        // Find the scheduled email
-        const scheduledEmailList = await db
-            .select()
-            .from(scheduledEmails)
-            .where(and(
-                eq(scheduledEmails.id, id),
-                eq(scheduledEmails.userId, userId)
-            ))
-            .limit(1)
+        // Get the scheduled email via QStash scheduler
+        const scheduledEmail = await emailScheduler.getScheduledEmail(id)
 
-        if (scheduledEmailList.length === 0) {
-            console.log('❌ Scheduled email not found:', id)
+        if (!scheduledEmail || scheduledEmail.userId !== userId) {
+            console.log('❌ Scheduled email not found or unauthorized:', id)
             return NextResponse.json(
                 { error: 'Scheduled email not found' },
                 { status: 404 }
             )
         }
 
-        const scheduledEmail = scheduledEmailList[0]
         console.log('✅ Found scheduled email:', id, 'status:', scheduledEmail.status)
 
         // Format response
@@ -149,25 +142,17 @@ export async function DELETE(
         }
         console.log('✅ Authentication successful for userId:', userId)
 
-        // Find the scheduled email
-        const scheduledEmailList = await db
-            .select()
-            .from(scheduledEmails)
-            .where(and(
-                eq(scheduledEmails.id, id),
-                eq(scheduledEmails.userId, userId)
-            ))
-            .limit(1)
+        // Get the scheduled email via QStash scheduler
+        const scheduledEmail = await emailScheduler.getScheduledEmail(id)
 
-        if (scheduledEmailList.length === 0) {
-            console.log('❌ Scheduled email not found:', id)
+        if (!scheduledEmail || scheduledEmail.userId !== userId) {
+            console.log('❌ Scheduled email not found or unauthorized:', id)
             return NextResponse.json(
                 { error: 'Scheduled email not found' },
                 { status: 404 }
             )
         }
 
-        const scheduledEmail = scheduledEmailList[0]
         console.log('📧 Found scheduled email:', id, 'status:', scheduledEmail.status)
 
         // Check if email can be cancelled
@@ -179,26 +164,16 @@ export async function DELETE(
             )
         }
 
-        // Update status to cancelled
-        console.log('🚫 Cancelling scheduled email:', id)
-        const [updatedEmail] = await db
-            .update(scheduledEmails)
-            .set({
-                status: SCHEDULED_EMAIL_STATUS.CANCELLED,
-                updatedAt: new Date()
-            })
-            .where(and(
-                eq(scheduledEmails.id, id),
-                eq(scheduledEmails.userId, userId)
-            ))
-            .returning()
+        // Cancel via QStash-aware scheduler
+        console.log('🚫 Cancelling scheduled email via QStash:', id)
+        await emailScheduler.cancelScheduledEmail(id)
 
         console.log('✅ Scheduled email cancelled successfully:', id)
 
         const response: DeleteScheduledEmailResponse = {
-            id: updatedEmail.id,
+            id,
             status: 'cancelled',
-            cancelled_at: updatedEmail.updatedAt?.toISOString() || new Date().toISOString()
+            cancelled_at: new Date().toISOString()
         }
 
         return NextResponse.json(response)

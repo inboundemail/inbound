@@ -12,6 +12,7 @@ import { GetDomainsResponse, PostDomainsRequest, PostDomainsResponse } from "./d
 import { GetDomainByIdResponse, PutDomainByIdRequest, PutDomainByIdResponse } from "./domains/[id]/route";
 import { PostEmailsResponse } from "./emails/route";
 import { GetEmailByIdResponse } from "./emails/[id]/route";
+import { PostScheduleEmailRequest, PostScheduleEmailResponse } from "./emails/schedule/route";
 import { PostDomainAuthInitResponse, PatchDomainAuthVerifyResponse } from "./domains/[id]/auth/route";
 import type { WebhookConfig } from "@/features/endpoints/types";
 import { setupWebhook, createTestFlag, sendTestEmail } from "./helper/webhook-tester";
@@ -1956,6 +1957,394 @@ describe("Domain Authentication API", () => {
             expect(data.summary.verifiedRecords).toBeGreaterThanOrEqual(0);
 
             console.log(`✅ Domain auth verification completed - Status: ${data.overallStatus}, Records: ${data.summary.verifiedRecords}/${data.summary.totalRecords} verified`);
+        });
+    });
+});
+
+// QStash Email Scheduling Tests
+let scheduledEmailIds: string[] = [];
+
+describe("QStash Email Scheduling Tests", () => {
+    
+    describe("POST /emails/schedule - 5 minute delay", () => {
+        it("should schedule email to be sent in 5 minutes via QStash", async () => {
+            const scheduleRequest: PostScheduleEmailRequest = {
+                from: "scheduler@inbound.new",
+                to: "ryan@mandarin3d.com",
+                subject: "QStash Test - 5 Minute Delivery",
+                text: "This email was scheduled to be sent in 5 minutes using QStash.",
+                html: "<h2>QStash 5 Minute Test</h2><p>This email was scheduled to be sent in <strong>5 minutes</strong> using QStash.</p><p>Scheduled at: " + new Date().toISOString() + "</p>",
+                scheduled_at: "in 5 minutes",
+                timezone: "UTC"
+            };
+
+            const response = await fetch(`${API_URL}/emails/schedule`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`,
+                    "Content-Type": "application/json",
+                    "Idempotency-Key": `test_5min_${Date.now()}`
+                },
+                body: JSON.stringify(scheduleRequest)
+            });
+
+            const data: PostScheduleEmailResponse = await response.json();
+            
+            expect(response.status).toBe(201);
+            expect(data.id).toBeDefined();
+            expect(data.status).toBe('scheduled');
+            expect(data.scheduled_at).toBeDefined();
+            
+            scheduledEmailIds.push(data.id);
+            console.log(`✅ 5-minute email scheduled: ${data.id} at ${data.scheduled_at}`);
+        });
+    });
+
+    describe("POST /emails/schedule - 10 minute delay", () => {
+        it("should schedule email to be sent in 10 minutes via QStash", async () => {
+            const scheduleRequest: PostScheduleEmailRequest = {
+                from: "marketing@inbound.new",
+                to: "ryan@mandarin3d.com",
+                subject: "QStash Test - 10 Minute Delivery",
+                text: "This email was scheduled to be sent in 10 minutes using QStash.",
+                html: "<h2>QStash 10 Minute Test</h2><p>This email was scheduled to be sent in <strong>10 minutes</strong> using QStash.</p><p>Scheduled at: " + new Date().toISOString() + "</p>",
+                scheduled_at: "in 10 minutes",
+                timezone: "UTC"
+            };
+
+            const response = await fetch(`${API_URL}/emails/schedule`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`,
+                    "Content-Type": "application/json",
+                    "Idempotency-Key": `test_10min_${Date.now()}`
+                },
+                body: JSON.stringify(scheduleRequest)
+            });
+
+            const data: PostScheduleEmailResponse = await response.json();
+            
+            expect(response.status).toBe(201);
+            expect(data.id).toBeDefined();
+            expect(data.status).toBe('scheduled');
+            expect(data.scheduled_at).toBeDefined();
+            
+            scheduledEmailIds.push(data.id);
+            console.log(`✅ 10-minute email scheduled: ${data.id} at ${data.scheduled_at}`);
+        });
+    });
+
+    describe("POST /emails/schedule - 1 hour delay", () => {
+        it("should schedule email to be sent in 1 hour via QStash", async () => {
+            const scheduleRequest: PostScheduleEmailRequest = {
+                from: "support@inbound.new",
+                to: "ryan@mandarin3d.com",
+                subject: "QStash Test - 1 Hour Delivery",
+                text: "This email was scheduled to be sent in 1 hour using QStash.",
+                html: "<h2>QStash 1 Hour Test</h2><p>This email was scheduled to be sent in <strong>1 hour</strong> using QStash.</p><p>Scheduled at: " + new Date().toISOString() + "</p>",
+                scheduled_at: "in 1 hour",
+                timezone: "UTC"
+            };
+
+            const response = await fetch(`${API_URL}/emails/schedule`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`,
+                    "Content-Type": "application/json",
+                    "Idempotency-Key": `test_1hour_${Date.now()}`
+                },
+                body: JSON.stringify(scheduleRequest)
+            });
+
+            const data: PostScheduleEmailResponse = await response.json();
+            
+            expect(response.status).toBe(201);
+            expect(data.id).toBeDefined();
+            expect(data.status).toBe('scheduled');
+            expect(data.scheduled_at).toBeDefined();
+            
+            scheduledEmailIds.push(data.id);
+            console.log(`✅ 1-hour email scheduled: ${data.id} at ${data.scheduled_at}`);
+        });
+    });
+
+    describe("POST /emails/schedule - 2 days delay", () => {
+        it("should schedule email to be sent in 2 days via QStash", async () => {
+            const scheduleRequest: PostScheduleEmailRequest = {
+                from: "newsletter@inbound.new",
+                to: "ryan@mandarin3d.com",
+                subject: "QStash Test - 2 Day Delivery",
+                text: "This email was scheduled to be sent in 2 days using QStash.",
+                html: "<h2>QStash 2 Day Test</h2><p>This email was scheduled to be sent in <strong>2 days</strong> using QStash.</p><p>Scheduled at: " + new Date().toISOString() + "</p>",
+                scheduled_at: "in 2 days",
+                timezone: "UTC"
+            };
+
+            const response = await fetch(`${API_URL}/emails/schedule`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`,
+                    "Content-Type": "application/json",
+                    "Idempotency-Key": `test_2days_${Date.now()}`
+                },
+                body: JSON.stringify(scheduleRequest)
+            });
+
+            const data: PostScheduleEmailResponse = await response.json();
+            
+            expect(response.status).toBe(201);
+            expect(data.id).toBeDefined();
+            expect(data.status).toBe('scheduled');
+            expect(data.scheduled_at).toBeDefined();
+            
+            scheduledEmailIds.push(data.id);
+            console.log(`✅ 2-day email scheduled: ${data.id} at ${data.scheduled_at}`);
+        });
+    });
+
+    describe("POST /emails/schedule - Complex email with attachments", () => {
+        it("should schedule email with multiple attachments via QStash", async () => {
+            // Simple base64 test image (1x1 pixel PNG)
+            const testImageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAHIcLq+1QAAAABJRU5ErkJggg==";
+            
+            const scheduleRequest: PostScheduleEmailRequest = {
+                from: "attachments@inbound.new",
+                to: "ryan@mandarin3d.com",
+                cc: ["test@inbound.new"],
+                subject: "QStash Test - Email with Attachments (15 mins)",
+                text: "This is a test email with attachments scheduled via QStash.",
+                html: `
+                    <h2>QStash Attachment Test</h2>
+                    <p>This email contains:</p>
+                    <ul>
+                        <li>An inline image: <img src="cid:test-logo" width="50" height="50" alt="Test Logo" /></li>
+                        <li>A PDF attachment</li>
+                    </ul>
+                    <p>Scheduled at: ${new Date().toISOString()}</p>
+                `,
+                scheduled_at: "in 15 minutes",
+                timezone: "UTC",
+                attachments: [
+                    {
+                        content: testImageBase64,
+                        filename: "test-logo.png",
+                        contentType: "image/png",
+                        content_id: "test-logo"
+                    },
+                    {
+                        content: "JVBERi0xLjQKJdPr6eHpKSBzdHJlYW0KQlQKMCAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMyAwIFIKL1BhZ2VNb2RlIC9Vc2VOb25lCj4+CmVuZG9iago0IDAgb2JqCjw8Ci9UeXBlIC9Gb250Ci9TdWJ0eXBlIC9UeXBlMQovQmFzZUZvbnQgL0hlbHZldGljYQo+PgplbmRvYmoKcmVmCjANAP//QABNIQ==",
+                        filename: "test-document.pdf",
+                        contentType: "application/pdf"
+                    }
+                ],
+                tags: [
+                    {"name": "test", "value": "qstash"},
+                    {"name": "type", "value": "attachment-test"}
+                ]
+            };
+
+            const response = await fetch(`${API_URL}/emails/schedule`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`,
+                    "Content-Type": "application/json",
+                    "Idempotency-Key": `test_attachments_${Date.now()}`
+                },
+                body: JSON.stringify(scheduleRequest)
+            });
+
+            const data: PostScheduleEmailResponse = await response.json();
+            
+            expect(response.status).toBe(201);
+            expect(data.id).toBeDefined();
+            expect(data.status).toBe('scheduled');
+            expect(data.scheduled_at).toBeDefined();
+            
+            scheduledEmailIds.push(data.id);
+            console.log(`✅ Attachment email scheduled: ${data.id} at ${data.scheduled_at}`);
+        });
+    });
+
+    describe("POST /emails/schedule - Immediate delivery test", () => {
+        it("should schedule email for immediate delivery via QStash", async () => {
+            const scheduleRequest: PostScheduleEmailRequest = {
+                from: "immediate@inbound.new",
+                to: "ryan@mandarin3d.com",
+                subject: "QStash Test - Immediate Delivery",
+                text: "This email should be sent immediately via QStash.",
+                html: "<h2>QStash Immediate Test</h2><p>This email should be sent <strong>immediately</strong> via QStash.</p><p>Scheduled at: " + new Date().toISOString() + "</p>",
+                scheduled_at: "in 1 minute", // Minimal delay for immediate testing
+                timezone: "UTC"
+            };
+
+            const response = await fetch(`${API_URL}/emails/schedule`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`,
+                    "Content-Type": "application/json",
+                    "Idempotency-Key": `test_immediate_${Date.now()}`
+                },
+                body: JSON.stringify(scheduleRequest)
+            });
+
+            const data: PostScheduleEmailResponse = await response.json();
+            
+            expect(response.status).toBe(201);
+            expect(data.id).toBeDefined();
+            expect(data.status).toBe('scheduled');
+            expect(data.scheduled_at).toBeDefined();
+            
+            scheduledEmailIds.push(data.id);
+            console.log(`✅ Immediate email scheduled: ${data.id} at ${data.scheduled_at}`);
+        });
+    });
+
+    describe("GET /emails/schedule - List scheduled emails", () => {
+        it("should list all scheduled emails including QStash queue", async () => {
+            const response = await fetch(`${API_URL}/emails/schedule`, {
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`
+                }
+            });
+
+            const data = await response.json();
+            
+            expect(response.status).toBe(200);
+            expect(data.data).toBeDefined();
+            expect(Array.isArray(data.data)).toBe(true);
+            expect(data.pagination).toBeDefined();
+            
+            console.log(`📊 Listed scheduled emails: ${data.data.length} emails found`);
+            
+            // Show details of scheduled emails
+            data.data.forEach((email: any) => {
+                console.log(`📧 ${email.status}: ${email.subject} (${email.scheduled_at})`);
+            });
+        });
+    });
+
+    describe("QStash Monitoring - Check queue status", () => {
+        it("should return current QStash queue status", async () => {
+            const response = await fetch(`${API_URL}/../qstash/monitoring?include_qstash=true`, {
+                headers: {
+                    "Authorization": `Bearer ${API_KEY}`
+                }
+            });
+
+            const data = await response.json();
+            
+            expect(response.status).toBe(200);
+            expect(data.success).toBe(true);
+            expect(data.data.queue).toBeDefined();
+            expect(data.data.queue.currentlyQueued).toBeDefined();
+            expect(Array.isArray(data.data.queue.currentlyQueued)).toBe(true);
+            
+            console.log(`📊 QStash Queue Status:`);
+            console.log(`   📧 Queued: ${data.data.queue.queuedCount} emails`);
+            console.log(`   🔄 Processing: ${data.data.queue.processing.length} emails`);
+            console.log(`   📈 Total ever scheduled: ${data.data.database.totalCount}`);
+            console.log(`   📊 Status breakdown:`, data.data.database.statusBreakdown);
+            
+            // Show currently queued emails
+            if (data.data.queue.currentlyQueued.length > 0) {
+                console.log(`\n🎯 Currently Queued Emails:`);
+                data.data.queue.currentlyQueued.forEach((email: any) => {
+                    console.log(`   📧 ${email.subject} → ${email.scheduledAt} (${email.id})`);
+                });
+            } else {
+                console.log(`\n🎯 No emails currently queued`);
+            }
+        });
+    });
+
+    describe("Test different time formats", () => {
+        it("should schedule emails with various time formats", async () => {
+            const testCases = [
+                {
+                    from: "iso8601@inbound.new",
+                    scheduled_at: new Date(Date.now() + 25 * 60 * 1000).toISOString(), // 25 minutes from now
+                    subject: "QStash Test - ISO 8601 Format"
+                },
+                {
+                    from: "natural1@inbound.new", 
+                    scheduled_at: "today at 11pm",
+                    subject: "QStash Test - Today at 11PM"
+                },
+                {
+                    from: "natural2@inbound.new",
+                    scheduled_at: "tomorrow at 9am", 
+                    subject: "QStash Test - Tomorrow at 9AM"
+                },
+                {
+                    from: "timezone@inbound.new",
+                    scheduled_at: "tomorrow at 2pm",
+                    timezone: "America/New_York",
+                    subject: "QStash Test - Tomorrow 2PM EST"
+                }
+            ];
+
+            for (const testCase of testCases) {
+                const scheduleRequest: PostScheduleEmailRequest = {
+                    from: testCase.from,
+                    to: "ryan@mandarin3d.com",
+                    subject: testCase.subject,
+                    text: `Test email for time format: ${testCase.scheduled_at}`,
+                    html: `<h2>${testCase.subject}</h2><p>Testing time format: <code>${testCase.scheduled_at}</code></p><p>Timezone: ${testCase.timezone || 'UTC'}</p>`,
+                    scheduled_at: testCase.scheduled_at,
+                    timezone: testCase.timezone
+                };
+
+                const response = await fetch(`${API_URL}/emails/schedule`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${API_KEY}`,
+                        "Content-Type": "application/json",
+                        "Idempotency-Key": `test_format_${Date.now()}_${Math.random()}`
+                    },
+                    body: JSON.stringify(scheduleRequest)
+                });
+
+                const data: PostScheduleEmailResponse = await response.json();
+                
+                expect(response.status).toBe(201);
+                expect(data.id).toBeDefined();
+                scheduledEmailIds.push(data.id);
+                
+                console.log(`✅ ${testCase.scheduled_at} → Scheduled for ${data.scheduled_at} (${data.id})`);
+            }
+        });
+    });
+
+    describe("Cleanup - Cancel test emails", () => {
+        it("should cancel all test emails that haven't been sent yet", async () => {
+            console.log(`\n🧹 Cleaning up ${scheduledEmailIds.length} test emails...`);
+            
+            let cancelledCount = 0;
+            let alreadySentCount = 0;
+            
+            for (const emailId of scheduledEmailIds) {
+                const response = await fetch(`${API_URL}/emails/schedule/${emailId}`, {
+                    method: "DELETE",
+                    headers: {
+                        "Authorization": `Bearer ${API_KEY}`
+                    }
+                });
+
+                if (response.status === 200) {
+                    cancelledCount++;
+                    console.log(`🚫 Cancelled: ${emailId}`);
+                } else if (response.status === 400) {
+                    alreadySentCount++;
+                    console.log(`✅ Already sent: ${emailId}`);
+                } else {
+                    console.log(`⚠️ Failed to cancel ${emailId}: ${response.status}`);
+                }
+            }
+            
+            console.log(`\n📊 Cleanup Summary:`);
+            console.log(`   🚫 Cancelled: ${cancelledCount} emails`);
+            console.log(`   ✅ Already sent: ${alreadySentCount} emails`);
+            console.log(`   📧 Total processed: ${scheduledEmailIds.length} emails`);
         });
     });
 });
