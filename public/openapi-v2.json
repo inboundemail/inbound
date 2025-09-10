@@ -17,7 +17,7 @@
   },
   "servers": [
     {
-      "url": "https://app.inbound.new",
+      "url": "https://inbound.new",
       "description": "Production server"
     },
     {

@@ -20,7 +20,8 @@
     "email": "bun run scripts/sending/resend.ts",
     "email-verified": "bun run scripts/test-domain-verification.ts",
     "preview-email": "bun run scripts/preview-domain-email.ts",
-    "trigger-cron": "curl -X GET \"http://localhost:3000/api/cron/process-scheduled-emails\" -H \"Authorization: Bearer ${CRON_SECRET:-test-secret}\" || echo 'Make sure your dev server is running and CRON_SECRET is set'"
+    "trigger-cron": "curl -X GET \"http://localhost:3000/api/cron/process-scheduled-emails\" -H \"Authorization: Bearer ${CRON_SECRET:-test-secret}\" || echo 'Make sure your dev server is running and CRON_SECRET is set'",
+    "generate:openapi": "bun run scripts/generate-openapi.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "1.0.2",
@@ -146,6 +147,7 @@
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "ts-morph": "^27.0.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "yaml": "^2.8.1"
   }
 }
