@@ -72,7 +72,7 @@ export function DeleteWebhookDialog({ open, onOpenChange, webhook }: DeleteWebho
         <div className="space-y-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <CircleWarning2 width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
+              <CircleWarning2 width="20" height="20" className="text-red-500 mt-0.5 shrink-0" />
               <div>
                 <h4 className="text-sm font-medium text-red-800 mb-1">
                   This action cannot be undone

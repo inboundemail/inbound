@@ -97,7 +97,7 @@ export function EmailAttachments({ emailId, attachments }: EmailAttachmentsProps
               Icon={File2}
               backgroundColor="#6b7280"
               size={32}
-              className="flex-shrink-0"
+              className="shrink-0"
             />
             <div className="flex-1 min-w-0">
               <div className="font-medium text-sm text-gray-900 truncate">{attachment.filename}</div>

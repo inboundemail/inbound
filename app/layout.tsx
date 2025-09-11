@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import { Outfit, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./prose.css";
-import 'fumadocs-ui/css/neutral.css';
-import 'fumadocs-ui/css/preset.css';
 import { Analytics } from "@vercel/analytics/next"
 import { Analytics as DubAnalytics } from '@dub/analytics/react';
 import { AutumnProvider } from "autumn-js/react";

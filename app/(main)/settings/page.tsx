@@ -761,7 +761,7 @@ export default function SettingsPage() {
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
               <div className="flex items-start gap-2">
-                <div className="w-4 h-4 rounded-full bg-amber-500 mt-0.5 flex-shrink-0"></div>
+                <div className="w-4 h-4 rounded-full bg-amber-500 mt-0.5 shrink-0"></div>
                 <div className="text-sm text-amber-800">
                   <strong>Important:</strong> This is the only time you'll see this API key. Make sure to copy and store it securely.
                 </div>

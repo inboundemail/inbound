@@ -291,7 +291,7 @@ export default async function AnalyticsPage() {
               <div key={email.id} className="border border-border rounded-lg p-3 hover:bg-muted/50 transition-colors">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3 min-w-0 flex-1">
-                    <div className="text-xs text-muted-foreground font-mono w-16 flex-shrink-0 mt-0.5">
+                    <div className="text-xs text-muted-foreground font-mono w-16 shrink-0 mt-0.5">
                       {format(new Date(email.receivedAt), 'HH:mm:ss')}
                     </div>
                     <div className="min-w-0 flex-1">

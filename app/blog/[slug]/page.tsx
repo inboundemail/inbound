@@ -97,7 +97,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 </header>
 
                 {blog.image?.url && (
-                  <div className="w-full aspect-[16/9] bg-muted flex items-center justify-center rounded-2xl overflow-hidden">
+                  <div className="w-full aspect-video bg-muted flex items-center justify-center rounded-2xl overflow-hidden">
                     <BaseHubImage
                       src={blog.image.url}
                       alt={blog.title}

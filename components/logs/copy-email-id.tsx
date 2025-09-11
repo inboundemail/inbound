@@ -40,7 +40,7 @@ export function CopyEmailId({ emailId, label = "Email ID" }: CopyEmailIdProps) {
           variant="ghost"
           size="sm"
           onClick={handleCopy}
-          className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0"
+          className="h-8 w-8 p-0 hover:bg-muted border border-border rounded shrink-0"
           title="Copy email ID"
         >
           {copied ? (

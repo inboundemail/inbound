@@ -1447,7 +1447,7 @@ export default function AddDomainForm({
                         {showDnsWarning && (
                             <div className="bg-yellow-500/10 border-b border-yellow-500/20 p-4">
                                 <div className="flex items-start gap-2">
-                                    <CircleWarning2 width="16" height="16" className="text-yellow-600 mt-0.5 flex-shrink-0" />
+                                    <CircleWarning2 width="16" height="16" className="text-yellow-600 mt-0.5 shrink-0" />
                                     <div className="flex-1 text-sm">
                                         <p className="font-medium text-yellow-700 dark:text-yellow-400 mb-1">
                                             Important DNS Configuration Note
@@ -1506,7 +1506,7 @@ export default function AddDomainForm({
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => copyToClipboard(extractRecordName(record.name, domainName))}
-                                                className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                className="h-8 w-8 p-0 hover:bg-muted border border-border rounded shrink-0 ml-2"
                                             >
                                                 <Clipboard2 width="16" height="16" className="text-muted-foreground" />
                                             </Button>
@@ -1524,7 +1524,7 @@ export default function AddDomainForm({
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => copyToClipboard(record.type)}
-                                                className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                className="h-8 w-8 p-0 hover:bg-muted border border-border rounded shrink-0 ml-2"
                                             >
                                                 <Clipboard2 width="16" height="16" className="text-muted-foreground" />
                                             </Button>
@@ -1554,7 +1554,7 @@ export default function AddDomainForm({
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => copyToClipboard(record.type === "MX" ? record.value.split(" ")[1] : record.value)}
-                                                className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                className="h-8 w-8 p-0 hover:bg-muted border border-border rounded shrink-0 ml-2"
                                             >
                                                 <Clipboard2 width="16" height="16" className="text-muted-foreground" />
                                             </Button>
@@ -1573,7 +1573,7 @@ export default function AddDomainForm({
                                                     variant="ghost"
                                                     size="sm"
                                                     onClick={() => copyToClipboard(record.type === "MX" ? record.value.split(" ")[0] : "")}
-                                                    className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                    className="h-8 w-8 p-0 hover:bg-muted border border-border rounded shrink-0 ml-2"
                                                 >
                                                     <Clipboard2 width="16" height="16" className="text-muted-foreground" />
                                                 </Button>

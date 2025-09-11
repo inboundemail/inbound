@@ -165,7 +165,7 @@ export default async function InboundEmailServicePage() {
 
             <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
               {/* TypeScript First */}
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-8 border border-blue-200">
+              <div className="bg-linear-to-br from-blue-50 to-blue-100 rounded-xl p-8 border border-blue-200">
                 <div className="w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-6">
                   <Code2 width="32" height="32" className="text-white" />
                 </div>
@@ -180,7 +180,7 @@ export default async function InboundEmailServicePage() {
               </div>
 
               {/* Modern APIs */}
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-8 border border-green-200">
+              <div className="bg-linear-to-br from-green-50 to-green-100 rounded-xl p-8 border border-green-200">
                 <div className="w-16 h-16 bg-green-600 rounded-xl flex items-center justify-center mx-auto mb-6">
                   <Globe2 width="32" height="32" className="text-white" />
                 </div>
@@ -195,7 +195,7 @@ export default async function InboundEmailServicePage() {
               </div>
 
               {/* Real-time Processing */}
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-8 border border-purple-200">
+              <div className="bg-linear-to-br from-purple-50 to-purple-100 rounded-xl p-8 border border-purple-200">
                 <div className="w-16 h-16 bg-purple-600 rounded-xl flex items-center justify-center mx-auto mb-6">
                   <Timer width="32" height="32" className="text-white" />
                 </div>
@@ -423,7 +423,7 @@ app.post('/webhook', (req, res) => {
             
             <div className="grid md:grid-cols-2 gap-6 max-w-5xl mx-auto text-left">
               {/* Customer Support */}
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-8 border border-blue-200">
+              <div className="bg-linear-to-br from-blue-50 to-blue-100 rounded-xl p-8 border border-blue-200">
                 <CustomInboundIcon 
                   backgroundColor="#3b82f6" 
                   Icon={Envelope2} 
@@ -442,7 +442,7 @@ app.post('/webhook', (req, res) => {
               </div>
 
               {/* Lead Management */}
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-8 border border-green-200">
+              <div className="bg-linear-to-br from-green-50 to-green-100 rounded-xl p-8 border border-green-200">
                 <CustomInboundIcon 
                   backgroundColor="#10b981" 
                   Icon={Globe2} 
@@ -461,7 +461,7 @@ app.post('/webhook', (req, res) => {
               </div>
 
               {/* System Monitoring */}
-              <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-8 border border-red-200">
+              <div className="bg-linear-to-br from-red-50 to-red-100 rounded-xl p-8 border border-red-200">
                 <CustomInboundIcon 
                   backgroundColor="#dc2626" 
                   Icon={ShieldCheck} 
@@ -480,7 +480,7 @@ app.post('/webhook', (req, res) => {
               </div>
 
               {/* E-commerce */}
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-8 border border-purple-200">
+              <div className="bg-linear-to-br from-purple-50 to-purple-100 rounded-xl p-8 border border-purple-200">
                 <CustomInboundIcon 
                   backgroundColor="#8b5cf6" 
                   Icon={Settings3} 

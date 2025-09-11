@@ -205,7 +205,7 @@ export default function EmailsPage() {
                 className="flex items-center gap-4 px-5 py-4 transition-colors cursor-pointer hover:bg-muted/50"
               >
                 {/* Domain Icon with Status */}
-                <div className="flex-shrink-0">
+                <div className="shrink-0">
                   <div className="relative p-[8px] rounded-md bg-muted">
                     <Globe2 width="23" height="23" className="text-[#735ACF]" />
                     <div className="absolute -top-1 -right-1">{getDomainStatusDot(domain)}</div>
@@ -213,7 +213,7 @@ export default function EmailsPage() {
                 </div>
 
                 {/* Domain Name */}
-                <div className="flex-shrink-0 w-64 flex flex-col gap-[2px]">
+                <div className="shrink-0 w-64 flex flex-col gap-[2px]">
                   <div className="flex items-center gap-2">
 
                     <span className="text-sm font-medium">{domain.domain}</span>
@@ -237,7 +237,7 @@ export default function EmailsPage() {
 
 
                 {/* Created */}
-                <div className="flex-shrink-0 text-xs text-muted-foreground w-20 text-right ml-auto">
+                <div className="shrink-0 text-xs text-muted-foreground w-20 text-right ml-auto">
                   {format(new Date(domain.createdAt), 'MMM d')}
                 </div>
               </Link>

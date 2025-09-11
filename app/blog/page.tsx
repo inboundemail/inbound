@@ -13,7 +13,7 @@ export default async function BlogPage() {
         <h1 className="text-4xl md:text-5xl mb-6 leading-tight">
           Blog
         </h1>
-        <p className="text-lg text-[var(--text-secondary)] max-w-2xl mx-auto mb-16 leading-relaxed">
+        <p className="text-lg text-(--text-secondary) max-w-2xl mx-auto mb-16 leading-relaxed">
           Stay updated with the latest news and updates from inbound.
         </p>
       </section>

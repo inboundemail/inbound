@@ -195,7 +195,7 @@ export const PricingCard = ({
 
         {/* Features */}
         {showFeatures && items.length > 0 && (
-          <div className="flex-grow mb-6">
+          <div className="grow mb-6">
             <PricingFeatureList
               items={items}
               showIcon={true}
@@ -253,7 +253,7 @@ export const PricingFeatureList = ({
       {items.map((item, index) => (
         <div key={index} className="flex items-start gap-3 text-sm">
           {showIcon && (
-            <Check2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+            <Check2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
           )}
           <div className="flex flex-col">
             <span className="text-card-foreground">{item.primaryText}</span>

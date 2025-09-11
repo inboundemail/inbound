@@ -82,7 +82,7 @@ export default function AmbassadorPage() {
                                 Application Submitted!
                             </Highlighter>
                         </h1>
-                        <p className="text-lg text-[var(--text-secondary)] mb-8 max-w-2xl mx-auto">
+                        <p className="text-lg text-(--text-secondary) mb-8 max-w-2xl mx-auto">
                             Thank you for your interest in becoming an Inbound Ambassador! 
                             We've received your application and will review it shortly. 
                             You'll hear from us within the next few days.
@@ -160,19 +160,19 @@ export default function AmbassadorPage() {
                     <h1 className="text-4xl md:text-5xl mb-6">
                         become an inbound <Highlighter action="underline" color="#6C47FF">ambassador</Highlighter>
                     </h1>
-                    <p className="text-lg text-[var(--text-secondary)] max-w-3xl mx-auto leading-relaxed">
+                    <p className="text-lg text-(--text-secondary) max-w-3xl mx-auto leading-relaxed">
                         Join our community of developers who are passionate about making email development simple and accessible. 
                         Help spread the word about Inbound and earn rewards for your contributions.
                     </p>
                 </div>
 
                 {/* Application Form */}
-                <Card className="bg-[var(--bg-card)] border-[var(--border-primary)] max-w-2xl mx-auto">
+                <Card className="bg-(--bg-card) border-(--border-primary) max-w-2xl mx-auto">
                     <CardHeader>
-                        <CardTitle className="text-2xl font-bold text-[var(--text-primary)]">
+                        <CardTitle className="text-2xl font-bold text-(--text-primary)">
                             Ambassador Application
                         </CardTitle>
-                        <CardDescription className="text-[var(--text-secondary)]">
+                        <CardDescription className="text-(--text-secondary)">
                             Tell us about yourself and why you'd like to become an Inbound Ambassador
                         </CardDescription>
                     </CardHeader>
@@ -180,7 +180,7 @@ export default function AmbassadorPage() {
                         <form onSubmit={handleSubmit} className="space-y-6">
                             {/* Name Field */}
                             <div className="space-y-2">
-                                <Label htmlFor="name" className="text-[var(--text-primary)] font-medium">
+                                <Label htmlFor="name" className="text-(--text-primary) font-medium">
                                     Full Name *
                                 </Label>
                                 <Input
@@ -190,13 +190,13 @@ export default function AmbassadorPage() {
                                     value={formData.name}
                                     onChange={(e) => handleInputChange('name', e.target.value)}
                                     required
-                                    className="bg-[var(--bg-primary)] border-[var(--border-secondary)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--purple-primary)] focus:ring-[var(--purple-primary)]"
+                                    className="bg-(--bg-primary) border-(--border-secondary) text-(--text-primary) placeholder:text-(--text-muted) focus:border-(--purple-primary) focus:ring-(--purple-primary)"
                                 />
                             </div>
 
                             {/* Email Field */}
                             <div className="space-y-2">
-                                <Label htmlFor="email" className="text-[var(--text-primary)] font-medium">
+                                <Label htmlFor="email" className="text-(--text-primary) font-medium">
                                     Email Address *
                                 </Label>
                                 <Input
@@ -206,13 +206,13 @@ export default function AmbassadorPage() {
                                     value={formData.email}
                                     onChange={(e) => handleInputChange('email', e.target.value)}
                                     required
-                                    className="bg-[var(--bg-primary)] border-[var(--border-secondary)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--purple-primary)] focus:ring-[var(--purple-primary)]"
+                                    className="bg-(--bg-primary) border-(--border-secondary) text-(--text-primary) placeholder:text-(--text-muted) focus:border-(--purple-primary) focus:ring-(--purple-primary)"
                                 />
                             </div>
 
                             {/* X Handle Field */}
                             <div className="space-y-2">
-                                <Label htmlFor="xHandle" className="text-[var(--text-primary)] font-medium">
+                                <Label htmlFor="xHandle" className="text-(--text-primary) font-medium">
                                     X (Twitter) Handle *
                                 </Label>
                                 <Input
@@ -229,13 +229,13 @@ export default function AmbassadorPage() {
                                         handleInputChange('xHandle', value)
                                     }}
                                     required
-                                    className="bg-[var(--bg-primary)] border-[var(--border-secondary)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--purple-primary)] focus:ring-[var(--purple-primary)]"
+                                    className="bg-(--bg-primary) border-(--border-secondary) text-(--text-primary) placeholder:text-(--text-muted) focus:border-(--purple-primary) focus:ring-(--purple-primary)"
                                 />
                             </div>
 
                             {/* Reason Field */}
                             <div className="space-y-2">
-                                <Label htmlFor="reason" className="text-[var(--text-primary)] font-medium">
+                                <Label htmlFor="reason" className="text-(--text-primary) font-medium">
                                     Why do you want to be an Inbound Ambassador? *
                                 </Label>
                                 <Textarea
@@ -245,9 +245,9 @@ export default function AmbassadorPage() {
                                     onChange={(e) => handleInputChange('reason', e.target.value)}
                                     required
                                     rows={4}
-                                    className="bg-[var(--bg-primary)] border-[var(--border-secondary)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--purple-primary)] focus:ring-[var(--purple-primary)] resize-none"
+                                    className="bg-(--bg-primary) border-(--border-secondary) text-(--text-primary) placeholder:text-(--text-muted) focus:border-(--purple-primary) focus:ring-(--purple-primary) resize-none"
                                 />
-                                <div className="text-right text-xs text-[var(--text-muted)]">
+                                <div className="text-right text-xs text-(--text-muted)">
                                     {formData.reason.length}/1000 characters
                                 </div>
                             </div>
@@ -263,7 +263,7 @@ export default function AmbassadorPage() {
                             <Button
                                 type="submit"
                                 size="lg"
-                                className="w-full bg-[var(--purple-primary)] hover:bg-[var(--purple-dark)] text-white border-0 py-3 font-medium"
+                                className="w-full bg-(--purple-primary) hover:bg-(--purple-dark) text-white border-0 py-3 font-medium"
                                 disabled={isSubmitting}
                             >
                                 {isSubmitting ? 'Submitting Application...' : 'Submit Application'}
@@ -274,28 +274,28 @@ export default function AmbassadorPage() {
 
                 {/* What You'll Get Section */}
                 <div className="mt-16 text-center">
-                    <h2 className="text-2xl mb-8 text-[var(--text-primary)]">
+                    <h2 className="text-2xl mb-8 text-(--text-primary)">
                         What You'll Get as an Ambassador
                     </h2>
                     <div className="grid md:grid-cols-3 gap-6">
-                        <div className="bg-[var(--bg-card)] border border-[var(--border-secondary)] rounded-lg p-6">
+                        <div className="bg-(--bg-card) border border-(--border-secondary) rounded-lg p-6">
                             <div className="text-3xl mb-4">🎯</div>
-                            <h3 className="font-semibold text-[var(--purple-primary)] mb-2">Early Access</h3>
-                            <p className="text-sm text-[var(--text-muted)]">
+                            <h3 className="font-semibold text-(--purple-primary) mb-2">Early Access</h3>
+                            <p className="text-sm text-(--text-muted)">
                                 Be the first to try new features and provide feedback to shape the future of Inbound
                             </p>
                         </div>
-                        <div className="bg-[var(--bg-card)] border border-[var(--border-secondary)] rounded-lg p-6">
+                        <div className="bg-(--bg-card) border border-(--border-secondary) rounded-lg p-6">
                             <div className="text-3xl mb-4">💰</div>
-                            <h3 className="font-semibold text-[var(--purple-primary)] mb-2">Rewards & Perks</h3>
-                            <p className="text-sm text-[var(--text-muted)]">
+                            <h3 className="font-semibold text-(--purple-primary) mb-2">Rewards & Perks</h3>
+                            <p className="text-sm text-(--text-muted)">
                                 Earn credits, swag, and exclusive perks for successful referrals and community contributions
                             </p>
                         </div>
-                        <div className="bg-[var(--bg-card)] border border-[var(--border-secondary)] rounded-lg p-6">
+                        <div className="bg-(--bg-card) border border-(--border-secondary) rounded-lg p-6">
                             <div className="text-3xl mb-4">🤝</div>
-                            <h3 className="font-semibold text-[var(--purple-primary)] mb-2">Direct Access</h3>
-                            <p className="text-sm text-[var(--text-muted)]">
+                            <h3 className="font-semibold text-(--purple-primary) mb-2">Direct Access</h3>
+                            <p className="text-sm text-(--text-muted)">
                                 Connect directly with our team and influence product decisions through ambassador feedback
                             </p>
                         </div>

@@ -86,7 +86,7 @@ export default async function EmailAsWebhookPage() {
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
               email
               <CustomInboundIcon
-                className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-[fadeInRotate_1s_ease-out_0.5s_forwards]"
+                className="inline-block ml-4 mr-2 align-bottom opacity-0 animate-fade-in-rotate"
                 backgroundColor="#1C2894"
                 Icon={Envelope2}
                 size={48}
@@ -132,7 +132,7 @@ export default async function EmailAsWebhookPage() {
             <h2 className="text-3xl font-bold text-gray-900 mb-12 text-center">how it works</h2>
             
             {/* Step 1: Email Arrives */}
-            <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-8 mb-8">
+            <div className="bg-linear-to-br from-gray-50 to-gray-100 rounded-xl p-8 mb-8">
               <div className="flex items-center gap-4 mb-6">
                 <CustomInboundIcon 
                   backgroundColor="#10b981" 
@@ -162,7 +162,7 @@ export default async function EmailAsWebhookPage() {
             </div>
 
             {/* Step 2: Parse & Structure */}
-            <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-8 mb-8">
+            <div className="bg-linear-to-br from-purple-50 to-indigo-50 rounded-xl p-8 mb-8">
               <div className="flex items-center gap-4 mb-6">
                 <CustomInboundIcon 
                   backgroundColor="#6C47FF" 
@@ -198,7 +198,7 @@ export default async function EmailAsWebhookPage() {
             </div>
 
             {/* Step 3: Webhook Delivery */}
-            <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-8">
+            <div className="bg-linear-to-br from-blue-50 to-cyan-50 rounded-xl p-8">
               <div className="flex items-center gap-4 mb-6">
                 <CustomInboundIcon 
                   backgroundColor="#3b82f6" 
@@ -361,7 +361,7 @@ export default async function EmailAsWebhookPage() {
 
             <div className="space-y-8 max-w-4xl mx-auto text-left">
               {/* Step 1: Install SDK */}
-              <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-8 border border-purple-200">
+              <div className="bg-linear-to-br from-purple-50 to-indigo-50 rounded-xl p-8 border border-purple-200">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white font-bold">1</div>
                   <h3 className="text-xl font-bold text-gray-900">Install the SDK</h3>
@@ -382,7 +382,7 @@ export default async function EmailAsWebhookPage() {
               </div>
 
               {/* Step 2: Create Email + Webhook */}
-              <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-8 border border-blue-200">
+              <div className="bg-linear-to-br from-blue-50 to-cyan-50 rounded-xl p-8 border border-blue-200">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">2</div>
                   <h3 className="text-xl font-bold text-gray-900">Create Email & Webhook</h3>
@@ -407,7 +407,7 @@ export default async function EmailAsWebhookPage() {
               </div>
 
               {/* Step 3: Handle Webhooks */}
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-8 border border-green-200">
+              <div className="bg-linear-to-br from-green-50 to-emerald-50 rounded-xl p-8 border border-green-200">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center text-white font-bold">3</div>
                   <h3 className="text-xl font-bold text-gray-900">Handle Incoming Webhooks</h3>
@@ -520,7 +520,7 @@ export default async function EmailAsWebhookPage() {
           </div>
 
           {/* Final CTA */}
-          <div className="bg-gradient-to-br from-purple-600 via-purple-700 to-purple-900 rounded-2xl p-12 text-white">
+          <div className="bg-linear-to-br from-purple-600 via-purple-700 to-purple-900 rounded-2xl p-12 text-white">
             <h2 className="text-3xl font-bold mb-4">Ready to get started?</h2>
             <p className="text-xl text-purple-100 mb-8 max-w-2xl mx-auto">
               Join thousands of developers who trust Inbound for their email infrastructure.

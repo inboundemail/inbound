@@ -107,7 +107,7 @@ export default async function EmailWebhookAPIPage() {
             
             <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
               {/* Step 1 */}
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-8 border border-blue-200">
+              <div className="bg-linear-to-br from-blue-50 to-blue-100 rounded-xl p-8 border border-blue-200">
                 <div className="w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-6">
                   <Envelope2 width="32" height="32" className="text-white" />
                 </div>
@@ -118,7 +118,7 @@ export default async function EmailWebhookAPIPage() {
               </div>
 
               {/* Step 2 */}
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-8 border border-purple-200">
+              <div className="bg-linear-to-br from-purple-50 to-purple-100 rounded-xl p-8 border border-purple-200">
                 <div className="w-16 h-16 bg-purple-600 rounded-xl flex items-center justify-center mx-auto mb-6">
                   <Database2 width="32" height="32" className="text-white" />
                 </div>
@@ -129,7 +129,7 @@ export default async function EmailWebhookAPIPage() {
               </div>
 
               {/* Step 3 */}
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-8 border border-green-200">
+              <div className="bg-linear-to-br from-green-50 to-green-100 rounded-xl p-8 border border-green-200">
                 <div className="w-16 h-16 bg-green-600 rounded-xl flex items-center justify-center mx-auto mb-6">
                   <BoltLightning width="32" height="32" className="text-white" />
                 </div>
@@ -441,7 +441,7 @@ app.post('/webhooks/email', (req, res) => {
 
             <div className="space-y-8 max-w-4xl mx-auto text-left">
               {/* Step 1 */}
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-8 border border-blue-200">
+              <div className="bg-linear-to-br from-blue-50 to-blue-100 rounded-xl p-8 border border-blue-200">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">1</div>
                   <h3 className="text-xl font-bold text-gray-900">Install & Setup</h3>
@@ -455,7 +455,7 @@ app.post('/webhooks/email', (req, res) => {
               </div>
 
               {/* Step 2 */}
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-8 border border-purple-200">
+              <div className="bg-linear-to-br from-purple-50 to-purple-100 rounded-xl p-8 border border-purple-200">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white font-bold">2</div>
                   <h3 className="text-xl font-bold text-gray-900">Create Webhook</h3>
@@ -473,7 +473,7 @@ app.post('/webhooks/email', (req, res) => {
               </div>
 
               {/* Step 3 */}
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-8 border border-green-200">
+              <div className="bg-linear-to-br from-green-50 to-green-100 rounded-xl p-8 border border-green-200">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center text-white font-bold">3</div>
                   <h3 className="text-xl font-bold text-gray-900">Handle Webhooks</h3>

@@ -125,7 +125,7 @@ export function DeleteEndpointDialog({ open, onOpenChange, endpoint }: DeleteEnd
         <div className="space-y-4">
           <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <CircleWarning2 className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
+              <CircleWarning2 className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
               <div>
                 <h4 className="text-sm font-medium text-destructive mb-1">
                   This action cannot be undone

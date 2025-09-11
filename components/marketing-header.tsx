@@ -69,7 +69,7 @@ export default async function MarketingHeader() {
               <DropdownMenuItem asChild className="p-0">
                 <a href="/email-as-webhook" className="w-full cursor-pointer p-4 rounded-lg hover:bg-blue-50 hover:border-blue-200 border border-transparent transition-all duration-200 group">
                   <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-blue-200 transition-colors">
+                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-blue-200 transition-colors">
                       <BoltLightning className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -83,7 +83,7 @@ export default async function MarketingHeader() {
               <DropdownMenuItem asChild className="p-0">
                 <a href="/improvmx-alternative" className="w-full cursor-pointer p-4 rounded-lg hover:bg-green-50 hover:border-green-200 border border-transparent transition-all duration-200 group">
                   <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-green-200 transition-colors">
+                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-green-200 transition-colors">
                       <Envelope2 className="w-4 h-4 text-green-600 group-hover:text-green-700" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -97,7 +97,7 @@ export default async function MarketingHeader() {
               <DropdownMenuItem asChild className="p-0">
                 <a href="/addtoblocklist" className="w-full cursor-pointer p-4 rounded-lg hover:bg-red-50 hover:border-red-200 border border-transparent transition-all duration-200 group">
                   <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-red-200 transition-colors">
+                    <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-red-200 transition-colors">
                       <ShieldCheck className="w-4 h-4 text-red-600 group-hover:text-red-700" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -111,7 +111,7 @@ export default async function MarketingHeader() {
               <DropdownMenuItem asChild className="p-0">
                 <a href="/examples" className="w-full cursor-pointer p-4 rounded-lg hover:bg-orange-50 hover:border-orange-200 border border-transparent transition-all duration-200 group">
                   <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-orange-200 transition-colors">
+                    <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-orange-200 transition-colors">
                       <Code2 className="w-4 h-4 text-orange-600 group-hover:text-orange-700" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -127,7 +127,7 @@ export default async function MarketingHeader() {
               <DropdownMenuItem asChild className="p-0">
                 <a href="/changelog" className="w-full cursor-pointer p-4 rounded-lg hover:bg-purple-50 hover:border-purple-200 border border-transparent transition-all duration-200 group">
                   <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-purple-200 transition-colors">
+                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-purple-200 transition-colors">
                       <File2 className="w-4 h-4 text-purple-600 group-hover:text-purple-700" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -143,7 +143,7 @@ export default async function MarketingHeader() {
               <DropdownMenuItem asChild className="p-0">
                 <a href="/docs" className="w-full cursor-pointer p-4 rounded-lg hover:bg-purple-50 hover:border-purple-200 border border-transparent transition-all duration-200 group">
                   <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-purple-200 transition-colors">
+                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-purple-200 transition-colors">
                       <Code2 className="w-4 h-4 text-purple-600 group-hover:text-purple-700" />
                     </div>
                     <div className="flex-1 min-w-0">

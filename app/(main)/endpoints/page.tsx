@@ -500,7 +500,7 @@ export default function EndpointsPage() {
                       className="flex items-center gap-4 px-5 py-4 transition-colors cursor-pointer hover:bg-muted/50"
                     >
                       {/* Endpoint Icon with Status */}
-                      <div className="flex-shrink-0">
+                      <div className="shrink-0">
                         <div className="relative p-[8px] rounded-md bg-muted">
                           <Icon width="23" height="23" className="text-[#735ACF]" />
                           <div className="absolute -top-1 -right-1">{getEndpointStatusDot(endpoint)}</div>
@@ -508,7 +508,7 @@ export default function EndpointsPage() {
                       </div>
 
                       {/* Endpoint Name and Details */}
-                      <div className="flex-shrink-0 w-64 flex flex-col gap-[2px]">
+                      <div className="shrink-0 w-64 flex flex-col gap-[2px]">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">{endpoint.name}</span>
                           {getStatusBadge(endpoint)}
@@ -520,7 +520,7 @@ export default function EndpointsPage() {
                       </div>
 
                       {/* Created Date */}
-                      <div className="flex-shrink-0 text-xs text-muted-foreground w-20 text-right ml-auto">
+                      <div className="shrink-0 text-xs text-muted-foreground w-20 text-right ml-auto">
                         {endpoint.createdAt ? format(new Date(endpoint.createdAt as any), 'MMM d') : ''}
                       </div>
 

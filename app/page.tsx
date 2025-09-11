@@ -219,7 +219,7 @@ export async function POST(request: NextRequest) {
             </div>
             <TextGenerateEffect
               words="focus on your product, not configs"
-              className="text-xl sm:text-2xl md:text-3xl font-bold leading-tight text-[var(--purple-primary)] mt-1 sm:-mt-2"
+              className="text-xl sm:text-2xl md:text-3xl font-bold leading-tight text-(--purple-primary) mt-1 sm:-mt-2"
               duration={0.5}
             />
           </h1>
@@ -270,11 +270,11 @@ export async function POST(request: NextRequest) {
           </div>
 
           {/* Trusted by section */}
-          <div className="mt-16 pt-8 border-t border-[var(--border-secondary)]">
-            <p className="text-xs uppercase tracking-wide text-[var(--text-muted)] mb-6 font-medium text-center">
+          <div className="mt-16 pt-8 border-t border-(--border-secondary)">
+            <p className="text-xs uppercase tracking-wide text-(--text-muted) mb-6 font-medium text-center">
               trusted by builders at:
             </p>
-            <div className="flex flex-wrap justify-center items-center gap-x-8 gap-y-4 text-[var(--text-muted)]">
+            <div className="flex flex-wrap justify-center items-center gap-x-8 gap-y-4 text-(--text-muted)">
               <span className="text-lg font-medium flex items-center gap-2 mr-1">
                 <svg width="18" height="18" viewBox="0 0 58 57" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path fillRule="evenodd" clipRule="evenodd" d="M0 9.82759C0 4.39996 4.47705 0 9.99976 0H47.9989C53.5216 0 57.9986 4.39996 57.9986 9.82759V41.5893C57.9986 47.2045 50.7684 49.6414 47.2618 45.2082L36.2991 31.3488V48.1552C36.2991 53.04 32.2698 57 27.2993 57H9.99976C4.47705 57 0 52.6 0 47.1724V9.82759ZM9.99976 7.86207C8.89522 7.86207 7.99981 8.74206 7.99981 9.82759V47.1724C7.99981 48.2579 8.89522 49.1379 9.99976 49.1379H27.5993C28.1516 49.1379 28.2993 48.6979 28.2993 48.1552V25.6178C28.2993 20.0027 35.5295 17.5656 39.0361 21.9989L49.9988 35.8583V9.82759C49.9988 8.74206 50.1034 7.86207 48.9988 7.86207H9.99976Z" fill="var(--text-muted)" />
@@ -320,8 +320,8 @@ export async function POST(request: NextRequest) {
             <>
               <div key={i} className="grid md:grid-cols-4 gap-8 items-center">
                 <div className={`space-y-4 md:col-span-2 ${i % 2 === 1 ? 'md:order-2' : ''}`}>
-                  <h3 className="text-2xl text-[var(--text-primary)]">{story.title}</h3>
-                  <p className="text-lg text-[var(--text-secondary)] leading-relaxed">{story.description}</p>
+                  <h3 className="text-2xl text-(--text-primary)">{story.title}</h3>
+                  <p className="text-lg text-(--text-secondary) leading-relaxed">{story.description}</p>
                 </div>
                 <div className={`md:col-span-2 ${i % 2 === 1 ? 'md:order-1' : ''}`}>
                   <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -373,7 +373,7 @@ export async function POST(request: NextRequest) {
         </div>
 
         {/* Background Beams for Hero */}
-        <div className="absolute inset-0 h-[100vh]">
+        <div className="absolute inset-0 h-screen">
           <BackgroundBeams className='' />
         </div>
       </section>
@@ -381,18 +381,18 @@ export async function POST(request: NextRequest) {
       {/* Pain Points & Solutions */}
       {/* <section id="features" className="max-w-6xl mx-auto px-6 py-20 relative z-10">
                 <h2 className="text-3xl font-bold text-center mb-4">stop suffering with email</h2>
-                <p className="text-[var(--text-secondary)] text-center mb-16 text-base">
+                <p className="text-(--text-secondary) text-center mb-16 text-base">
                     We've all been there. Here's how Inbound fixes the pain.
                 </p>
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
                     {painPoints.map((point, i) => (
                         <div
                             key={i}
-                            className="bg-[var(--bg-card)] border border-[var(--border-secondary)] rounded-lg p-6 hover:bg-[var(--bg-card-hover)] hover:border-[var(--purple-primary)]/50 transition-all duration-200"
+                            className="bg-(--bg-card) border border-(--border-secondary) rounded-lg p-6 hover:bg-(--bg-card-hover) hover:border-(--purple-primary)/50 transition-all duration-200"
                         >
                             <div className="text-2xl mb-4">{point.icon}</div>
-                            <h3 className="text-lg font-semibold mb-2 text-[var(--purple-primary)]">{point.title}</h3>
-                            <p className="text-sm text-[var(--text-muted)] leading-relaxed mb-4">{point.description}</p>
+                            <h3 className="text-lg font-semibold mb-2 text-(--purple-primary)">{point.title}</h3>
+                            <p className="text-sm text-(--text-muted) leading-relaxed mb-4">{point.description}</p>
                             <div className="space-y-2">
                                 <div className="text-xs text-red-400">❌ Before: {point.before}</div>
                                 <div className="text-xs text-green-400">✅ After: {point.after}</div>
@@ -474,14 +474,14 @@ await inbound.emails.send(emailData)
       {/* Testimonials */}
       {/* <section id="testimonials" className="max-w-6xl mx-auto px-6 py-20 relative z-10">
                 <h2 className="text-3xl font-bold text-center mb-4">developers who escaped email hell</h2>
-                <p className="text-[var(--text-secondary)] text-center mb-16 text-base">
+                <p className="text-(--text-secondary) text-center mb-16 text-base">
                     Real stories from teams who got their time back
                 </p>
                 <div className="grid md:grid-cols-2 gap-8">
                     {testimonials.map((testimonial, i) => (
                         <div
                             key={i}
-                            className="bg-[var(--bg-card)] border border-[var(--border-secondary)] rounded-lg p-6 hover:bg-[var(--bg-card-hover)] hover:border-[var(--purple-primary)]/50 transition-all duration-200"
+                            className="bg-(--bg-card) border border-(--border-secondary) rounded-lg p-6 hover:bg-(--bg-card-hover) hover:border-(--purple-primary)/50 transition-all duration-200"
                         >
                             <div className="flex items-center gap-4 mb-4">
                                 <CustomInboundIcon
@@ -491,11 +491,11 @@ await inbound.emails.send(emailData)
                                     iconColor="white"
                                 />
                                 <div>
-                                    <div className="font-semibold text-[var(--purple-primary)]">{testimonial.company}</div>
-                                    <div className="text-sm text-[var(--text-muted)]">{testimonial.person}</div>
+                                    <div className="font-semibold text-(--purple-primary)">{testimonial.company}</div>
+                                    <div className="text-sm text-(--text-muted)">{testimonial.person}</div>
                                 </div>
                             </div>
-                            <p className="text-sm text-[var(--text-secondary)] leading-relaxed italic">
+                            <p className="text-sm text-(--text-secondary) leading-relaxed italic">
                                 "{testimonial.quote}"
                             </p>
                         </div>

@@ -895,7 +895,7 @@ export default function LogsPage() {
                    className="flex items-center gap-4 px-6 py-3 hover:bg-muted/50 transition-colors cursor-pointer"
                  >
                    {/* Type Icon with Status Dot */}
-                   <div className="flex-shrink-0">
+                   <div className="shrink-0">
                      <div className="relative">
                        {getTypeIcon(log)}
                        <div className="absolute -top-1 -right-1">
@@ -905,17 +905,17 @@ export default function LogsPage() {
                    </div>
 
                   {/* Time */}
-                  <div className="flex-shrink-0 w-20 text-xs font-mono text-muted-foreground">
+                  <div className="shrink-0 w-20 text-xs font-mono text-muted-foreground">
                     {format(new Date(log.createdAt), 'HH:mm:ss')}
                   </div>
 
                   {/* From */}
-                  <div className="flex-shrink-0 w-48 truncate">
+                  <div className="shrink-0 w-48 truncate">
                     <span className="text-sm font-medium">{log.from}</span>
                   </div>
 
                   {/* To/Recipient */}
-                  <div className="flex-shrink-0 w-48 truncate">
+                  <div className="shrink-0 w-48 truncate">
                     {isInbound && inboundLog ? (
                       <span className="text-sm">{inboundLog.recipient}</span>
                     ) : (
@@ -932,7 +932,7 @@ export default function LogsPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-sm truncate">{log.subject}</span>
                       {log.hasAttachments && (
-                        <Hashtag2 width="14" height="14" className="text-muted-foreground flex-shrink-0" />
+                        <Hashtag2 width="14" height="14" className="text-muted-foreground shrink-0" />
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground truncate">
@@ -941,7 +941,7 @@ export default function LogsPage() {
                   </div>
 
                   {/* Status/Delivery Info */}
-                  <div className="flex-shrink-0 text-right">
+                  <div className="shrink-0 text-right">
                     {isInbound && inboundLog ? (
                       inboundLog.deliveries.length > 0 ? (
                         <div className="text-xs">
@@ -968,7 +968,7 @@ export default function LogsPage() {
                   </div>
 
                   {/* Auth badges (Inbound only) */}
-                  <div className="flex-shrink-0 flex gap-1">
+                  <div className="shrink-0 flex gap-1">
                     {isInbound && inboundLog && (
                       <>
                         {inboundLog.authResults.spf === 'PASS' && (
@@ -988,7 +988,7 @@ export default function LogsPage() {
                   </div>
 
                   {/* Processing time / Timing info */}
-                  <div className="flex-shrink-0 text-xs text-muted-foreground">
+                  <div className="shrink-0 text-xs text-muted-foreground">
                     {isInbound && inboundLog ? 
                       `${inboundLog.processingTimeMs}ms` : 
                       outboundLog?.sentAt ? format(new Date(outboundLog.sentAt), 'HH:mm') : 'Pending'
@@ -996,7 +996,7 @@ export default function LogsPage() {
                   </div>
 
                   {/* Visual indicator for clickable row */}
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     <ArrowUpRight2 width="12" height="12" className="text-muted-foreground" />
                   </div>
                 </Link>

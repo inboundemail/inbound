@@ -140,7 +140,7 @@ export function TestWebhookDialog({ open, onOpenChange, webhook }: TestWebhookDi
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <CircleWarning2 width="20" height="20" className="text-blue-500 mt-0.5 flex-shrink-0" />
+              <CircleWarning2 width="20" height="20" className="text-blue-500 mt-0.5 shrink-0" />
               <div>
                 <h4 className="text-sm font-medium text-blue-800 mb-1">
                   Test Delivery

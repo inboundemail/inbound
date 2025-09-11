@@ -159,11 +159,11 @@ export function LoginForm({
 
       {/* Divider */}
       <div className="relative flex items-center justify-center text-xs uppercase">
-        <div className="w-full h-px bg-gradient-to-r from-transparent to-border" />
+        <div className="w-full h-px bg-linear-to-r from-transparent to-border" />
         <span className="bg-card px-2 text-muted-foreground whitespace-nowrap">
           or continue with
         </span>
-        <div className="w-full h-px bg-gradient-to-l from-transparent to-border" />
+        <div className="w-full h-px bg-linear-to-l from-transparent to-border" />
       </div>
 
       <div className="grid gap-2">

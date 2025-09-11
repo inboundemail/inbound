@@ -17,7 +17,7 @@ export function BlogCard({ blog, className = "" }: BlogCardProps) {
       >
         {blog.image?.url && (
           <div
-            className="w-full aspect-[16/9] bg-muted flex items-center justify-center 
+            className="w-full aspect-video bg-muted flex items-center justify-center 
       overflow-hidden rounded-2xl "
           >
             <BaseHubImage

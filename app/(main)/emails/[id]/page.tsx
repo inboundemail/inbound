@@ -737,7 +737,7 @@ export default function DomainDetailPage() {
                 {/* Header (no card) */}
                 <div className="flex items-center justify-between p-2">
                     <div className="flex items-center gap-4">
-                        <div className="flex w-[46px] h-[46px] p-2 justify-center items-center gap-2.5 rounded-[10px] bg-[var(--badge-default-bg)]">
+                        <div className="flex w-[46px] h-[46px] p-2 justify-center items-center gap-2.5 rounded-[10px] bg-(--badge-default-bg)">
                             <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 31 30" fill="none">
                                 <path d="M15.5327 2.66663C22.344 2.66663 27.8665 8.18839 27.8667 14.9996C27.8667 21.811 22.3441 27.3336 15.5327 27.3336C8.72147 27.3334 3.19971 21.8109 3.19971 14.9996C3.19988 8.18849 8.72157 2.6668 15.5327 2.66663Z" fill="var(--purple-primary)" fillOpacity="0.4" stroke="var(--purple-dark)" strokeWidth="2" />
                                 <path d="M27.897 10C28.22 10.7979 28.468 11.6341 28.6323 12.5H2.43359C2.59786 11.6341 2.84584 10.7979 3.16883 10H27.897Z" fill="var(--purple-dark)" />
@@ -972,7 +972,7 @@ export default function DomainDetailPage() {
                                                     variant="ghost"
                                                     size="sm"
                                                     onClick={() => copyToClipboard(recommendation.name, `${type} name`)}
-                                                    className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                    className="h-8 w-8 p-0 hover:bg-muted border border-border rounded shrink-0 ml-2"
                                                 >
                                                     <Clipboard2 width="16" height="16" className="text-muted-foreground" />
                                                 </Button>
@@ -987,7 +987,7 @@ export default function DomainDetailPage() {
                                                     variant="ghost"
                                                     size="sm"
                                                     onClick={() => copyToClipboard("TXT", "DNS record type")}
-                                                    className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                    className="h-8 w-8 p-0 hover:bg-muted border border-border rounded shrink-0 ml-2"
                                                 >
                                                     <Clipboard2 width="16" height="16" className="text-muted-foreground" />
                                                 </Button>
@@ -1002,7 +1002,7 @@ export default function DomainDetailPage() {
                                                     variant="ghost"
                                                     size="sm"
                                                     onClick={() => copyToClipboard(recommendation.value, type)}
-                                                    className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                    className="h-8 w-8 p-0 hover:bg-muted border border-border rounded shrink-0 ml-2"
                                                 >
                                                     <Clipboard2 width="16" height="16" className="text-muted-foreground" />
                                                 </Button>
@@ -1015,7 +1015,7 @@ export default function DomainDetailPage() {
                                                     variant="ghost"
                                                     size="sm"
                                                     onClick={() => copyToClipboard("Auto", "TTL")}
-                                                    className="h-8 w-8 p-0 hover:bg-muted border border-border rounded flex-shrink-0 ml-2"
+                                                    className="h-8 w-8 p-0 hover:bg-muted border border-border rounded shrink-0 ml-2"
                                                 >
                                                     <Clipboard2 width="16" height="16" className="text-muted-foreground" />
                                                 </Button>
@@ -1102,7 +1102,7 @@ export default function DomainDetailPage() {
                                                 }}
                                                 className="border-0 rounded-r-none focus:ring-0 flex-1 h-full"
                                             />
-                                            <div className="px-3 border-l border-l-[var(--badge-outline-border)] text-sm rounded-r-lg flex items-center h-full whitespace-nowrap bg-[var(--badge-outline-bg)] text-[var(--badge-outline-text)]">
+                                            <div className="px-3 border-l border-l-(--badge-outline-border) text-sm rounded-r-lg flex items-center h-full whitespace-nowrap bg-(--badge-outline-bg) text-(--badge-outline-text)">
                                                 @{domain}
                                             </div>
                                         </div>
@@ -1466,7 +1466,7 @@ export default function DomainDetailPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="rounded-[11px] md:rounded-[13px] overflow-hidden bg-[var(--dns-table-bg)]">
+                            <div className="rounded-[11px] md:rounded-[13px] overflow-hidden bg-(--dns-table-bg)">
                                 <div className="px-4 py-3">
                                     <div className="flex">
                                         <div className="w-[20%] pr-4">

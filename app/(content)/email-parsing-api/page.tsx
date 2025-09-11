@@ -464,7 +464,7 @@ console.log('Custom Headers:', parsedEmail.headers)`}
             
             <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
               {/* REST API */}
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-8 border border-blue-200 text-center">
+              <div className="bg-linear-to-br from-blue-50 to-blue-100 rounded-xl p-8 border border-blue-200 text-center">
                 <CustomInboundIcon 
                   backgroundColor="#3b82f6" 
                   Icon={Globe2} 
@@ -482,7 +482,7 @@ console.log('Custom Headers:', parsedEmail.headers)`}
               </div>
 
               {/* Webhooks */}
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-8 border border-purple-200 text-center">
+              <div className="bg-linear-to-br from-purple-50 to-purple-100 rounded-xl p-8 border border-purple-200 text-center">
                 <CustomInboundIcon 
                   backgroundColor="#8b5cf6" 
                   Icon={BoltLightning} 
@@ -500,7 +500,7 @@ console.log('Custom Headers:', parsedEmail.headers)`}
               </div>
 
               {/* SDK */}
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-8 border border-green-200 text-center">
+              <div className="bg-linear-to-br from-green-50 to-green-100 rounded-xl p-8 border border-green-200 text-center">
                 <CustomInboundIcon 
                   backgroundColor="#10b981" 
                   Icon={Code2} 
@@ -525,7 +525,7 @@ console.log('Custom Headers:', parsedEmail.headers)`}
             
             <div className="space-y-6 max-w-4xl mx-auto text-left">
               {/* Support Ticket Creation */}
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-8 border border-blue-200">
+              <div className="bg-linear-to-br from-blue-50 to-blue-100 rounded-xl p-8 border border-blue-200">
                 <h3 className="text-xl font-bold text-gray-900 mb-3">Support Ticket Creation</h3>
                 <p className="text-gray-600 mb-4">
                   Parse support emails to automatically create tickets with proper categorization and routing.
@@ -548,7 +548,7 @@ console.log('Custom Headers:', parsedEmail.headers)`}
               </div>
 
               {/* Order Processing */}
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-8 border border-green-200">
+              <div className="bg-linear-to-br from-green-50 to-green-100 rounded-xl p-8 border border-green-200">
                 <h3 className="text-xl font-bold text-gray-900 mb-3">Order & Invoice Processing</h3>
                 <p className="text-gray-600 mb-4">
                   Parse order confirmations, invoices, and receipts to extract structured business data.
@@ -567,7 +567,7 @@ console.log('Custom Headers:', parsedEmail.headers)`}
               </div>
 
               {/* Lead Qualification */}
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-8 border border-purple-200">
+              <div className="bg-linear-to-br from-purple-50 to-purple-100 rounded-xl p-8 border border-purple-200">
                 <h3 className="text-xl font-bold text-gray-900 mb-3">Lead Qualification</h3>
                 <p className="text-gray-600 mb-4">
                   Parse contact form emails to extract lead information and automatically score prospects.

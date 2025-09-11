@@ -125,27 +125,27 @@ export default async function PostmarkAlternativePage() {
                 
                 <div className="space-y-4">
                   <div className="flex items-start gap-3">
-                    <SackDollar width="20" height="20" className="text-orange-500 mt-0.5 flex-shrink-0" />
+                    <SackDollar width="20" height="20" className="text-orange-500 mt-0.5 shrink-0" />
                     <span className="text-gray-600">$1.25 per 1,000 emails</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <SackDollar width="20" height="20" className="text-orange-500 mt-0.5 flex-shrink-0" />
+                    <SackDollar width="20" height="20" className="text-orange-500 mt-0.5 shrink-0" />
                     <span className="text-gray-600">$125/month for 100k emails</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 shrink-0" />
                     <span className="text-gray-600">No free tier</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 shrink-0" />
                     <span className="text-gray-600">Basic webhook payload</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 shrink-0" />
                     <span className="text-gray-600">No TypeScript SDK</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 shrink-0" />
                     <span className="text-gray-600">Limited email threading</span>
                   </div>
                 </div>
@@ -157,10 +157,10 @@ export default async function PostmarkAlternativePage() {
               </div>
 
               {/* inbound Column */}
-              <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-8 border border-blue-200">
+              <div className="bg-linear-to-br from-blue-50 to-purple-50 rounded-xl p-8 border border-blue-200">
                 <div className="flex items-center gap-3 mb-6">
                   <CustomInboundIcon
-                    className="flex-shrink-0"
+                    className="shrink-0"
                     backgroundColor="#1C2894"
                     Icon={CircleSparkle}
                     size={40}
@@ -170,27 +170,27 @@ export default async function PostmarkAlternativePage() {
                 
                 <div className="space-y-4">
                   <div className="flex items-start gap-3">
-                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 shrink-0" />
                     <span className="text-gray-700 font-medium">1,000 emails/month FREE</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 shrink-0" />
                     <span className="text-gray-700 font-medium">$25/month for 100k emails</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 shrink-0" />
                     <span className="text-gray-700 font-medium">Forever free tier</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 shrink-0" />
                     <span className="text-gray-700 font-medium">Rich, structured webhook data</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 shrink-0" />
                     <span className="text-gray-700 font-medium">Full TypeScript SDK included</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 shrink-0" />
                     <span className="text-gray-700 font-medium">Advanced email threading</span>
                   </div>
                 </div>
@@ -393,7 +393,7 @@ app.post('/inbound-webhook', (req, res) => {
 
           {/* Migration Steps */}
           <div className="mb-32">
-            <div className="bg-gradient-to-br from-green-50 to-blue-50 rounded-2xl p-12 border border-green-200 text-center">
+            <div className="bg-linear-to-br from-green-50 to-blue-50 rounded-2xl p-12 border border-green-200 text-center">
               <h2 className="text-3xl font-bold text-gray-900 mb-6">Migrate from Postmark in 3 Steps</h2>
               <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
                 Keep your email flow working while switching to 80% cost savings and better features.
@@ -401,7 +401,7 @@ app.post('/inbound-webhook', (req, res) => {
 
               <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto text-left mb-8">
                 <div className="flex items-start gap-4">
-                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">
+                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm shrink-0">
                     1
                   </div>
                   <div>
@@ -411,7 +411,7 @@ app.post('/inbound-webhook', (req, res) => {
                 </div>
                 
                 <div className="flex items-start gap-4">
-                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">
+                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm shrink-0">
                     2
                   </div>
                   <div>
@@ -421,7 +421,7 @@ app.post('/inbound-webhook', (req, res) => {
                 </div>
                 
                 <div className="flex items-start gap-4">
-                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">
+                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm shrink-0">
                     3
                   </div>
                   <div>

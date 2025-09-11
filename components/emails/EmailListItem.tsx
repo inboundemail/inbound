@@ -58,7 +58,7 @@ export function EmailListItem({ email, isSelectMode = false, isSelected = false,
     <div className="flex items-center gap-4 relative">
       {/* Selection checkbox */}
       {isSelectMode && (
-        <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
           <Checkbox
             checked={isSelected}
             onCheckedChange={handleCheckboxChange}
@@ -67,13 +67,13 @@ export function EmailListItem({ email, isSelectMode = false, isSelected = false,
       )}
       
       {/* Name Column */}
-      <div className="w-40 flex-shrink-0">
+      <div className="w-40 shrink-0">
           <div className="flex items-center gap-2">
             <span className={`font-medium truncate text-foreground text-sm ${!email.isRead ? 'font-semibold' : ''}`}>
               {senderName}
             </span>
             {!email.isRead && (
-              <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0"></div>
+              <div className="w-2 h-2 bg-primary rounded-full shrink-0"></div>
             )}
           </div>
         </div>
@@ -81,7 +81,7 @@ export function EmailListItem({ email, isSelectMode = false, isSelected = false,
         {/* Subject + Preview (flowing) */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 text-sm">
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               <span className={`font-medium text-foreground ${!email.isRead ? 'font-semibold' : ''}`}>
                 {email.subject}
               </span>
@@ -95,13 +95,13 @@ export function EmailListItem({ email, isSelectMode = false, isSelected = false,
               — {preview}
             </span>
             {email.parsedData.hasAttachments && (
-              <File2 width="14" height="14" className="text-muted-foreground flex-shrink-0" />
+              <File2 width="14" height="14" className="text-muted-foreground shrink-0" />
             )}
           </div>
         </div>
         
         {/* Time Column */}
-        <div className="w-24 flex-shrink-0 text-right">
+        <div className="w-24 shrink-0 text-right">
           <span className="text-xs text-muted-foreground whitespace-nowrap">
             {formatDistanceToNow(new Date(email.receivedAt || new Date()), { addSuffix: true })}
           </span>

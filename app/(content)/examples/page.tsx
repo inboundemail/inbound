@@ -156,7 +156,7 @@ export default async function ExamplesPage() {
                 <div className="text-accent-foreground">&#125;</div>
               </div>
 
-              <div className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-lg p-4">
+              <div className="bg-linear-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-lg p-4">
                 <h4 className="font-semibold mb-2 flex items-center gap-2">
                   <ChartActivity2 width="16" height="16" className="text-blue-600 dark:text-blue-400" />
                   Impact Metrics
@@ -223,7 +223,7 @@ export default async function ExamplesPage() {
                 <div className="text-accent-foreground">&#125;</div>
               </div>
 
-              <div className="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-lg p-4">
+              <div className="bg-linear-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-lg p-4">
                 <h4 className="font-semibold mb-2 flex items-center gap-2">
                   <ChartActivity2 width="16" height="16" className="text-green-600 dark:text-green-400" />
                   Lead Quality Boost
@@ -290,7 +290,7 @@ export default async function ExamplesPage() {
                 <div className="text-accent-foreground">&#125;</div>
               </div>
 
-              <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 rounded-lg p-4">
+              <div className="bg-linear-to-r from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 rounded-lg p-4">
                 <h4 className="font-semibold mb-2 flex items-center gap-2">
                   <Timer width="16" height="16" className="text-red-600 dark:text-red-400" />
                   Incident Response
@@ -357,7 +357,7 @@ export default async function ExamplesPage() {
                 <div className="text-accent-foreground">&#125;</div>
               </div>
 
-              <div className="bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-lg p-4">
+              <div className="bg-linear-to-r from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-lg p-4">
                 <h4 className="font-semibold mb-2 flex items-center gap-2">
                   <SackDollar width="16" height="16" className="text-purple-600 dark:text-purple-400" />
                   Order Efficiency
@@ -424,7 +424,7 @@ export default async function ExamplesPage() {
                 <div className="text-accent-foreground">&#125;</div>
               </div>
 
-              <div className="bg-gradient-to-r from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/20 rounded-lg p-4">
+              <div className="bg-linear-to-r from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/20 rounded-lg p-4">
                 <h4 className="font-semibold mb-2 flex items-center gap-2">
                   <BoltLightning width="16" height="16" className="text-yellow-600 dark:text-yellow-400" />
                   Publishing Speed
@@ -491,7 +491,7 @@ export default async function ExamplesPage() {
                 <div className="text-accent-foreground">&#125;</div>
               </div>
 
-              <div className="bg-gradient-to-r from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 rounded-lg p-4">
+              <div className="bg-linear-to-r from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 rounded-lg p-4">
                 <h4 className="font-semibold mb-2 flex items-center gap-2">
                   <CircleSparkle width="16" height="16" className="text-indigo-600 dark:text-indigo-400" />
                   AI Performance
@@ -672,7 +672,7 @@ app.post('/webhook/email', async (req, res) => {
 
         {/* CTA Section */}
         <div className="max-w-4xl mx-auto text-center">
-          <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-background rounded-3xl p-12">
+          <div className="bg-linear-to-br from-primary/10 via-primary/5 to-background rounded-3xl p-12">
             <h2 className="text-3xl font-bold mb-6">Start Building Your Email Automation</h2>
             <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
               Join thousands of developers using inbound to automate email workflows. 

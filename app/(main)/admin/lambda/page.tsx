@@ -474,7 +474,7 @@ export default function LambdaPage() {
   return (
     <div className="flex flex-1 flex-col h-full p-6 gap-4">
       {/* Header */}
-      <div className="flex items-center justify-between flex-shrink-0">
+      <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <Code2 width="32" height="32" />
@@ -522,7 +522,7 @@ export default function LambdaPage() {
         </TabsList>
 
         <TabsContent value="logs" className="flex flex-col flex-1 gap-4">
-          <div className="flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center justify-between shrink-0">
             <div className="flex items-center gap-4">
               <h3 className="text-lg font-semibold">Lambda Logs</h3>
               <div className="flex items-center gap-2">
@@ -706,7 +706,7 @@ export default function LambdaPage() {
                                 >
                                   {group.emailTarget ? `Request for ${group.emailTarget}` : group.summary}
                                 </div>
-                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <div className="flex items-center gap-1.5 shrink-0">
                                   {group.emailTarget && (
                                     <Button
                                       variant="secondary"
@@ -787,7 +787,7 @@ export default function LambdaPage() {
                                         className="px-2 py-1 hover:bg-card rounded cursor-pointer transition-colors text-xs"
                                       >
                                         <div className="flex items-start gap-2">
-                                          <span className="text-[9px] text-muted-foreground whitespace-nowrap flex-shrink-0 font-mono opacity-50">
+                                          <span className="text-[9px] text-muted-foreground whitespace-nowrap shrink-0 font-mono opacity-50">
                                             {new Date(log.timestamp).toLocaleTimeString('en-US', { 
                                               hour12: false, 
                                               hour: '2-digit', 
@@ -839,7 +839,7 @@ export default function LambdaPage() {
                                 'bg-muted/50 hover:bg-muted border-l-border'
                               }`}
                             >
-                              <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0 font-mono opacity-60">
+                              <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 font-mono opacity-60">
                                 {new Date(log.timestamp).toLocaleTimeString('en-US', { 
                                   hour12: false, 
                                   hour: '2-digit', 
@@ -850,7 +850,7 @@ export default function LambdaPage() {
                               <div className="font-medium text-xs flex-1 mx-2 break-words">
                                 {summary}
                               </div>
-                              <div className="flex items-center gap-1 flex-shrink-0">
+                              <div className="flex items-center gap-1 shrink-0">
                                 <span className="text-[10px] text-muted-foreground opacity-60 font-mono">
                                   {log.message.split('\n').length} lines
                                 </span>
@@ -898,7 +898,7 @@ export default function LambdaPage() {
                           'bg-muted/50 hover:bg-muted border-l-border'
                         }`}
                       >
-                        <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0 font-mono opacity-60">
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 font-mono opacity-60">
                           {new Date(log.timestamp).toLocaleTimeString('en-US', { 
                             hour12: false, 
                             hour: '2-digit', 
@@ -909,7 +909,7 @@ export default function LambdaPage() {
                         <div className="font-medium text-xs truncate flex-1 mx-2">
                           {summary}
                         </div>
-                        <div className="flex items-center gap-1 flex-shrink-0">
+                        <div className="flex items-center gap-1 shrink-0">
                           <span className="text-[10px] text-muted-foreground opacity-60 font-mono">
                             {log.message.split('\n').length} lines
                           </span>

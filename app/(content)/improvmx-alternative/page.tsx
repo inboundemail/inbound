@@ -100,37 +100,37 @@ export default async function ImprovMXAlternativePage() {
                 
                 <div className="space-y-4">
                   <div className="flex items-start gap-3">
-                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 shrink-0" />
                     <span className="text-gray-600">Limited to 25 free aliases</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 shrink-0" />
                     <span className="text-gray-600">Paid plans start at $9/month</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />  
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 shrink-0" />  
                     <span className="text-gray-600">No email storage or IMAP access</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 shrink-0" />
                     <span className="text-gray-600">Basic webhook support</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 shrink-0" />
                     <span className="text-gray-600">No AI agent integration</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 flex-shrink-0" />
+                    <TabClose width="20" height="20" className="text-red-500 mt-0.5 shrink-0" />
                     <span className="text-gray-600">Limited API capabilities</span>
                   </div>
                 </div>
               </div>
 
               {/* Inbound Column */}
-              <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-8 border border-blue-200">
+              <div className="bg-linear-to-br from-blue-50 to-purple-50 rounded-xl p-8 border border-blue-200">
                 <div className="flex items-center gap-3 mb-6">
                   <CustomInboundIcon
-                    className="flex-shrink-0"
+                    className="shrink-0"
                     backgroundColor="#1C2894"
                     Icon={CircleSparkle}
                     size={40}
@@ -140,27 +140,27 @@ export default async function ImprovMXAlternativePage() {
                 
                 <div className="space-y-4">
                   <div className="flex items-start gap-3">
-                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 shrink-0" />
                     <span className="text-gray-700 font-medium">Unlimited free aliases per domain</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 shrink-0" />
                     <span className="text-gray-700 font-medium">Forever free tier - no hidden costs</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 shrink-0" />
                     <span className="text-gray-700 font-medium">Full catch-all domain support</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 shrink-0" />
                     <span className="text-gray-700 font-medium">Advanced webhook integration</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 shrink-0" />
                     <span className="text-gray-700 font-medium">AI agent & automation ready</span>
                   </div>
                   <div className="flex items-start gap-3">
-                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <Check2 width="20" height="20" className="text-green-500 mt-0.5 shrink-0" />
                     <span className="text-gray-700 font-medium">Full REST API + TypeScript SDK</span>
                   </div>
                 </div>
@@ -284,19 +284,19 @@ await client.domains.setCatchAll({
                   <h3 className="text-xl font-bold text-gray-900 mb-3">Developer Experience</h3>
                   <div className="space-y-3">
                     <div className="flex items-start gap-3">
-                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 shrink-0" />
                       <span className="text-gray-700">Full TypeScript SDK with type safety</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 shrink-0" />
                       <span className="text-gray-700">Comprehensive REST API documentation</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 shrink-0" />
                       <span className="text-gray-700">Webhook retry & failure handling</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 shrink-0" />
                       <span className="text-gray-700">Real-time email processing logs</span>
                     </div>
                   </div>
@@ -306,19 +306,19 @@ await client.domains.setCatchAll({
                   <h3 className="text-xl font-bold text-gray-900 mb-3">AI Integration</h3>
                   <div className="space-y-3">
                     <div className="flex items-start gap-3">
-                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 shrink-0" />
                       <span className="text-gray-700">Direct webhook delivery to AI agents</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 shrink-0" />
                       <span className="text-gray-700">Structured email parsing & metadata</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 shrink-0" />
                       <span className="text-gray-700">Auto-scaling email processing</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <Check2 width="20" height="20" className="text-green-500 mt-1 flex-shrink-0" />
+                      <Check2 width="20" height="20" className="text-green-500 mt-1 shrink-0" />
                       <span className="text-gray-700">Built-in spam & security filtering</span>
                     </div>
                   </div>
@@ -329,7 +329,7 @@ await client.domains.setCatchAll({
 
           {/* Migration Section */}
           <div className="mb-32">
-            <div className="bg-gradient-to-br from-green-50 to-blue-50 rounded-2xl p-12 border border-green-200 text-center">
+            <div className="bg-linear-to-br from-green-50 to-blue-50 rounded-2xl p-12 border border-green-200 text-center">
               <h2 className="text-3xl font-bold text-gray-900 mb-6">Migrate from ImprovMX in Minutes</h2>
               <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
                 Switching from ImprovMX is simple. Keep your existing email addresses working while you transition to unlimited aliases and advanced features.
@@ -337,7 +337,7 @@ await client.domains.setCatchAll({
 
               <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto text-left mb-8">
                 <div className="flex items-start gap-4">
-                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">
+                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm shrink-0">
                     1
                   </div>
                   <div>
@@ -347,7 +347,7 @@ await client.domains.setCatchAll({
                 </div>
                 
                 <div className="flex items-start gap-4">
-                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">
+                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm shrink-0">
                     2
                   </div>
                   <div>
@@ -357,7 +357,7 @@ await client.domains.setCatchAll({
                 </div>
                 
                 <div className="flex items-start gap-4">
-                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">
+                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm shrink-0">
                     3
                   </div>
                   <div>

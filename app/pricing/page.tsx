@@ -304,7 +304,7 @@ export default function PricingPage() {
               <div className="space-y-3">
                 {plan.features.core.map((feature, i) => (
                   <div key={i} className="flex items-start gap-3">
-                    <CircleCheck width="16" height="16" className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <CircleCheck width="16" height="16" className="text-green-500 mt-0.5 shrink-0" />
                     <span className="text-sm text-muted-foreground">{feature}</span>
                   </div>
                 ))}
@@ -643,7 +643,7 @@ export default function PricingPage() {
 
       {/* CTA Section */}
       <section className="max-w-6xl mx-auto px-6 py-20">
-        <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-background rounded-3xl p-12 text-center">
+        <div className="bg-linear-to-br from-primary/10 via-primary/5 to-background rounded-3xl p-12 text-center">
           <h2 className="text-4xl font-bold mb-6 text-foreground">Ready to build better email experiences?</h2>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
             Join thousands of developers who trust inbound for reliable, modern email infrastructure. 

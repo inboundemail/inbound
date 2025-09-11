@@ -12,7 +12,7 @@ export function HeroSection() {
   const { displayText, isComplete } = useTypingEffect(["inbound.new"], 150)
 
   return (
-    <AnimatedSection className="text-center bg-gradient-to-b from-muted/40 to-background rounded-[30px] sm:rounded-[50px] px-4 sm:px-6 min-h-[85vh] sm:min-h-[90vh] w-full flex flex-col justify-center pb-6 gap-y-4 sm:gap-y-6 border border-border">
+    <AnimatedSection className="text-center bg-linear-to-b from-muted/40 to-background rounded-[30px] sm:rounded-[50px] px-4 sm:px-6 min-h-[85vh] sm:min-h-[90vh] w-full flex flex-col justify-center pb-6 gap-y-4 sm:gap-y-6 border border-border">
       <h1 className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-foreground leading-tight sm:leading-[1.2] tracking-tighter mb-0 font-normal">
         <span className="animate-[fadeIn_1s_ease-out]">
           email receiving infrastructure <br />
@@ -25,7 +25,7 @@ export function HeroSection() {
         <code className="bg-card px-1 xs:px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-xs xs:text-sm font-mono text-foreground border border-border relative group cursor-pointer hover:bg-card/80 transition-all duration-300 inline-flex items-center">
           <span className="whitespace-nowrap">TypeScript SDK</span>
           <svg
-            className="w-0 h-3 ml-0 opacity-0 group-hover:opacity-100 group-hover:w-3 group-hover:ml-1 transition-all duration-300 flex-shrink-0 hidden sm:inline"
+            className="w-0 h-3 ml-0 opacity-0 group-hover:opacity-100 group-hover:w-3 group-hover:ml-1 transition-all duration-300 shrink-0 hidden sm:inline"
             fill="currentColor"
             viewBox="0 0 24 24"
           >
@@ -63,7 +63,7 @@ export function HeroSection() {
           </div>
           <div className="relative text-muted-foreground bg-card text-[11px] xs:text-xs sm:text-sm px-1 xs:px-2 sm:px-3 flex items-center justify-center">
             <p className="relative bg-card z-10 py-0.5 xs:py-1">forwards to</p>
-            <span className="absolute z-0 -top-[50%] left-1/2 transform -translate-x-1/2 h-[200%] w-[1px] bg-border hidden sm:block"></span>
+            <span className="absolute z-0 -top-[50%] left-1/2 transform -translate-x-1/2 h-[200%] w-px bg-border hidden sm:block"></span>
           </div>
           <div className="flex-1 relative">
             <Input

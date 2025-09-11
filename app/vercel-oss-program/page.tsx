@@ -127,7 +127,7 @@ function VercelOssProgramContent() {
         {/* Content */}
         <div className="space-y-8 pb-16">
           {/* Main Offer Card */}
-          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
+          <Card className="bg-linear-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
             <CardContent className="p-8 lg:p-12">
               <div className="text-center space-y-6">
                 <h2 className="text-2xl sm:text-3xl lg:text-4xl text-foreground">
@@ -193,7 +193,7 @@ function VercelOssProgramContent() {
             <CardContent>
               <div className="grid gap-6 md:grid-cols-2">
                 <div className="flex items-start gap-4">
-                  <div className="w-6 h-6 text-green-500 flex-shrink-0 mt-1">
+                  <div className="w-6 h-6 text-green-500 shrink-0 mt-1">
                     <svg viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
@@ -205,7 +205,7 @@ function VercelOssProgramContent() {
                 </div>
                 
                 <div className="flex items-start gap-4">
-                  <div className="w-6 h-6 text-green-500 flex-shrink-0 mt-1">
+                  <div className="w-6 h-6 text-green-500 shrink-0 mt-1">
                     <svg viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
@@ -217,7 +217,7 @@ function VercelOssProgramContent() {
                 </div>
                 
                 <div className="flex items-start gap-4">
-                  <div className="w-6 h-6 text-green-500 flex-shrink-0 mt-1">
+                  <div className="w-6 h-6 text-green-500 shrink-0 mt-1">
                     <svg viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
@@ -229,7 +229,7 @@ function VercelOssProgramContent() {
                 </div>
                 
                 <div className="flex items-start gap-4">
-                  <div className="w-6 h-6 text-green-500 flex-shrink-0 mt-1">
+                  <div className="w-6 h-6 text-green-500 shrink-0 mt-1">
                     <svg viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>

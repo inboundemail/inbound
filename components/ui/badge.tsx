@@ -9,13 +9,13 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default:
-          "border-[var(--badge-default-border)] bg-[var(--badge-default-bg)] text-[var(--badge-default-text)]",
+          "border-(--badge-default-border) bg-(--badge-default-bg) text-(--badge-default-text)",
         secondary:
-          "border-[var(--badge-secondary-border)] bg-[var(--badge-secondary-bg)] text-[var(--badge-secondary-text)]",
+          "border-(--badge-secondary-border) bg-(--badge-secondary-bg) text-(--badge-secondary-text)",
         destructive:
-          "border-[var(--badge-destructive-border)] bg-[var(--badge-destructive-bg)] text-[var(--badge-destructive-text)]",
+          "border-(--badge-destructive-border) bg-(--badge-destructive-bg) text-(--badge-destructive-text)",
         outline:
-          "border-[var(--badge-outline-border)] bg-[var(--badge-outline-bg)] text-[var(--badge-outline-text)]",
+          "border-(--badge-outline-border) bg-(--badge-outline-bg) text-(--badge-outline-text)",
       },
     },
     defaultVariants: {
