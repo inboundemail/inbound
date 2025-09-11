@@ -1068,15 +1068,16 @@ export async function PATCH(
   console.log('🔧 PATCH /api/v2/domains/{id} - Upgrading domain with MAIL FROM configuration:', id)
   
   try {
-    console.log('🔐 Validating request authentication')
-    const { userId, error } = await validateRequest(request)
-    if (!userId) {
-      console.log('❌ Authentication failed:', error)
-      return NextResponse.json(
-        { error: error },
-        { status: 401 }
-      )
+    console.log('🔐 Validating request authentication and rate limits')
+    const validationResult = await validateRequest(request)
+    
+    // If validation returned a NextResponse (error or rate limit), return it immediately
+    if (validationResult instanceof NextResponse) {
+        return validationResult
     }
+    
+    // Otherwise, we have a successful validation with userId and rate limit headers
+    const { userId, rateLimitHeaders } = validationResult
     console.log('✅ Authentication successful for userId:', userId)
 
     // Get domain record

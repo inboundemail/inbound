@@ -41,11 +41,16 @@ export async function GET(request: NextRequest) {
   console.log('📊 GET /api/qstash/monitoring - QStash monitoring dashboard');
 
   try {
-    // Validate authentication
-    const { userId, error } = await validateRequest(request);
-    if (!userId) {
-      return NextResponse.json({ error }, { status: 401 });
+    // Validate authentication and rate limits
+    const validationResult = await validateRequest(request);
+    
+    // If validation returned a NextResponse (error or rate limit), return it immediately
+    if (validationResult instanceof NextResponse) {
+        return validationResult;
     }
+    
+    // Otherwise, we have a successful validation with userId and rate limit headers
+    const { userId, rateLimitHeaders } = validationResult;
 
     const { searchParams } = new URL(request.url);
     const days = parseInt(searchParams.get('days') || '7');
@@ -209,11 +214,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Convert rate limit headers to proper format
+    const responseHeaders: Record<string, string> = {
+        'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+        'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+        'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+    };
+    if (rateLimitHeaders['retry-after']) {
+        responseHeaders['retry-after'] = rateLimitHeaders['retry-after'];
+    }
+
     return NextResponse.json({
       success: true,
       data: stats,
       timestamp: new Date().toISOString(),
-    });
+    }, { headers: responseHeaders });
 
   } catch (error) {
     console.error('❌ QStash monitoring error:', error);
