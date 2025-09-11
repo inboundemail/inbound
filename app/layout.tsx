@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Outfit, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./prose.css";
+import 'fumadocs-ui/css/neutral.css';
+import 'fumadocs-ui/css/preset.css';
 import { Analytics } from "@vercel/analytics/next"
 import { Analytics as DubAnalytics } from '@dub/analytics/react';
 import { AutumnProvider } from "autumn-js/react";
@@ -9,6 +11,7 @@ import { QueryProvider } from "@/components/providers/query-provider";
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import Script from "next/script";
 import { Databuddy } from "@databuddy/sdk"
+import { RootProvider } from 'fumadocs-ui/provider';
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -270,6 +273,11 @@ export default function RootLayout({
       </head>
       <body
         className={`${outfit.variable} ${geist.variable} ${geistMono.variable} antialiased`}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: '100vh',
+        }}
         suppressHydrationWarning
       >
         <script
@@ -294,13 +302,15 @@ export default function RootLayout({
         )}
         <Databuddy clientId="jj0WXe_nNBuyT2e2YnLSY" trackErrors trackAttributes disabled={process.env.NODE_ENV === "development"} />
 
-        <QueryProvider>
-          <AutumnProvider backendUrl={process.env.BETTER_AUTH_URL || ""}>
-            {children}
-            <Analytics />
-            <SpeedInsights />
-          </AutumnProvider>
-        </QueryProvider>
+        <RootProvider>
+          <QueryProvider>
+            <AutumnProvider backendUrl={process.env.BETTER_AUTH_URL || ""}>
+              {children}
+              <Analytics />
+              <SpeedInsights />
+            </AutumnProvider>
+          </QueryProvider>
+        </RootProvider>
       </body>
       <DubAnalytics domainsConfig={{
         refer: "inbd.link"

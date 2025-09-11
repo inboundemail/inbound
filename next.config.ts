@@ -1,12 +1,9 @@
 import {withSentryConfig} from "@sentry/nextjs";
 import type { NextConfig } from "next";
+import { createMDX } from 'fumadocs-mdx/next';
 
 const nextConfig: NextConfig = {
   /* config options here */
-  // Add Turbopack configuration to suppress warnings
-  turbopack: {
-    // Empty configuration to acknowledge Turbopack usage
-  },
   
   // Performance optimizations for SEO and Core Web Vitals
   experimental: {
@@ -82,7 +79,9 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
+const withMDX = createMDX();
+
+export default withSentryConfig(withMDX(nextConfig), {
 // For all available options, see:
 // https://www.npmjs.com/package/@sentry/webpack-plugin#options
 
