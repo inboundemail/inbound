@@ -132,8 +132,17 @@ export async function POST(
   console.log('🔐 POST /api/v2/domains/{id}/auth - Init domain auth for:', id)
   
   try {
-    const { userId, error } = await validateRequest(request)
-    if (!userId) return NextResponse.json({ error }, { status: 401 })
+    console.log('🔐 Validating request authentication and rate limits')
+    const validationResult = await validateRequest(request)
+    
+    // If validation returned a NextResponse (error or rate limit), return it immediately
+    if (validationResult instanceof NextResponse) {
+        return validationResult
+    }
+    
+    // Otherwise, we have a successful validation with userId and rate limit headers
+    const { userId, rateLimitHeaders } = validationResult
+    console.log('✅ Authentication successful for userId:', userId)
 
     // Get domain
     const domainResult = await db
@@ -298,7 +307,17 @@ export async function POST(
       message: `Domain authentication initialized. ${records.length} DNS records generated. Add these records to your DNS provider and use the verify endpoint to check status.`
     }
 
-    return NextResponse.json(response, { status: 201 })
+    // Convert rate limit headers to proper format
+    const responseHeaders: Record<string, string> = {
+        'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+        'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+        'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+    }
+    if (rateLimitHeaders['retry-after']) {
+        responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+    }
+    
+    return NextResponse.json(response, { status: 201, headers: responseHeaders })
   } catch (error) {
     console.error('❌ POST /api/v2/domains/{id}/auth - Error:', error)
     return NextResponse.json({ error: 'Failed to initialize domain authentication', details: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 })
@@ -313,8 +332,17 @@ export async function PATCH(
   console.log('🔍 PATCH /api/v2/domains/{id}/auth - Verify auth for:', id)
 
   try {
-    const { userId, error } = await validateRequest(request)
-    if (!userId) return NextResponse.json({ error }, { status: 401 })
+    console.log('🔐 Validating request authentication and rate limits')
+    const validationResult = await validateRequest(request)
+    
+    // If validation returned a NextResponse (error or rate limit), return it immediately
+    if (validationResult instanceof NextResponse) {
+        return validationResult
+    }
+    
+    // Otherwise, we have a successful validation with userId and rate limit headers
+    const { userId, rateLimitHeaders } = validationResult
+    console.log('✅ Authentication successful for userId:', userId)
 
     const domainResult = await db
       .select({ id: emailDomains.id, domain: emailDomains.domain, userId: emailDomains.userId, status: emailDomains.status })
@@ -423,7 +451,17 @@ export async function PATCH(
       ...(nextSteps.length > 0 && { nextSteps }),
     }
 
-    return NextResponse.json(response)
+    // Convert rate limit headers to proper format
+    const responseHeaders: Record<string, string> = {
+        'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+        'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+        'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+    }
+    if (rateLimitHeaders['retry-after']) {
+        responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+    }
+    
+    return NextResponse.json(response, { headers: responseHeaders })
   } catch (error) {
     console.error('❌ PATCH /api/v2/domains/{id}/auth - Error:', error)
     return NextResponse.json({ error: 'Failed to verify domain authentication', details: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 })

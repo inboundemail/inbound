@@ -100,15 +100,16 @@ export async function POST(request: NextRequest) {
     console.log('📧 POST /api/v2/emails - Starting request')
     
     try {
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json(
-                { error: error },
-                { status: 401 }
-            )
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
 
         // Check for idempotency key
@@ -372,7 +373,18 @@ export async function POST(request: NextRequest) {
                 id: emailId,
                 messageId: messageId || ''
             }
-            return NextResponse.json(response, { status: 200 })
+            
+            // Convert rate limit headers to proper format
+            const responseHeaders: Record<string, string> = {
+                'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+                'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+                'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+            }
+            if (rateLimitHeaders['retry-after']) {
+                responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+            }
+            
+            return NextResponse.json(response, { status: 200, headers: responseHeaders })
 
         } catch (sesError) {
             console.error('❌ SES send error:', sesError)

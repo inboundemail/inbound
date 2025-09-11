@@ -74,15 +74,16 @@ export async function GET(
     console.log('🔍 GET /api/v2/endpoints/{id} - Starting request for endpoint:', id)
     
     try {
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json(
-                { error: error },
-                { status: 401 }
-            )
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
 
         // Get endpoint with user verification
@@ -228,7 +229,18 @@ export async function GET(
         }
 
         console.log('✅ GET /api/v2/endpoints/{id} - Successfully returning endpoint data')
-        return NextResponse.json(response)
+        
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+        
+        return NextResponse.json(response, { headers: responseHeaders })
 
     } catch (error) {
         console.error('💥 Unexpected error in GET /api/v2/endpoints/{id}:', error)
@@ -278,15 +290,16 @@ export async function PUT(
     console.log('✏️ PUT /api/v2/endpoints/{id} - Starting update for endpoint:', id)
     
     try {
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json(
-                { error: error },
-                { status: 401 }
-            )
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
 
         const data: UpdateEndpointData = await request.json()
@@ -401,7 +414,18 @@ export async function PUT(
         }
 
         console.log('✅ PUT /api/v2/endpoints/{id} - Successfully returning updated endpoint')
-        return NextResponse.json(response)
+        
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+        
+        return NextResponse.json(response, { headers: responseHeaders })
 
     } catch (error) {
         console.error('💥 Unexpected error in PUT /api/v2/endpoints/{id}:', error)
@@ -446,15 +470,16 @@ export async function DELETE(
     console.log('🗑️ DELETE /api/v2/endpoints/{id} - Starting deletion for endpoint:', id)
     
     try {
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json(
-                { error: error },
-                { status: 401 }
-            )
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
 
         // Check if endpoint exists and belongs to user
@@ -531,6 +556,16 @@ export async function DELETE(
 
         console.log('✅ DELETE /api/v2/endpoints/{id} - Successfully deleted endpoint and cleaned up')
 
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+
         return NextResponse.json({
             message: 'Endpoint deleted successfully',
             cleanup: {
@@ -541,7 +576,7 @@ export async function DELETE(
                 groupEmailsDeleted: deletedGroupEmails,
                 deliveriesDeleted: deletedDeliveries.length
             }
-        })
+        }, { headers: responseHeaders })
 
     } catch (error) {
         console.error('💥 Unexpected error in DELETE /api/v2/endpoints/{id}:', error)

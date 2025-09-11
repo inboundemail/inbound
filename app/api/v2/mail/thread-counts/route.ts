@@ -96,14 +96,17 @@ function getAllThreadMessageIds(email: any): Set<string> {
 
 export async function POST(request: NextRequest) {
     try {
-        const { userId, error } = await validateRequest(request)
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
         
-        if (error) {
-            return NextResponse.json(
-                { success: false, error },
-                { status: 401 }
-            )
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
+        console.log('✅ Authentication successful for userId:', userId)
 
         const body: ThreadCountsRequest = await request.json()
         
@@ -242,11 +245,22 @@ export async function POST(request: NextRequest) {
 
         console.log(`📧 Thread counts calculated for ${results.length} emails for user ${userId}`)
 
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+
         return NextResponse.json(
             { 
                 success: true, 
                 data: results 
-            }
+            },
+            { headers: responseHeaders }
         )
 
     } catch (error) {

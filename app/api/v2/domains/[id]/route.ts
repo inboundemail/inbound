@@ -105,15 +105,16 @@ export async function GET(
     console.log('🌐 GET /api/v2/domains/{id} - Starting request for domain:', id)
     
     try {
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json(
-                { error: error },
-                { status: 401 }
-            )
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
 
         // Extract query parameters
@@ -519,7 +520,17 @@ export async function GET(
             }
         }
 
-        return NextResponse.json(response)
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+
+        return NextResponse.json(response, { headers: responseHeaders })
 
     } catch (error) {
         console.error('❌ GET /api/v2/domains/{id} - Error:', error)
@@ -573,15 +584,16 @@ export async function PUT(
     console.log('✏️ PUT /api/v2/domains/{id} - Starting update for domain:', id)
     
     try {
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json(
-                { error: error },
-                { status: 401 }
-            )
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
 
         const data: PutDomainByIdRequest = await request.json()
@@ -766,7 +778,17 @@ export async function PUT(
             response.awsConfigurationWarning = awsConfigurationWarning
         }
 
-        return NextResponse.json(response)
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+
+        return NextResponse.json(response, { headers: responseHeaders })
 
     } catch (error) {
         console.error('❌ PUT /api/v2/domains/{id} - Error:', error)
@@ -811,15 +833,16 @@ export async function DELETE(
     console.log('🗑️ DELETE /api/v2/domains/{id} - Starting deletion for domain:', id)
     
     try {
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json(
-                { error: error },
-                { status: 401 }
-            )
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
 
         // Get domain with user verification
@@ -1008,7 +1031,17 @@ export async function DELETE(
             deletedResources: deletionStats
         }
 
-        return NextResponse.json(response)
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+
+        return NextResponse.json(response, { headers: responseHeaders })
 
     } catch (error) {
         console.error('❌ DELETE /api/v2/domains/{id} - Error:', error)
@@ -1076,6 +1109,17 @@ export async function PATCH(
     // Check if domain already has MAIL FROM domain configured
     if (domain.mailFromDomain && domain.mailFromDomainStatus === 'Success') {
       console.log('ℹ️ Domain already has MAIL FROM domain configured:', domain.mailFromDomain)
+      
+      // Convert rate limit headers to proper format
+      const responseHeaders: Record<string, string> = {
+          'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+          'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+          'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+      }
+      if (rateLimitHeaders['retry-after']) {
+          responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+      }
+      
       return NextResponse.json(
         { 
           success: true,
@@ -1083,7 +1127,7 @@ export async function PATCH(
           mailFromDomain: domain.mailFromDomain,
           mailFromDomainStatus: domain.mailFromDomainStatus
         },
-        { status: 200 }
+        { status: 200, headers: responseHeaders }
       )
     }
 
@@ -1182,6 +1226,16 @@ export async function PATCH(
 
     console.log('✅ Successfully upgraded domain with MAIL FROM configuration')
 
+    // Convert rate limit headers to proper format
+    const responseHeaders: Record<string, string> = {
+        'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+        'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+        'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+    }
+    if (rateLimitHeaders['retry-after']) {
+        responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Domain successfully upgraded with MAIL FROM domain configuration',
@@ -1194,7 +1248,7 @@ export async function PATCH(
         description: record.description,
         isRequired: record.isRequired
       }))
-    }, { status: 200 })
+    }, { status: 200, headers: responseHeaders })
 
   } catch (error) {
     console.error('❌ PATCH /api/v2/domains/{id} - Error:', error)

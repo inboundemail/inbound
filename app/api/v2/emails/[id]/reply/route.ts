@@ -165,6 +165,7 @@ async function handleSimpleReply(
     emailId: string,
     originalEmail: any,
     body: PostEmailReplyRequest,
+    rateLimitHeaders: any,
     idempotencyKey?: string
 ): Promise<NextResponse> {
     console.log('🚀 Using simplified reply mode')
@@ -454,7 +455,18 @@ async function handleSimpleReply(
             messageId: messageId,
             awsMessageId: sesMessageId || ''
         }
-        return NextResponse.json(response, { status: 200 })
+        
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+        
+        return NextResponse.json(response, { status: 200, headers: responseHeaders })
 
     } catch (sesError) {
         console.error('❌ SES send error in simple mode:', sesError)
@@ -484,15 +496,16 @@ export async function POST(
     console.log('📧 POST /api/v2/emails/[id]/reply - Starting request')
     
     try {
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json(
-                { error: error },
-                { status: 401 }
-            )
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
 
         const { id: emailId } = await params
@@ -739,7 +752,7 @@ export async function POST(
         // Check if simple mode is requested
         if (body.simple) {
             console.log('🚀 Simple mode requested, delegating to handleSimpleReply')
-            return await handleSimpleReply(userId, emailId, original, body, idempotencyKey || undefined)
+            return await handleSimpleReply(userId, emailId, original, body, rateLimitHeaders, idempotencyKey || undefined)
         }
 
         // Helper to ensure proper Message-ID format with angle brackets
@@ -947,7 +960,18 @@ export async function POST(
                 messageId: messageId,  // The Inbound message ID used for threading
                 awsMessageId: sesMessageId || ''  // The AWS SES Message ID
             }
-            return NextResponse.json(response, { status: 200 })
+            
+            // Convert rate limit headers to proper format
+            const responseHeaders: Record<string, string> = {
+                'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+                'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+                'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+            }
+            if (rateLimitHeaders['retry-after']) {
+                responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+            }
+            
+            return NextResponse.json(response, { status: 200, headers: responseHeaders })
 
         } catch (sesError) {
             console.error('❌ SES send error:', sesError)

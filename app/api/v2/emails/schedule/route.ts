@@ -93,12 +93,16 @@ export async function POST(request: NextRequest) {
     console.log('⏰ POST /api/v2/emails/schedule - Starting request')
     
     try {
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json({ error }, { status: 401 })
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
 
         // Parse request body
@@ -216,7 +220,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Check for idempotency key
-        const idempotencyKey = request.headers.get('Idempotency-Key')
+        const idempotencyKey = request.headers.get('Idempotency-Key') || undefined
         if (idempotencyKey) {
             console.log('🔑 Checking idempotency key:', idempotencyKey)
             const existingScheduled = await db
@@ -275,7 +279,17 @@ export async function POST(request: NextRequest) {
             timezone: parsedDate.timezone
         }
 
-        return NextResponse.json(response, { status: 201 })
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+
+        return NextResponse.json(response, { status: 201, headers: responseHeaders })
 
     } catch (err) {
         console.error('❌ POST /api/v2/emails/schedule - Error:', err)
@@ -293,12 +307,16 @@ export async function GET(request: NextRequest) {
     console.log('📋 GET /api/v2/emails/schedule - Starting request')
     
     try {
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json({ error }, { status: 401 })
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
 
         // Parse query parameters
@@ -360,7 +378,18 @@ export async function GET(request: NextRequest) {
         }
 
         console.log('✅ Successfully retrieved scheduled emails')
-        return NextResponse.json(response)
+        
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+        
+        return NextResponse.json(response, { headers: responseHeaders })
 
     } catch (err) {
         console.error('❌ GET /api/v2/emails/schedule - Error:', err)

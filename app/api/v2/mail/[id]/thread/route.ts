@@ -298,15 +298,16 @@ export async function GET(
     console.log('🧵 GET /api/v2/mail/[id]/thread - Starting request')
     
     try {
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json(
-                { error: error },
-                { status: 401 }
-            )
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
         
         const { id } = await params
@@ -531,11 +532,22 @@ export async function GET(
             : (normalizedSubject || id)
 
         console.log(`✅ Successfully retrieved thread with ${messages.length} messages`)
+        
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+        
         return NextResponse.json({
             messages,
             totalCount: messages.length,
             threadId
-        })
+        }, { headers: responseHeaders })
 
     } catch (error) {
         console.error('💥 Unexpected error in GET /api/v2/mail/[id]/thread:', error)

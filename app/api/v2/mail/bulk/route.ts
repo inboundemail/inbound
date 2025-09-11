@@ -33,15 +33,16 @@ export async function POST(request: NextRequest) {
     console.log('📦 POST /api/v2/mail/bulk - Starting bulk update request')
     
     try {
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json(
-                { error: error },
-                { status: 401 }
-            )
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
 
         console.log('📝 Parsing request body')
@@ -125,7 +126,18 @@ export async function POST(request: NextRequest) {
         }
 
         console.log('✅ Successfully bulk updated', result.data?.updatedCount || 0, 'emails for user:', userId)
-        return NextResponse.json(result.data)
+        
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+        
+        return NextResponse.json(result.data, { headers: responseHeaders })
 
     } catch (error) {
         console.error('💥 Unexpected error in POST /api/v2/mail/bulk:', error)

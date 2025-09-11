@@ -51,15 +51,16 @@ export async function GET(
     try {
         const { id } = await params
 
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json(
-                { error: error },
-                { status: 401 }
-            )
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
 
         console.log('🔍 Looking up email address:', id)
@@ -176,7 +177,21 @@ export async function GET(
         }
 
         console.log('✅ GET /api/v2/email-addresses/[id] - Successfully retrieved email address')
-        return NextResponse.json(response, { status: 200 })
+        
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+        
+        return NextResponse.json(response, { 
+            status: 200,
+            headers: responseHeaders
+        })
 
     } catch (error) {
         console.error('❌ GET /api/v2/email-addresses/[id] - Error:', error)
@@ -239,15 +254,16 @@ export async function PUT(
     try {
         const { id } = await params
 
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json(
-                { error: error },
-                { status: 401 }
-            )
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
 
         const data: PutEmailAddressByIdRequest = await request.json()
@@ -416,7 +432,21 @@ export async function PUT(
         }
 
         console.log('✅ PUT /api/v2/email-addresses/[id] - Successfully updated email address')
-        return NextResponse.json(response, { status: 200 })
+        
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+        
+        return NextResponse.json(response, { 
+            status: 200,
+            headers: responseHeaders 
+        })
 
     } catch (error) {
         console.error('❌ PUT /api/v2/email-addresses/[id] - Error:', error)
@@ -459,15 +489,16 @@ export async function DELETE(
     try {
         const { id } = await params
 
-        console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
-            return NextResponse.json(
-                { error: error },
-                { status: 401 }
-            )
+        console.log('🔐 Validating request authentication and rate limits')
+        const validationResult = await validateRequest(request)
+        
+        // If validation returned a NextResponse (error or rate limit), return it immediately
+        if (validationResult instanceof NextResponse) {
+            return validationResult
         }
+        
+        // Otherwise, we have a successful validation with userId and rate limit headers
+        const { userId, rateLimitHeaders } = validationResult
         console.log('✅ Authentication successful for userId:', userId)
 
         // Get email address with domain information
@@ -605,7 +636,21 @@ export async function DELETE(
         }
 
         console.log('✅ DELETE /api/v2/email-addresses/[id] - Successfully deleted email address')
-        return NextResponse.json(response, { status: 200 })
+        
+        // Convert rate limit headers to proper format
+        const responseHeaders: Record<string, string> = {
+            'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+            'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+            'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+        }
+        if (rateLimitHeaders['retry-after']) {
+            responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+        }
+        
+        return NextResponse.json(response, { 
+            status: 200,
+            headers: responseHeaders 
+        })
 
     } catch (error) {
         console.error('❌ DELETE /api/v2/email-addresses/[id] - Error:', error)

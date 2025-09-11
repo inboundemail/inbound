@@ -20,12 +20,16 @@ export async function POST(request: NextRequest) {
   console.log('📧 POST /api/v2/onboarding/demo - Starting demo request')
   
   try {
-    console.log('🔐 Validating request authentication')
-    const { userId, error: authError } = await validateRequest(request)
-    if (!userId) {
-      console.log('❌ Authentication failed:', authError)
-      return NextResponse.json({ error: authError }, { status: 401 })
+    console.log('🔐 Validating request authentication and rate limits')
+    const validationResult = await validateRequest(request)
+    
+    // If validation returned a NextResponse (error or rate limit), return it immediately
+    if (validationResult instanceof NextResponse) {
+        return validationResult
     }
+    
+    // Otherwise, we have a successful validation with userId and rate limit headers
+    const { userId, rateLimitHeaders } = validationResult
     console.log('✅ Authentication successful for userId:', userId)
 
     const body: DemoRequest = await request.json()
@@ -108,7 +112,18 @@ export async function POST(request: NextRequest) {
     })
 
     console.log('📝 Tracked demo email for reply matching:', { demoEmailId, messageId })
-    return NextResponse.json({ id: response?.id }, { status: 200 })
+    
+    // Convert rate limit headers to proper format
+    const responseHeaders: Record<string, string> = {
+        'ratelimit-limit': rateLimitHeaders['ratelimit-limit'],
+        'ratelimit-remaining': rateLimitHeaders['ratelimit-remaining'],
+        'ratelimit-reset': rateLimitHeaders['ratelimit-reset']
+    }
+    if (rateLimitHeaders['retry-after']) {
+        responseHeaders['retry-after'] = rateLimitHeaders['retry-after']
+    }
+    
+    return NextResponse.json({ id: response?.id }, { status: 200, headers: responseHeaders })
 
   } catch (error) {
     console.error('❌ Demo email error:', error)
