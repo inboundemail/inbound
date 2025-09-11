@@ -14,6 +14,7 @@ import { canUserSendFromEmail, extractEmailAddress, extractDomain, extractEmailN
  * POST /api/v2/emails/[id]/reply
  * Reply to an inbound email
  * Supports both session-based auth and API key auth
+ * Defaults to simple mode (faster, lighter) - use full mode only when attachments are needed or simple=false
  * Has tests? ❌
  * Has logging? ✅
  * Has types? ✅
@@ -35,7 +36,7 @@ export interface PostEmailReplyRequest {
     attachments?: AttachmentInput[]
     include_original?: boolean    // snake_case (legacy)
     includeOriginal?: boolean     // camelCase (Resend-compatible)
-    simple?: boolean        // Use simplified reply mode (faster, lighter)
+    simple?: boolean        // Default: true (simplified reply mode - faster, lighter). Set to false to force full mode.
     tags?: Array<{  // Resend-compatible tags
         name: string
         value: string
@@ -749,11 +750,16 @@ export async function POST(
             )
         }
 
-        // Check if simple mode is requested
-        if (body.simple) {
-            console.log('🚀 Simple mode requested, delegating to handleSimpleReply')
+        // Default to simple mode unless explicitly disabled or full mode requested
+        // Simple mode is faster and lighter - use full mode only when needed
+        const useSimpleMode = body.simple !== false && !body.attachments?.length
+        
+        if (useSimpleMode) {
+            console.log('🚀 Using simple mode (default), delegating to handleSimpleReply')
             return await handleSimpleReply(userId, emailId, original, body, rateLimitHeaders, idempotencyKey || undefined)
         }
+        
+        console.log('📧 Using full mode - attachments or simple=false specified')
 
         // Helper to ensure proper Message-ID format with angle brackets
         const formatMessageIdForThreading = (id: string) => {
