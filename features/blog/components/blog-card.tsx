@@ -25,7 +25,7 @@ export function BlogCard({ blog, className = "" }: BlogCardProps) {
               alt={blog.title}
               width={640}
               height={360}
-              className="object-cover w-full h-full group-hover:scale-105 transition-all 
+              className="object-cover w-full h-full group-hover:scale-105 touchscale transition-all 
           duration-300"
               style={{ display: "block" }}
             />

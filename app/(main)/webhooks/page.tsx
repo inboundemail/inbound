@@ -307,7 +307,7 @@ export default function WebhooksPage() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-1 h-auto hover:bg-accent rounded hover:scale-105 active:scale-95"
+                                  className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-1 h-auto hover:bg-accent rounded hover:scale-105 touchscale active:scale-95"
                                   onClick={() => copyUrl(webhook.url)}
                                 >
                                   {copiedUrl === webhook.url ? (
