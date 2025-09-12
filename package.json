@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "basehub dev & next dev --turbopack",
+    "dev": "basehub dev & next dev",
     "dev:basehub": "basehub dev",
     "prebuild": "drizzle-kit generate && drizzle-kit push",
     "build": "basehub build && next build",

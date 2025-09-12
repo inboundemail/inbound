@@ -3,10 +3,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  // Add Turbopack configuration to suppress warnings
-  turbopack: {
-    // Empty configuration to acknowledge Turbopack usage
-  },
+  // Remove Turbopack configuration for consistency
   
   // Performance optimizations for SEO and Core Web Vitals
   experimental: {
