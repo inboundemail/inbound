@@ -693,3 +693,31 @@ export type DeliveryType = typeof DELIVERY_TYPES[keyof typeof DELIVERY_TYPES];
 export type DeliveryStatus = typeof DELIVERY_STATUS[keyof typeof DELIVERY_STATUS];
 export type SentEmailStatus = typeof SENT_EMAIL_STATUS[keyof typeof SENT_EMAIL_STATUS];
 export type VipPaymentStatus = typeof VIP_PAYMENT_STATUS[keyof typeof VIP_PAYMENT_STATUS];
+
+// Dub Integrations table - stores OAuth2 tokens for Dub.co integration
+export const dubIntegrations = pgTable('dub_integrations', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull().unique(), // 1:1 relationship with users
+  accessToken: text('access_token').notNull(), // OAuth2 access token
+  refreshToken: text('refresh_token').notNull(), // OAuth2 refresh token
+  tokenType: varchar('token_type', { length: 50 }).notNull().default('Bearer'), // Token type (Bearer)
+  expiresAt: timestamp('expires_at').notNull(), // When access token expires
+  scope: varchar('scope', { length: 500 }).notNull(), // OAuth2 scopes granted
+  status: varchar('status', { length: 50 }).notNull().default('active'), // 'active', 'expired', 'revoked'
+  dubWorkspaceId: varchar('dub_workspace_id', { length: 255 }), // Dub workspace ID if available
+  dubWorkspaceName: varchar('dub_workspace_name', { length: 255 }), // Dub workspace name for display
+  lastUsed: timestamp('last_used'), // Track when tokens were last used
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Dub integration status enum
+export const DUB_INTEGRATION_STATUS = {
+  ACTIVE: 'active',
+  EXPIRED: 'expired',
+  REVOKED: 'revoked'
+} as const;
+
+export type DubIntegration = typeof dubIntegrations.$inferSelect;
+export type NewDubIntegration = typeof dubIntegrations.$inferInsert;
+export type DubIntegrationStatus = typeof DUB_INTEGRATION_STATUS[keyof typeof DUB_INTEGRATION_STATUS];

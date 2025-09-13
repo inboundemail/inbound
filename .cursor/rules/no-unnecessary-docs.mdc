@@ -1,0 +1,71 @@
+---
+alwaysApply: true
+description: Prevent creating unnecessary documentation files
+---
+
+# Documentation Creation Guidelines
+
+## Do NOT Create Documentation Files Unless Explicitly Requested
+
+**NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.**
+
+This includes but is not limited to:
+- README.md files
+- Integration guides
+- API documentation
+- Setup instructions
+- Migration guides
+- Troubleshooting documents
+- Any other markdown (.md) files
+
+## When Documentation IS Appropriate
+
+Only create documentation files when:
+1. **Explicitly requested** by the user with clear instructions like:
+   - "Create a README for this"
+   - "Write documentation for the API"
+   - "Generate a migration guide"
+   
+2. **Part of a specific requirement** where documentation is the primary deliverable
+
+## Alternative Approaches
+
+Instead of creating documentation files, prefer:
+- **Inline code comments** for explaining complex logic
+- **JSDoc comments** for function/class documentation
+- **TypeScript interfaces** for API contracts
+- **Code examples** in responses rather than separate files
+- **Brief explanations** in chat responses
+
+## Rationale
+
+Users typically prefer:
+- Working code over documentation
+- Inline explanations over external files
+- Minimal file creation unless necessary
+- Clean project structure without unnecessary files
+
+## Examples
+
+❌ **Don't do this:**
+```typescript
+// Creating integration-guide.md after implementing OAuth
+writeFile('docs/oauth-integration.md', longDocumentationContent);
+```
+
+✅ **Do this instead:**
+```typescript
+/**
+ * Dub OAuth Integration Helper
+ * Handles account linking and API operations with Dub using manual OAuth 2 implementation
+ * 
+ * Usage:
+ *   const dubOAuth = DubOAuth.getInstance();
+ *   await dubOAuth.linkToExistingAccount('/callback');
+ */
+export class DubOAuth {
+  // Implementation with good inline documentation
+}
+```
+
+Remember: Code should be self-documenting through clear naming, structure, and strategic comments rather than external documentation files.

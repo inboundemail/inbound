@@ -36,6 +36,8 @@ import { formatDistanceToNow } from 'date-fns'
 import { PricingTable } from '@/components/autumn/pricing-table-format'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { trackPurchaseConversion } from '@/lib/utils/twitter-tracking'
+import Dub from '@/components/dub'
+import { useDubIntegration } from '@/features/dub/hooks/useDubIntegration'
 // removed unused feature icons after layout merge
 // Types are now imported from @/features/settings/types
 
@@ -89,6 +91,7 @@ export default function SettingsPage() {
   
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { data: dubStatus } = useDubIntegration()
 
   const handleUpdateProfile = async (formData: FormData) => {
     setIsLoading(true)
@@ -264,6 +267,38 @@ export default function SettingsPage() {
         {/* Content */}
         
         <div className="space-y-6">
+        <div className="h-4 border-b border-slate-800"></div>
+        {/* Dub Integration */}
+        <Card className="border-none bg-transparent">
+          <CardHeader className="p-0 mb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Dub width={20} height={20} className="text-foreground" />
+                <CardTitle>Dub Integration</CardTitle>
+              </div>
+              <div className="flex items-center gap-2">
+                {dubStatus?.linked ? (
+                  <Badge>Connected{dubStatus?.workspaceName ? ` • ${dubStatus.workspaceName}` : ''}</Badge>
+                ) : (
+                  <Badge variant="secondary">Not Connected</Badge>
+                )}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    window.location.href = '/api/linking/dub/authorize'
+                  }}
+                >
+                  {dubStatus?.linked ? 'Re-link' : 'Link Dub'}
+                </Button>
+              </div>
+            </div>
+            <CardDescription>
+              Connect your Dub account to enable link creation and analytics.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+
         <div className="h-4 border-b border-slate-800"></div>
         {/* Subscription Management */}
         <Card className="border-none p-0 w-full bg-transparent">
