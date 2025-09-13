@@ -1,1 +1,0 @@
-ALTER TABLE "user" ADD COLUMN "webhooks_to_endpoints_migrated" boolean DEFAULT false;

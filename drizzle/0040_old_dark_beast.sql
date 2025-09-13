@@ -1,1 +1,0 @@
-ALTER TABLE "email_domains" ADD COLUMN "receive_dmarc_emails" boolean DEFAULT false;

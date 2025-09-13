@@ -1,1 +1,0 @@
-ALTER TABLE "sent_emails" ADD COLUMN "tags" text;
