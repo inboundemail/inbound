@@ -71,3 +71,6 @@ remail/
 scripts-and-work/
 
 tmp-files/
+
+drizzle/*.sql
+drizzle/meta/
