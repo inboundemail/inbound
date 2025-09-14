@@ -710,6 +710,14 @@ export const dubIntegrations = pgTable('dub_integrations', {
   status: varchar('status', { length: 50 }).notNull().default('active'), // 'active', 'expired', 'revoked'
   dubWorkspaceId: varchar('dub_workspace_id', { length: 255 }), // Dub workspace ID if available
   dubWorkspaceName: varchar('dub_workspace_name', { length: 255 }), // Dub workspace name for display
+  // Default click-tracking domain selection
+  defaultDubDomainId: varchar('default_dub_domain_id', { length: 255 }),
+  defaultDubDomainSlug: varchar('default_dub_domain_slug', { length: 255 }),
+  // Default click-tracking folder selection (modeled via Dub tags)
+  defaultDubFolderId: varchar('default_dub_folder_id', { length: 255 }),
+  defaultDubFolderName: varchar('default_dub_folder_name', { length: 255 }),
+  // Global toggle: convert all email links to Dub links
+  enableDubLinksForEmails: boolean('enable_dub_links_for_emails').default(false),
   lastUsed: timestamp('last_used'), // Track when tokens were last used
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),

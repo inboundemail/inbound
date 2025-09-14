@@ -163,7 +163,7 @@ export async function getValidAccessToken(userId: string): Promise<string | null
 }
 
 export function getScopes(): string[] {
-  return ['links.read', 'links.write', 'tags.read', 'tags.write', 'analytics.read', 'user.read']
+  return ['links.read', 'links.write', 'tags.read', 'tags.write', 'analytics.read', 'user.read', 'domains.read']
 }
 
 // PKCE helpers
@@ -178,5 +178,153 @@ export function generatePkcePair(): { verifier: string; challenge: string } {
 }
 
 export { DUB_AUTH_URL, DUB_TOKEN_URL }
+
+
+// Dub API
+export type DubDomain = {
+  id: string
+  slug: string
+  verified: boolean
+  primary: boolean
+  archived: boolean
+  placeholder?: string | null
+  expiredUrl?: string | null
+  notFoundUrl?: string | null
+  logo?: string | null
+  assetLinks?: string | null
+  appleAppSiteAssociation?: string | null
+  createdAt: string
+  updatedAt: string
+  registeredDomain?: {
+    id: string
+    autoRenewalDisabledAt?: string | null
+    createdAt: string
+    expiresAt: string
+    renewalFee?: number | null
+  } | null
+  deepviewData?: string | null
+}
+
+export async function listDubDomains(userId: string): Promise<DubDomain[]> {
+  const token = await getValidAccessToken(userId)
+  if (!token) throw new Error('Dub account not linked')
+  const res = await fetch('https://api.dub.co/domains', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    // Prevent Next from caching if called server-side
+    cache: 'no-store' as RequestCache,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Failed to fetch Dub domains: ${res.status} ${text}`)
+  }
+  const json = await res.json()
+  return Array.isArray(json) ? (json as DubDomain[]) : []
+}
+
+export async function getDefaultDubDomain(userId: string): Promise<{ id: string | null; slug: string | null }> {
+  const rows = await db.select().from(dubIntegrations).where(eq(dubIntegrations.userId, userId)).limit(1)
+  const integ = rows[0]
+  if (!integ) return { id: null, slug: null }
+  return {
+    id: integ.defaultDubDomainId || null,
+    slug: integ.defaultDubDomainSlug || null,
+  }
+}
+
+export async function setDefaultDubDomain(userId: string, params: { id?: string | null; slug?: string | null }): Promise<void> {
+  await db.update(dubIntegrations)
+    .set({
+      defaultDubDomainId: params.id ?? null,
+      defaultDubDomainSlug: params.slug ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(dubIntegrations.userId, userId))
+}
+
+// Tags (Folders)
+export type DubTag = { id: string; name: string }
+
+export async function listDubTags(userId: string): Promise<DubTag[]> {
+  const token = await getValidAccessToken(userId)
+  if (!token) throw new Error('Dub account not linked')
+  const res = await fetch('https://api.dub.co/tags', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    cache: 'no-store' as RequestCache,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Failed to fetch Dub tags: ${res.status} ${text}`)
+  }
+  const json = await res.json()
+  if (!Array.isArray(json)) return []
+  return json.map((t: any) => ({ id: t.id, name: t.name })) as DubTag[]
+}
+
+export async function createDubTag(userId: string, name: string): Promise<DubTag> {
+  const token = await getValidAccessToken(userId)
+  if (!token) throw new Error('Dub account not linked')
+  const res = await fetch('https://api.dub.co/tags', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ name }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Failed to create tag: ${res.status} ${text}`)
+  }
+  const json = await res.json()
+  return { id: json.id, name: json.name } as DubTag
+}
+
+export async function getDefaultDubFolder(userId: string): Promise<{ id: string | null; name: string | null }> {
+  const rows = await db.select().from(dubIntegrations).where(eq(dubIntegrations.userId, userId)).limit(1)
+  const integ = rows[0]
+  if (!integ) return { id: null, name: null }
+  return {
+    id: integ.defaultDubFolderId || null,
+    name: integ.defaultDubFolderName || null,
+  }
+}
+
+export async function setDefaultDubFolder(userId: string, params: { id?: string | null; name?: string | null }): Promise<void> {
+  await db.update(dubIntegrations)
+    .set({
+      defaultDubFolderId: params.id ?? null,
+      defaultDubFolderName: params.name ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(dubIntegrations.userId, userId))
+}
+
+export async function ensureInboundFolder(userId: string): Promise<{ id: string; name: string }> {
+  const tags = await listDubTags(userId).catch(() => [])
+  const existing = tags.find(t => t.name.toLowerCase() === 'inbound')
+  if (existing) return existing
+  const created = await createDubTag(userId, 'Inbound')
+  return created
+}
+
+export async function getEnableDubLinksForEmails(userId: string): Promise<boolean> {
+  const rows = await db.select().from(dubIntegrations).where(eq(dubIntegrations.userId, userId)).limit(1)
+  const integ = rows[0]
+  return !!integ?.enableDubLinksForEmails
+}
+
+export async function setEnableDubLinksForEmails(userId: string, enabled: boolean): Promise<void> {
+  await db.update(dubIntegrations)
+    .set({ enableDubLinksForEmails: enabled, updatedAt: new Date() })
+    .where(eq(dubIntegrations.userId, userId))
+}
 
 

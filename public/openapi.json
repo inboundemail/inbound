@@ -1,0 +1,6007 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Inbound Email API",
+    "description": "Comprehensive API for managing inbound email processing, domains, endpoints, and email operations.",
+    "version": "2.0.0",
+    "contact": {
+      "name": "Inbound Email Support",
+      "url": "https://inbound.new",
+      "email": "support@inbound.new"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://inbound.new",
+      "description": "Production server"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "Development server"
+    }
+  ],
+  "paths": {
+    "/api/v2/domains": {
+      "get": {
+        "operationId": "listDomains",
+        "summary": "GET /domains",
+        "tags": [
+          "domains"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetDomainsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "limit parameter"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "offset parameter"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "verified",
+                "failed",
+                "undefined"
+              ]
+            },
+            "description": "status parameter"
+          },
+          {
+            "name": "canReceive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false",
+                "undefined"
+              ]
+            },
+            "description": "canReceive parameter"
+          },
+          {
+            "name": "check",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false",
+                "undefined"
+              ]
+            },
+            "description": "check parameter"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postDomains",
+        "summary": "POST /domains",
+        "tags": [
+          "domains"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostDomainsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostDomainsRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/email-addresses": {
+      "get": {
+        "operationId": "listEmailAddresses",
+        "summary": "GET /email-addresses",
+        "tags": [
+          "email-addresses"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetEmailAddressesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "limit parameter"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "offset parameter"
+          },
+          {
+            "name": "domainId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "domainId parameter"
+          },
+          {
+            "name": "isActive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false",
+                "undefined"
+              ]
+            },
+            "description": "isActive parameter"
+          },
+          {
+            "name": "isReceiptRuleConfigured",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false",
+                "undefined"
+              ]
+            },
+            "description": "isReceiptRuleConfigured parameter"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postEmailAddresses",
+        "summary": "POST /email-addresses",
+        "tags": [
+          "email-addresses"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostEmailAddressesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostEmailAddressesRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/emails": {
+      "post": {
+        "operationId": "postEmails",
+        "summary": "POST /emails",
+        "tags": [
+          "emails"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostEmailsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostEmailsRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/endpoints": {
+      "get": {
+        "operationId": "listEndpoints",
+        "summary": "GET /endpoints",
+        "tags": [
+          "endpoints"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetEndpointsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "limit parameter"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "offset parameter"
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "webhook",
+                "email",
+                "email_group",
+                "undefined"
+              ]
+            },
+            "description": "type parameter"
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false",
+                "undefined"
+              ]
+            },
+            "description": "active parameter"
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "newest",
+                "oldest",
+                "undefined"
+              ]
+            },
+            "description": "sortBy parameter"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postEndpoints",
+        "summary": "POST /endpoints",
+        "tags": [
+          "endpoints"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostEndpointsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostEndpointsRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/mail": {
+      "get": {
+        "operationId": "listMail",
+        "summary": "GET /mail",
+        "tags": [
+          "mail"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetMailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "limit parameter"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "offset parameter"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "search parameter"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "failed",
+                "all",
+                "processed",
+                "undefined"
+              ]
+            },
+            "description": "status parameter"
+          },
+          {
+            "name": "domain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "domain parameter"
+          },
+          {
+            "name": "timeRange",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "24h",
+                "7d",
+                "30d",
+                "90d",
+                "undefined"
+              ]
+            },
+            "description": "timeRange parameter"
+          },
+          {
+            "name": "includeArchived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "includeArchived parameter"
+          },
+          {
+            "name": "emailAddress",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "emailAddress parameter"
+          },
+          {
+            "name": "emailId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "emailId parameter"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postMail",
+        "summary": "POST /mail",
+        "tags": [
+          "mail"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostMailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostMailRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/domains/{id}": {
+      "get": {
+        "operationId": "getDomainsById",
+        "summary": "GET /domains/{id}",
+        "tags": [
+          "domains"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetDomainByIdResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id parameter"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "putDomainsById",
+        "summary": "PUT /domains/{id}",
+        "tags": [
+          "domains"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PutDomainByIdResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutDomainByIdRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteDomainsById",
+        "summary": "DELETE /domains/{id}",
+        "tags": [
+          "domains"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteDomainByIdResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patchDomainsById",
+        "summary": "PATCH /domains/{id}",
+        "tags": [
+          "domains"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      }
+    },
+    "/api/v2/email-addresses/{id}": {
+      "get": {
+        "operationId": "getEmailAddressesById",
+        "summary": "GET /email-addresses/{id}",
+        "tags": [
+          "email-addresses"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetEmailAddressByIdResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "putEmailAddressesById",
+        "summary": "PUT /email-addresses/{id}",
+        "tags": [
+          "email-addresses"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PutEmailAddressByIdResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutEmailAddressByIdRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteEmailAddressesById",
+        "summary": "DELETE /email-addresses/{id}",
+        "tags": [
+          "email-addresses"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteEmailAddressByIdResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      }
+    },
+    "/api/v2/emails/{id}": {
+      "get": {
+        "operationId": "getEmailsById",
+        "summary": "GET /emails/{id}",
+        "tags": [
+          "emails"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetEmailByIdResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      }
+    },
+    "/api/v2/emails/schedule": {
+      "get": {
+        "operationId": "listEmails",
+        "summary": "GET /emails/schedule",
+        "tags": [
+          "emails"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetScheduledEmailsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "limit parameter"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "description": "offset parameter"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "status parameter"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postEmails",
+        "summary": "POST /emails/schedule",
+        "tags": [
+          "emails"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostScheduleEmailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostScheduleEmailRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/endpoints/{id}": {
+      "get": {
+        "operationId": "getEndpointsById",
+        "summary": "GET /endpoints/{id}",
+        "tags": [
+          "endpoints"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetEndpointByIdResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id parameter"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "putEndpointsById",
+        "summary": "PUT /endpoints/{id}",
+        "tags": [
+          "endpoints"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PutEndpointByIdResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutEndpointByIdRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteEndpointsById",
+        "summary": "DELETE /endpoints/{id}",
+        "tags": [
+          "endpoints"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteEndpointByIdResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      }
+    },
+    "/api/v2/mail/{id}": {
+      "get": {
+        "operationId": "getMailById",
+        "summary": "GET /mail/{id}",
+        "tags": [
+          "mail"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetMailByIdResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patchMailById",
+        "summary": "PATCH /mail/{id}",
+        "tags": [
+          "mail"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatchMailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchMailRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      }
+    },
+    "/api/v2/mail/bulk": {
+      "post": {
+        "operationId": "postMail",
+        "summary": "POST /mail/bulk",
+        "tags": [
+          "mail"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostMailBulkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostMailBulkRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/mail/thread-counts": {
+      "post": {
+        "operationId": "postMail",
+        "summary": "POST /mail/thread-counts",
+        "tags": [
+          "mail"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v2/onboarding/check-reply": {
+      "get": {
+        "operationId": "listOnboarding",
+        "summary": "GET /onboarding/check-reply",
+        "tags": [
+          "onboarding"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v2/onboarding/demo": {
+      "post": {
+        "operationId": "postOnboarding",
+        "summary": "POST /onboarding/demo",
+        "tags": [
+          "onboarding"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v2/onboarding/webhook": {
+      "post": {
+        "operationId": "postOnboarding",
+        "summary": "POST /onboarding/webhook",
+        "tags": [
+          "onboarding"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v2/domains/{id}/auth": {
+      "post": {
+        "operationId": "postDomainsById",
+        "summary": "POST /domains/{id}/auth",
+        "tags": [
+          "domains"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostDomainAuthInitResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostDomainAuthInitRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patchDomainsById",
+        "summary": "PATCH /domains/{id}/auth",
+        "tags": [
+          "domains"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatchDomainAuthVerifyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      }
+    },
+    "/api/v2/domains/{id}/dns-records": {
+      "get": {
+        "operationId": "getDomainsById",
+        "summary": "GET /domains/{id}/dns-records",
+        "tags": [
+          "domains"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetDomainDnsRecordsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      }
+    },
+    "/api/v2/emails/{id}/reply": {
+      "post": {
+        "operationId": "postEmailsById",
+        "summary": "POST /emails/{id}/reply",
+        "tags": [
+          "emails"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostEmailReplyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostEmailReplyRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      }
+    },
+    "/api/v2/emails/schedule/{id}": {
+      "get": {
+        "operationId": "getEmailsById",
+        "summary": "GET /emails/schedule/{id}",
+        "tags": [
+          "emails"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetScheduledEmailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteEmailsById",
+        "summary": "DELETE /emails/schedule/{id}",
+        "tags": [
+          "emails"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteScheduledEmailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      }
+    },
+    "/api/v2/endpoints/{id}/test": {
+      "post": {
+        "operationId": "postEndpointsById",
+        "summary": "POST /endpoints/{id}/test",
+        "tags": [
+          "endpoints"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostEndpointTestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostEndpointTestRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      }
+    },
+    "/api/v2/mail/{id}/thread": {
+      "get": {
+        "operationId": "getMailById",
+        "summary": "GET /mail/{id}/thread",
+        "tags": [
+          "mail"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetThreadResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id identifier"
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "GetDomainsRequest": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "verified",
+              "failed",
+              "undefined"
+            ]
+          },
+          "canReceive": {
+            "type": "string",
+            "enum": [
+              "true",
+              "false",
+              "undefined"
+            ]
+          },
+          "check": {
+            "type": "string",
+            "enum": [
+              "true",
+              "false",
+              "undefined"
+            ]
+          }
+        },
+        "required": [],
+        "description": "GET /api/v2/domains\nGets all domains for the user with filtering and pagination\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "DomainWithStats": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "canReceiveEmails": {
+            "type": "boolean"
+          },
+          "hasMxRecords": {
+            "type": "boolean"
+          },
+          "domainProvider": {
+            "type": "string"
+          },
+          "providerConfidence": {
+            "type": "string"
+          },
+          "lastDnsCheck": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "lastSesCheck": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "isCatchAllEnabled": {
+            "type": "boolean"
+          },
+          "catchAllEndpointId": {
+            "type": "string"
+          },
+          "mailFromDomain": {
+            "type": "string"
+          },
+          "mailFromDomainStatus": {
+            "type": "string"
+          },
+          "mailFromDomainVerifiedAt": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "receiveDmarcEmails": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "stats": {
+            "type": "number"
+          },
+          "catchAllEndpoint": {
+            "type": "string"
+          },
+          "verificationCheck": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "domain",
+          "status",
+          "canReceiveEmails",
+          "hasMxRecords",
+          "domainProvider",
+          "providerConfidence",
+          "lastDnsCheck",
+          "lastSesCheck",
+          "isCatchAllEnabled",
+          "catchAllEndpointId",
+          "mailFromDomain",
+          "mailFromDomainStatus",
+          "mailFromDomainVerifiedAt",
+          "receiveDmarcEmails",
+          "createdAt",
+          "updatedAt",
+          "userId",
+          "stats"
+        ]
+      },
+      "GetDomainsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pagination": {
+            "type": "number"
+          },
+          "meta": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "meta"
+        ]
+      },
+      "PostDomainsRequest": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "description": "POST /api/v2/domains\nCreates a new domain for email receiving\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "PostDomainsResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "verified",
+              "failed"
+            ]
+          },
+          "canReceiveEmails": {
+            "type": "boolean"
+          },
+          "hasMxRecords": {
+            "type": "boolean"
+          },
+          "domainProvider": {
+            "type": "string"
+          },
+          "providerConfidence": {
+            "type": "string"
+          },
+          "mailFromDomain": {
+            "type": "string"
+          },
+          "mailFromDomainStatus": {
+            "type": "string"
+          },
+          "dnsRecords": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "domain",
+          "status",
+          "canReceiveEmails",
+          "hasMxRecords",
+          "domainProvider",
+          "providerConfidence",
+          "dnsRecords",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "GetEmailAddressesRequest": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          },
+          "domainId": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "string",
+            "enum": [
+              "true",
+              "false",
+              "undefined"
+            ]
+          },
+          "isReceiptRuleConfigured": {
+            "type": "string",
+            "enum": [
+              "true",
+              "false",
+              "undefined"
+            ]
+          }
+        },
+        "required": [],
+        "description": "GET /api/v2/email-addresses\nLists all email addresses for the authenticated user with filtering and pagination\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "EmailAddressWithDomain": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "domainId": {
+            "type": "string"
+          },
+          "webhookId": {
+            "type": "string"
+          },
+          "endpointId": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "isReceiptRuleConfigured": {
+            "type": "boolean"
+          },
+          "receiptRuleName": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "routing": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "address",
+          "domainId",
+          "webhookId",
+          "endpointId",
+          "isActive",
+          "isReceiptRuleConfigured",
+          "receiptRuleName",
+          "createdAt",
+          "updatedAt",
+          "userId",
+          "domain",
+          "routing"
+        ]
+      },
+      "GetEmailAddressesResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pagination": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ]
+      },
+      "PostEmailAddressesRequest": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "domainId": {
+            "type": "string"
+          },
+          "endpointId": {
+            "type": "string"
+          },
+          "webhookId": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "address",
+          "domainId"
+        ],
+        "description": "POST /api/v2/email-addresses\nCreates a new email address and configures SES receipt rules\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "PostEmailAddressesResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "domainId": {
+            "type": "string"
+          },
+          "webhookId": {
+            "type": "string"
+          },
+          "endpointId": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "isReceiptRuleConfigured": {
+            "type": "boolean"
+          },
+          "receiptRuleName": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "routing": {
+            "type": "string"
+          },
+          "warning": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "address",
+          "domainId",
+          "webhookId",
+          "endpointId",
+          "isActive",
+          "isReceiptRuleConfigured",
+          "receiptRuleName",
+          "createdAt",
+          "updatedAt",
+          "userId",
+          "domain",
+          "routing"
+        ]
+      },
+      "PostEmailsRequest": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "bcc": {
+            "type": "string"
+          },
+          "cc": {
+            "type": "string"
+          },
+          "reply_to": {
+            "type": "string"
+          },
+          "replyTo": {
+            "type": "string"
+          },
+          "html": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "headers": {
+            "type": "string"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "subject"
+        ],
+        "description": "POST /api/v2/emails\nSend an email through the API (Resend-compatible)\nSupports both session-based auth and API key auth\nHas tests? ❌\nHas logging? ✅\nHas types? ✅"
+      },
+      "PostEmailsResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "messageId"
+        ]
+      },
+      "GetEndpointsRequest": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "webhook",
+              "email",
+              "email_group",
+              "undefined"
+            ]
+          },
+          "active": {
+            "type": "string",
+            "enum": [
+              "true",
+              "false",
+              "undefined"
+            ]
+          },
+          "sortBy": {
+            "type": "string",
+            "enum": [
+              "newest",
+              "oldest",
+              "undefined"
+            ]
+          }
+        },
+        "required": [],
+        "description": "GET /api/v2/endpoints\nGets all endpoints for the user with filtering and pagination\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "EndpointWithStats": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "webhook",
+              "email",
+              "email_group"
+            ]
+          },
+          "config": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "groupEmails": {
+            "type": "string"
+          },
+          "deliveryStats": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "config",
+          "isActive",
+          "description",
+          "userId",
+          "createdAt",
+          "updatedAt",
+          "groupEmails",
+          "deliveryStats"
+        ]
+      },
+      "GetEndpointsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pagination": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ]
+      },
+      "PostEndpointsRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "webhook",
+              "email",
+              "email_group"
+            ]
+          },
+          "config": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "config"
+        ],
+        "description": "POST /api/v2/endpoints\nCreates a new endpoint\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "PostEndpointsResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "webhook",
+              "email",
+              "email_group"
+            ]
+          },
+          "config": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "groupEmails": {
+            "type": "string"
+          },
+          "deliveryStats": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "config",
+          "isActive",
+          "description",
+          "userId",
+          "createdAt",
+          "updatedAt",
+          "groupEmails",
+          "deliveryStats"
+        ]
+      },
+      "GetMailRequest": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          },
+          "search": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "failed",
+              "all",
+              "processed",
+              "undefined"
+            ]
+          },
+          "domain": {
+            "type": "string"
+          },
+          "timeRange": {
+            "type": "string",
+            "enum": [
+              "24h",
+              "7d",
+              "30d",
+              "90d",
+              "undefined"
+            ]
+          },
+          "includeArchived": {
+            "type": "boolean"
+          },
+          "emailAddress": {
+            "type": "string"
+          },
+          "emailId": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "description": "GET /api/v2/mail\nGets all emails for the user (can filter by status, date, domain)\nSupports both session-based auth and API key auth\nHas tests? ✅\nHas logging? ✅\nHas types? ✅"
+      },
+      "EmailItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "emailId": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "fromName": {
+            "type": "string"
+          },
+          "recipient": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "string"
+          },
+          "receivedAt": {
+            "type": "string"
+          },
+          "isRead": {
+            "type": "boolean"
+          },
+          "readAt": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "isArchived": {
+            "type": "boolean"
+          },
+          "archivedAt": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "hasAttachments": {
+            "type": "boolean"
+          },
+          "attachmentCount": {
+            "type": "number"
+          },
+          "parseSuccess": {
+            "type": "boolean"
+          },
+          "parseError": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "emailId",
+          "messageId",
+          "subject",
+          "from",
+          "fromName",
+          "recipient",
+          "preview",
+          "receivedAt",
+          "isRead",
+          "readAt",
+          "isArchived",
+          "archivedAt",
+          "hasAttachments",
+          "attachmentCount",
+          "parseSuccess",
+          "parseError",
+          "createdAt"
+        ]
+      },
+      "GetMailResponse": {
+        "type": "object",
+        "properties": {
+          "emails": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pagination": {
+            "type": "number"
+          },
+          "filters": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "emails",
+          "pagination",
+          "filters"
+        ]
+      },
+      "PostMailRequest": {
+        "type": "object",
+        "properties": {
+          "emailId": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "textBody": {
+            "type": "string"
+          },
+          "htmlBody": {
+            "type": "string"
+          },
+          "attachments": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "emailId",
+          "to",
+          "subject"
+        ],
+        "description": "POST /api/v2/mail\nCreates a reply to an email\nSupports both session-based auth and API key auth\nHas logging? ✅\nHas types? ✅\nHas tests? ✅"
+      },
+      "PostMailResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "originalEmailId": {
+            "type": "string"
+          },
+          "replyData": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "originalEmailId",
+          "replyData",
+          "status"
+        ]
+      },
+      "GetDomainByIdRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "description": "GET /api/v2/domains/{id}\nGets detailed information about a specific domain\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "DomainStats": {
+        "type": "object",
+        "properties": {
+          "totalEmailAddresses": {
+            "type": "number"
+          },
+          "activeEmailAddresses": {
+            "type": "number"
+          },
+          "emailsLast24h": {
+            "type": "number"
+          },
+          "emailsLast7d": {
+            "type": "number"
+          },
+          "emailsLast30d": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "totalEmailAddresses",
+          "activeEmailAddresses",
+          "emailsLast24h",
+          "emailsLast7d",
+          "emailsLast30d"
+        ]
+      },
+      "GetDomainByIdResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "canReceiveEmails": {
+            "type": "boolean"
+          },
+          "hasMxRecords": {
+            "type": "boolean"
+          },
+          "domainProvider": {
+            "type": "string"
+          },
+          "providerConfidence": {
+            "type": "string"
+          },
+          "lastDnsCheck": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "lastSesCheck": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "isCatchAllEnabled": {
+            "type": "boolean"
+          },
+          "catchAllEndpointId": {
+            "type": "string"
+          },
+          "mailFromDomain": {
+            "type": "string"
+          },
+          "mailFromDomainStatus": {
+            "type": "string"
+          },
+          "mailFromDomainVerifiedAt": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "stats": {
+            "type": "string"
+          },
+          "catchAllEndpoint": {
+            "type": "string"
+          },
+          "verificationCheck": {
+            "type": "string"
+          },
+          "authRecommendations": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "domain",
+          "status",
+          "canReceiveEmails",
+          "hasMxRecords",
+          "domainProvider",
+          "providerConfidence",
+          "lastDnsCheck",
+          "lastSesCheck",
+          "isCatchAllEnabled",
+          "catchAllEndpointId",
+          "mailFromDomain",
+          "mailFromDomainStatus",
+          "mailFromDomainVerifiedAt",
+          "createdAt",
+          "updatedAt",
+          "userId",
+          "stats"
+        ]
+      },
+      "PutDomainByIdRequest": {
+        "type": "object",
+        "properties": {
+          "isCatchAllEnabled": {
+            "type": "boolean"
+          },
+          "catchAllEndpointId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "isCatchAllEnabled"
+        ],
+        "description": "PUT /api/v2/domains/{id}\nUpdates domain catch-all settings (enable/disable with endpoint configuration)\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "PutDomainByIdResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "isCatchAllEnabled": {
+            "type": "boolean"
+          },
+          "catchAllEndpointId": {
+            "type": "string"
+          },
+          "catchAllEndpoint": {
+            "type": "string"
+          },
+          "receiptRuleName": {
+            "type": "string"
+          },
+          "awsConfigurationWarning": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "domain",
+          "status",
+          "isCatchAllEnabled",
+          "catchAllEndpointId",
+          "updatedAt"
+        ]
+      },
+      "DeleteDomainByIdResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "deletedResources": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "deletedResources"
+        ],
+        "description": "DELETE /api/v2/domains/{id}\nDeletes a domain and all associated resources\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "GetEmailAddressByIdResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "domainId": {
+            "type": "string"
+          },
+          "webhookId": {
+            "type": "string"
+          },
+          "endpointId": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "isReceiptRuleConfigured": {
+            "type": "boolean"
+          },
+          "receiptRuleName": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "routing": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "address",
+          "domainId",
+          "webhookId",
+          "endpointId",
+          "isActive",
+          "isReceiptRuleConfigured",
+          "receiptRuleName",
+          "createdAt",
+          "updatedAt",
+          "userId",
+          "domain",
+          "routing"
+        ],
+        "description": "GET /api/v2/email-addresses/[id]\nGets a specific email address by ID with detailed information\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "PutEmailAddressByIdRequest": {
+        "type": "object",
+        "properties": {
+          "endpointId": {
+            "type": "string"
+          },
+          "webhookId": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "description": "PUT /api/v2/email-addresses/[id]\nUpdates an email address and reconfigures SES rules if needed\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "PutEmailAddressByIdResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "domainId": {
+            "type": "string"
+          },
+          "webhookId": {
+            "type": "string"
+          },
+          "endpointId": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "isReceiptRuleConfigured": {
+            "type": "boolean"
+          },
+          "receiptRuleName": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "routing": {
+            "type": "string"
+          },
+          "warning": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "address",
+          "domainId",
+          "webhookId",
+          "endpointId",
+          "isActive",
+          "isReceiptRuleConfigured",
+          "receiptRuleName",
+          "createdAt",
+          "updatedAt",
+          "userId",
+          "domain",
+          "routing"
+        ]
+      },
+      "DeleteEmailAddressByIdResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "cleanup": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "cleanup"
+        ],
+        "description": "DELETE /api/v2/email-addresses/[id]\nDeletes an email address and cleans up SES rules\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "GetEmailByIdResponse": {
+        "type": "object",
+        "properties": {
+          "object": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "html": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "bcc": {
+            "type": "string"
+          },
+          "cc": {
+            "type": "string"
+          },
+          "reply_to": {
+            "type": "string"
+          },
+          "last_event": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "object",
+          "id",
+          "to",
+          "from",
+          "created_at",
+          "subject",
+          "html",
+          "text",
+          "bcc",
+          "cc",
+          "reply_to",
+          "last_event"
+        ],
+        "description": "GET /api/v2/emails/{id}\nRetrieve a single sent email by ID\nSupports both session-based auth and API key auth\nHas tests? ❌\nHas logging? ✅\nHas types? ✅"
+      },
+      "PostScheduleEmailRequest": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "bcc": {
+            "type": "string"
+          },
+          "cc": {
+            "type": "string"
+          },
+          "reply_to": {
+            "type": "string"
+          },
+          "replyTo": {
+            "type": "string"
+          },
+          "html": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "headers": {
+            "type": "string"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "string"
+          },
+          "scheduled_at": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "subject",
+          "scheduled_at"
+        ],
+        "description": "POST /api/v2/emails/schedule\nSchedule an email to be sent at a future time (Resend-compatible)\nSupports both session-based auth and API key auth\nHas tests? ❌ (TODO)\nHas logging? ✅\nHas types? ✅"
+      },
+      "PostScheduleEmailResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "scheduled_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "scheduled_at",
+          "status",
+          "timezone"
+        ]
+      },
+      "GetScheduledEmailsRequest": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": []
+      },
+      "ScheduledEmailItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "scheduled_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "number"
+          },
+          "last_error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "from",
+          "to",
+          "subject",
+          "scheduled_at",
+          "status",
+          "timezone",
+          "created_at",
+          "attempts"
+        ]
+      },
+      "GetScheduledEmailsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pagination": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ]
+      },
+      "GetEndpointByIdRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "description": "GET /api/v2/endpoints/{id}\nGets detailed information about a specific endpoint\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "EndpointDeliveryItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "emailId": {
+            "type": "string"
+          },
+          "deliveryType": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "number"
+          },
+          "lastAttemptAt": {
+            "type": "string"
+          },
+          "responseData": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "emailId",
+          "deliveryType",
+          "status",
+          "attempts",
+          "lastAttemptAt",
+          "responseData",
+          "createdAt"
+        ]
+      },
+      "AssociatedEmailAddress": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "address",
+          "isActive",
+          "createdAt"
+        ]
+      },
+      "CatchAllDomain": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "domain",
+          "status"
+        ]
+      },
+      "GetEndpointByIdResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "webhook",
+              "email",
+              "email_group"
+            ]
+          },
+          "config": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "groupEmails": {
+            "type": "string"
+          },
+          "deliveryStats": {
+            "type": "string"
+          },
+          "recentDeliveries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "associatedEmails": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "catchAllDomains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "config",
+          "isActive",
+          "description",
+          "userId",
+          "createdAt",
+          "updatedAt",
+          "groupEmails",
+          "deliveryStats",
+          "recentDeliveries",
+          "associatedEmails",
+          "catchAllDomains"
+        ]
+      },
+      "PutEndpointByIdRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "config": {
+            "type": "string",
+            "enum": [
+              "import(/Users/ryanvogel/dev/inbound-org/inbound/features/endpoints/types/index).EndpointConfig",
+              "undefined"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "description": "PUT /api/v2/endpoints/{id}\nUpdates an existing endpoint\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "PutEndpointByIdResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "webhook",
+              "email",
+              "email_group"
+            ]
+          },
+          "config": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "groupEmails": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "config",
+          "isActive",
+          "description",
+          "userId",
+          "createdAt",
+          "updatedAt",
+          "groupEmails"
+        ]
+      },
+      "DeleteEndpointByIdRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "description": "DELETE /api/v2/endpoints/{id}\nDeletes an endpoint and handles cleanup\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "DeleteEndpointByIdResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "cleanup": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "cleanup"
+        ]
+      },
+      "GetMailByIdParams": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "ParsedEmailAddress": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "addresses": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "addresses"
+        ]
+      },
+      "EmailAttachment": {
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          },
+          "contentId": {
+            "type": "string"
+          },
+          "contentDisposition": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "contentType",
+          "size",
+          "contentId",
+          "contentDisposition"
+        ]
+      },
+      "GetMailByIdResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "emailId": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "fromName": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "cc": {
+            "type": "string"
+          },
+          "bcc": {
+            "type": "string"
+          },
+          "replyTo": {
+            "type": "string"
+          },
+          "recipient": {
+            "type": "string"
+          },
+          "receivedAt": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "isRead": {
+            "type": "boolean"
+          },
+          "readAt": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "addresses": {
+            "type": "string",
+            "enum": [
+              "{ from: import(/Users/ryanvogel/dev/inbound-org/inbound/app/api/v2/mail/[id]/route).ParsedEmailAddress",
+              "null; to: import(/Users/ryanvogel/dev/inbound-org/inbound/app/api/v2/mail/[id]/route).ParsedEmailAddress",
+              "null; cc: import(/Users/ryanvogel/dev/inbound-org/inbound/app/api/v2/mail/[id]/route).ParsedEmailAddress",
+              "null; bcc: import(/Users/ryanvogel/dev/inbound-org/inbound/app/api/v2/mail/[id]/route).ParsedEmailAddress",
+              "null; replyTo: import(/Users/ryanvogel/dev/inbound-org/inbound/app/api/v2/mail/[id]/route).ParsedEmailAddress",
+              "null; }"
+            ]
+          },
+          "metadata": {
+            "type": "string"
+          },
+          "security": {
+            "type": "string"
+          },
+          "processing": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "emailId",
+          "messageId",
+          "subject",
+          "from",
+          "fromName",
+          "to",
+          "cc",
+          "bcc",
+          "replyTo",
+          "recipient",
+          "receivedAt",
+          "isRead",
+          "readAt",
+          "content",
+          "addresses",
+          "metadata",
+          "security",
+          "processing",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "PatchMailRequest": {
+        "type": "object",
+        "properties": {
+          "isRead": {
+            "type": "boolean"
+          },
+          "isArchived": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "description": "PATCH /api/v2/mail/[id]\nUpdates email properties (read status, archive status, etc.)\nSupports both session-based auth and API key auth\nHas tests? ❌\nHas logging? ✅\nHas types? ✅"
+      },
+      "PatchMailResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "isRead": {
+            "type": "boolean"
+          },
+          "isArchived": {
+            "type": "boolean"
+          },
+          "readAt": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "archivedAt": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "isRead",
+          "isArchived",
+          "readAt",
+          "archivedAt"
+        ]
+      },
+      "PostMailBulkRequest": {
+        "type": "object",
+        "properties": {
+          "emailIds": {
+            "type": "string"
+          },
+          "updates": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "emailIds",
+          "updates"
+        ],
+        "description": "POST /api/v2/mail/bulk\nBulk update emails (archive, mark as read, etc.)\nSupports both session-based auth and API key auth\nHas tests? ❌\nHas logging? ✅\nHas types? ✅"
+      },
+      "PostMailBulkResponse": {
+        "type": "object",
+        "properties": {
+          "updatedCount": {
+            "type": "number"
+          },
+          "emails": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "updatedCount",
+          "emails"
+        ]
+      },
+      "ThreadCountsRequest": {
+        "type": "object",
+        "properties": {
+          "emailIds": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "emailIds"
+        ],
+        "description": "POST /api/v2/mail/thread-counts\nGets thread counts for multiple emails in batch\nEfficiently calculates conversation thread sizes for inbox listing\nSupports both session-based auth and API key auth\nHas tests? ❌\nHas logging? ✅\nHas types? ✅"
+      },
+      "ThreadCountResult": {
+        "type": "object",
+        "properties": {
+          "emailId": {
+            "type": "string"
+          },
+          "threadCount": {
+            "type": "number"
+          },
+          "hasThread": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "emailId",
+          "threadCount",
+          "hasThread"
+        ]
+      },
+      "ThreadCountsResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ]
+      },
+      "CheckReplyResponse": {
+        "type": "object",
+        "properties": {
+          "hasReply": {
+            "type": "boolean"
+          },
+          "reply": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hasReply"
+        ],
+        "description": "GET /api/v2/onboarding/check-reply\nCheck if user has received a demo reply (for polling)\nWorks on Vercel serverless"
+      },
+      "DemoRequest": {
+        "type": "object",
+        "properties": {
+          "apiKey": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "apiKey",
+          "to"
+        ],
+        "description": "POST /api/v2/onboarding/demo\nDemo route for onboarding to test SDK email sending"
+      },
+      "DnsRecordOut": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "TXT",
+              "CNAME",
+              "MX"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "number"
+          },
+          "isRequired": {
+            "type": "boolean"
+          },
+          "isVerified": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "value",
+          "isRequired",
+          "isVerified",
+          "description"
+        ]
+      },
+      "PostDomainAuthInitRequest": {
+        "type": "object",
+        "properties": {
+          "mailFromDomain": {
+            "type": "string"
+          },
+          "generateSpf": {
+            "type": "boolean"
+          },
+          "generateDmarc": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      },
+      "PostDomainAuthInitResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "sesIdentityStatus": {
+            "type": "string"
+          },
+          "dkimEnabled": {
+            "type": "boolean"
+          },
+          "dkimTokens": {
+            "type": "string"
+          },
+          "mailFromDomain": {
+            "type": "string"
+          },
+          "mailFromStatus": {
+            "type": "string"
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "domain",
+          "sesIdentityStatus",
+          "dkimEnabled",
+          "dkimTokens",
+          "mailFromDomain",
+          "mailFromStatus",
+          "records",
+          "message"
+        ]
+      },
+      "DnsVerificationResultOut": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "isRequired": {
+            "type": "boolean"
+          },
+          "isVerified": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "lastChecked": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "value",
+          "isRequired",
+          "isVerified",
+          "description",
+          "lastChecked"
+        ]
+      },
+      "SesVerificationStatusOut": {
+        "type": "object",
+        "properties": {
+          "identityStatus": {
+            "type": "string"
+          },
+          "identityVerified": {
+            "type": "boolean"
+          },
+          "dkimStatus": {
+            "type": "string"
+          },
+          "dkimVerified": {
+            "type": "boolean"
+          },
+          "dkimTokens": {
+            "type": "string"
+          },
+          "mailFromDomain": {
+            "type": "string"
+          },
+          "mailFromStatus": {
+            "type": "string"
+          },
+          "mailFromVerified": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "identityStatus",
+          "identityVerified",
+          "dkimStatus",
+          "dkimVerified",
+          "dkimTokens",
+          "mailFromStatus",
+          "mailFromVerified"
+        ]
+      },
+      "PatchDomainAuthVerifyResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "overallStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "verified",
+              "failed"
+            ]
+          },
+          "dnsRecords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sesStatus": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "number"
+          },
+          "message": {
+            "type": "string"
+          },
+          "nextSteps": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "domain",
+          "overallStatus",
+          "dnsRecords",
+          "sesStatus",
+          "summary",
+          "message"
+        ]
+      },
+      "DnsRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "domainId": {
+            "type": "string"
+          },
+          "recordType": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "number"
+          },
+          "isRequired": {
+            "type": "boolean"
+          },
+          "isVerified": {
+            "type": "boolean"
+          },
+          "lastChecked": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "domainId",
+          "recordType",
+          "name",
+          "value",
+          "isRequired",
+          "isVerified",
+          "lastChecked",
+          "createdAt",
+          "updatedAt"
+        ],
+        "description": "GET /api/v2/domains/{id}/dns-records\nGets DNS records for a specific domain\nSupports both session-based auth and API key auth\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "GetDomainDnsRecordsResponse": {
+        "type": "object",
+        "properties": {
+          "domainId": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "domainId",
+          "domain",
+          "records"
+        ]
+      },
+      "PostEmailReplyRequest": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "from_name": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "cc": {
+            "type": "string"
+          },
+          "bcc": {
+            "type": "string"
+          },
+          "reply_to": {
+            "type": "string"
+          },
+          "replyTo": {
+            "type": "string"
+          },
+          "html": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "headers": {
+            "type": "string"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "include_original": {
+            "type": "boolean"
+          },
+          "includeOriginal": {
+            "type": "boolean"
+          },
+          "simple": {
+            "type": "boolean"
+          },
+          "tags": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from"
+        ],
+        "description": "POST /api/v2/emails/[id]/reply\nReply to an inbound email\nSupports both session-based auth and API key auth\nHas tests? ❌\nHas logging? ✅\nHas types? ✅"
+      },
+      "PostEmailReplyResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "awsMessageId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "messageId",
+          "awsMessageId"
+        ]
+      },
+      "GetScheduledEmailResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "cc": {
+            "type": "string"
+          },
+          "bcc": {
+            "type": "string"
+          },
+          "replyTo": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "html": {
+            "type": "string"
+          },
+          "headers": {
+            "type": "string"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "string"
+          },
+          "scheduled_at": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "number"
+          },
+          "max_attempts": {
+            "type": "number"
+          },
+          "next_retry_at": {
+            "type": "string"
+          },
+          "last_error": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "sent_at": {
+            "type": "string"
+          },
+          "sent_email_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "from",
+          "to",
+          "subject",
+          "scheduled_at",
+          "timezone",
+          "status",
+          "attempts",
+          "max_attempts",
+          "created_at",
+          "updated_at"
+        ],
+        "description": "GET /api/v2/emails/schedule/[id]\nGet details of a specific scheduled email\n\nDELETE /api/v2/emails/schedule/[id] \nCancel a scheduled email (only if status is 'scheduled')\n\nHas tests? ❌ (TODO)\nHas logging? ✅\nHas types? ✅"
+      },
+      "DeleteScheduledEmailResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "cancelled_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "cancelled_at"
+        ]
+      },
+      "PostEndpointTestRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "webhookFormat": {
+            "type": "string",
+            "enum": [
+              "inbound",
+              "discord",
+              "slack",
+              "undefined"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "description": "POST /api/v2/endpoints/{id}/test\nTests an endpoint by sending a test payload\nSupports webhook, email, and email_group endpoint types\nFor webhooks, supports inbound, discord, and slack formats\nHas tests? ⏳\nHas logging? ✅\nHas types? ✅"
+      },
+      "PostEndpointTestResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "responseTime": {
+            "type": "number"
+          },
+          "statusCode": {
+            "type": "number"
+          },
+          "responseBody": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "testPayload": {
+            "type": "string"
+          },
+          "webhookFormat": {
+            "type": "string",
+            "enum": [
+              "inbound",
+              "discord",
+              "slack",
+              "undefined"
+            ]
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "responseTime"
+        ]
+      },
+      "ThreadMessage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "inbound",
+              "outbound"
+            ]
+          },
+          "subject": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "fromName": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "receivedAt": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "sentAt": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "addresses": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "string"
+          },
+          "isRead": {
+            "type": "boolean"
+          },
+          "readAt": {
+            "type": "string",
+            "enum": [
+              "Date",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "messageId",
+          "type",
+          "subject",
+          "from",
+          "fromName",
+          "to",
+          "receivedAt",
+          "sentAt",
+          "content",
+          "addresses",
+          "metadata",
+          "isRead",
+          "readAt"
+        ],
+        "description": "GET /api/v2/mail/[id]/thread\nGets all emails in a conversation thread for a given email ID\nImplements advanced threading based on RFC 2822 and modern email client practices\nSupports both session-based auth and API key auth\nHas tests? ❌\nHas logging? ✅\nHas types? ✅"
+      },
+      "GetThreadResponse": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "totalCount": {
+            "type": "number"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "messages",
+          "totalCount",
+          "threadId"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "domains",
+      "description": "Domain verification and DNS management"
+    },
+    {
+      "name": "email-addresses",
+      "description": "Email address management and configuration"
+    },
+    {
+      "name": "emails",
+      "description": "Email sending and management operations"
+    },
+    {
+      "name": "endpoints",
+      "description": "Webhook and endpoint configuration"
+    },
+    {
+      "name": "mail",
+      "description": "Inbound email processing and retrieval"
+    },
+    {
+      "name": "onboarding",
+      "description": "User onboarding and setup workflows"
+    }
+  ]
+}

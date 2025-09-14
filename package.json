@@ -7,20 +7,17 @@
     "dev:basehub": "basehub dev",
     "prebuild": "drizzle-kit generate && drizzle-kit push",
     "build": "basehub build && next build --turbopack",
-    "test-api": "bun run app/api/v2/api.test.ts",
-    "test-sdk": "bun run app/api/v2/sdk.test.ts",
     "start": "next start",
     "lint": "next lint",
     "db-prepare": "bun run scripts/db-prepare.ts",
     "deploy:email": "bun run scripts/deploy-email-system.ts",
     "deploy:quick": "bun run scripts/quick-deploy.ts",
     "deploy:lambda": "bun run scripts/deploy-lambda.ts",
-    "deploy:cdk": "bun run scripts/deploy-cdk-complete.ts",
-    "test:deployment": "bun run scripts/test-deployment.ts",
     "email": "bun run scripts/sending/resend.ts",
-    "email-verified": "bun run scripts/test-domain-verification.ts",
     "preview-email": "bun run scripts/preview-domain-email.ts",
-    "trigger-cron": "curl -X GET \"http://localhost:3000/api/cron/process-scheduled-emails\" -H \"Authorization: Bearer ${CRON_SECRET:-test-secret}\" || echo 'Make sure your dev server is running and CRON_SECRET is set'"
+    "trigger-cron": "curl -X GET \"http://localhost:3000/api/cron/process-scheduled-emails\" -H \"Authorization: Bearer ${CRON_SECRET:-test-secret}\" || echo 'Make sure your dev server is running and CRON_SECRET is set'",
+    "generate-openapi": "bun run scripts/openapi/index.ts"
+    
   },
   "dependencies": {
     "@ai-sdk/openai": "1.0.2",

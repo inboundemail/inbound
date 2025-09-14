@@ -8,7 +8,7 @@ import ChevronUp from "@/components/icons/chevron-up"
 
 import { cn } from "@/lib/utils"
 
-const Select = SelectPrimitive.Root
+const   Select = SelectPrimitive.Root
 
 const SelectGroup = SelectPrimitive.Group
 

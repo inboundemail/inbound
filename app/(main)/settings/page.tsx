@@ -37,9 +37,9 @@ import { PricingTable } from '@/components/autumn/pricing-table-format'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { trackPurchaseConversion } from '@/lib/utils/twitter-tracking'
 import Dub from '@/components/dub'
-import { useDubIntegration } from '@/features/dub/hooks/useDubIntegration'
-// removed unused feature icons after layout merge
-// Types are now imported from @/features/settings/types
+import { useDubIntegration, useDubDomainsQuery, useDefaultDubDomainQuery, useSetDefaultDubDomainMutation, useDubFoldersQuery, useDefaultDubFolderQuery, useSetDefaultDubFolderMutation, useEmailLinksToggleQuery, useSetEmailLinksToggleMutation } from '@/features/dub/hooks/useDubIntegration'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export default function SettingsPage() {
   const { data: session, isPending } = useSession()
@@ -92,6 +92,14 @@ export default function SettingsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { data: dubStatus } = useDubIntegration()
+  const { data: dubDomains, isLoading: isLoadingDubDomains } = useDubDomainsQuery(!!dubStatus?.linked)
+  const { data: defaultDubDomain } = useDefaultDubDomainQuery(!!dubStatus?.linked)
+  const setDefaultDubDomainMutation = useSetDefaultDubDomainMutation()
+  const { data: dubFolders, isLoading: isLoadingDubFolders } = useDubFoldersQuery(!!dubStatus?.linked)
+  const { data: defaultDubFolder } = useDefaultDubFolderQuery(!!dubStatus?.linked, true)
+  const setDefaultDubFolderMutation = useSetDefaultDubFolderMutation()
+  const { data: emailLinksToggle } = useEmailLinksToggleQuery(!!dubStatus?.linked)
+  const setEmailLinksToggleMutation = useSetEmailLinksToggleMutation()
 
   const handleUpdateProfile = async (formData: FormData) => {
     setIsLoading(true)
@@ -296,6 +304,152 @@ export default function SettingsPage() {
             <CardDescription>
               Connect your Dub account to enable link creation and analytics.
             </CardDescription>
+            <div className="mt-2 text-xs text-muted-foreground">
+              Requires a Dub subscription. New users get 20% off for 3 months —
+              <a
+                href="https://refer.dub.co/ryan-vogel"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-1 text-primary underline"
+              >
+                click here
+              </a>
+              .
+            </div>
+            {dubStatus?.linked && (
+              <div className="mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">Default click-tracking domain</div>
+                    <div className="text-xs text-muted-foreground">Used for open & click tracking links.</div>
+                  </div>
+                  <div>
+                    <Select
+                      value={defaultDubDomain?.slug || dubStatus?.defaultDomainSlug || ''}
+                      onValueChange={async (slug) => {
+                        const list = Array.isArray(dubDomains) ? dubDomains : []
+                        const selected = list.find((d: any) => d.slug === slug)
+                        try {
+                          await setDefaultDubDomainMutation.mutateAsync({ id: selected?.id || null, slug: slug || null })
+                          toast.success('Default domain saved')
+                        } catch (e: any) {
+                          toast.error(e?.message || 'Failed to save')
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="dub-default-domain" aria-label="Default click-tracking domain">
+                        <SelectValue placeholder={isLoadingDubDomains ? 'Loading domains…' : 'Select a domain'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.isArray(dubDomains) ? (
+                          dubDomains.map((d: any) => (
+                            <SelectItem key={d.id} value={d.slug}>
+                              {d.slug}{d.primary ? ' (primary)' : ''}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="__disabled__" disabled>
+                            {(dubDomains as any)?.needsRelink ? 'Permission missing: re-link Dub to grant domains.read' : 'No domains available'}
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {!Array.isArray(dubDomains) && (dubDomains as any)?.needsRelink && (
+                      <div className="mt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => { window.location.href = '/api/linking/dub/authorize' }}
+                        >
+                          Re-link Dub to grant domains.read
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center mt-4">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">Default click-tracking folder</div>
+                    <div className="text-xs text-muted-foreground">Defaults to Inbound; used to organize links.</div>
+                  </div>
+                  <div>
+                    <Select
+                      value={defaultDubFolder?.id || ''}
+                      onOpenChange={async (open) => {
+                        if (open && (!defaultDubFolder?.id)) {
+                          try {
+                            await setDefaultDubFolderMutation.mutateAsync({ ensureInbound: true })
+                          } catch {}
+                        }
+                      }}
+                      onValueChange={async (id) => {
+                        const list = Array.isArray(dubFolders) ? dubFolders : []
+                        const selected: any = list.find((f: any) => f.id === id)
+                        try {
+                          await setDefaultDubFolderMutation.mutateAsync({ id: selected?.id || null, name: selected?.name || null })
+                          toast.success('Default folder saved')
+                        } catch (e: any) {
+                          toast.error(e?.message || 'Failed to save')
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="dub-default-folder" aria-label="Default click-tracking folder">
+                        <SelectValue placeholder={isLoadingDubFolders ? 'Loading folders…' : 'Select a folder'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.isArray(dubFolders) ? (
+                          dubFolders.map((f: any) => (
+                            <SelectItem key={f.id} value={f.id}>
+                              {f.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="__disabled__" disabled>
+                            {(dubFolders as any)?.needsRelink ? 'Permission missing: re-link Dub to grant tags.read' : 'No folders available'}
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {!Array.isArray(dubFolders) && (dubFolders as any)?.needsRelink && (
+                      <div className="mt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => { window.location.href = '/api/linking/dub/authorize' }}
+                        >
+                          Re-link Dub to grant tags.read
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center mt-4">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">Enable Dub links for email URLs</div>
+                    <div className="text-xs text-muted-foreground">Automatically convert all links in emails to Dub-tracked links.</div>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <label htmlFor="enable-dub-links" className="sr-only">Enable Dub links</label>
+                      <Checkbox
+                        id="enable-dub-links"
+                        checked={!!emailLinksToggle?.enabled}
+                        onCheckedChange={async (value) => {
+                          try {
+                            await setEmailLinksToggleMutation.mutateAsync(Boolean(value))
+                            toast.success('Preference saved')
+                          } catch (err: any) {
+                            toast.error(err?.message || 'Failed to save preference')
+                          }
+                        }}
+                        aria-label="Enable Dub links for email URLs"
+                      />
+                      <span className="text-sm text-muted-foreground">{emailLinksToggle?.enabled ? 'Enabled' : 'Disabled'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardHeader>
         </Card>
 

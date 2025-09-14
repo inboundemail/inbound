@@ -16,6 +16,8 @@ export async function GET() {
   return NextResponse.json({
     linked: true,
     workspaceName: integ.dubWorkspaceName || null,
+    defaultDomainSlug: integ.defaultDubDomainSlug || null,
+    defaultFolderName: integ.defaultDubFolderName || null,
     updatedAt: integ.updatedAt?.toISOString?.() || null,
   })
 }
