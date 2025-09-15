@@ -52,7 +52,7 @@ export default function SubscriptionRenewalReminder({
   return (
     <Html>
       <Head />
-      <Preview>Your {planName} renews in {daysUntilRenewal} days</Preview>
+      <Preview>Your {planName} renews in {daysUntilRenewal.toString()} days</Preview>
       <Tailwind>
         <Body className="mx-auto my-auto bg-white font-sans">
           <Container className="mx-auto my-10 max-w-[600px] rounded border border-solid border-neutral-200 px-10 py-5">
