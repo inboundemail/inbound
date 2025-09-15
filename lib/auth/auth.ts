@@ -29,7 +29,7 @@ export const auth = betterAuth({
         : "https://inbound.new",
     trustedOrigins: process.env.NODE_ENV === 'development' 
         ? ["http://localhost:3000"] 
-        : ["https://inbound.new"],
+        : ["https://inbound.new", process.env.VERCEL_URL || ""],
     database: drizzleAdapter(db, {
         provider: "pg",
         schema: schema
