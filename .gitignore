@@ -73,3 +73,5 @@ scripts-and-work/
 tmp-files/
 
 drizzle/meta/
+
+scripts/dub-tests/email-examples/
