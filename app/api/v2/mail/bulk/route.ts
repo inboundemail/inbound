@@ -29,6 +29,16 @@ export interface PostMailBulkResponse {
     }>
 }
 
+/**
+ * Bulk update emails
+ * @description Update multiple emails at once (mark as read, archive, etc.). Limited to 100 emails per request.
+ * @body PostMailBulkRequest
+ * @response PostMailBulkResponse:Bulk update results
+ * @responseSet auth
+ * @auth apikey
+ * @tag Mail
+ * @openapi
+ */
 export async function POST(request: NextRequest) {
     console.log('📦 POST /api/v2/mail/bulk - Starting bulk update request')
     

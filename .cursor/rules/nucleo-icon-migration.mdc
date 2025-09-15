@@ -1,7 +1,6 @@
 ---
-alwaysApply: true
+alwaysApply: false
 ---
-
 Anytime you see a lucide-react or react-icons icon, you should replace it with the corresponding Nucleo icon.
 
 # Nucleo Icon Migration Guide

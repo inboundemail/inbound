@@ -48,6 +48,30 @@ export interface PostEmailReplyResponse {
     awsMessageId: string  // AWS SES Message ID
 }
 
+// Path parameter type for OpenAPI documentation
+export interface EmailIdParam {
+    id: string // The ID of the email to reply to
+}
+
+// Error response types for OpenAPI documentation
+export interface ForbiddenError {
+    error: string
+    code: 'FORBIDDEN' | 'DOMAIN_NOT_VERIFIED' | 'DOMAIN_NOT_OWNED'
+    details?: string
+}
+
+export interface NotFoundError {
+    error: string
+    code: 'NOT_FOUND'
+    details?: string
+}
+
+export interface RateLimitError {
+    error: string
+    code: 'RATE_LIMITED'
+    details?: string
+}
+
 // Helper functions
 // Helper functions moved to @/lib/email-management/agent-email-helper
 function toArray(value: string | string[] | undefined): string[] {
@@ -477,6 +501,20 @@ async function handleSimpleReply(
     }
 }
 
+/**
+ * Reply to an email
+ * @description Reply to an inbound email with proper threading support. Supports both simple mode (faster) and full mode (with attachments and original message quoting).
+ * @pathParams EmailIdParam
+ * @body PostEmailReplyRequest
+ * @response 200:PostEmailReplyResponse:Reply sent successfully
+ * @add 403:ForbiddenError:Domain not verified or user doesn't own the sender domain
+ * @add 404:NotFoundError:Original email not found
+ * @add 429:RateLimitError:Email sending limit reached
+ * @responseSet auth
+ * @auth apikey
+ * @tag Emails
+ * @openapi
+ */
 export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }

@@ -105,6 +105,17 @@ export interface GetMailByIdResponse {
  * Has logging? ✅
  * Has types? ✅
  */
+/**
+ * Get an email by ID
+ * @description Retrieve detailed information about a specific received email including content, attachments, headers, and security information.
+ * @pathParams EmailIdParam
+ * @response GetMailByIdResponse:Detailed email information
+ * @add 404:NotFoundError:Email not found or doesn't belong to the user
+ * @responseSet auth
+ * @auth apikey
+ * @tag Mail
+ * @openapi
+ */
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -190,6 +201,30 @@ export interface PatchMailResponse {
     archivedAt: Date | null
 }
 
+// Path parameter type for OpenAPI documentation
+export interface EmailIdParam {
+    id: string // The ID of the email
+}
+
+// Error response types for OpenAPI documentation
+export interface NotFoundError {
+    error: string
+    code: 'NOT_FOUND'
+    details?: string
+}
+
+/**
+ * Update email properties
+ * @description Update an email's read status, archive status, or other properties.
+ * @pathParams EmailIdParam
+ * @body PatchMailRequest
+ * @response PatchMailResponse:Updated email properties
+ * @add 404:NotFoundError:Email not found or doesn't belong to the user
+ * @responseSet auth
+ * @auth apikey
+ * @tag Mail
+ * @openapi
+ */
 export async function PATCH(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }

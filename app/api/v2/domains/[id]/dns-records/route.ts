@@ -34,6 +34,29 @@ export interface GetDomainDnsRecordsResponse {
     records: DnsRecord[]
 }
 
+// Path parameter type for OpenAPI documentation
+export interface DomainIdParam {
+    id: string // The ID of the domain
+}
+
+// Error response types for OpenAPI documentation
+export interface NotFoundError {
+    error: string
+    code: 'NOT_FOUND'
+    details?: string
+}
+
+/**
+ * Get DNS records for a domain
+ * @description Retrieve all DNS records associated with a domain, including verification status for each record.
+ * @pathParams DomainIdParam
+ * @response GetDomainDnsRecordsResponse:List of DNS records for the domain
+ * @add 404:NotFoundError:Domain not found or doesn't belong to the user
+ * @responseSet auth
+ * @auth apikey
+ * @tag Domains
+ * @openapi
+ */
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }

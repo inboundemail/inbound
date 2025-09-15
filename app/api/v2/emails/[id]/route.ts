@@ -29,6 +29,29 @@ export interface GetEmailByIdResponse {
     last_event: string
 }
 
+// Path parameter type for OpenAPI documentation
+export interface EmailIdParam {
+    id: string // The ID of the email to retrieve
+}
+
+// Error response types for OpenAPI documentation
+export interface NotFoundError {
+    error: string
+    code: 'NOT_FOUND'
+    details?: string
+}
+
+/**
+ * Get an email by ID
+ * @description Retrieve details of a specific sent email by its ID. Compatible with Resend API format.
+ * @pathParams EmailIdParam
+ * @response GetEmailByIdResponse:Email details retrieved successfully
+ * @add 404:NotFoundError:Email not found or doesn't belong to the user
+ * @responseSet auth
+ * @auth apikey
+ * @tag Emails
+ * @openapi
+ */
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }

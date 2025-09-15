@@ -1,9 +1,6 @@
 ---
-description: AWS SES v2 Client Reference - Commands and Configuration
-globs:
-alwaysApply: true
+alwaysApply: false
 ---
-
 # AWS SES v2 Client Reference
 
 Amazon SES API v2 is an Amazon Web Services service for sending email messages to customers. This reference provides a comprehensive overview of the SESv2Client commands and configuration options.

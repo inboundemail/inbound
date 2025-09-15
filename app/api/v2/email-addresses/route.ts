@@ -61,6 +61,16 @@ export interface GetEmailAddressesResponse {
     }
 }
 
+/**
+ * Get all email addresses
+ * @description Retrieve all email addresses for the authenticated user with filtering and pagination options.
+ * @params GetEmailAddressesRequest
+ * @response GetEmailAddressesResponse:List of email addresses with domain and routing information
+ * @responseSet auth
+ * @auth apikey
+ * @tag Email Addresses
+ * @openapi
+ */
 export async function GET(request: NextRequest) {
     console.log('📧 GET /api/v2/email-addresses - Starting request')
     
@@ -314,6 +324,31 @@ export interface PostEmailAddressesResponse {
     warning?: string
 }
 
+// Error response types for OpenAPI documentation
+export interface NotFoundError {
+    error: string
+    code: 'NOT_FOUND'
+    details?: string
+}
+
+export interface ConflictError {
+    error: string
+    code: 'CONFLICT' | 'EMAIL_EXISTS'
+    details?: string
+}
+
+/**
+ * Create a new email address
+ * @description Create a new email address for receiving emails and configure AWS SES receipt rules automatically.
+ * @body PostEmailAddressesRequest
+ * @response 201:PostEmailAddressesResponse:Email address created successfully
+ * @add 404:NotFoundError:Domain not found or doesn't belong to the user
+ * @add 409:ConflictError:Email address already exists
+ * @responseSet crud
+ * @auth apikey
+ * @tag Email Addresses
+ * @openapi
+ */
 export async function POST(request: NextRequest) {
     console.log('📝 POST /api/v2/email-addresses - Starting request')
     

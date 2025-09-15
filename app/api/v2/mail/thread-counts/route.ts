@@ -94,6 +94,16 @@ function getAllThreadMessageIds(email: any): Set<string> {
     return messageIds
 }
 
+/**
+ * Get email thread counts
+ * @description Calculate conversation thread sizes for multiple emails in batch. Useful for inbox listings to show conversation counts.
+ * @body ThreadCountsRequest
+ * @response ThreadCountsResponse:Thread count results for each email
+ * @responseSet auth
+ * @auth apikey
+ * @tag Mail
+ * @openapi
+ */
 export async function POST(request: NextRequest) {
     try {
         const { userId, error } = await validateRequest(request)

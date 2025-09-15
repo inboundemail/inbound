@@ -20,6 +20,15 @@ interface CheckReplyResponse {
   }
 }
 
+/**
+ * Check for onboarding demo reply
+ * @description Check if the user has received a reply to their onboarding demo email. Used for polling during the onboarding flow.
+ * @response CheckReplyResponse:Reply status and details if found
+ * @responseSet auth
+ * @auth apikey
+ * @tag Onboarding
+ * @openapi
+ */
 export async function GET(request: NextRequest) {
   console.log('🔍 GET /api/v2/onboarding/check-reply - Checking for replies')
   

@@ -1,6 +1,4 @@
 ---
-description: This can help with understanding the AWS Email Stack Implementation
-globs: 
 alwaysApply: false
 ---
 # AWS Email Stack Implementation Guide

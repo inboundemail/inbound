@@ -1,8 +1,8 @@
 ---
 description: Unified v2 API endpoint coding rules and structure for all endpoints going forward
-globs: inbound-app/app/api/**/*.ts
+globs: api/*.ts
+alwaysApply: false
 ---
-
 # v2 API Endpoint Coding Rules
 
 This rule establishes consistent structure, typing, auth, logging, error handling, and pagination patterns for all API endpoints. It is based on existing implementations under `inbound-app/app/api/v2/` and complements the more concise spec in [v2-api-spec.mdc](mdc:inbound-app/app/api/v2/.cursor/v2-api-spec.mdc).
@@ -157,9 +157,133 @@ export async function POST(request: NextRequest) {
 - For email replies, construct proper `In-Reply-To`/`References` headers, default `to` to the original sender when omitted, and default subject to `Re: {original}` when omitted. See [emails/[id]/reply/route.ts](mdc:inbound-app/app/api/v2/emails/[id]/reply/route.ts).
 - For threads, normalize `Message-Id` and `References` consistently. See [mail/[id]/thread/route.ts](mdc:inbound-app/app/api/v2/mail/[id]/thread/route.ts).
 
+## OpenAPI Documentation Requirements
+All v2 API endpoints **MUST** include comprehensive OpenAPI documentation using JSDoc comments with the `@openapi` tag.
+
+### Required JSDoc Tags
+Every HTTP method (GET, POST, PUT, DELETE, PATCH) must include:
+
+```typescript
+/**
+ * Brief endpoint description
+ * @description Detailed description of what the endpoint does
+ * @pathParams PathParamType (if route has parameters)
+ * @params QueryParamType (for GET with query parameters)
+ * @body RequestBodyType (for POST/PUT/PATCH with body)
+ * @response StatusCode:ResponseType:Description (primary response)
+ * @add StatusCode:ErrorType:Description (additional error responses)
+ * @responseSet auth|crud|public (error response set)
+ * @auth apikey (authentication type)
+ * @tag CategoryName (for grouping in docs)
+ * @openapi (required to include in spec)
+ */
+```
+
+### Response Set Usage
+Use predefined response sets from `next.openapi.json`:
+- `auth`: 400, 401, 500 (basic authenticated endpoints)
+- `crud`: 400, 401, 403, 404, 409, 500 (full CRUD operations)
+- `public`: 400, 500 (unauthenticated endpoints)
+
+### Type Organization
+Define types in this order within each route file:
+
+1. **Request Types** (query params, body params, path params)
+2. **Response Types** (success responses)
+3. **Error Types** (specific error responses referenced in @add tags)
+4. **Path Parameter Types** (for @pathParams)
+
+### Example Documentation
+```typescript
+// Request/Response types
+export interface PostEmailsRequest {
+    from: string
+    to: string | string[]
+    subject: string
+    html?: string
+    text?: string
+}
+
+export interface PostEmailsResponse {
+    id: string
+    messageId: string
+}
+
+// Path parameter types
+export interface EmailIdParam {
+    id: string // The ID of the email
+}
+
+// Error response types
+export interface ForbiddenError {
+    error: string
+    code: 'FORBIDDEN' | 'DOMAIN_NOT_VERIFIED'
+    details?: string
+}
+
+export interface RateLimitError {
+    error: string
+    code: 'RATE_LIMITED'
+    details?: string
+}
+
+/**
+ * Send an email
+ * @description Send a single email through the Inbound API. Supports both simple text/HTML emails and emails with attachments.
+ * @body PostEmailsRequest
+ * @response 200:PostEmailsResponse:Email sent successfully
+ * @add 403:ForbiddenError:Domain not verified or user doesn't own the sender domain
+ * @add 429:RateLimitError:Email sending limit reached
+ * @responseSet auth
+ * @auth apikey
+ * @tag Emails
+ * @openapi
+ */
+export async function POST(request: NextRequest) {
+    // Implementation...
+}
+```
+
+### Authentication Documentation
+Always use `@auth apikey` for v2 API endpoints since they use API key authentication.
+
+### Tag Categories
+Use consistent tag names for grouping:
+- `Emails` - Email sending operations
+- `Mail` - Email receiving/inbox operations  
+- `Domains` - Domain management
+- `Endpoints` - Webhook/forward endpoint management
+- `Email Addresses` - Email address management
+- `Onboarding` - Onboarding flow endpoints
+
+### Error Response Patterns
+Define error types matching actual API responses:
+```typescript
+export interface NotFoundError {
+    error: string
+    code: 'NOT_FOUND'
+    details?: string
+}
+
+export interface ConflictError {
+    error: string
+    code: 'CONFLICT' | 'DOMAIN_ALREADY_REGISTERED'
+    details?: string
+}
+```
+
+### Path Parameter Documentation
+For dynamic routes like `/api/v2/emails/[id]`, always define:
+```typescript
+export interface EmailIdParam {
+    id: string // Description of what this ID represents
+}
+```
+
 ## Testing and Documentation
 - Add/extend endpoint coverage in [api.test.ts](mdc:inbound-app/app/api/v2/api.test.ts).
 - Update Mintlify docs in `inbound-docs/` using the clean documentation standard (see workspace rule), reflecting new endpoints, params, and response shapes.
+- Generate OpenAPI spec with `npx next-openapi-gen generate` after adding/updating endpoints.
 
 ## Do/Don’t Summary
 - Do: auth first, typed inputs/outputs, await `params`, validate queries, user-scope DB, consistent logging, correct status codes, structured pagination, idempotency where applicable, and update docs/tests.

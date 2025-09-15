@@ -97,6 +97,57 @@ export interface GetDomainByIdResponse {
     }
 }
 
+// Path parameter type for OpenAPI documentation
+export interface DomainIdParam {
+    id: string // The ID of the domain
+}
+
+// Response types for PATCH endpoint
+export interface PatchDomainByIdResponse {
+    success: boolean
+    message: string
+    mailFromDomain: string
+    mailFromDomainStatus: string
+    additionalDnsRecords: Array<{
+        type: string
+        name: string
+        value: string
+        description: string
+        isRequired: boolean
+    }>
+}
+
+// Error response types for OpenAPI documentation
+export interface NotFoundError {
+    error: string
+    code: 'NOT_FOUND'
+    details?: string
+}
+
+export interface BadRequestError {
+    error: string
+    code: 'BAD_REQUEST' | 'DOMAIN_NOT_VERIFIED' | 'ENDPOINT_INVALID'
+    details?: string
+}
+
+export interface InternalServerError {
+    error: string
+    code: 'INTERNAL_ERROR' | 'AWS_SES_NOT_CONFIGURED'
+    details?: string
+}
+
+/**
+ * Get domain details
+ * @description Get detailed information about a specific domain including verification status, statistics, and optional DNS/SES checks.
+ * @pathParams DomainIdParam
+ * @params GetDomainByIdRequest
+ * @response GetDomainByIdResponse:Domain details with statistics and verification status
+ * @add 404:NotFoundError:Domain not found or doesn't belong to the user
+ * @responseSet auth
+ * @auth apikey
+ * @tag Domains
+ * @openapi
+ */
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -565,6 +616,19 @@ export interface PutDomainByIdResponse {
     updatedAt: Date
 }
 
+/**
+ * Update domain catch-all settings
+ * @description Configure catch-all email routing for a domain. Enable or disable catch-all functionality with endpoint configuration.
+ * @pathParams DomainIdParam
+ * @body PutDomainByIdRequest
+ * @response PutDomainByIdResponse:Domain catch-all settings updated successfully
+ * @add 400:BadRequestError:Domain not verified or endpoint configuration invalid
+ * @add 404:NotFoundError:Domain not found or doesn't belong to the user
+ * @responseSet crud
+ * @auth apikey
+ * @tag Domains
+ * @openapi
+ */
 export async function PUT(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -803,6 +867,17 @@ export interface DeleteDomainByIdResponse {
     }
 }
 
+/**
+ * Delete a domain
+ * @description Permanently delete a domain and all its associated resources (email addresses, DNS records, AWS SES configuration).
+ * @pathParams DomainIdParam
+ * @response DeleteDomainByIdResponse:Domain and associated resources deleted successfully
+ * @add 404:NotFoundError:Domain not found or doesn't belong to the user
+ * @responseSet crud
+ * @auth apikey
+ * @tag Domains
+ * @openapi
+ */
 export async function DELETE(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -1026,6 +1101,18 @@ export async function DELETE(
  * PATCH /api/v2/domains/{id}
  * Upgrade existing domain with MAIL FROM domain configuration
  * This eliminates the "via amazonses.com" attribution in emails
+ */
+/**
+ * Upgrade domain with MAIL FROM configuration
+ * @description Upgrade an existing domain with MAIL FROM domain configuration to eliminate the "via amazonses.com" attribution in emails.
+ * @pathParams DomainIdParam
+ * @response PatchDomainByIdResponse:Domain upgraded successfully with MAIL FROM configuration
+ * @add 404:NotFoundError:Domain not found or doesn't belong to the user
+ * @add 500:InternalServerError:AWS SES not configured or MAIL FROM setup failed
+ * @responseSet crud
+ * @auth apikey
+ * @tag Domains
+ * @openapi
  */
 export async function PATCH(
   request: NextRequest,

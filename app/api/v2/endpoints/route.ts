@@ -53,6 +53,16 @@ export interface GetEndpointsResponse {
     }
 }
 
+/**
+ * Get all endpoints
+ * @description Retrieve all endpoints for the authenticated user with filtering, sorting, and pagination options.
+ * @params GetEndpointsRequest
+ * @response GetEndpointsResponse:List of endpoints with statistics and pagination
+ * @responseSet auth
+ * @auth apikey
+ * @tag Endpoints
+ * @openapi
+ */
 export async function GET(request: NextRequest) {
     console.log('🔗 GET /api/v2/endpoints - Starting request')
     
@@ -279,6 +289,16 @@ export interface PostEndpointsResponse {
     }
 }
 
+/**
+ * Create a new endpoint
+ * @description Create a new webhook, email forward, or email group endpoint for processing incoming emails.
+ * @body PostEndpointsRequest
+ * @response 201:PostEndpointsResponse:Endpoint created successfully
+ * @responseSet auth
+ * @auth apikey
+ * @tag Endpoints
+ * @openapi
+ */
 export async function POST(request: NextRequest) {
     console.log('➕ POST /api/v2/endpoints - Starting create request')
     

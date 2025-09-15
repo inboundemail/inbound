@@ -99,6 +99,30 @@ export interface PatchDomainAuthVerifyResponse {
   nextSteps?: string[]
 }
 
+// Path parameter type for OpenAPI documentation
+export interface DomainIdParam {
+  id: string // The ID of the domain
+}
+
+// Error response types for OpenAPI documentation
+export interface NotFoundError {
+  error: string
+  code: 'NOT_FOUND'
+  details?: string
+}
+
+export interface BadRequestError {
+  error: string
+  code: 'BAD_REQUEST' | 'DNS_RECORDS_NOT_FOUND'
+  details?: string
+}
+
+export interface InternalServerError {
+  error: string
+  code: 'INTERNAL_ERROR' | 'AWS_SES_NOT_CONFIGURED'
+  details?: string
+}
+
 /**
  * Get description for DNS record based on type and name
  */
@@ -124,6 +148,19 @@ function getDnsRecordDescription(recordType: string, name: string): string {
   return `${recordType} record`
 }
 
+/**
+ * Initialize domain authentication
+ * @description Initialize AWS SES authentication for a domain including DKIM, MAIL FROM domain, and optional SPF/DMARC records.
+ * @pathParams DomainIdParam
+ * @body PostDomainAuthInitRequest
+ * @response 201:PostDomainAuthInitResponse:Domain authentication initialized with DNS records to configure
+ * @add 404:NotFoundError:Domain not found or doesn't belong to the user
+ * @add 500:InternalServerError:AWS SES not configured or initialization failed
+ * @responseSet crud
+ * @auth apikey
+ * @tag Domains
+ * @openapi
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -305,6 +342,19 @@ export async function POST(
   }
 }
 
+/**
+ * Verify domain authentication
+ * @description Verify DNS records and check AWS SES authentication status for a domain. Updates verification status in the database.
+ * @pathParams DomainIdParam
+ * @response PatchDomainAuthVerifyResponse:Domain authentication verification results with status and next steps
+ * @add 400:BadRequestError:No DNS records found - must run POST first
+ * @add 404:NotFoundError:Domain not found or doesn't belong to the user
+ * @add 500:InternalServerError:AWS SES not configured or verification failed
+ * @responseSet crud
+ * @auth apikey
+ * @tag Domains
+ * @openapi
+ */
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

@@ -67,6 +67,18 @@ export interface GetThreadResponse {
     threadId: string // The root message ID of the thread
 }
 
+// Path parameter type for OpenAPI documentation
+export interface EmailIdParam {
+    id: string // The ID of the email to get the thread for
+}
+
+// Error response types for OpenAPI documentation
+export interface NotFoundError {
+    error: string
+    code: 'NOT_FOUND'
+    details?: string
+}
+
 /**
  * Clean and normalize a message ID by removing angle brackets and whitespace
  */
@@ -291,6 +303,17 @@ async function getThreadMessageIds(userId: string, emailId: string) {
     }
 }
 
+/**
+ * Get email conversation thread
+ * @description Retrieve all emails in a conversation thread for a given email ID. Uses RFC 2822 threading with subject-based fallback.
+ * @pathParams EmailIdParam
+ * @response GetThreadResponse:Complete conversation thread with all messages
+ * @add 404:NotFoundError:Email not found or doesn't belong to the user
+ * @responseSet auth
+ * @auth apikey
+ * @tag Mail
+ * @openapi
+ */
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }

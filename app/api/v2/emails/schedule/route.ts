@@ -70,6 +70,13 @@ export interface GetScheduledEmailsResponse {
     pagination: { limit: number; offset: number; total: number; hasMore: boolean }
 }
 
+// Error response types for OpenAPI documentation
+export interface ForbiddenError {
+    error: string
+    code: 'FORBIDDEN' | 'DOMAIN_NOT_VERIFIED' | 'DOMAIN_NOT_OWNED'
+    details?: string
+}
+
 // Helper functions
 function toArray(value: string | string[] | undefined): string[] {
     if (!value) return []
@@ -87,6 +94,17 @@ function parseEmailWithName(emailString: string): { email: string; name?: string
     return { email: emailString.trim() }
 }
 
+/**
+ * Schedule an email to be sent later
+ * @description Schedule an email to be sent at a future time. Supports natural language scheduling like "in 1 hour" or "tomorrow at 9am". Compatible with Resend API format.
+ * @body PostScheduleEmailRequest
+ * @response 201:PostScheduleEmailResponse:Email scheduled successfully
+ * @add 403:ForbiddenError:Domain not verified or user doesn't own the sender domain
+ * @responseSet auth
+ * @auth apikey
+ * @tag Emails
+ * @openapi
+ */
 export async function POST(request: NextRequest) {
     console.log('⏰ POST /api/v2/emails/schedule - Starting request')
     
@@ -293,6 +311,16 @@ export async function POST(request: NextRequest) {
     }
 }
 
+/**
+ * Get scheduled emails
+ * @description Retrieve a list of emails scheduled for future sending. Supports filtering by status and pagination.
+ * @params GetScheduledEmailsRequest
+ * @response GetScheduledEmailsResponse:List of scheduled emails with pagination
+ * @responseSet auth
+ * @auth apikey
+ * @tag Emails
+ * @openapi
+ */
 export async function GET(request: NextRequest) {
     console.log('📋 GET /api/v2/emails/schedule - Starting request')
     

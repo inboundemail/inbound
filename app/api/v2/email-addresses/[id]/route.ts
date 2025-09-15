@@ -42,6 +42,17 @@ export interface GetEmailAddressByIdResponse {
     }
 }
 
+/**
+ * Get email address details
+ * @description Get detailed information about a specific email address including domain and routing configuration.
+ * @pathParams EmailAddressIdParam
+ * @response GetEmailAddressByIdResponse:Detailed email address information
+ * @add 404:NotFoundError:Email address not found or doesn't belong to the user
+ * @responseSet auth
+ * @auth apikey
+ * @tag Email Addresses
+ * @openapi
+ */
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -230,6 +241,18 @@ export interface PutEmailAddressByIdResponse {
     warning?: string
 }
 
+/**
+ * Update email address routing
+ * @description Update an email address's routing configuration (endpoint, webhook, or disable routing).
+ * @pathParams EmailAddressIdParam
+ * @body PutEmailAddressByIdRequest
+ * @response PutEmailAddressByIdResponse:Updated email address information
+ * @add 404:NotFoundError:Email address, endpoint, or webhook not found
+ * @responseSet crud
+ * @auth apikey
+ * @tag Email Addresses
+ * @openapi
+ */
 export async function PUT(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -450,6 +473,29 @@ export interface DeleteEmailAddressByIdResponse {
     }
 }
 
+// Path parameter type for OpenAPI documentation
+export interface EmailAddressIdParam {
+    id: string // The ID of the email address
+}
+
+// Error response types for OpenAPI documentation
+export interface NotFoundError {
+    error: string
+    code: 'NOT_FOUND'
+    details?: string
+}
+
+/**
+ * Delete an email address
+ * @description Permanently delete an email address and update AWS SES receipt rules accordingly.
+ * @pathParams EmailAddressIdParam
+ * @response DeleteEmailAddressByIdResponse:Email address deleted successfully with cleanup details
+ * @add 404:NotFoundError:Email address not found or doesn't belong to the user
+ * @responseSet crud
+ * @auth apikey
+ * @tag Email Addresses
+ * @openapi
+ */
 export async function DELETE(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }

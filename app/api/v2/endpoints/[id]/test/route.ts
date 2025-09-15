@@ -36,6 +36,18 @@ export interface PostEndpointTestResponse {
   webhookFormat?: 'inbound' | 'discord' | 'slack'
 }
 
+// Path parameter type for OpenAPI documentation
+export interface EndpointIdParam {
+  id: string // The ID of the endpoint to test
+}
+
+// Error response types for OpenAPI documentation
+export interface NotFoundError {
+  error: string
+  code: 'NOT_FOUND'
+  details?: string
+}
+
 // Build a mock payload that matches the exact real webhook payload structure
 function buildMockInboundWebhookPayload(endpoint: { id: string; name: string; type: 'webhook' | 'email' | 'email_group' }): InboundWebhookPayload {
   const nowIso = new Date().toISOString()
@@ -174,6 +186,18 @@ function buildMockInboundWebhookPayload(endpoint: { id: string; name: string; ty
   return payload
 }
 
+/**
+ * Test an endpoint
+ * @description Send a test payload to an endpoint to verify it's working correctly. Supports different webhook formats and provides detailed response information.
+ * @pathParams EndpointIdParam
+ * @body PostEndpointTestRequest
+ * @response PostEndpointTestResponse:Test results with response time and status
+ * @add 404:NotFoundError:Endpoint not found or doesn't belong to the user
+ * @responseSet auth
+ * @auth apikey
+ * @tag Endpoints
+ * @openapi
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

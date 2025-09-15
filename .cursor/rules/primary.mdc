@@ -1,9 +1,16 @@
 ---
-description: 
+description: This is the primary rules file for the project, you need to follow these rules for every message.
 globs: 
 alwaysApply: true
 ---
 Project Rules:
+
+Project Information: 
+
+- the primary domain is inbound.new (ONLY USE THIS DOMAIN)
+- the base API url is https://inbound.new/api/v2
+- inbound is always lowercase
+- use the correct icon for the project
 
 - only use bun for package manager
 - never run `bun run dev` or `bun run build` without my approval
@@ -13,3 +20,4 @@ Project Rules:
 - You should NOT create duplicate type definitions, always try to find an existing type or find/extend one from a schema.
 - All icons are using nucleo via MCP. 
 - For all new functions and components you can create them in the API folder. Make sure to use the correct spec for the API.
+- You need to make sure the code you write doesn't exist elsewhere in the project, before you genereate a new file, lib, helper or anything else check the project if something similar exists. 

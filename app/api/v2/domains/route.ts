@@ -111,6 +111,16 @@ export interface GetDomainsResponse {
     }
 }
 
+/**
+ * Get all domains
+ * @description Retrieve all domains for the authenticated user with filtering, pagination, and optional DNS/SES verification checks.
+ * @params GetDomainsRequest
+ * @response GetDomainsResponse:List of domains with statistics and pagination
+ * @responseSet auth
+ * @auth apikey
+ * @tag Domains
+ * @openapi
+ */
 export async function GET(request: NextRequest) {
     console.log('🌐 GET /api/v2/domains - Starting request')
     
@@ -488,6 +498,31 @@ export interface PostDomainsResponse {
     updatedAt: Date
 }
 
+// Error response types for OpenAPI documentation
+export interface ForbiddenError {
+    error: string
+    code: 'FORBIDDEN' | 'DOMAIN_LIMIT_REACHED' | 'DNS_VERIFICATION_FAILED'
+    details?: string
+}
+
+export interface ConflictError {
+    error: string
+    code: 'CONFLICT' | 'DOMAIN_ALREADY_REGISTERED'
+    details?: string
+}
+
+/**
+ * Add a new domain
+ * @description Add a new domain for email receiving. Validates domain ownership and sets up DNS verification records.
+ * @body PostDomainsRequest
+ * @response 201:PostDomainsResponse:Domain added successfully with verification records
+ * @add 403:ForbiddenError:Domain limit reached or verification failed
+ * @add 409:ConflictError:Domain already exists on the platform
+ * @responseSet crud
+ * @auth apikey
+ * @tag Domains
+ * @openapi
+ */
 export async function POST(request: NextRequest) {
     console.log('➕ POST /api/v2/domains - Starting domain creation')
     

@@ -58,6 +58,16 @@ export interface GetMailResponse {
     }
 }
 
+/**
+ * Get received emails
+ * @description Retrieve all received emails for the authenticated user with filtering, search, and pagination options.
+ * @params GetMailRequest
+ * @response GetMailResponse:List of received emails with pagination and filtering options
+ * @responseSet auth
+ * @auth apikey
+ * @tag Mail
+ * @openapi
+ */
 export async function GET(request: NextRequest) {
     console.log('📧 GET /api/v2/mail - Starting request')
     
@@ -209,6 +219,24 @@ export interface PostMailResponse {
     status: string
 }
 
+// Error response types for OpenAPI documentation
+export interface NotFoundError {
+    error: string
+    code: 'NOT_FOUND'
+    details?: string
+}
+
+/**
+ * Reply to an email
+ * @description Create a reply to a received email. This is a convenience endpoint that calls the dedicated reply endpoint internally.
+ * @body PostMailRequest
+ * @response 201:PostMailResponse:Reply sent successfully
+ * @add 404:NotFoundError:Original email not found
+ * @responseSet auth
+ * @auth apikey
+ * @tag Mail
+ * @openapi
+ */
 export async function POST(request: NextRequest) {
     console.log('📤 POST /api/v2/mail - Starting reply request')
     

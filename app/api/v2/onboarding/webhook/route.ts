@@ -5,6 +5,22 @@ import { db } from '@/lib/db'
 import { onboardingDemoEmails } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 
+// Types for onboarding webhook
+export interface OnboardingWebhookPayload extends InboundWebhookPayload {}
+
+export interface OnboardingWebhookResponse {
+    success: boolean
+}
+
+/**
+ * Handle onboarding webhook
+ * @description Process webhook events for onboarding demo emails. Updates demo status when replies are received.
+ * @body OnboardingWebhookPayload
+ * @response OnboardingWebhookResponse:Webhook processed successfully
+ * @responseSet public
+ * @tag Onboarding
+ * @openapi
+ */
 export async function POST(request: NextRequest) {
   console.log('📧 POST /api/v2/onboarding/webhook - Received webhook')
   

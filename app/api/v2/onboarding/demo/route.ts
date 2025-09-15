@@ -16,6 +16,20 @@ interface DemoRequest {
   to: string
 }
 
+interface DemoResponse {
+  id: string // The ID of the sent demo email
+}
+
+/**
+ * Send onboarding demo email
+ * @description Send a demo email to test the SDK integration during onboarding. The recipient can reply to complete the onboarding flow.
+ * @body DemoRequest
+ * @response DemoResponse:Demo email sent successfully
+ * @responseSet auth
+ * @auth apikey
+ * @tag Onboarding
+ * @openapi
+ */
 export async function POST(request: NextRequest) {
   console.log('📧 POST /api/v2/onboarding/demo - Starting demo request')
   

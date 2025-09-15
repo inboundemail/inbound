@@ -43,6 +43,19 @@ export interface PostEmailsResponse {
     messageId: string  // AWS SES Message ID
 }
 
+// Error response types for OpenAPI documentation
+export interface ForbiddenError {
+    error: string
+    code: 'FORBIDDEN' | 'DOMAIN_NOT_VERIFIED' | 'DOMAIN_NOT_OWNED'
+    details?: string
+}
+
+export interface RateLimitError {
+    error: string
+    code: 'RATE_LIMITED'
+    details?: string
+}
+
 // Helper functions moved to @/lib/email-management/agent-email-helper
 
 // Helper function to convert string or array to array
@@ -96,6 +109,18 @@ if (awsAccessKeyId && awsSecretAccessKey) {
     console.warn('⚠️ AWS credentials not configured. Email sending will not work.')
 }
 
+/**
+ * Send an email
+ * @description Send a single email through the Inbound API. Supports both simple text/HTML emails and emails with attachments. Compatible with Resend API format for easy migration.
+ * @body PostEmailsRequest
+ * @response 200:PostEmailsResponse:Email sent successfully
+ * @add 403:ForbiddenError:Domain not verified or user doesn't own the sender domain
+ * @add 429:RateLimitError:Email sending limit reached
+ * @responseSet auth
+ * @auth apikey
+ * @tag Emails
+ * @openapi
+ */
 export async function POST(request: NextRequest) {
     console.log('📧 POST /api/v2/emails - Starting request')
     

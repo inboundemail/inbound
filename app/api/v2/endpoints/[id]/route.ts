@@ -66,6 +66,29 @@ export interface GetEndpointByIdResponse {
     catchAllDomains: CatchAllDomain[]
 }
 
+// Path parameter type for OpenAPI documentation
+export interface EndpointIdParam {
+    id: string // The ID of the endpoint
+}
+
+// Error response types for OpenAPI documentation
+export interface NotFoundError {
+    error: string
+    code: 'NOT_FOUND'
+    details?: string
+}
+
+/**
+ * Get endpoint details
+ * @description Get detailed information about a specific endpoint including delivery statistics, recent deliveries, and associated resources.
+ * @pathParams EndpointIdParam
+ * @response GetEndpointByIdResponse:Detailed endpoint information with statistics and associations
+ * @add 404:NotFoundError:Endpoint not found or doesn't belong to the user
+ * @responseSet auth
+ * @auth apikey
+ * @tag Endpoints
+ * @openapi
+ */
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -270,6 +293,18 @@ export interface PutEndpointByIdResponse {
     groupEmails: string[] | null
 }
 
+/**
+ * Update an endpoint
+ * @description Update an existing endpoint's configuration, status, or properties. For email groups, this will recreate the group members.
+ * @pathParams EndpointIdParam
+ * @body PutEndpointByIdRequest
+ * @response PutEndpointByIdResponse:Updated endpoint information
+ * @add 404:NotFoundError:Endpoint not found or doesn't belong to the user
+ * @responseSet crud
+ * @auth apikey
+ * @tag Endpoints
+ * @openapi
+ */
 export async function PUT(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -438,6 +473,17 @@ export interface DeleteEndpointByIdResponse {
     }
 }
 
+/**
+ * Delete an endpoint
+ * @description Permanently delete an endpoint and handle cleanup of associated resources (email addresses, domains, delivery history).
+ * @pathParams EndpointIdParam
+ * @response DeleteEndpointByIdResponse:Endpoint deleted successfully with cleanup details
+ * @add 404:NotFoundError:Endpoint not found or doesn't belong to the user
+ * @responseSet crud
+ * @auth apikey
+ * @tag Endpoints
+ * @openapi
+ */
 export async function DELETE(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
