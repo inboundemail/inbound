@@ -478,6 +478,9 @@ export const scheduledEmails = pgTable('scheduled_emails', {
   
   // Idempotency
   idempotencyKey: varchar('idempotency_key', { length: 256 }), // For preventing duplicates
+
+  qstashScheduleId: varchar('qstash_schedule_id', { length: 255 }), // QStash schedule/message ID
+  qstashDlqId: varchar('qstash_dlq_id', { length: 255 }), // Dead Letter Queue ID if failed
   
   // Audit and tracking
   createdAt: timestamp('created_at').defaultNow(),
