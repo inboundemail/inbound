@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+# Args: $1 old-object-name, $2 new-object-name, $3 flag (1 if branch checkout)
+IS_BRANCH_CHECKOUT="$3"
+
+# Only run on branch checkouts/switches
+if [ "$IS_BRANCH_CHECKOUT" != "1" ]; then
+  exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+SCRIPT_PATH="$REPO_ROOT/scripts/on-branch-switch.sh"
+
+if [ -x "$SCRIPT_PATH" ]; then
+  "$SCRIPT_PATH"
+else
+  echo "post-checkout: script not executable or missing: $SCRIPT_PATH" >&2
+fi
