@@ -1,4 +1,6 @@
 {
+  "buildCommand": "bun run build",
+  "installCommand": "bun install",
   "crons": [
     {
       "path": "/api/webhooks/daily-usage",
