@@ -40,6 +40,12 @@ export interface PostEmailReplyRequest {
         name: string
         value: string
     }>
+    // Optional Dub link tracking config
+    dub?: {
+        enabled?: boolean
+        domain?: string
+        tag?: string
+    }
 }
 
 export interface PostEmailReplyResponse {
@@ -256,6 +262,16 @@ async function handleSimpleReply(
         )
     }
 
+    // Optionally rewrite links with Dub
+    const { applyDubRewritingIfEnabled } = await import('../../helper/dub-links')
+    const { text: finalTextBody, html: finalHtmlBody } = await applyDubRewritingIfEnabled(
+        userId,
+        body.text || '',
+        body.html || null,
+        body.dub,
+        'simple reply'
+    )
+
     // Create basic email record
     const replyEmailId = nanoid()
     const messageId = `${replyEmailId}@${fromDomain}`
@@ -272,8 +288,8 @@ async function handleSimpleReply(
         bcc: null,
         replyTo: null,
         subject,
-        textBody: body.text || '',
-        htmlBody: body.html || null,
+        textBody: finalTextBody,
+        htmlBody: finalHtmlBody,
         headers: JSON.stringify({
             'In-Reply-To': originalEmail.messageId ? `<${originalEmail.messageId}>` : null,
             'References': originalEmail.messageId ? `<${originalEmail.messageId}>` : null,
@@ -379,7 +395,7 @@ async function handleSimpleReply(
         rawMessage += `MIME-Version: 1.0\r\n`
         
         // Handle content based on what's provided
-        if (body.html && body.text) {
+        if (finalHtmlBody && finalTextBody) {
             // Multipart alternative
             rawMessage += `Content-Type: multipart/alternative; boundary="${boundary}"\r\n\r\n`
             
@@ -387,25 +403,25 @@ async function handleSimpleReply(
             rawMessage += `--${boundary}\r\n`
             rawMessage += `Content-Type: text/plain; charset=UTF-8\r\n`
             rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`
-            rawMessage += `${body.text}\r\n`
+            rawMessage += `${finalTextBody}\r\n`
             
             // HTML part
             rawMessage += `--${boundary}\r\n`
             rawMessage += `Content-Type: text/html; charset=UTF-8\r\n`
             rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`
-            rawMessage += `${body.html}\r\n`
+            rawMessage += `${finalHtmlBody}\r\n`
             
             rawMessage += `--${boundary}--\r\n`
-        } else if (body.html) {
+        } else if (finalHtmlBody) {
             // HTML only
             rawMessage += `Content-Type: text/html; charset=UTF-8\r\n`
             rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`
-            rawMessage += `${body.html}\r\n`
+            rawMessage += `${finalHtmlBody}\r\n`
         } else {
             // Text only
             rawMessage += `Content-Type: text/plain; charset=UTF-8\r\n`
             rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`
-            rawMessage += `${body.text}\r\n`
+            rawMessage += `${finalTextBody}\r\n`
         }
         
         // Use SendRawEmailCommand for proper header support
@@ -804,6 +820,18 @@ export async function POST(
                 </div>
             `
         }
+
+        // Optionally rewrite links with Dub (full mode, after quoting)
+        const { applyDubRewritingIfEnabled } = await import('../../helper/dub-links')
+        const dubResult = await applyDubRewritingIfEnabled(
+            userId,
+            finalTextBody,
+            finalHtmlBody,
+            body.dub,
+            'full reply'
+        )
+        finalTextBody = dubResult.text
+        finalHtmlBody = dubResult.html
 
         // Create sent email record
         const replyEmailId = nanoid()

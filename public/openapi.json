@@ -3681,6 +3681,9 @@
           },
           "tags": {
             "type": "string"
+          },
+          "dub": {
+            "type": "string"
           }
         },
         "required": [
@@ -5650,6 +5653,9 @@
             "type": "boolean"
           },
           "tags": {
+            "type": "string"
+          },
+          "dub": {
             "type": "string"
           }
         },

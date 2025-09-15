@@ -18,3 +18,10 @@ declare namespace JSX {
 }
 
 
+// Linkify-it typings shim
+declare module 'linkify-it' {
+  export default class LinkifyIt {
+    constructor(...args: any[])
+    match(text: string): Array<{ index: number; lastIndex?: number; raw: string; url: string }> | null
+  }
+}

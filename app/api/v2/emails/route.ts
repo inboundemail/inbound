@@ -36,6 +36,12 @@ export interface PostEmailsRequest {
         name: string
         value: string
     }>
+    // Optional Dub link tracking config
+    dub?: {
+        enabled?: boolean
+        domain?: string
+        tag?: string
+    }
 }
 
 export interface PostEmailsResponse {
@@ -254,6 +260,16 @@ export async function POST(request: NextRequest) {
             )
         }
 
+        // Prepare content, optionally rewrite links with Dub
+        const { applyDubRewritingIfEnabled } = await import('../helper/dub-links')
+        const { text: finalTextBody, html: finalHtmlBody } = await applyDubRewritingIfEnabled(
+            userId,
+            body.text || '',
+            body.html || null,
+            body.dub,
+            'send email'
+        )
+
         // Create sent email record
         const emailId = nanoid()
         console.log('💾 Creating sent email record:', emailId)
@@ -268,8 +284,8 @@ export async function POST(request: NextRequest) {
             bcc: bccAddresses.length > 0 ? JSON.stringify(bccAddresses) : null,
             replyTo: replyToAddresses.length > 0 ? JSON.stringify(replyToAddresses) : null,
             subject: body.subject,
-            textBody: body.text,
-            htmlBody: body.html,
+            textBody: finalTextBody,
+            htmlBody: finalHtmlBody,
             headers: body.headers ? JSON.stringify(body.headers) : null,
             attachments: processedAttachments.length > 0 ? JSON.stringify(
                 attachmentsToStorageFormat(processedAttachments)
@@ -320,8 +336,8 @@ export async function POST(request: NextRequest) {
                 bcc: bccAddresses.length > 0 ? bccAddresses : undefined,
                 replyTo: replyToAddresses.length > 0 ? replyToAddresses : undefined,
                 subject: body.subject,
-                textBody: body.text,
-                htmlBody: body.html,
+                textBody: finalTextBody,
+                htmlBody: finalHtmlBody || undefined,
                 customHeaders: body.headers,
                 attachments: processedAttachments,
                 date: new Date()

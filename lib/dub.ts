@@ -1,4 +1,5 @@
 import { db } from './db/index'
+import { Dub as DubSDK } from 'dub'
 import { dubIntegrations, type DubIntegration } from './db/schema'
 import { eq } from 'drizzle-orm'
 import { createHash, randomBytes } from 'crypto'
@@ -325,6 +326,140 @@ export async function setEnableDubLinksForEmails(userId: string, enabled: boolea
   await db.update(dubIntegrations)
     .set({ enableDubLinksForEmails: enabled, updatedAt: new Date() })
     .where(eq(dubIntegrations.userId, userId))
+}
+
+// --- Dub Overrides Verification and Bulk Link Creation ---
+
+export async function verifyDubOverrides(
+  userId: string,
+  params: { domain?: string | null; tag?: string | null }
+): Promise<{ domainSlug?: string | null; tagId?: string | null }> {
+  let domainSlug: string | null | undefined
+  let tagId: string | null | undefined
+
+  if (params.domain) {
+    const domains = await listDubDomains(userId)
+    const found = domains.find(d => d.slug.toLowerCase() === params.domain!.toLowerCase())
+    if (!found) {
+      throw new Error(`Dub domain not found or not accessible: ${params.domain}`)
+    }
+    if (!found.verified) {
+      throw new Error(`Dub domain is not verified: ${params.domain}`)
+    }
+    domainSlug = found.slug
+  }
+
+  if (params.tag) {
+    const tags = await listDubTags(userId)
+    const foundTag = tags.find(t => t.id === params.tag || t.name.toLowerCase() === params.tag!.toLowerCase())
+    if (!foundTag) {
+      throw new Error(`Dub tag not found or not accessible: ${params.tag}`)
+    }
+    tagId = foundTag.id
+  }
+
+  return { domainSlug: domainSlug ?? null, tagId: tagId ?? null }
+}
+
+export async function createShortLinksBulk(
+  userId: string,
+  urls: string[],
+  opts?: { domainSlug?: string; tagId?: string }
+): Promise<Map<string, string>> {
+  const token = await getValidAccessToken(userId)
+  if (!token) throw new Error('Dub account not linked')
+
+  const payload = urls.map(u => ({
+    url: u,
+    ...(opts?.domainSlug ? { domain: opts.domainSlug } : {}),
+    ...(opts?.tagId ? { tagId: opts.tagId, tags: [opts.tagId] } : {}),
+  }))
+
+  // First try official SDK bulk create
+  try {
+    const dub = new DubSDK({ token })
+    const created = await dub.links.createMany(payload as any)
+    const map = new Map<string, string>()
+    for (const item of Array.isArray(created) ? created : []) {
+      const original = (item as any)?.url || (item as any)?.originalUrl
+      let short = (item as any)?.shortLink || (item as any)?.shortUrl || (item as any)?.short
+      if (original && short) {
+        if (typeof short === 'string' && !short.startsWith('http')) short = `https://${short}`
+        map.set(original, short)
+      }
+    }
+    if (map.size > 0) return map
+  } catch (e) {
+    // SDK path failed; fall through to HTTP
+  }
+
+  // Try bulk create (variant A: wrapped payload)
+  const map = new Map<string, string>()
+  const tryParseResults = (json: any) => {
+    const arr = Array.isArray(json?.results) ? json.results : Array.isArray(json) ? json : []
+    for (const item of arr) {
+      const original = item?.url || item?.originalUrl
+      let short = item?.shortLink || item?.shortUrl || item?.short
+      if (original && short) {
+        if (typeof short === 'string' && !short.startsWith('http')) {
+          short = `https://${short}`
+        }
+        map.set(original, short)
+      }
+    }
+  }
+
+  const bulkEndpoints = [
+    { body: { links: payload } },
+    { body: payload },
+  ]
+
+  for (const variant of bulkEndpoints) {
+    try {
+      const res = await fetch('https://api.dub.co/links/bulk', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(variant.body),
+      })
+      if (res.ok) {
+        const json = await res.json().catch(() => null)
+        tryParseResults(json)
+        if (map.size > 0) return map
+      }
+    } catch {}
+  }
+
+  // Fallback: create links individually
+  for (const u of urls) {
+    try {
+      const res = await fetch('https://api.dub.co/links', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: u,
+          ...(opts?.domainSlug ? { domain: opts.domainSlug } : {}),
+          ...(opts?.tagId ? { tagId: opts.tagId, tags: [opts.tagId] } : {}),
+        }),
+      })
+      if (!res.ok) continue
+      const json = await res.json().catch(() => null)
+      let short = json?.shortLink || json?.shortUrl || json?.short
+      if (short) {
+        if (typeof short === 'string' && !short.startsWith('http')) {
+          short = `https://${short}`
+        }
+        map.set(u, short)
+      }
+    } catch {}
+  }
+
+  return map
 }
 
 

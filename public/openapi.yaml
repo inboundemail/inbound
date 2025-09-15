@@ -2259,6 +2259,8 @@ components:
             type: string
         tags:
           type: string
+        dub:
+          type: string
       required:
         - from
         - to
@@ -3756,6 +3758,8 @@ components:
         simple:
           type: boolean
         tags:
+          type: string
+        dub:
           type: string
       required:
         - from
