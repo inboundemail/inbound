@@ -283,7 +283,20 @@ export interface EmailIdParam {
 ## Testing and Documentation
 - Add/extend endpoint coverage in [api.test.ts](mdc:inbound-app/app/api/v2/api.test.ts).
 - Update Mintlify docs in `inbound-docs/` using the clean documentation standard (see workspace rule), reflecting new endpoints, params, and response shapes.
-- Generate OpenAPI spec with `npx next-openapi-gen generate` after adding/updating endpoints.
+- Generate OpenAPI spec with `bun run openapi:generate` after adding/updating endpoints.
+- Validate OpenAPI spec with `bun run openapi:validate` before uploading to external services.
+- Full workflow: `bun run openapi:check` (regenerates + validates in one command).
+
+### OpenAPI Generation Workflow
+1. Document endpoints with required JSDoc tags + `@openapi`
+2. Run `bun run openapi:generate` to generate spec to `openapi.json`
+3. Run `bun run test-openapi` to validate the generated spec
+4. Upload `openapi.json` (NOT `next.openapi.json`) to external services like Stainless
+
+**File Structure:**
+- `next.openapi.json` - Configuration file (146 lines)
+- `openapi.json` - Generated spec with all endpoints (10k+ lines) ← Upload this to Stainless
+- `app/api-docs/page.tsx` - Scalar UI documentation page
 
 ## Do/Don’t Summary
 - Do: auth first, typed inputs/outputs, await `params`, validate queries, user-scope DB, consistent logging, correct status codes, structured pagination, idempotency where applicable, and update docs/tests.

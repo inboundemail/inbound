@@ -9,7 +9,7 @@ export default function ApiDocsPage() {
     <ApiReferenceReact
       configuration={{
         _integration: "nextjs",
-        url: "/next.openapi.json",
+        url: "/openapi.json",
       }}
     />
   );

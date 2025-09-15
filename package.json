@@ -12,6 +12,7 @@
     "test-openapi": "bun test app/api/v2/openapi.test.ts",
     "openapi:generate": "npx next-openapi-gen generate",
     "openapi:check": "npx next-openapi-gen generate && bun test app/api/v2/openapi.test.ts",
+    "openapi:validate": "bun test app/api/v2/openapi.test.ts && echo '✅ OpenAPI spec is valid and ready for Stainless!'",
     "start": "next start",
     "lint": "next lint",
     "db-prepare": "bun run scripts/db-prepare.ts",
