@@ -35,6 +35,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@dotlottie/react-player": "^1.6.19",
     "@dub/analytics": "^0.0.30",
+    "@dub/better-auth": "^0.0.5",
     "@inboundemail/sdk": "^4.0.0",
     "@lordicon/react": "^1.11.0",
     "@mdx-js/loader": "^3.1.0",
@@ -123,6 +124,7 @@
     "stripe": "^18.0.0",
     "tailwind-merge": "^3.3.0",
     "tailwindcss-animate": "^1.0.7",
+    "ts-morph": "^27.0.0",
     "vaul": "^1.1.2",
     "zod": "^3.25.56"
   },

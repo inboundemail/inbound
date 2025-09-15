@@ -263,7 +263,7 @@ async function handleSimpleReply(
     }
 
     // Optionally rewrite links with Dub
-    const { applyDubRewritingIfEnabled } = await import('../../helper/dub-links')
+    const { applyDubRewritingIfEnabled } = await import('../../../helper/dub-links')
     const { text: finalTextBody, html: finalHtmlBody } = await applyDubRewritingIfEnabled(
         userId,
         body.text || '',
@@ -822,7 +822,7 @@ export async function POST(
         }
 
         // Optionally rewrite links with Dub (full mode, after quoting)
-        const { applyDubRewritingIfEnabled } = await import('../../helper/dub-links')
+        const { applyDubRewritingIfEnabled } = await import('../../../helper/dub-links')
         const dubResult = await applyDubRewritingIfEnabled(
             userId,
             finalTextBody,
@@ -831,7 +831,7 @@ export async function POST(
             'full reply'
         )
         finalTextBody = dubResult.text
-        finalHtmlBody = dubResult.html
+        finalHtmlBody = dubResult.html || finalHtmlBody
 
         // Create sent email record
         const replyEmailId = nanoid()

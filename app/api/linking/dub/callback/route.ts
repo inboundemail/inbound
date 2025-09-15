@@ -39,11 +39,11 @@ export async function GET(request: Request) {
   try {
     const tokens = await exchangeCodeForTokens(code, { codeVerifier: pkceVerifier || undefined })
     await upsertIntegration(session.user.id, tokens)
+    settingsUrl.searchParams.set('dub_linked', 'true')
     const res = NextResponse.redirect(settingsUrl)
     // Clear state cookie
     res.cookies.set('dub_oauth_state', '', { path: '/', maxAge: 0 })
     res.cookies.set('dub_oauth_pkce', '', { path: '/', maxAge: 0 })
-    settingsUrl.searchParams.set('dub_linked', 'true')
     return res
   } catch (e: any) {
     settingsUrl.searchParams.set('dub_error', e?.message || 'token_exchange_failed')
