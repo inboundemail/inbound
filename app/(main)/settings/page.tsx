@@ -405,7 +405,7 @@ export default function SettingsPage() {
                           ))
                         ) : (
                           <SelectItem value="__disabled__" disabled>
-                            {(dubFolders as any)?.needsRelink ? 'Permission missing: re-link Dub to grant tags.read' : 'No folders available'}
+                            {(dubFolders as any)?.needsRelink ? 'Permission missing: re-link Dub to grant folders.read' : 'No folders available'}
                           </SelectItem>
                         )}
                       </SelectContent>
@@ -417,7 +417,7 @@ export default function SettingsPage() {
                           size="sm"
                           onClick={() => { window.location.href = '/api/linking/dub/authorize' }}
                         >
-                          Re-link Dub to grant tags.read
+                          Re-link Dub to grant folders.read
                         </Button>
                       </div>
                     )}

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth/auth'
-import { ensureInboundFolder, listDubTags } from '@/lib/dub'
+import { ensureInboundFolder, listDubFolders } from '@/lib/dub'
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -12,8 +12,8 @@ export async function GET(request: Request) {
     if (ensureInbound) {
       await ensureInboundFolder(session.user.id)
     }
-    const tags = await listDubTags(session.user.id)
-    return NextResponse.json(tags)
+    const folders = await listDubFolders(session.user.id)
+    return NextResponse.json(folders)
   } catch (e: any) {
     const message = String(e?.message || '')
     const needsRelink = /scope|unauthorized|forbidden|insufficient/i.test(message)

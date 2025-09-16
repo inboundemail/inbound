@@ -5,7 +5,9 @@ import { getEnableDubLinksForEmails, listDubDomains, verifyDubOverrides, createS
 export type DubPerRequestConfig = {
   enabled?: boolean
   domain?: string
+  // Backwards-compatible: allow tag, but prefer folder
   tag?: string
+  folder?: string
 }
 
 export type RewrittenBodies = {
@@ -189,8 +191,9 @@ export async function rewriteBodiesWithDub(
   }
 
   // Verify overrides and prepare bulk create
-  const { domainSlug, tagId } = await verifyDubOverrides(userId, {
+  const { domainSlug, folderId, tagId } = await verifyDubOverrides(userId, {
     domain: config?.domain,
+    folder: config?.folder,
     tag: config?.tag,
   })
 
@@ -200,9 +203,10 @@ export async function rewriteBodiesWithDub(
 
   const createdMap = await createShortLinksBulk(userId, unique, {
     domainSlug: domainSlug || undefined,
+    folderId: folderId || undefined,
     tagId: tagId || undefined,
   })
-  console.log('🔗 Dub rewrite: created short links', { requested: unique.length, created: createdMap.size, domain: domainSlug, tagId })
+  console.log('🔗 Dub rewrite: created short links', { requested: unique.length, created: createdMap.size, domain: domainSlug, folderId, tagId })
 
   // Build a string-to-string map for exact replacements
   const urlMap = new Map<string, string>()

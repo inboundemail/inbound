@@ -164,7 +164,18 @@ export async function getValidAccessToken(userId: string): Promise<string | null
 }
 
 export function getScopes(): string[] {
-  return ['links.read', 'links.write', 'tags.read', 'tags.write', 'analytics.read', 'user.read', 'domains.read']
+  // Request both legacy tag scopes and new folder scopes for maximum compatibility
+  return [
+    'links.read',
+    'links.write',
+    'folders.read',
+    'folders.write',
+    'tags.read',
+    'tags.write',
+    'analytics.read',
+    'user.read',
+    'domains.read',
+  ]
 }
 
 // PKCE helpers
@@ -246,8 +257,56 @@ export async function setDefaultDubDomain(userId: string, params: { id?: string 
     .where(eq(dubIntegrations.userId, userId))
 }
 
-// Tags (Folders)
+// Folders and Tags
+export type DubFolder = { id: string; name: string }
 export type DubTag = { id: string; name: string }
+
+export async function listDubFolders(userId: string): Promise<DubFolder[]> {
+  const token = await getValidAccessToken(userId)
+  if (!token) throw new Error('Dub account not linked')
+  // Prefer new folders endpoint; fall back to tags if unavailable
+  try {
+    const res = await fetch('https://api.dub.co/folders', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store' as RequestCache,
+    })
+    if (res.ok) {
+      const json = await res.json()
+      if (!Array.isArray(json)) return []
+      return json.map((f: any) => ({ id: f.id, name: f.name })) as DubFolder[]
+    }
+  } catch {}
+  // Fallback to tags
+  const tags = await listDubTags(userId)
+  return tags.map(t => ({ id: t.id, name: t.name }))
+}
+
+export async function createDubFolder(userId: string, name: string): Promise<DubFolder> {
+  const token = await getValidAccessToken(userId)
+  if (!token) throw new Error('Dub account not linked')
+  // Prefer new folders endpoint; fall back to tags
+  try {
+    const res = await fetch('https://api.dub.co/folders', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name }),
+    })
+    if (res.ok) {
+      const json = await res.json()
+      return { id: json.id, name: json.name } as DubFolder
+    }
+  } catch {}
+  // Fallback to tag creation
+  const tag = await createDubTag(userId, name)
+  return { id: tag.id, name: tag.name }
+}
 
 export async function listDubTags(userId: string): Promise<DubTag[]> {
   const token = await getValidAccessToken(userId)
@@ -309,11 +368,20 @@ export async function setDefaultDubFolder(userId: string, params: { id?: string 
 }
 
 export async function ensureInboundFolder(userId: string): Promise<{ id: string; name: string }> {
+  // Try folders first
+  try {
+    const folders = await listDubFolders(userId)
+    const existing = folders.find(f => f.name.toLowerCase() === 'inbound')
+    if (existing) return existing
+    const created = await createDubFolder(userId, 'Inbound')
+    return created
+  } catch {}
+  // Fallback to tags
   const tags = await listDubTags(userId).catch(() => [])
-  const existing = tags.find(t => t.name.toLowerCase() === 'inbound')
-  if (existing) return existing
-  const created = await createDubTag(userId, 'Inbound')
-  return created
+  const existingTag = tags.find(t => t.name.toLowerCase() === 'inbound')
+  if (existingTag) return existingTag
+  const createdTag = await createDubTag(userId, 'Inbound')
+  return createdTag
 }
 
 export async function getEnableDubLinksForEmails(userId: string): Promise<boolean> {
@@ -332,9 +400,10 @@ export async function setEnableDubLinksForEmails(userId: string, enabled: boolea
 
 export async function verifyDubOverrides(
   userId: string,
-  params: { domain?: string | null; tag?: string | null }
-): Promise<{ domainSlug?: string | null; tagId?: string | null }> {
+  params: { domain?: string | null; tag?: string | null; folder?: string | null }
+): Promise<{ domainSlug?: string | null; folderId?: string | null; tagId?: string | null }> {
   let domainSlug: string | null | undefined
+  let folderId: string | null | undefined
   let tagId: string | null | undefined
 
   if (params.domain) {
@@ -349,7 +418,25 @@ export async function verifyDubOverrides(
     domainSlug = found.slug
   }
 
-  if (params.tag) {
+  // Prefer folders if provided
+  if (params.folder) {
+    const folders = await listDubFolders(userId)
+    const foundFolder = folders.find(f => f.id === params.folder || f.name.toLowerCase() === params.folder!.toLowerCase())
+    if (!foundFolder) {
+      throw new Error(`Dub folder not found or not accessible: ${params.folder}`)
+    }
+    folderId = foundFolder.id
+  } else {
+    // Use default folder if configured
+    const rows = await db.select().from(dubIntegrations).where(eq(dubIntegrations.userId, userId)).limit(1)
+    const integ = rows[0]
+    if (integ?.defaultDubFolderId) {
+      folderId = integ.defaultDubFolderId
+    }
+  }
+
+  // Fallback: allow tags override if provided (for backward compatibility)
+  if (!folderId && params.tag) {
     const tags = await listDubTags(userId)
     const foundTag = tags.find(t => t.id === params.tag || t.name.toLowerCase() === params.tag!.toLowerCase())
     if (!foundTag) {
@@ -358,13 +445,13 @@ export async function verifyDubOverrides(
     tagId = foundTag.id
   }
 
-  return { domainSlug: domainSlug ?? null, tagId: tagId ?? null }
+  return { domainSlug: domainSlug ?? null, folderId: folderId ?? null, tagId: tagId ?? null }
 }
 
 export async function createShortLinksBulk(
   userId: string,
   urls: string[],
-  opts?: { domainSlug?: string; tagId?: string }
+  opts?: { domainSlug?: string; folderId?: string; tagId?: string }
 ): Promise<Map<string, string>> {
   const token = await getValidAccessToken(userId)
   if (!token) throw new Error('Dub account not linked')
@@ -372,6 +459,8 @@ export async function createShortLinksBulk(
   const payload = urls.map(u => ({
     url: u,
     ...(opts?.domainSlug ? { domain: opts.domainSlug } : {}),
+    // Prefer folderId; include tag fields for backward compatibility
+    ...(opts?.folderId ? { folderId: opts.folderId } : {}),
     ...(opts?.tagId ? { tagId: opts.tagId, tags: [opts.tagId] } : {}),
   }))
 
