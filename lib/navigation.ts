@@ -20,6 +20,7 @@ import Code2 from "@/components/icons/code-2"
 import StackPerspective2 from "@/components/icons/stack-perspective-2"
 import Crown from "@/components/icons/crown"
 import UserGroup from "@/components/icons/user-group"
+import Key2 from "@/components/icons/key-2"
 
 export interface NavigationItem {
   title: string
@@ -62,6 +63,12 @@ export const navigationConfig: NavigationConfig = {
       url: "/analytics",
       icon: ChartActivity2,
       description: "View detailed analytics"
+    },
+    {
+      title: "API Keys",
+      url: "/api-keys",
+      icon: Key2,
+      description: "Manage API keys for programmatic access"
     },
     {
       title: "Settings",
