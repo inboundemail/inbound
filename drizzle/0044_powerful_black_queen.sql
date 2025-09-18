@@ -1,0 +1,1 @@
+ALTER TABLE "apikey" ADD COLUMN "allowed_domains" text;

@@ -309,6 +309,13 @@
       "when": 1757956268113,
       "tag": "0043_polite_hellion",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1758206039038,
+      "tag": "0044_powerful_black_queen",
+      "breakpoints": true
     }
   ]
 }

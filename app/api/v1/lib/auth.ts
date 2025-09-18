@@ -78,6 +78,50 @@ export async function validateApiKey(request: NextRequest): Promise<ApiKeyValida
       }
     }
 
+    // Check domain restrictions if they exist
+    if (key.allowedDomains && key.allowedDomains.length > 0) {
+      // Extract domain from request (you might need to adjust this based on your request structure)
+      const origin = request.headers.get('origin') || request.headers.get('referer')
+      let requestDomain: string | null = null
+
+      if (origin) {
+        try {
+          const url = new URL(origin)
+          requestDomain = url.hostname
+        } catch (error) {
+          // Invalid URL, continue without domain check
+        }
+      }
+
+      // Parse allowedDomains from JSON string if needed
+      let allowedDomains: string[]
+      try {
+        allowedDomains = typeof key.allowedDomains === 'string'
+          ? JSON.parse(key.allowedDomains)
+          : key.allowedDomains
+      } catch (error) {
+        allowedDomains = []
+      }
+
+      if (allowedDomains.length > 0 && requestDomain) {
+        const isDomainAllowed = allowedDomains.some(allowedDomain => {
+          // Support wildcards (e.g., *.example.com)
+          if (allowedDomain.startsWith('*.')) {
+            const domain = allowedDomain.slice(2)
+            return requestDomain === domain || requestDomain.endsWith('.' + domain)
+          }
+          return requestDomain === allowedDomain
+        })
+
+        if (!isDomainAllowed) {
+          return {
+            valid: false,
+            error: `API key is restricted to specific domains. Current domain '${requestDomain}' is not allowed.`
+          }
+        }
+      }
+    }
+
     // Use the userId from the API key directly
     return {
       valid: true,

@@ -76,5 +76,6 @@ export const apikey = pgTable("apikey", {
 	createdAt: timestamp('created_at').notNull(),
 	updatedAt: timestamp('updated_at').notNull(),
 	permissions: text('permissions'),
-	metadata: text('metadata')
+	metadata: text('metadata'),
+	allowedDomains: text('allowed_domains') // JSON array of allowed domains for scoped API keys
 });

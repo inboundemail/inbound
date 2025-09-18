@@ -7,7 +7,15 @@ export const useCreateApiKeyMutation = () => {
 
   return useMutation({
     mutationFn: async (data: CreateApiKeyData) => {
-      const { data: result, error } = await authClient.apiKey.create(data)
+      // Serialize allowedDomains to JSON if provided
+      const processedData = {
+        ...data,
+        allowedDomains: data.allowedDomains && data.allowedDomains.length > 0
+          ? JSON.stringify(data.allowedDomains)
+          : undefined
+      }
+
+      const { data: result, error } = await authClient.apiKey.create(processedData)
       if (error) {
         throw new Error(error.message)
       }
@@ -24,7 +32,15 @@ export const useUpdateApiKeyMutation = () => {
 
   return useMutation({
     mutationFn: async ({ keyId, ...updates }: UpdateApiKeyData) => {
-      const { error } = await authClient.apiKey.update({ keyId, ...updates })
+      // Serialize allowedDomains to JSON if provided
+      const processedUpdates = {
+        ...updates,
+        allowedDomains: updates.allowedDomains
+          ? JSON.stringify(updates.allowedDomains)
+          : updates.allowedDomains
+      }
+
+      const { error } = await authClient.apiKey.update({ keyId, ...processedUpdates })
       if (error) {
         throw new Error(error.message)
       }

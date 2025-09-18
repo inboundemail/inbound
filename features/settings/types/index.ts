@@ -37,24 +37,28 @@ export interface ApiKey {
   updatedAt: string
   permissions: { [key: string]: string[] } | null
   metadata: Record<string, any> | null
+  allowedDomains: string[] | null
 }
 
 // Form types for API operations
 export interface CreateApiKeyData {
   name?: string
   prefix?: string
+  allowedDomains?: string[]
 }
 
 export interface UpdateApiKeyData {
   keyId: string
   name?: string
   enabled?: boolean
+  allowedDomains?: string[]
 }
 
 // UI component types
 export interface CreateApiKeyForm {
   name: string
   prefix: string
+  allowedDomains: string[]
 }
 
 export interface CircularProgressProps {

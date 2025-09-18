@@ -9,7 +9,18 @@ export const useApiKeysQuery = () => {
       if (error) {
         throw new Error(error.message)
       }
-      return data || []
+
+      // Process the data to ensure allowedDomains is properly parsed
+      const processedData = (data || []).map((apiKey: any) => ({
+        ...apiKey,
+        allowedDomains: apiKey.allowedDomains
+          ? typeof apiKey.allowedDomains === 'string'
+            ? JSON.parse(apiKey.allowedDomains)
+            : apiKey.allowedDomains
+          : null
+      }))
+
+      return processedData
     },
     staleTime: 3 * 60 * 1000, // 3 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes

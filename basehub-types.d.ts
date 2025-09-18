@@ -99,7 +99,7 @@ export interface BlockColor {
     __typename: 'BlockColor'
 }
 
-export type BlockDocument = (BlogPosts | SimplifyingEmailForDevelopers | WhyEmailTemplatesStickToA600pxWidthAndDoesItStillMatter | _AgentInboundianBlogger) & { __isUnion?: true }
+export type BlockDocument = (BlogPosts | SimplifyingEmailForDevelopers | WhyIsEveryEmail600pxWide | _AgentInboundianBlogger) & { __isUnion?: true }
 
 export interface BlockDocumentSys {
     apiNamePath: Scalars['String']
@@ -208,7 +208,7 @@ export interface BlogPosts {
     _sys: BlockDocumentSys
     _title: Scalars['String']
     simplifyingEmailForDevelopers: SimplifyingEmailForDevelopers
-    whyEmailTemplatesStickToA600pxWidthAndDoesItStillMatter: WhyEmailTemplatesStickToA600pxWidthAndDoesItStillMatter
+    whyIsEveryEmail600pxWide: WhyIsEveryEmail600pxWide
     __typename: 'BlogPosts'
 }
 
@@ -369,7 +369,7 @@ export interface Variant {
     __typename: 'Variant'
 }
 
-export interface WhyEmailTemplatesStickToA600pxWidthAndDoesItStillMatter {
+export interface WhyIsEveryEmail600pxWide {
     _analyticsKey: Scalars['String']
     _dashboardUrl: Scalars['String']
     _id: Scalars['String']
@@ -387,7 +387,7 @@ export interface WhyEmailTemplatesStickToA600pxWidthAndDoesItStillMatter {
     /** ISO 8601 date string. */
     publishedDate: (Scalars['String'] | null)
     title: Scalars['String']
-    __typename: 'WhyEmailTemplatesStickToA600pxWidthAndDoesItStillMatter'
+    __typename: 'WhyIsEveryEmail600pxWide'
 }
 
 export interface _AgentInboundianBlogger {
@@ -549,7 +549,7 @@ export interface BlockDocumentGenqlSelection{
     _title?: boolean | number
     on_BlogPosts?: BlogPostsGenqlSelection
     on_SimplifyingEmailForDevelopers?: SimplifyingEmailForDevelopersGenqlSelection
-    on_WhyEmailTemplatesStickToA600pxWidthAndDoesItStillMatter?: WhyEmailTemplatesStickToA600pxWidthAndDoesItStillMatterGenqlSelection
+    on_WhyIsEveryEmail600pxWide?: WhyIsEveryEmail600pxWideGenqlSelection
     on__AgentInboundianBlogger?: _AgentInboundianBloggerGenqlSelection
     __typename?: boolean | number
     __fragmentOn?: "BlockDocument"
@@ -696,7 +696,7 @@ export interface BlogPostsGenqlSelection{
     _sys?: BlockDocumentSysGenqlSelection
     _title?: boolean | number
     simplifyingEmailForDevelopers?: SimplifyingEmailForDevelopersGenqlSelection
-    whyEmailTemplatesStickToA600pxWidthAndDoesItStillMatter?: WhyEmailTemplatesStickToA600pxWidthAndDoesItStillMatterGenqlSelection
+    whyIsEveryEmail600pxWide?: WhyIsEveryEmail600pxWideGenqlSelection
     __typename?: boolean | number
     __fragmentOn?: "BlogPosts"
 }
@@ -969,7 +969,7 @@ export interface VariantGenqlSelection{
     __fragmentOn?: "Variant"
 }
 
-export interface WhyEmailTemplatesStickToA600pxWidthAndDoesItStillMatterGenqlSelection{
+export interface WhyIsEveryEmail600pxWideGenqlSelection{
     _analyticsKey?: { __args: {
     /**
      * The scope of the analytics key. Use `send` for just ingesting data. Use `query` if you need to show an analytics data in your website.
@@ -994,7 +994,7 @@ export interface WhyEmailTemplatesStickToA600pxWidthAndDoesItStillMatterGenqlSel
     publishedDate?: boolean | number
     title?: boolean | number
     __typename?: boolean | number
-    __fragmentOn?: "WhyEmailTemplatesStickToA600pxWidthAndDoesItStillMatter"
+    __fragmentOn?: "WhyIsEveryEmail600pxWide"
 }
 
 export interface _AgentInboundianBloggerGenqlSelection{
@@ -1218,9 +1218,9 @@ export interface FragmentsMap {
     root: Variant,
     selection: VariantGenqlSelection,
 }
-  WhyEmailTemplatesStickToA600pxWidthAndDoesItStillMatter: {
-    root: WhyEmailTemplatesStickToA600pxWidthAndDoesItStillMatter,
-    selection: WhyEmailTemplatesStickToA600pxWidthAndDoesItStillMatterGenqlSelection,
+  WhyIsEveryEmail600pxWide: {
+    root: WhyIsEveryEmail600pxWide,
+    selection: WhyIsEveryEmail600pxWideGenqlSelection,
 }
   _AgentInboundianBlogger: {
     root: _AgentInboundianBlogger,

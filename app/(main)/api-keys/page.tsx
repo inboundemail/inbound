@@ -28,6 +28,7 @@ import Trash2 from "@/components/icons/trash-2"
 import CircleCheck from "@/components/icons/circle-check"
 import { formatDistanceToNow } from 'date-fns'
 import { useRouter } from 'next/navigation'
+import { X } from 'lucide-react'
 
 export default function ApiKeysPage() {
   const { data: session, isPending } = useSession()
@@ -58,14 +59,17 @@ export default function ApiKeysPage() {
   const [keyToDelete, setKeyToDelete] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState<CreateApiKeyForm>({
     name: '',
-    prefix: ''
+    prefix: '',
+    allowedDomains: []
   })
+  const [newDomain, setNewDomain] = useState('')
 
   const handleCreateApiKey = async () => {
     try {
       const createData = {
         name: createForm.name || undefined,
         prefix: createForm.prefix || undefined,
+        allowedDomains: createForm.allowedDomains.length > 0 ? createForm.allowedDomains : undefined,
       }
       
       const result = await createApiKeyMutation.mutateAsync(createData)
@@ -78,7 +82,8 @@ export default function ApiKeysPage() {
         // Reset form
         setCreateForm({
           name: '',
-          prefix: ''
+          prefix: '',
+          allowedDomains: []
         })
       }
     } catch (error) {
@@ -114,6 +119,23 @@ export default function ApiKeysPage() {
     } catch (error) {
       toast.error('Failed to copy to clipboard')
     }
+  }
+
+  const addDomain = () => {
+    if (newDomain.trim() && !createForm.allowedDomains.includes(newDomain.trim())) {
+      setCreateForm(prev => ({
+        ...prev,
+        allowedDomains: [...prev.allowedDomains, newDomain.trim()]
+      }))
+      setNewDomain('')
+    }
+  }
+
+  const removeDomain = (domain: string) => {
+    setCreateForm(prev => ({
+      ...prev,
+      allowedDomains: prev.allowedDomains.filter(d => d !== domain)
+    }))
   }
 
   if (isPending) {
@@ -187,6 +209,52 @@ export default function ApiKeysPage() {
                         setCreateForm(prev => ({ ...prev, prefix: value }))
                       }}
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="domains">Allowed Domains (optional)</Label>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Input
+                          id="domains"
+                          placeholder="example.com"
+                          value={newDomain}
+                          onChange={(e) => setNewDomain(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              addDomain()
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={addDomain}
+                          disabled={!newDomain.trim()}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                      {createForm.allowedDomains.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {createForm.allowedDomains.map((domain) => (
+                            <Badge key={domain} variant="secondary" className="flex items-center gap-1">
+                              {domain}
+                              <button
+                                type="button"
+                                onClick={() => removeDomain(domain)}
+                                className="ml-1 hover:bg-red-100 rounded-full p-0.5"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Leave empty for unrestricted access. Add domains to limit this API key to specific domains only.
+                      </p>
+                    </div>
                   </div>
                   <div className="flex justify-end gap-2">
                     <Button
@@ -293,6 +361,23 @@ export default function ApiKeysPage() {
                                 </span>
                               )}
                             </div>
+                            {apiKey.allowedDomains && apiKey.allowedDomains.length > 0 && (
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs">Restricted to:</span>
+                                <div className="flex flex-wrap gap-1">
+                                  {apiKey.allowedDomains.slice(0, 3).map((domain) => (
+                                    <Badge key={domain} variant="outline" className="text-xs px-1 py-0">
+                                      {domain}
+                                    </Badge>
+                                  ))}
+                                  {apiKey.allowedDomains.length > 3 && (
+                                    <Badge variant="outline" className="text-xs px-1 py-0">
+                                      +{apiKey.allowedDomains.length - 3} more
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
