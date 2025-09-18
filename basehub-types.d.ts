@@ -99,7 +99,7 @@ export interface BlockColor {
     __typename: 'BlockColor'
 }
 
-export type BlockDocument = (BlogPosts | SimplifyingEmailForDevelopers | _AgentInboundianBlogger) & { __isUnion?: true }
+export type BlockDocument = (BlogPosts | SimplifyingEmailForDevelopers | WhyIsEveryEmail600pxWide | _AgentInboundianBlogger) & { __isUnion?: true }
 
 export interface BlockDocumentSys {
     apiNamePath: Scalars['String']
@@ -182,7 +182,7 @@ export interface BlockOgImage {
 
 
 /** Rich text block */
-export type BlockRichText = (Content) & { __isUnion?: true }
+export type BlockRichText = (Content | Content_1) & { __isUnion?: true }
 
 export interface BlockVideo {
     aspectRatio: Scalars['String']
@@ -208,6 +208,7 @@ export interface BlogPosts {
     _sys: BlockDocumentSys
     _title: Scalars['String']
     simplifyingEmailForDevelopers: SimplifyingEmailForDevelopers
+    whyIsEveryEmail600pxWide: WhyIsEveryEmail600pxWide
     __typename: 'BlogPosts'
 }
 
@@ -224,6 +225,21 @@ export interface ContentRichText {
     content: Scalars['BSHBRichTextContentSchema']
     toc: Scalars['BSHBRichTextTOCSchema']
     __typename: 'ContentRichText'
+}
+
+export interface Content_1 {
+    html: Scalars['String']
+    json: Content_1RichText
+    markdown: Scalars['String']
+    plainText: Scalars['String']
+    readingTime: Scalars['Int']
+    __typename: 'Content_1'
+}
+
+export interface Content_1RichText {
+    content: Scalars['BSHBRichTextContentSchema']
+    toc: Scalars['BSHBRichTextTOCSchema']
+    __typename: 'Content_1RichText'
 }
 
 export interface GetUploadSignedURL {
@@ -300,7 +316,7 @@ export interface RepoSys {
     __typename: 'RepoSys'
 }
 
-export type RichTextJson = (BaseRichTextJson | ContentRichText) & { __isUnion?: true }
+export type RichTextJson = (BaseRichTextJson | ContentRichText | Content_1RichText) & { __isUnion?: true }
 
 export interface SearchHighlight {
     /** The field/path that was matched (e.g., "title", "body.content") */
@@ -351,6 +367,27 @@ export interface Variant {
     isDefault: Scalars['Boolean']
     label: Scalars['String']
     __typename: 'Variant'
+}
+
+export interface WhyIsEveryEmail600pxWide {
+    _analyticsKey: Scalars['String']
+    _dashboardUrl: Scalars['String']
+    _id: Scalars['String']
+    _idPath: Scalars['String']
+    _slug: Scalars['String']
+    _slugPath: Scalars['String']
+    _sys: BlockDocumentSys
+    _title: Scalars['String']
+    authorImage: BlockImage
+    authorName: (Scalars['String'] | null)
+    authorPosition: (Scalars['String'] | null)
+    content: (Content_1 | null)
+    description: Scalars['String']
+    image: BlockImage
+    /** ISO 8601 date string. */
+    publishedDate: (Scalars['String'] | null)
+    title: Scalars['String']
+    __typename: 'WhyIsEveryEmail600pxWide'
 }
 
 export interface _AgentInboundianBlogger {
@@ -512,6 +549,7 @@ export interface BlockDocumentGenqlSelection{
     _title?: boolean | number
     on_BlogPosts?: BlogPostsGenqlSelection
     on_SimplifyingEmailForDevelopers?: SimplifyingEmailForDevelopersGenqlSelection
+    on_WhyIsEveryEmail600pxWide?: WhyIsEveryEmail600pxWideGenqlSelection
     on__AgentInboundianBlogger?: _AgentInboundianBloggerGenqlSelection
     __typename?: boolean | number
     __fragmentOn?: "BlockDocument"
@@ -622,6 +660,7 @@ export interface BlockRichTextGenqlSelection{
     /** Words per minute, defaults to average 183wpm */
     wpm?: (Scalars['Int'] | null)} } | boolean | number
     on_Content?: ContentGenqlSelection
+    on_Content_1?: Content_1GenqlSelection
     __typename?: boolean | number
     __fragmentOn?: "BlockRichText"
 }
@@ -657,6 +696,7 @@ export interface BlogPostsGenqlSelection{
     _sys?: BlockDocumentSysGenqlSelection
     _title?: boolean | number
     simplifyingEmailForDevelopers?: SimplifyingEmailForDevelopersGenqlSelection
+    whyIsEveryEmail600pxWide?: WhyIsEveryEmail600pxWideGenqlSelection
     __typename?: boolean | number
     __fragmentOn?: "BlogPosts"
 }
@@ -682,6 +722,29 @@ export interface ContentRichTextGenqlSelection{
     toc?: boolean | number
     __typename?: boolean | number
     __fragmentOn?: "ContentRichText"
+}
+
+export interface Content_1GenqlSelection{
+    html?: { __args: {
+    /** It automatically generates a unique id for each heading present in the HTML. Enabled by default. */
+    slugs?: (Scalars['Boolean'] | null), 
+    /** Inserts a table of contents at the beginning of the HTML. */
+    toc?: (Scalars['Boolean'] | null)} } | boolean | number
+    json?: Content_1RichTextGenqlSelection
+    markdown?: boolean | number
+    plainText?: boolean | number
+    readingTime?: { __args: {
+    /** Words per minute, defaults to average 183wpm */
+    wpm?: (Scalars['Int'] | null)} } | boolean | number
+    __typename?: boolean | number
+    __fragmentOn?: "Content_1"
+}
+
+export interface Content_1RichTextGenqlSelection{
+    content?: boolean | number
+    toc?: boolean | number
+    __typename?: boolean | number
+    __fragmentOn?: "Content_1RichText"
 }
 
 export interface DateFilter {eq?: (Scalars['DateTime'] | null),isAfter?: (Scalars['DateTime'] | null),isBefore?: (Scalars['DateTime'] | null),isNull?: (Scalars['Boolean'] | null),neq?: (Scalars['DateTime'] | null),onOrAfter?: (Scalars['DateTime'] | null),onOrBefore?: (Scalars['DateTime'] | null)}
@@ -834,6 +897,7 @@ export interface RichTextJsonGenqlSelection{
     toc?: boolean | number
     on_BaseRichTextJson?: BaseRichTextJsonGenqlSelection
     on_ContentRichText?: ContentRichTextGenqlSelection
+    on_Content_1RichText?: Content_1RichTextGenqlSelection
     __typename?: boolean | number
     __fragmentOn?: "RichTextJson"
 }
@@ -903,6 +967,34 @@ export interface VariantGenqlSelection{
     label?: boolean | number
     __typename?: boolean | number
     __fragmentOn?: "Variant"
+}
+
+export interface WhyIsEveryEmail600pxWideGenqlSelection{
+    _analyticsKey?: { __args: {
+    /**
+     * The scope of the analytics key. Use `send` for just ingesting data. Use `query` if you need to show an analytics data in your website.
+     * 
+     * Have in mind, if you expose your `query` analytics key in the frontend, you'll be exposing all of this block's analytics data to the public. This is generally safe, but it might not be in your case.
+     */
+    scope?: (AnalyticsKeyScope | null)} } | boolean | number
+    _dashboardUrl?: boolean | number
+    _id?: boolean | number
+    _idPath?: boolean | number
+    _slug?: boolean | number
+    _slugPath?: boolean | number
+    _sys?: BlockDocumentSysGenqlSelection
+    _title?: boolean | number
+    authorImage?: BlockImageGenqlSelection
+    authorName?: boolean | number
+    authorPosition?: boolean | number
+    content?: Content_1GenqlSelection
+    description?: boolean | number
+    image?: BlockImageGenqlSelection
+    /** ISO 8601 date string. */
+    publishedDate?: boolean | number
+    title?: boolean | number
+    __typename?: boolean | number
+    __fragmentOn?: "WhyIsEveryEmail600pxWide"
 }
 
 export interface _AgentInboundianBloggerGenqlSelection{
@@ -1074,6 +1166,14 @@ export interface FragmentsMap {
     root: ContentRichText,
     selection: ContentRichTextGenqlSelection,
 }
+  Content_1: {
+    root: Content_1,
+    selection: Content_1GenqlSelection,
+}
+  Content_1RichText: {
+    root: Content_1RichText,
+    selection: Content_1RichTextGenqlSelection,
+}
   GetUploadSignedURL: {
     root: GetUploadSignedURL,
     selection: GetUploadSignedURLGenqlSelection,
@@ -1117,6 +1217,10 @@ export interface FragmentsMap {
   Variant: {
     root: Variant,
     selection: VariantGenqlSelection,
+}
+  WhyIsEveryEmail600pxWide: {
+    root: WhyIsEveryEmail600pxWide,
+    selection: WhyIsEveryEmail600pxWideGenqlSelection,
 }
   _AgentInboundianBlogger: {
     root: _AgentInboundianBlogger,

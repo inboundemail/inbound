@@ -40,44 +40,45 @@ import Dub from '@/components/dub'
 import { useDubIntegration, useDubDomainsQuery, useDefaultDubDomainQuery, useSetDefaultDubDomainMutation, useDubFoldersQuery, useDefaultDubFolderQuery, useSetDefaultDubFolderMutation, useEmailLinksToggleQuery, useSetEmailLinksToggleMutation } from '@/features/dub/hooks/useDubIntegration'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { hasFeatureFlag } from '@/lib/navigation'
 
 export default function SettingsPage() {
   const { data: session, isPending } = useSession()
   const [isLoading, setIsLoading] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isUpgradeSuccessOpen, setIsUpgradeSuccessOpen] = useState(false)
-  
+
   // React Query hooks
-  const { 
-    data: customerData, 
+  const {
+    data: customerData,
     isLoading: isLoadingCustomer,
     error: customerError,
-    refetch: refetchCustomer 
+    refetch: refetchCustomer
   } = useCustomerQuery()
-  
-  const { 
-    data: domainStats, 
+
+  const {
+    data: domainStats,
     isLoading: isLoadingDomainStats,
     error: domainStatsError
   } = useDomainStatsQuery()
-  
-  const { 
-    data: apiKeysData = [], 
+
+  const {
+    data: apiKeysData = [],
     isLoading: isLoadingApiKeys,
     error: apiKeysError
   } = useApiKeysQuery()
 
   // Sort API keys by creation date (newest first)
-  const apiKeys = [...apiKeysData].sort((a, b) => 
+  const apiKeys = [...apiKeysData].sort((a, b) =>
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
-  
+
   // Mutations
   const createApiKeyMutation = useCreateApiKeyMutation()
   const updateApiKeyMutation = useUpdateApiKeyMutation()
   const deleteApiKeyMutation = useDeleteApiKeyMutation()
   const billingPortalMutation = useBillingPortalMutation()
-  
+
   // API Key state
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [newApiKey, setNewApiKey] = useState<string | null>(null)
@@ -88,7 +89,7 @@ export default function SettingsPage() {
     name: '',
     prefix: ''
   })
-  
+
   const router = useRouter()
   const searchParams = useSearchParams()
   const { data: dubStatus } = useDubIntegration()
@@ -119,14 +120,14 @@ export default function SettingsPage() {
         name: createForm.name || undefined,
         prefix: createForm.prefix || undefined,
       }
-      
+
       const result = await createApiKeyMutation.mutateAsync(createData)
-      
+
       if (result?.key) {
         setNewApiKey(result.key)
         setShowNewApiKey(true)
         toast.success('API key created successfully')
-        
+
         // Reset form
         setCreateForm({
           name: '',
@@ -184,13 +185,13 @@ export default function SettingsPage() {
     const productParam = searchParams.get('product') // Get product ID if available
     if (upgradeParam === 'true') {
       setIsUpgradeSuccessOpen(true)
-      
+
       // Track Twitter conversion for plan purchase
       if (session?.user?.email) {
         const productId = productParam || 'pro' // Default to 'pro' if not specified
         trackPurchaseConversion(productId, session.user.email)
       }
-      
+
       // Remove the parameter from URL
       const newUrl = new URL(window.location.href)
       newUrl.searchParams.delete('upgrade')
@@ -228,7 +229,7 @@ export default function SettingsPage() {
   const maxDomains = domainsFeature?.balance || 0
 
   // Show upgrade button for all users except Scale plan
-  const showUpgradeButton = !activeProduct || 
+  const showUpgradeButton = !activeProduct ||
     !activeProduct.name?.toLowerCase().includes('scale')
 
   const handleOpenUpgrade = () => {
@@ -250,16 +251,16 @@ export default function SettingsPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleManageBilling}
                 disabled={!customerData || billingPortalMutation.isPending}
               >
                 {billingPortalMutation.isPending ? 'Loading…' : 'Manage Billing'}
               </Button>
               {showUpgradeButton && (
-                <Button 
+                <Button
                   size="sm"
                   onClick={handleOpenUpgrade}
                   variant="primary"
@@ -273,567 +274,572 @@ export default function SettingsPage() {
         </div>
 
         {/* Content */}
-        
+
         <div className="space-y-6">
-        <div className="h-4 border-b border-slate-800"></div>
-        {/* Dub Integration */}
-        <Card className="border-none bg-transparent">
-          <CardHeader className="p-0 mb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Dub width={20} height={20} className="text-foreground" />
-                <CardTitle>Dub Integration</CardTitle>
-              </div>
-              <div className="flex items-center gap-2">
-                {dubStatus?.linked ? (
-                  <Badge>Connected{dubStatus?.workspaceName ? ` • ${dubStatus.workspaceName}` : ''}</Badge>
-                ) : (
-                  <Badge variant="secondary">Not Connected</Badge>
-                )}
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => {
-                    window.location.href = '/api/linking/dub/authorize'
-                  }}
-                >
-                  {dubStatus?.linked ? 'Re-link' : 'Link Dub'}
-                </Button>
-              </div>
-            </div>
-            <CardDescription>
-              Connect your Dub account to enable link creation and analytics.
-            </CardDescription>
-            <div className="mt-2 text-xs text-muted-foreground">
-              Requires a Dub subscription. New users get 20% off for 3 months —
-              <a
-                href="https://refer.dub.co/ryan-vogel"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-1 text-primary underline"
-              >
-                click here
-              </a>
-              .
-            </div>
-            {dubStatus?.linked && (
-              <div className="mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium">Default click-tracking domain</div>
-                    <div className="text-xs text-muted-foreground">Used for open & click tracking links.</div>
-                  </div>
-                  <div>
-                    <Select
-                      value={defaultDubDomain?.slug || dubStatus?.defaultDomainSlug || ''}
-                      onValueChange={async (slug) => {
-                        const list = Array.isArray(dubDomains) ? dubDomains : []
-                        const selected = list.find((d: any) => d.slug === slug)
-                        try {
-                          await setDefaultDubDomainMutation.mutateAsync({ id: selected?.id || null, slug: slug || null })
-                          toast.success('Default domain saved')
-                        } catch (e: any) {
-                          toast.error(e?.message || 'Failed to save')
-                        }
-                      }}
-                    >
-                      <SelectTrigger id="dub-default-domain" aria-label="Default click-tracking domain">
-                        <SelectValue placeholder={isLoadingDubDomains ? 'Loading domains…' : 'Select a domain'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.isArray(dubDomains) ? (
-                          dubDomains.map((d: any) => (
-                            <SelectItem key={d.id} value={d.slug}>
-                              {d.slug}{d.primary ? ' (primary)' : ''}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="__disabled__" disabled>
-                            {(dubDomains as any)?.needsRelink ? 'Permission missing: re-link Dub to grant domains.read' : 'No domains available'}
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    {!Array.isArray(dubDomains) && (dubDomains as any)?.needsRelink && (
-                      <div className="mt-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => { window.location.href = '/api/linking/dub/authorize' }}
-                        >
-                          Re-link Dub to grant domains.read
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center mt-4">
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium">Default click-tracking folder</div>
-                    <div className="text-xs text-muted-foreground">Defaults to Inbound; used to organize links.</div>
-                  </div>
-                  <div>
-                    <Select
-                      value={defaultDubFolder?.id || ''}
-                      onOpenChange={async (open) => {
-                        if (open && (!defaultDubFolder?.id)) {
-                          try {
-                            await setDefaultDubFolderMutation.mutateAsync({ ensureInbound: true })
-                          } catch {}
-                        }
-                      }}
-                      onValueChange={async (id) => {
-                        const list = Array.isArray(dubFolders) ? dubFolders : []
-                        const selected: any = list.find((f: any) => f.id === id)
-                        try {
-                          await setDefaultDubFolderMutation.mutateAsync({ id: selected?.id || null, name: selected?.name || null })
-                          toast.success('Default folder saved')
-                        } catch (e: any) {
-                          toast.error(e?.message || 'Failed to save')
-                        }
-                      }}
-                    >
-                      <SelectTrigger id="dub-default-folder" aria-label="Default click-tracking folder">
-                        <SelectValue placeholder={isLoadingDubFolders ? 'Loading folders…' : 'Select a folder'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.isArray(dubFolders) ? (
-                          dubFolders.map((f: any) => (
-                            <SelectItem key={f.id} value={f.id}>
-                              {f.name}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="__disabled__" disabled>
-                            {(dubFolders as any)?.needsRelink ? 'Permission missing: re-link Dub to grant tags.read' : 'No folders available'}
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    {!Array.isArray(dubFolders) && (dubFolders as any)?.needsRelink && (
-                      <div className="mt-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => { window.location.href = '/api/linking/dub/authorize' }}
-                        >
-                          Re-link Dub to grant tags.read
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center mt-4">
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium">Enable Dub links for email URLs</div>
-                    <div className="text-xs text-muted-foreground">Automatically convert all links in emails to Dub-tracked links.</div>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-3">
-                      <label htmlFor="enable-dub-links" className="sr-only">Enable Dub links</label>
-                      <Checkbox
-                        id="enable-dub-links"
-                        checked={!!emailLinksToggle?.enabled}
-                        onCheckedChange={async (value) => {
-                          try {
-                            await setEmailLinksToggleMutation.mutateAsync(Boolean(value))
-                            toast.success('Preference saved')
-                          } catch (err: any) {
-                            toast.error(err?.message || 'Failed to save preference')
-                          }
-                        }}
-                        aria-label="Enable Dub links for email URLs"
-                      />
-                      <span className="text-sm text-muted-foreground">{emailLinksToggle?.enabled ? 'Enabled' : 'Disabled'}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardHeader>
-        </Card>
 
-        <div className="h-4 border-b border-slate-800"></div>
-        {/* Subscription Management */}
-        <Card className="border-none p-0 w-full bg-transparent">
-          <CardContent className="p-0">
-            {isLoadingCustomer ? (
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <Skeleton className="h-6 w-32 mb-2" />
-                  <Skeleton className="h-4 w-64" />
-                </div>
-                <div className="space-y-3">
-                  <Skeleton className="h-12 w-32" />
-                  <Skeleton className="h-12 w-32" />
-                </div>
-              </div>
-            ) : customerData ? (
-              <div>
-                {/* Plan Info */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-xl font-semibold">
-                        {activeProduct?.name || 'Free'}
-                      </h3>
-                      <Badge 
-                        variant={activeProduct?.status === 'active' ? 'default' : 'secondary'}
-                        className="capitalize"
-                      >
-                        {activeProduct?.status || 'Inactive'}
-                      </Badge>
-                    </div>
-                    <p className="text-muted-foreground text-sm max-w-md">
-                      {activeProduct?.name === 'Pro' 
-                        ? 'Advanced email processing with unlimited triggers and extended retention.'
-                        : activeProduct?.name === 'Scale'
-                        ? 'Enterprise-grade email infrastructure with maximum limits and priority support.'
-                        : 'Get started with basic email forwarding and domain management.'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button 
-                      variant="outline" 
-                      onClick={handleManageBilling}
-                      disabled={!customerData || billingPortalMutation.isPending}
-                    >
-                      {billingPortalMutation.isPending ? 'Loading...' : 'Manage'}
-                    </Button>
-                    {showUpgradeButton && (
-                      <Button 
-                        onClick={handleOpenUpgrade}
-                        variant="primary"
-                      >
-                        <ChartTrendUp width="16" height="16" className="mr-2" />
-                        Upgrade
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Features & Usage */}
-                <div className="mt-6 space-y-4">
-                  {domainsFeature && (
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="text-sm font-medium">Domains</div>
-                        <div className="text-xs text-muted-foreground">
-                          {domainsFeature.unlimited ? 'unlimited' : `${currentDomainCount} / ${maxDomains.toLocaleString()}`}
-                        </div>
-                      </div>
-                      {!domainsFeature.unlimited && maxDomains > 0 && (
-                        <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-1.5 rounded-full bg-blue-500"
-                            style={{ width: `${Math.min((currentDomainCount / maxDomains) * 100, 100)}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {inboundTriggersFeature && (
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="text-sm font-medium">Emails Received</div>
-                        <div className="text-xs text-muted-foreground">
-                          {inboundTriggersFeature.unlimited ? 'unlimited' : `${(inboundTriggersFeature.usage || 0).toLocaleString()} / ${(inboundTriggersFeature.balance || 0).toLocaleString()}`}
-                        </div>
-                      </div>
-                      {!inboundTriggersFeature.unlimited && (inboundTriggersFeature.balance || 0) > 0 && (
-                        <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-1.5 rounded-full bg-green-500"
-                            style={{ width: `${Math.min((((inboundTriggersFeature.usage || 0) / (inboundTriggersFeature.balance || 0)) * 100), 100)}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {emailsSentFeature && (
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="text-sm font-medium">Emails Sent</div>
-                        <div className="text-xs text-muted-foreground">
-                          {emailsSentFeature.unlimited ? 'unlimited' : `${(emailsSentFeature.usage || 0).toLocaleString()} / ${(emailsSentFeature.balance || 0).toLocaleString()}`}
-                        </div>
-                      </div>
-                      {!emailsSentFeature.unlimited && (emailsSentFeature.balance || 0) > 0 && (
-                        <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-1.5 rounded-full bg-purple-500"
-                            style={{ width: `${Math.min((((emailsSentFeature.usage || 0) / (emailsSentFeature.balance || 0)) * 100), 100)}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {emailRetentionFeature && (
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="text-sm font-medium">Email Retention</div>
-                        <div className="text-xs text-muted-foreground">{emailRetentionFeature.unlimited ? 'unlimited' : `${emailRetentionFeature.balance?.toLocaleString()} days`}</div>
-                      </div>
-                    </div>
-                  )}
-
-                  {vipByokFeature && (
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="text-sm font-medium">VIP BYOK</div>
-                        <div className="text-xs text-muted-foreground">{(vipByokFeature.unlimited || vipByokFeature.balance) ? 'Enabled' : 'Disabled'}</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : customerError ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <CreditCard2 width="32" height="32" className="mx-auto mb-2 opacity-50" />
-                <p>Unable to load subscription data</p>
-                <p className="text-sm text-destructive mt-1">
-                  {customerError instanceof Error ? customerError.message : 'Unknown error'}
-                </p>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => refetchCustomer()}
-                  className="mt-2"
-                >
-                  Retry
-                </Button>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <CreditCard2 width="32" height="32" className="mx-auto mb-2 opacity-50" />
-                <p>No subscription data available</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="h-4 border-b border-slate-800"></div>
-
-        {/* API Keys Management */}
-        <Card className="border-none bg-transparent">
-          <CardHeader className="p-0 mb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2 mb-2">
-                  <Key2 width="20" height="20" className="text-purple-600" />
-                  API Keys
-                </CardTitle>
-                <CardDescription>
-                  Manage API keys for programmatic access to your account
-                </CardDescription>
-              </div>
-              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <CirclePlus width="16" height="16" className="mr-2" />
-                    Create API Key
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Create New API Key</DialogTitle>
-                    <DialogDescription>
-                      Create a new API key for programmatic access to your account.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4" onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !createApiKeyMutation.isPending) {
-                      e.preventDefault()
-                      handleCreateApiKey()
-                    }
-                  }}>
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Name (optional)</Label>
-                      <Input
-                        id="name"
-                        placeholder="My API Key"
-                        value={createForm.name}
-                        onChange={(e) => setCreateForm(prev => ({ ...prev, name: e.target.value }))}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="prefix">Prefix (optional)</Label>
-                      <Input
-                        id="prefix"
-                        placeholder="myapp"
-                        value={createForm.prefix}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/\s+/g, '-')
-                          setCreateForm(prev => ({ ...prev, prefix: value }))
-                        }}
-                      />
-                    </div>
-                                         <div className="flex justify-end gap-2">
-                       <Button
-                         variant="secondary"
-                         onClick={() => setIsCreateDialogOpen(false)}
-                       >
-                         Cancel
-                       </Button>
-                       <Button
-                         onClick={handleCreateApiKey}
-                         disabled={createApiKeyMutation.isPending}
-                       >
-                         {createApiKeyMutation.isPending ? 'Creating...' : 'Create API Key'}
-                       </Button>
-                     </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0 bg-transparent mb-4">
-            {apiKeysError ? (
-              <div className="text-center py-8">
-                <Key2 width="32" height="32" className="text-red-500 mx-auto mb-2" />
-                <p className="text-sm text-red-600 mb-3">Failed to load API keys</p>
-                <p className="text-xs text-muted-foreground mb-3">
-                  {apiKeysError instanceof Error ? apiKeysError.message : 'Unknown error'}
-                </p>
-                <Button 
-                  variant="secondary" 
-                  size="sm" 
-                  onClick={() => window.location.reload()}
-                >
-                  Retry
-                </Button>
-              </div>
-            ) : isLoadingApiKeys ? (
-              <div className="space-y-3">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-lg border">
-                    <div className="flex items-center gap-3">
-                      <Skeleton className="w-8 h-8 rounded-md" />
-                      <div>
-                        <Skeleton className="h-4 w-32 mb-1" />
-                        <Skeleton className="h-3 w-40" />
-                      </div>
-                    </div>
-                    <Skeleton className="h-6 w-16 rounded-full" />
-                  </div>
-                ))}
-              </div>
-            ) : apiKeys.length === 0 ? (
-              <div className="text-center py-8">
-                <Key2 width="32" height="32" className="text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground mb-3">No API keys created yet</p>
-                <Button 
-                  variant="secondary" 
-                  size="sm" 
-                  onClick={() => setIsCreateDialogOpen(true)}
-                >
-                  <CirclePlus width="16" height="16" className="mr-2" />
-                  Create Your First API Key
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {apiKeys.map((apiKey) => (
-                  <div 
-                    key={apiKey.id}
-                    className={`flex items-center justify-between p-1 ${apiKeys.length > 1 ? 'border-b' : ''}`}
-                  >
-                    <div className="flex items-center gap-3 flex-1">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-md bg-purple-100 border border-purple-200">
-                        <Key2 width="16" height="16" className="text-purple-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="font-medium text-sm truncate">
-                            {apiKey.name || 'Unnamed API Key'}
-                          </div>
-                          <Badge variant={apiKey.enabled ? "default" : "secondary"}>
-                            {apiKey.enabled ? 'Active' : 'Disabled'}
-                          </Badge>
-                        </div>
-                        <div className="text-xs text-muted-foreground space-y-1">
-                          <div className="flex items-center gap-4">
-                            <span>Key: {apiKey.prefix ? `${apiKey.prefix}_` : ''}***{apiKey.start}</span>
-                            {apiKey.remaining !== null && (
-                              <span>Remaining: {apiKey.remaining.toLocaleString()}</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <span>Created: {formatDistanceToNow(new Date(apiKey.createdAt), { addSuffix: true })}</span>
-                            {apiKey.expiresAt && (
-                              <span className={new Date(apiKey.expiresAt) < new Date() ? 'text-red-500' : ''}>
-                                Expires: {formatDistanceToNow(new Date(apiKey.expiresAt), { addSuffix: true })}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+          {/* Dub Integration - Feature Flagged */}
+          {hasFeatureFlag('dub', (session?.user as any)?.featureFlags) && (
+            <>
+              <div className="h-4 border-b border-slate-800"></div>
+              <Card className="border-none bg-transparent">
+                <CardHeader className="p-0 mb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Dub width={20} height={20} className="text-foreground" />
+                      <CardTitle>Dub Integration</CardTitle>
                     </div>
                     <div className="flex items-center gap-2">
-                                             <Button
-                         variant="ghost"
-                         size="sm"
-                         onClick={() => handleUpdateApiKey(apiKey.id, { enabled: !apiKey.enabled })}
-                         disabled={updateApiKeyMutation.isPending}
-                       >
-                         {updateApiKeyMutation.isPending ? 'Updating...' : (apiKey.enabled ? 'Disable' : 'Enable')}
-                       </Button>
-                       <Button 
-                         variant="ghost" 
-                         size="sm" 
-                         className="text-red-600 hover:text-red-700"
-                         onClick={() => {
-                           setKeyToDelete(apiKey.id)
-                           setDeleteConfirmOpen(true)
-                         }}
-                       >
-                         <Trash2 width="16" height="16" />
-                       </Button>
+                      {dubStatus?.linked ? (
+                        <Badge>Connected{dubStatus?.workspaceName ? ` • ${dubStatus.workspaceName}` : ''}</Badge>
+                      ) : (
+                        <Badge variant="secondary">Not Connected</Badge>
+                      )}
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => {
+                          window.location.href = '/api/linking/dub/authorize'
+                        }}
+                      >
+                        {dubStatus?.linked ? 'Re-link' : 'Link Dub'}
+                      </Button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  <CardDescription>
+                    Connect your Dub account to enable link creation and analytics.
+                  </CardDescription>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    Requires a Dub subscription. New users get 20% off for 3 months —
+                    <a
+                      href="https://refer.dub.co/ryan-vogel"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-1 text-primary underline"
+                    >
+                      click here
+                    </a>
+                    .
+                  </div>
+                  {dubStatus?.linked && (
+                    <div className="mt-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium">Default click-tracking domain</div>
+                          <div className="text-xs text-muted-foreground">Used for open & click tracking links.</div>
+                        </div>
+                        <div>
+                          <Select
+                            value={defaultDubDomain?.slug || dubStatus?.defaultDomainSlug || ''}
+                            onValueChange={async (slug) => {
+                              const list = Array.isArray(dubDomains) ? dubDomains : []
+                              const selected = list.find((d: any) => d.slug === slug)
+                              try {
+                                await setDefaultDubDomainMutation.mutateAsync({ id: selected?.id || null, slug: slug || null })
+                                toast.success('Default domain saved')
+                              } catch (e: any) {
+                                toast.error(e?.message || 'Failed to save')
+                              }
+                            }}
+                          >
+                            <SelectTrigger id="dub-default-domain" aria-label="Default click-tracking domain">
+                              <SelectValue placeholder={isLoadingDubDomains ? 'Loading domains…' : 'Select a domain'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.isArray(dubDomains) ? (
+                                dubDomains.map((d: any) => (
+                                  <SelectItem key={d.id} value={d.slug}>
+                                    {d.slug}{d.primary ? ' (primary)' : ''}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <SelectItem value="__disabled__" disabled>
+                                  {(dubDomains as any)?.needsRelink ? 'Permission missing: re-link Dub to grant domains.read' : 'No domains available'}
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          {!Array.isArray(dubDomains) && (dubDomains as any)?.needsRelink && (
+                            <div className="mt-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => { window.location.href = '/api/linking/dub/authorize' }}
+                              >
+                                Re-link Dub to grant domains.read
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center mt-4">
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium">Default click-tracking folder</div>
+                          <div className="text-xs text-muted-foreground">Defaults to Inbound; used to organize links.</div>
+                        </div>
+                        <div>
+                          <Select
+                            value={defaultDubFolder?.id || ''}
+                            onOpenChange={async (open) => {
+                              if (open && (!defaultDubFolder?.id)) {
+                                try {
+                                  await setDefaultDubFolderMutation.mutateAsync({ ensureInbound: true })
+                                } catch { }
+                              }
+                            }}
+                            onValueChange={async (id) => {
+                              const list = Array.isArray(dubFolders) ? dubFolders : []
+                              const selected: any = list.find((f: any) => f.id === id)
+                              try {
+                                await setDefaultDubFolderMutation.mutateAsync({ id: selected?.id || null, name: selected?.name || null })
+                                toast.success('Default folder saved')
+                              } catch (e: any) {
+                                toast.error(e?.message || 'Failed to save')
+                              }
+                            }}
+                          >
+                            <SelectTrigger id="dub-default-folder" aria-label="Default click-tracking folder">
+                              <SelectValue placeholder={isLoadingDubFolders ? 'Loading folders…' : 'Select a folder'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.isArray(dubFolders) ? (
+                                dubFolders.map((f: any) => (
+                                  <SelectItem key={f.id} value={f.id}>
+                                    {f.name}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <SelectItem value="__disabled__" disabled>
+                                  {(dubFolders as any)?.needsRelink ? 'Permission missing: re-link Dub to grant tags.read' : 'No folders available'}
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          {!Array.isArray(dubFolders) && (dubFolders as any)?.needsRelink && (
+                            <div className="mt-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => { window.location.href = '/api/linking/dub/authorize' }}
+                              >
+                                Re-link Dub to grant tags.read
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center mt-4">
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium">Enable Dub links for email URLs</div>
+                          <div className="text-xs text-muted-foreground">Automatically convert all links in emails to Dub-tracked links.</div>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-3">
+                            <label htmlFor="enable-dub-links" className="sr-only">Enable Dub links</label>
+                            <Checkbox
+                              id="enable-dub-links"
+                              checked={!!emailLinksToggle?.enabled}
+                              onCheckedChange={async (value) => {
+                                try {
+                                  await setEmailLinksToggleMutation.mutateAsync(Boolean(value))
+                                  toast.success('Preference saved')
+                                } catch (err: any) {
+                                  toast.error(err?.message || 'Failed to save preference')
+                                }
+                              }}
+                              aria-label="Enable Dub links for email URLs"
+                            />
+                            <span className="text-sm text-muted-foreground">{emailLinksToggle?.enabled ? 'Enabled' : 'Disabled'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardHeader>
+              </Card>
+            </>
+          )}
 
-        <div className="h-4 border-b border-slate-800"></div>
+          <div className="h-4 border-b border-slate-800"></div>
+          {/* Subscription Management */}
+          <Card className="border-none p-0 w-full bg-transparent">
+            <CardContent className="p-0">
+              {isLoadingCustomer ? (
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <Skeleton className="h-6 w-32 mb-2" />
+                    <Skeleton className="h-4 w-64" />
+                  </div>
+                  <div className="space-y-3">
+                    <Skeleton className="h-12 w-32" />
+                    <Skeleton className="h-12 w-32" />
+                  </div>
+                </div>
+              ) : customerData ? (
+                <div>
+                  {/* Plan Info */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-xl font-semibold">
+                          {activeProduct?.name || 'Free'}
+                        </h3>
+                        <Badge
+                          variant={activeProduct?.status === 'active' ? 'default' : 'secondary'}
+                          className="capitalize"
+                        >
+                          {activeProduct?.status || 'Inactive'}
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground text-sm max-w-md">
+                        {activeProduct?.name === 'Pro'
+                          ? 'Advanced email processing with unlimited triggers and extended retention.'
+                          : activeProduct?.name === 'Scale'
+                            ? 'Enterprise-grade email infrastructure with maximum limits and priority support.'
+                            : 'Get started with basic email forwarding and domain management.'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={handleManageBilling}
+                        disabled={!customerData || billingPortalMutation.isPending}
+                      >
+                        {billingPortalMutation.isPending ? 'Loading...' : 'Manage'}
+                      </Button>
+                      {showUpgradeButton && (
+                        <Button
+                          onClick={handleOpenUpgrade}
+                          variant="primary"
+                        >
+                          <ChartTrendUp width="16" height="16" className="mr-2" />
+                          Upgrade
+                        </Button>
+                      )}
+                    </div>
+                  </div>
 
-        <Card className="border-none bg-transparent">
-          <CardHeader className="p-0 mb-4">
-            <CardTitle>Profile Information</CardTitle>
-            <CardDescription>
-              Update your profile details and personal information
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 p-0">
-            <form action={handleUpdateProfile} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input 
-                    id="name" 
-                    name="name" 
-                    defaultValue={session.user.name || ''} 
-                    placeholder="Enter your full name"
-                  />
+                  {/* Features & Usage */}
+                  <div className="mt-6 space-y-4">
+                    {domainsFeature && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="text-sm font-medium">Domains</div>
+                          <div className="text-xs text-muted-foreground">
+                            {domainsFeature.unlimited ? 'unlimited' : `${currentDomainCount} / ${maxDomains.toLocaleString()}`}
+                          </div>
+                        </div>
+                        {!domainsFeature.unlimited && maxDomains > 0 && (
+                          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-1.5 rounded-full bg-blue-500"
+                              style={{ width: `${Math.min((currentDomainCount / maxDomains) * 100, 100)}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {inboundTriggersFeature && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="text-sm font-medium">Emails Received</div>
+                          <div className="text-xs text-muted-foreground">
+                            {inboundTriggersFeature.unlimited ? 'unlimited' : `${(inboundTriggersFeature.usage || 0).toLocaleString()} / ${(inboundTriggersFeature.balance || 0).toLocaleString()}`}
+                          </div>
+                        </div>
+                        {!inboundTriggersFeature.unlimited && (inboundTriggersFeature.balance || 0) > 0 && (
+                          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-1.5 rounded-full bg-green-500"
+                              style={{ width: `${Math.min((((inboundTriggersFeature.usage || 0) / (inboundTriggersFeature.balance || 0)) * 100), 100)}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {emailsSentFeature && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="text-sm font-medium">Emails Sent</div>
+                          <div className="text-xs text-muted-foreground">
+                            {emailsSentFeature.unlimited ? 'unlimited' : `${(emailsSentFeature.usage || 0).toLocaleString()} / ${(emailsSentFeature.balance || 0).toLocaleString()}`}
+                          </div>
+                        </div>
+                        {!emailsSentFeature.unlimited && (emailsSentFeature.balance || 0) > 0 && (
+                          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-1.5 rounded-full bg-purple-500"
+                              style={{ width: `${Math.min((((emailsSentFeature.usage || 0) / (emailsSentFeature.balance || 0)) * 100), 100)}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {emailRetentionFeature && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="text-sm font-medium">Email Retention</div>
+                          <div className="text-xs text-muted-foreground">{emailRetentionFeature.unlimited ? 'unlimited' : `${emailRetentionFeature.balance?.toLocaleString()} days`}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {vipByokFeature && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="text-sm font-medium">VIP BYOK</div>
+                          <div className="text-xs text-muted-foreground">{(vipByokFeature.unlimited || vipByokFeature.balance) ? 'Enabled' : 'Disabled'}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input 
-                    id="email" 
-                    name="email" 
-                    type="email" 
-                    defaultValue={session.user.email} 
-                    disabled
-                    className="bg-muted"
-                  />
+              ) : customerError ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CreditCard2 width="32" height="32" className="mx-auto mb-2 opacity-50" />
+                  <p>Unable to load subscription data</p>
+                  <p className="text-sm text-destructive mt-1">
+                    {customerError instanceof Error ? customerError.message : 'Unknown error'}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refetchCustomer()}
+                    className="mt-2"
+                  >
+                    Retry
+                  </Button>
                 </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CreditCard2 width="32" height="32" className="mx-auto mb-2 opacity-50" />
+                  <p>No subscription data available</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="h-4 border-b border-slate-800"></div>
+
+          {/* API Keys Management */}
+          <Card className="border-none bg-transparent">
+            <CardHeader className="p-0 mb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 mb-2">
+                    <Key2 width="20" height="20" className="text-purple-600" />
+                    API Keys
+                  </CardTitle>
+                  <CardDescription>
+                    Manage API keys for programmatic access to your account
+                  </CardDescription>
+                </div>
+                <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <CirclePlus width="16" height="16" className="mr-2" />
+                      Create API Key
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Create New API Key</DialogTitle>
+                      <DialogDescription>
+                        Create a new API key for programmatic access to your account.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4" onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !createApiKeyMutation.isPending) {
+                        e.preventDefault()
+                        handleCreateApiKey()
+                      }
+                    }}>
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Name (optional)</Label>
+                        <Input
+                          id="name"
+                          placeholder="My API Key"
+                          value={createForm.name}
+                          onChange={(e) => setCreateForm(prev => ({ ...prev, name: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="prefix">Prefix (optional)</Label>
+                        <Input
+                          id="prefix"
+                          placeholder="myapp"
+                          value={createForm.prefix}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\s+/g, '-')
+                            setCreateForm(prev => ({ ...prev, prefix: value }))
+                          }}
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="secondary"
+                          onClick={() => setIsCreateDialogOpen(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleCreateApiKey}
+                          disabled={createApiKeyMutation.isPending}
+                        >
+                          {createApiKeyMutation.isPending ? 'Creating...' : 'Create API Key'}
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
-              {/* <div className="space-y-2">
+            </CardHeader>
+            <CardContent className="p-0 bg-transparent mb-4">
+              {apiKeysError ? (
+                <div className="text-center py-8">
+                  <Key2 width="32" height="32" className="text-red-500 mx-auto mb-2" />
+                  <p className="text-sm text-red-600 mb-3">Failed to load API keys</p>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    {apiKeysError instanceof Error ? apiKeysError.message : 'Unknown error'}
+                  </p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => window.location.reload()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : isLoadingApiKeys ? (
+                <div className="space-y-3">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-lg border">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="w-8 h-8 rounded-md" />
+                        <div>
+                          <Skeleton className="h-4 w-32 mb-1" />
+                          <Skeleton className="h-3 w-40" />
+                        </div>
+                      </div>
+                      <Skeleton className="h-6 w-16 rounded-full" />
+                    </div>
+                  ))}
+                </div>
+              ) : apiKeys.length === 0 ? (
+                <div className="text-center py-8">
+                  <Key2 width="32" height="32" className="text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground mb-3">No API keys created yet</p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsCreateDialogOpen(true)}
+                  >
+                    <CirclePlus width="16" height="16" className="mr-2" />
+                    Create Your First API Key
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {apiKeys.map((apiKey) => (
+                    <div
+                      key={apiKey.id}
+                      className={`flex items-center justify-between p-1 ${apiKeys.length > 1 ? 'border-b' : ''}`}
+                    >
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-md bg-purple-100 border border-purple-200">
+                          <Key2 width="16" height="16" className="text-purple-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="font-medium text-sm truncate">
+                              {apiKey.name || 'Unnamed API Key'}
+                            </div>
+                            <Badge variant={apiKey.enabled ? "default" : "secondary"}>
+                              {apiKey.enabled ? 'Active' : 'Disabled'}
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground space-y-1">
+                            <div className="flex items-center gap-4">
+                              <span>Key: {apiKey.prefix ? `${apiKey.prefix}_` : ''}***{apiKey.start}</span>
+                              {apiKey.remaining !== null && (
+                                <span>Remaining: {apiKey.remaining.toLocaleString()}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <span>Created: {formatDistanceToNow(new Date(apiKey.createdAt), { addSuffix: true })}</span>
+                              {apiKey.expiresAt && (
+                                <span className={new Date(apiKey.expiresAt) < new Date() ? 'text-red-500' : ''}>
+                                  Expires: {formatDistanceToNow(new Date(apiKey.expiresAt), { addSuffix: true })}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleUpdateApiKey(apiKey.id, { enabled: !apiKey.enabled })}
+                          disabled={updateApiKeyMutation.isPending}
+                        >
+                          {updateApiKeyMutation.isPending ? 'Updating...' : (apiKey.enabled ? 'Disable' : 'Enable')}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700"
+                          onClick={() => {
+                            setKeyToDelete(apiKey.id)
+                            setDeleteConfirmOpen(true)
+                          }}
+                        >
+                          <Trash2 width="16" height="16" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="h-4 border-b border-slate-800"></div>
+
+          <Card className="border-none bg-transparent">
+            <CardHeader className="p-0 mb-4">
+              <CardTitle>Profile Information</CardTitle>
+              <CardDescription>
+                Update your profile details and personal information
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 p-0">
+              <form action={handleUpdateProfile} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Full Name</Label>
+                    <Input
+                      id="name"
+                      name="name"
+                      defaultValue={session.user.name || ''}
+                      placeholder="Enter your full name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email Address</Label>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      defaultValue={session.user.email}
+                      disabled
+                      className="bg-muted"
+                    />
+                  </div>
+                </div>
+                {/* <div className="space-y-2">
                 <Label htmlFor="image">Profile Image URL</Label>
                 <Input 
                   id="image" 
@@ -843,43 +849,43 @@ export default function SettingsPage() {
                   placeholder="https://example.com/avatar.jpg"
                 />
               </div> */}
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? 'Updating...' : 'Update Profile'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+                <Button type="submit" disabled={isLoading}>
+                  {isLoading ? 'Updating...' : 'Update Profile'}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
 
-        <div className="h-4 border-b border-slate-800"></div>
+          <div className="h-4 border-b border-slate-800"></div>
 
-        <Card className="border-none bg-transparent">
-          <CardHeader className="p-0 mb-4">
-            <CardTitle>Account Status</CardTitle>
-            <CardDescription>
-              Your account verification and status information
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 p-0">
-            <div className="flex items-center justify-between">
-              <span>Email Verification</span>
-              <Badge variant={session.user.emailVerified ? "default" : "destructive"}>
-                {session.user.emailVerified ? 'Verified' : 'Unverified'}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>Account Created</span>
-              <span className="text-sm text-muted-foreground">
-                {new Date(session.user.createdAt).toLocaleDateString()}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>Last Updated</span>
-              <span className="text-sm text-muted-foreground">
-                {new Date(session.user.updatedAt).toLocaleDateString()}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+          <Card className="border-none bg-transparent">
+            <CardHeader className="p-0 mb-4">
+              <CardTitle>Account Status</CardTitle>
+              <CardDescription>
+                Your account verification and status information
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 p-0">
+              <div className="flex items-center justify-between">
+                <span>Email Verification</span>
+                <Badge variant={session.user.emailVerified ? "default" : "destructive"}>
+                  {session.user.emailVerified ? 'Verified' : 'Unverified'}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Account Created</span>
+                <span className="text-sm text-muted-foreground">
+                  {new Date(session.user.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Last Updated</span>
+                <span className="text-sm text-muted-foreground">
+                  {new Date(session.user.updatedAt).toLocaleDateString()}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
@@ -939,13 +945,13 @@ export default function SettingsPage() {
                   readOnly
                   className="font-mono text-sm"
                 />
-                                 <Button
-                   variant="secondary"
-                   size="sm"
-                   onClick={() => copyToClipboard(newApiKey || '')}
-                 >
-                   <Clipboard2 width="16" height="16" />
-                 </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => copyToClipboard(newApiKey || '')}
+                >
+                  <Clipboard2 width="16" height="16" />
+                </Button>
               </div>
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -956,7 +962,7 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
-            <Button 
+            <Button
               onClick={() => {
                 setShowNewApiKey(false)
                 setNewApiKey(null)
@@ -998,7 +1004,7 @@ export default function SettingsPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="mt-6 flex justify-center">
-            <Button 
+            <Button
               onClick={() => {
                 setIsUpgradeSuccessOpen(false)
                 // Refresh customer data to show updated plan
