@@ -44,7 +44,9 @@ export interface PostEmailReplyRequest {
     dub?: {
         enabled?: boolean
         domain?: string
+        // Backwards-compatible: allow tag, but prefer folder
         tag?: string
+        folder?: string
     }
 }
 

@@ -73,7 +73,7 @@ export function useSetDefaultDubDomainMutation() {
   })
 }
 
-// Folders (tags)
+// Folders
 type DubFolder = { id: string; name: string }
 type FoldersResponse = DubFolder[] | { error?: string; needsRelink?: boolean }
 
