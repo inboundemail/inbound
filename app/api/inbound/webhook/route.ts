@@ -705,9 +705,9 @@ export async function POST(request: NextRequest) {
     for (const record of payload.processedRecords) {
       try {
         const sesData = record.ses
-        console.log('===============================================')
-        console.log('Record Full Data:', JSON.stringify(record, null, 2))
-        console.log('===============================================')
+        // console.log('===============================================')
+        // console.log('Record Full Data:', JSON.stringify(record, null, 2))
+        // console.log('===============================================')
         const mail = sesData.mail
         const receipt = sesData.receipt
 
@@ -750,6 +750,39 @@ export async function POST(request: NextRequest) {
         await db.insert(sesEvents).values(sesEventRecord)
         console.log(`✅ Webhook - Stored SES event ${sesEventId} for message ${mail.messageId}`);
 
+        /**
+         * CRITICAL: Create individual receivedEmail records for each recipient
+         *
+         * This design is essential for system longevity and multi-tenant architecture:
+         *
+         * 1. MULTI-RECIPIENT EMAIL HANDLING:
+         *    - AWS SES sends one event for emails with multiple recipients (e.g., alice@domain.com, bob@domain.com)
+         *    - Each recipient may belong to different users/tenants with separate configurations
+         *    - Individual records allow per-recipient processing, routing, and ownership
+         *
+         * 2. PER-RECIPIENT OWNERSHIP & TRACKING:
+         *    - Each record links to the specific userId who owns that email address domain
+         *    - Enables separate analytics, billing, and feature limits per user
+         *    - Allows individual email status tracking (received/blocked/failed)
+         *
+         * 3. FAULT ISOLATION:
+         *    - If one recipient's domain is misconfigured, others still receive their emails
+         *    - Individual routing rules and endpoint configurations per recipient
+         *    - Prevents single point of failure affecting all recipients
+         *
+         * 4. BACKWARD COMPATIBILITY BRIDGE:
+         *    - Serves as a stable interface between raw SES events and structured data
+         *    - Legacy systems and analytics depend on this per-recipient structure
+         *    - Enables gradual migration to structuredEmails without breaking changes
+         *
+         * 5. AUDIT TRAIL & DEBUGGING:
+         *    - Complete per-recipient history for troubleshooting
+         *    - Individual processing status and error tracking
+         *    - Rich metadata for debugging delivery issues
+         *
+         * DO NOT REMOVE: This per-recipient architecture is fundamental to the system's
+         * multi-tenant design and ensures proper email isolation between users.
+         */
         // Then, create a receivedEmail record for each recipient
         for (const recipient of receipt.recipients) {
           const userId = await mapRecipientToUserId(recipient)
@@ -879,6 +912,40 @@ export async function POST(request: NextRequest) {
 
           console.log(`✅ Webhook - Stored email ${mail.messageId} for ${recipient}`);
 
+          /**
+           * DUAL RECORD CREATION: parsedEmails (deprecated) + structuredEmails (current)
+           *
+           * This dual approach exists for migration and backward compatibility:
+           *
+           * 1. PARSED EMAILS (DEPRECATED - TO BE REMOVED):
+           *    - Legacy table structure with individual columns for each email field
+           *    - Used by existing analytics, admin dashboards, and legacy integrations
+           *    - Creates duplicate data storage but maintains compatibility
+           *    - Will be removed once all consumers migrate to structuredEmails
+           *
+           * 2. STRUCTURED EMAILS (CURRENT STANDARD):
+           *    - Matches ParsedEmailData type exactly with JSON fields
+           *    - More efficient storage and better type safety
+           *    - Used by email router and new features
+           *    - Future-proof design that matches our data structures
+           *
+           * WHY BOTH? GRADUAL MIGRATION STRATEGY:
+           *    - Analytics queries still depend on parsedEmails table
+           *    - Admin dashboard shows counts from parsedEmails
+           *    - Legacy webhook consumers expect this format
+           *    - Cannot break existing functionality during migration
+           *
+           * MIGRATION TIMELINE:
+           *    1. Keep both during transition period
+           *    2. Update all consumers to use structuredEmails
+           *    3. Remove parsedEmails table and createParsedEmailRecord function
+           *    4. Clean up deprecated code paths
+           *
+           * PERFORMANCE IMPACT:
+           *    - Temporary data duplication (acceptable for migration)
+           *    - Extra database writes (minimal overhead)
+           *    - Ensures zero downtime during migration
+           */
           // Create parsed email record if we have parsed data
           if (parsedEmailData) {
             await createParsedEmailRecord(emailRecord.id, parsedEmailData) // this will be deprecated in the future
