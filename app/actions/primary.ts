@@ -2575,6 +2575,342 @@ export async function downloadAttachment(
   }
 }
 
+// ============================================================================
+// ENHANCED ATTACHMENT EXTRACTION
+// ============================================================================
+
+/**
+ * Extract attachment content from an email by filename
+ * Uses the new attachment extractor for cleaner code
+ */
+export async function extractEmailAttachment(emailId: string, filename: string) {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    })
+
+    if (!session?.user?.id) {
+      return { error: "Unauthorized" }
+    }
+
+    // Get the email with raw content from structured emails
+    const email = await db
+      .select({
+        id: structuredEmails.id,
+        rawContent: structuredEmails.rawContent,
+        sesEventId: structuredEmails.sesEventId,
+      })
+      .from(structuredEmails)
+      .where(
+        and(
+          eq(structuredEmails.id, emailId),
+          eq(structuredEmails.userId, session.user.id)
+        )
+      )
+      .limit(1)
+
+    if (!email.length) {
+      return { error: "Email not found or access denied" }
+    }
+
+    const emailData = email[0]
+    let rawEmailContent = emailData.rawContent
+
+    // If no raw content in structured email, try to get it from SES events
+    if (!rawEmailContent && emailData.sesEventId) {
+      const sesEvent = await db
+        .select({
+          emailContent: sesEvents.emailContent,
+          s3BucketName: sesEvents.s3BucketName,
+          s3ObjectKey: sesEvents.s3ObjectKey,
+        })
+        .from(sesEvents)
+        .where(eq(sesEvents.id, emailData.sesEventId))
+        .limit(1)
+
+      if (sesEvent.length) {
+        if (sesEvent[0].emailContent) {
+          rawEmailContent = sesEvent[0].emailContent
+        } else if (sesEvent[0].s3BucketName && sesEvent[0].s3ObjectKey) {
+          // Try to fetch from S3
+          try {
+            const { getEmailFromS3 } = await import("@/lib/aws-ses/aws-ses")
+            const s3Email = await getEmailFromS3(sesEvent[0].s3BucketName, sesEvent[0].s3ObjectKey)
+            rawEmailContent = s3Email.toString()
+          } catch (s3Error) {
+            console.error('Failed to fetch email from S3:', s3Error)
+          }
+        }
+      }
+    }
+
+    if (!rawEmailContent) {
+      return { error: "Raw email content not available" }
+    }
+
+    // Extract attachment content using the new extractor
+    const { extractAttachmentByFilename } = await import('@/lib/email-management/attachment-extractor')
+    const attachment = await extractAttachmentByFilename(rawEmailContent, filename)
+
+    if (!attachment) {
+      return { error: "Attachment not found" }
+    }
+
+    return {
+      success: true,
+      data: {
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        size: attachment.size,
+        content: attachment.content.toString('base64'), // Return as base64
+        contentId: attachment.contentId,
+        contentDisposition: attachment.contentDisposition,
+      }
+    }
+  } catch (error) {
+    console.error('Error extracting email attachment:', error)
+    return { 
+      error: error instanceof Error ? error.message : 'Failed to extract attachment' 
+    }
+  }
+}
+
+/**
+ * Extract attachment content by contentId (useful for inline images)
+ */
+export async function extractEmailAttachmentByContentId(emailId: string, contentId: string) {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    })
+
+    if (!session?.user?.id) {
+      return { error: "Unauthorized" }
+    }
+
+    // Get the email with raw content from structured emails
+    const email = await db
+      .select({
+        id: structuredEmails.id,
+        rawContent: structuredEmails.rawContent,
+        sesEventId: structuredEmails.sesEventId,
+      })
+      .from(structuredEmails)
+      .where(
+        and(
+          eq(structuredEmails.id, emailId),
+          eq(structuredEmails.userId, session.user.id)
+        )
+      )
+      .limit(1)
+
+    if (!email.length) {
+      return { error: "Email not found or access denied" }
+    }
+
+    const emailData = email[0]
+    let rawEmailContent = emailData.rawContent
+
+    // If no raw content in structured email, try to get it from SES events
+    if (!rawEmailContent && emailData.sesEventId) {
+      const sesEvent = await db
+        .select({
+          emailContent: sesEvents.emailContent,
+          s3BucketName: sesEvents.s3BucketName,
+          s3ObjectKey: sesEvents.s3ObjectKey,
+        })
+        .from(sesEvents)
+        .where(eq(sesEvents.id, emailData.sesEventId))
+        .limit(1)
+
+      if (sesEvent.length) {
+        if (sesEvent[0].emailContent) {
+          rawEmailContent = sesEvent[0].emailContent
+        } else if (sesEvent[0].s3BucketName && sesEvent[0].s3ObjectKey) {
+          // Try to fetch from S3
+          try {
+            const { getEmailFromS3 } = await import("@/lib/aws-ses/aws-ses")
+            const s3Email = await getEmailFromS3(sesEvent[0].s3BucketName, sesEvent[0].s3ObjectKey)
+            rawEmailContent = s3Email.toString()
+          } catch (s3Error) {
+            console.error('Failed to fetch email from S3:', s3Error)
+          }
+        }
+      }
+    }
+
+    if (!rawEmailContent) {
+      return { error: "Raw email content not available" }
+    }
+
+    // Extract attachment content using the new extractor
+    const { extractAttachmentByContentId } = await import('@/lib/email-management/attachment-extractor')
+    const attachment = await extractAttachmentByContentId(rawEmailContent, contentId)
+
+    if (!attachment) {
+      return { error: "Attachment not found" }
+    }
+
+    return {
+      success: true,
+      data: {
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        size: attachment.size,
+        content: attachment.content.toString('base64'), // Return as base64
+        contentId: attachment.contentId,
+        contentDisposition: attachment.contentDisposition,
+      }
+    }
+  } catch (error) {
+    console.error('Error extracting email attachment by contentId:', error)
+    return { 
+      error: error instanceof Error ? error.message : 'Failed to extract attachment' 
+    }
+  }
+}
+
+/**
+ * List all attachments in an email with their metadata and availability
+ */
+export async function getEmailAttachments(emailId: string) {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    })
+
+    if (!session?.user?.id) {
+      return { error: "Unauthorized" }
+    }
+
+    // Get the email with attachment metadata and raw content availability
+    const email = await db
+      .select({
+        id: structuredEmails.id,
+        attachments: structuredEmails.attachments,
+        rawContent: structuredEmails.rawContent,
+        sesEventId: structuredEmails.sesEventId,
+      })
+      .from(structuredEmails)
+      .where(
+        and(
+          eq(structuredEmails.id, emailId),
+          eq(structuredEmails.userId, session.user.id)
+        )
+      )
+      .limit(1)
+
+    if (!email.length) {
+      return { error: "Email not found or access denied" }
+    }
+
+    const emailData = email[0]
+
+    // First try to get from stored attachments metadata
+    let attachmentsMetadata = []
+    if (emailData.attachments) {
+      try {
+        attachmentsMetadata = JSON.parse(emailData.attachments)
+      } catch (error) {
+        console.warn('Failed to parse stored attachments metadata:', error)
+      }
+    }
+
+    // Check if we can get content (have raw email or can fetch it)
+    let hasRawContent = !!emailData.rawContent
+    
+    if (!hasRawContent && emailData.sesEventId) {
+      // Check if we can get raw content from SES events
+      const sesEvent = await db
+        .select({
+          emailContent: sesEvents.emailContent,
+          s3BucketName: sesEvents.s3BucketName,
+          s3ObjectKey: sesEvents.s3ObjectKey,
+        })
+        .from(sesEvents)
+        .where(eq(sesEvents.id, emailData.sesEventId))
+        .limit(1)
+
+      if (sesEvent.length) {
+        hasRawContent = !!(sesEvent[0].emailContent || (sesEvent[0].s3BucketName && sesEvent[0].s3ObjectKey))
+      }
+    }
+
+    // If we have raw content available, get full attachment info
+    if (hasRawContent) {
+      let rawEmailContent = emailData.rawContent
+
+      // Fetch raw content if not already available
+      if (!rawEmailContent && emailData.sesEventId) {
+        const sesEvent = await db
+          .select({
+            emailContent: sesEvents.emailContent,
+            s3BucketName: sesEvents.s3BucketName,
+            s3ObjectKey: sesEvents.s3ObjectKey,
+          })
+          .from(sesEvents)
+          .where(eq(sesEvents.id, emailData.sesEventId))
+          .limit(1)
+
+        if (sesEvent.length) {
+          if (sesEvent[0].emailContent) {
+            rawEmailContent = sesEvent[0].emailContent
+          } else if (sesEvent[0].s3BucketName && sesEvent[0].s3ObjectKey) {
+            try {
+              const { getEmailFromS3 } = await import("@/lib/aws-ses/aws-ses")
+              const s3Email = await getEmailFromS3(sesEvent[0].s3BucketName, sesEvent[0].s3ObjectKey)
+              rawEmailContent = s3Email.toString()
+            } catch (s3Error) {
+              console.error('Failed to fetch email from S3:', s3Error)
+              hasRawContent = false
+            }
+          }
+        }
+      }
+
+      if (rawEmailContent) {
+        try {
+          const { extractAttachmentContent } = await import('@/lib/email-management/attachment-extractor')
+          const fullAttachments = await extractAttachmentContent(rawEmailContent)
+          
+          return {
+            success: true,
+            data: fullAttachments.map(att => ({
+              filename: att.filename,
+              contentType: att.contentType,
+              size: att.size,
+              contentId: att.contentId,
+              contentDisposition: att.contentDisposition,
+              hasContent: true, // Content is available for extraction
+            }))
+          }
+        } catch (extractError) {
+          console.warn('Failed to extract attachments from raw content:', extractError)
+          hasRawContent = false
+        }
+      }
+    }
+
+    // Fallback to metadata only
+    return {
+      success: true,
+      data: attachmentsMetadata.map((att: any) => ({
+        filename: att.filename,
+        contentType: att.contentType,
+        size: att.size,
+        contentId: att.contentId,
+        contentDisposition: att.contentDisposition,
+        hasContent: false, // Content not available
+      }))
+    }
+  } catch (error) {
+    console.error('Error getting email attachments:', error)
+    return { 
+      error: error instanceof Error ? error.message : 'Failed to get attachments' 
+    }
+  }
+}
+
 export async function getAllDomainsForAdmin() {
   try {
     const session = await auth.api.getSession({
