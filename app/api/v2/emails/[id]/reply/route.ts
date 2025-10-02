@@ -11,6 +11,7 @@ import {
   sentEmails,
   emailDomains,
   structuredEmails,
+  emailThreads,
   SENT_EMAIL_STATUS,
 } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -491,6 +492,46 @@ export async function POST(
       originalMessageId: original.messageId,
     });
 
+    // 🧵 FIXED: Get threading info BEFORE creating the email record to prevent race conditions
+    let replyThreadId: string | null = null;
+    let replyThreadPosition: number | null = null;
+    
+    try {
+      // Get the original email's thread info
+      const originalEmailResult = await db
+        .select({ threadId: structuredEmails.threadId })
+        .from(structuredEmails)
+        .where(
+          and(
+            eq(structuredEmails.id, emailId),
+            eq(structuredEmails.userId, userId)
+          )
+        )
+        .limit(1);
+      
+      if (!originalEmailResult[0]?.threadId) {
+        throw new Error(`Original email ${emailId} has no thread assignment`);
+      }
+      
+      replyThreadId = originalEmailResult[0].threadId;
+      
+      // Get current thread message count
+      const threadResult = await db
+        .select({ messageCount: emailThreads.messageCount })
+        .from(emailThreads)
+        .where(eq(emailThreads.id, replyThreadId))
+        .limit(1);
+      
+      const currentCount = threadResult[0]?.messageCount || 0;
+      replyThreadPosition = currentCount + 1;
+      
+      console.log(`🧵 Pre-calculated threading: thread ${replyThreadId} at position ${replyThreadPosition}`);
+      
+    } catch (threadingError) {
+      console.error(`⚠️ Pre-threading calculation failed for reply ${replyEmailId}:`, threadingError);
+      // Continue without threading info - the email should still be sent
+    }
+
     console.log("💾 Creating email record:", replyEmailId);
 
     const sentEmailRecord = await db
@@ -519,6 +560,9 @@ export async function POST(
         tags: body.tags ? JSON.stringify(body.tags) : null,
         status: SENT_EMAIL_STATUS.PENDING,
         messageId,
+        // 🧵 FIXED: Include threading info in the initial insert
+        threadId: replyThreadId,
+        threadPosition: replyThreadPosition,
         userId,
         idempotencyKey,
         createdAt: new Date(),
@@ -526,13 +570,23 @@ export async function POST(
       })
       .returning();
 
-    // 🧵 NEW: Process threading for sent email
-    try {
-      const threadingResult = await EmailThreader.processSentEmailForThreading(replyEmailId, emailId, userId);
-      console.log(`🧵 Reply ${replyEmailId} added to thread ${threadingResult.threadId} at position ${threadingResult.threadPosition}`);
-    } catch (threadingError) {
-      // Don't fail the reply if threading fails - log error and continue
-      console.error(`⚠️ Threading failed for reply ${replyEmailId}:`, threadingError);
+    // 🧵 FIXED: Update thread metadata after successful email record creation
+    if (replyThreadId && replyThreadPosition) {
+      try {
+        await db
+          .update(emailThreads)
+          .set({
+            messageCount: replyThreadPosition,
+            lastMessageAt: new Date(),
+            updatedAt: new Date()
+          })
+          .where(eq(emailThreads.id, replyThreadId));
+        
+        console.log(`✅ Reply ${replyEmailId} added to thread ${replyThreadId} at position ${replyThreadPosition}`);
+      } catch (threadUpdateError) {
+        console.error(`⚠️ Thread metadata update failed:`, threadUpdateError);
+        // Don't fail the reply - the threading is already set in the email record
+      }
     }
 
     // Check if SES is configured
