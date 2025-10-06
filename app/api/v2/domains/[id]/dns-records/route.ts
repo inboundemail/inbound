@@ -32,6 +32,7 @@ export interface GetDomainDnsRecordsResponse {
     domainId: string
     domain: string
     records: DnsRecord[]
+    valid: boolean
 }
 
 export async function GET(
@@ -89,22 +90,32 @@ export async function GET(
 
         console.log('📊 Found', dnsRecordsResult.length, 'DNS records')
 
+        const mappedRecords = dnsRecordsResult.map(record => ({
+            id: record.id,
+            domainId: record.domainId,
+            recordType: record.recordType,
+            name: record.name,
+            value: record.value,
+            priority: null, // Not in schema
+            isRequired: record.isRequired || false,
+            isVerified: record.isVerified || false,
+            lastChecked: record.lastChecked,
+            createdAt: record.createdAt || new Date(),
+            updatedAt: record.createdAt || new Date() // Use createdAt as updatedAt since it's not in schema
+        }))
+
+        // Calculate validity: all required records must be verified
+        const requiredRecords = mappedRecords.filter(r => r.isRequired)
+        const verifiedRequiredRecords = requiredRecords.filter(r => r.isVerified)
+        const valid = requiredRecords.length > 0 ? verifiedRequiredRecords.length === requiredRecords.length : true
+
+        console.log(`🔍 DNS Records validation: ${verifiedRequiredRecords.length}/${requiredRecords.length} required records verified, valid: ${valid}`)
+
         const response: GetDomainDnsRecordsResponse = {
             domainId: domain.id,
             domain: domain.domain,
-            records: dnsRecordsResult.map(record => ({
-                id: record.id,
-                domainId: record.domainId,
-                recordType: record.recordType,
-                name: record.name,
-                value: record.value,
-                priority: null, // Not in schema
-                isRequired: record.isRequired || false,
-                isVerified: record.isVerified || false,
-                lastChecked: record.lastChecked,
-                createdAt: record.createdAt || new Date(),
-                updatedAt: record.createdAt || new Date() // Use createdAt as updatedAt since it's not in schema
-            }))
+            records: mappedRecords,
+            valid
         }
 
         console.log('✅ Successfully retrieved DNS records')
