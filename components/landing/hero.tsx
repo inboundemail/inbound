@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { useRouter } from "next/navigation";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { AnimatedHeightDiv } from "../animated-height-div";
@@ -176,6 +177,7 @@ interface HeroProps {
 }
 
 export default function Hero({ content }: HeroProps) {
+  const router = useRouter();
   const [logs, setLogs] = useState<EmailLog[]>([]);
   const [currentCodeIndex, setCurrentCodeIndex] = useState(0);
   const [scrollKey, setScrollKey] = useState(0);
@@ -308,12 +310,16 @@ export default function Hero({ content }: HeroProps) {
             {content.heroSublineText}
           </p>
           <div className="flex items-center gap-2">
-            <Button className="tracking-normal h-10 max-xs:grow">
+            <Button 
+              className="tracking-normal h-10 max-xs:grow"
+              onClick={() => router.push('/login')}
+            >
               {content.ctaButtonPrimaryText}
             </Button>
             <Button
               variant={"secondary"}
               className="tracking-normal h-10 max-xs:grow"
+              onClick={() => router.push('/docs')}
             >
               View Documentation
             </Button>
