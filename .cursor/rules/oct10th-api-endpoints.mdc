@@ -1,0 +1,1287 @@
+---
+description: Code-first OpenAPI route definitions using @omer-x/next-openapi-route-handler and Zod schemas
+globs: app/api/v2/**/*.ts
+---
+
+# Code-First OpenAPI Routes with Zod and Next.js
+
+This rule establishes the pattern for creating type-safe, self-documenting API routes using `@omer-x/next-openapi-route-handler` with Zod schemas. The Zod schemas serve as both runtime validation and the source for OpenAPI documentation generation.
+
+## Core Principles
+
+1. **Single Source of Truth**: Zod schemas drive both validation and OpenAPI docs
+2. **Type Safety**: TypeScript types are inferred from Zod schemas
+3. **Runtime Validation**: All inputs validated automatically via Zod
+4. **Auto Documentation**: OpenAPI spec generated from route definitions
+5. **Bearer Auth**: All routes use `Authorization: Bearer <api_key>` authentication
+6. **Preserve Logic**: Existing auth, logging, and business logic remain unchanged
+
+## Dependencies
+
+These packages are already installed:
+- `@omer-x/next-openapi-route-handler` - Route wrapper with OpenAPI metadata
+- `@omer-x/next-openapi-json-generator` - OpenAPI spec generator (for future use)
+- `zod` - Schema validation library
+
+## Error Response Standard (RFC 9457)
+
+All API errors MUST follow the RFC 9457 Problem Details standard with enhancements for better developer experience.
+
+### Error Schema Structure
+
+```typescript
+// app/api/v2/schemas/errors.ts
+import { z } from "zod"
+
+export const ErrorCategoryEnum = z.enum([
+  'authentication_error',
+  'authorization_error',
+  'validation_error',
+  'not_found_error',
+  'conflict_error',
+  'rate_limit_error',
+  'server_error'
+])
+
+export const ErrorFieldSchema = z.object({
+  field: z.string(),
+  code: z.string(),
+  message: z.string(),
+})
+
+export const ApiErrorSchema = z.object({
+  // RFC 9457 standard fields
+  type: z.string().url(),
+  title: z.string(),
+  status: z.number().int().min(100).max(599),
+  detail: z.string(),
+  instance: z.string(),
+  
+  // Enhanced fields for Inbound
+  code: z.string(),
+  category: ErrorCategoryEnum,
+  field: z.string().optional(),
+  errors: z.array(ErrorFieldSchema).optional(),
+  request_id: z.string(),
+  timestamp: z.string().datetime(),
+  doc_url: z.string().url().optional(),
+  suggestion: z.string().optional(),
+})
+
+export type ApiError = z.infer<typeof ApiErrorSchema>
+```
+
+### Error Builder Helper
+
+```typescript
+// app/api/v2/schemas/errors.ts
+export function buildApiError(params: {
+  status: number
+  code: string
+  title: string
+  detail: string
+  instance: string
+  category: z.infer<typeof ErrorCategoryEnum>
+  field?: string
+  errors?: Array<{ field: string; code: string; message: string }>
+  suggestion?: string
+  requestId: string
+}): ApiError {
+  return {
+    type: `https://api.inbound.new/errors/${params.code.toLowerCase().replace(/_/g, '-')}`,
+    title: params.title,
+    status: params.status,
+    detail: params.detail,
+    instance: params.instance,
+    code: params.code,
+    category: params.category,
+    field: params.field,
+    errors: params.errors,
+    request_id: params.requestId,
+    timestamp: new Date().toISOString(),
+    doc_url: `https://docs.inbound.new/errors/${params.code.toLowerCase().replace(/_/g, '-')}`,
+    suggestion: params.suggestion,
+  }
+}
+```
+
+### Error Code Registry
+
+```typescript
+// app/api/v2/schemas/error-codes.ts
+export const ERROR_CODES = {
+  // Authentication (401)
+  AUTHENTICATION_REQUIRED: 'AUTHENTICATION_REQUIRED',
+  INVALID_API_KEY: 'INVALID_API_KEY',
+  API_KEY_EXPIRED: 'API_KEY_EXPIRED',
+  
+  // Authorization (403)
+  INSUFFICIENT_PERMISSIONS: 'INSUFFICIENT_PERMISSIONS',
+  DOMAIN_NOT_OWNED: 'DOMAIN_NOT_OWNED',
+  RESOURCE_ACCESS_DENIED: 'RESOURCE_ACCESS_DENIED',
+  
+  // Validation (400)
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  INVALID_EMAIL_FORMAT: 'INVALID_EMAIL_FORMAT',
+  INVALID_DOMAIN_FORMAT: 'INVALID_DOMAIN_FORMAT',
+  MISSING_REQUIRED_FIELD: 'MISSING_REQUIRED_FIELD',
+  INVALID_PARAMETER: 'INVALID_PARAMETER',
+  
+  // Not Found (404)
+  RESOURCE_NOT_FOUND: 'RESOURCE_NOT_FOUND',
+  EMAIL_NOT_FOUND: 'EMAIL_NOT_FOUND',
+  DOMAIN_NOT_FOUND: 'DOMAIN_NOT_FOUND',
+  ENDPOINT_NOT_FOUND: 'ENDPOINT_NOT_FOUND',
+  
+  // Conflict (409)
+  RESOURCE_ALREADY_EXISTS: 'RESOURCE_ALREADY_EXISTS',
+  DOMAIN_ALREADY_REGISTERED: 'DOMAIN_ALREADY_REGISTERED',
+  
+  // Rate Limiting (429)
+  RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
+  EMAIL_LIMIT_REACHED: 'EMAIL_LIMIT_REACHED',
+  DOMAIN_LIMIT_REACHED: 'DOMAIN_LIMIT_REACHED',
+  
+  // Server Errors (500)
+  INTERNAL_SERVER_ERROR: 'INTERNAL_SERVER_ERROR',
+  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+  AWS_SES_ERROR: 'AWS_SES_ERROR',
+  DATABASE_ERROR: 'DATABASE_ERROR',
+} as const
+
+export type ErrorCode = typeof ERROR_CODES[keyof typeof ERROR_CODES]
+```
+
+### Handling Zod Validation Errors
+
+```typescript
+// app/api/v2/schemas/errors.ts
+import { ZodError } from 'zod'
+
+export function zodErrorToApiError(
+  zodError: ZodError,
+  instance: string,
+  requestId: string
+): ApiError {
+  const errors = zodError.errors.map(err => ({
+    field: err.path.join('.'),
+    code: err.code.toUpperCase(),
+    message: err.message,
+  }))
+  
+  return buildApiError({
+    status: 400,
+    code: ERROR_CODES.VALIDATION_ERROR,
+    title: 'Validation Error',
+    detail: 'The request contains invalid parameters',
+    instance,
+    category: 'validation_error',
+    errors,
+    suggestion: 'Check the errors array for specific field issues',
+    requestId,
+  })
+}
+```
+
+### Error Response Examples
+
+**Validation Error:**
+```json
+{
+  "type": "https://api.inbound.new/errors/validation-error",
+  "title": "Validation Error",
+  "status": 400,
+  "detail": "The request contains invalid parameters",
+  "instance": "/api/v2/emails",
+  "code": "VALIDATION_ERROR",
+  "category": "validation_error",
+  "errors": [
+    {
+      "field": "from",
+      "code": "INVALID_EMAIL_FORMAT",
+      "message": "Email address must follow user@domain.com format"
+    }
+  ],
+  "request_id": "req_abc123xyz",
+  "timestamp": "2025-10-10T14:30:00Z",
+  "doc_url": "https://docs.inbound.new/errors/validation-error",
+  "suggestion": "Ensure all email fields contain valid email addresses"
+}
+```
+
+**Authentication Error:**
+```json
+{
+  "type": "https://api.inbound.new/errors/authentication-required",
+  "title": "Authentication Required",
+  "status": 401,
+  "detail": "Valid API key required to access this endpoint",
+  "instance": "/api/v2/domains",
+  "code": "AUTHENTICATION_REQUIRED",
+  "category": "authentication_error",
+  "request_id": "req_def456uvw",
+  "timestamp": "2025-10-10T14:31:00Z",
+  "doc_url": "https://docs.inbound.new/errors/authentication-required",
+  "suggestion": "Include Authorization: Bearer <api_key> header in your request"
+}
+```
+
+**Not Found Error:**
+```json
+{
+  "type": "https://api.inbound.new/errors/domain-not-found",
+  "title": "Domain Not Found",
+  "status": 404,
+  "detail": "The requested domain does not exist",
+  "instance": "/api/v2/domains/domain_123",
+  "code": "DOMAIN_NOT_FOUND",
+  "category": "not_found_error",
+  "request_id": "req_ghi789rst",
+  "timestamp": "2025-10-10T14:32:00Z",
+  "doc_url": "https://docs.inbound.new/errors/domain-not-found"
+}
+```
+
+**Rate Limit Error:**
+```json
+{
+  "type": "https://api.inbound.new/errors/rate-limit-exceeded",
+  "title": "Rate Limit Exceeded",
+  "status": 429,
+  "detail": "You have exceeded the allowed number of requests",
+  "instance": "/api/v2/emails",
+  "code": "RATE_LIMIT_EXCEEDED",
+  "category": "rate_limit_error",
+  "request_id": "req_jkl012mno",
+  "timestamp": "2025-10-10T14:33:00Z",
+  "doc_url": "https://docs.inbound.new/errors/rate-limit-exceeded",
+  "suggestion": "Reduce request frequency or upgrade your plan for higher limits"
+}
+```
+
+## Route Structure Template
+
+### Basic GET Route
+
+```typescript
+import { defineRoute } from "@omer-x/next-openapi-route-handler"
+import { z } from "zod"
+import { NextRequest, NextResponse } from 'next/server'
+import { validateRequest } from '../helper/main'
+import { ApiErrorSchema, buildApiError, ERROR_CODES } from '../schemas/errors'
+import { nanoid } from 'nanoid'
+
+// Define Zod schemas
+const GetResourcesQuerySchema = z.object({
+  limit: z.coerce.number().min(1).max(100).optional().default(50),
+  offset: z.coerce.number().min(0).optional().default(0),
+  status: z.enum(['active', 'inactive']).optional(),
+})
+
+const ResourceItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.string(),
+  createdAt: z.date(),
+})
+
+const PaginationSchema = z.object({
+  limit: z.number(),
+  offset: z.number(),
+  total: z.number(),
+  hasMore: z.boolean(),
+})
+
+const GetResourcesResponseSchema = z.object({
+  data: z.array(ResourceItemSchema),
+  pagination: PaginationSchema,
+})
+
+export const { GET } = defineRoute({
+  operationId: "getResources",
+  method: "GET",
+  summary: "List all resources",
+  description: "Retrieves a paginated list of resources with optional filtering",
+  tags: ["Resources"],
+  queryParams: GetResourcesQuerySchema,
+  responses: {
+    200: { 
+      description: "Successfully retrieved resources", 
+      content: GetResourcesResponseSchema 
+    },
+    400: { 
+      description: "Invalid query parameters", 
+      content: ApiErrorSchema 
+    },
+    401: { 
+      description: "Authentication required", 
+      content: ApiErrorSchema 
+    },
+    500: { 
+      description: "Internal server error", 
+      content: ApiErrorSchema 
+    },
+  },
+  action: async (params, req) => {
+    const requestId = `req_${nanoid()}`
+    console.log(`🌐 [${requestId}] GET /api/v2/resources - Starting request`)
+    
+    // Extract validated queryParams from params
+    // Type assertion is safe because Zod validation ensures correct shape
+    const queryParams = params.query as { limit: number; offset: number; status?: string }
+    
+    // Cast to NextRequest for validateRequest compatibility
+    const request = req as unknown as NextRequest
+    
+    try {
+      // Your existing auth logic
+      console.log('🔐 Validating request authentication')
+      const { userId, error } = await validateRequest(request)
+      if (!userId) {
+        console.log('❌ Authentication failed:', error)
+        const apiError = buildApiError({
+          status: 401,
+          code: ERROR_CODES.AUTHENTICATION_REQUIRED,
+          title: 'Authentication Required',
+          detail: error || 'Valid API key required',
+          instance: '/api/v2/resources',
+          category: 'authentication_error',
+          suggestion: 'Include Authorization: Bearer <api_key> header',
+          requestId,
+        })
+        return NextResponse.json(apiError, { status: 401 })
+      }
+      console.log('✅ Authentication successful for userId:', userId)
+      
+      // queryParams are already validated by Zod
+      const { limit, offset, status } = queryParams
+      
+      // Your existing business logic here
+      // ...
+      
+      return NextResponse.json({
+        data: [],
+        pagination: { limit, offset, total: 0, hasMore: false }
+      })
+    } catch (err) {
+      console.error(`❌ [${requestId}] GET /api/v2/resources - Error:`, err)
+      const apiError = buildApiError({
+        status: 500,
+        code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+        title: 'Internal Server Error',
+        detail: 'An unexpected error occurred while fetching resources',
+        instance: '/api/v2/resources',
+        category: 'server_error',
+        suggestion: 'Please try again later or contact support',
+        requestId,
+      })
+      return NextResponse.json(apiError, { status: 500 })
+    }
+  }
+})
+```
+
+### POST Route with Request Body
+
+```typescript
+import { defineRoute } from "@omer-x/next-openapi-route-handler"
+import { z } from "zod"
+import { ApiErrorSchema, buildApiError, ERROR_CODES } from '../schemas/errors'
+import { nanoid } from 'nanoid'
+
+const CreateResourceSchema = z.object({
+  name: z.string().min(1).max(255),
+  description: z.string().optional(),
+  type: z.enum(['webhook', 'email', 'email_group']),
+  config: z.record(z.any()), // Or define specific config schemas
+})
+
+const CreatedResourceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  createdAt: z.date(),
+})
+
+export const { POST } = defineRoute({
+  operationId: "createResource",
+  method: "POST",
+  summary: "Create a new resource",
+  description: "Creates a new resource with the provided configuration",
+  tags: ["Resources"],
+  requestBody: CreateResourceSchema,
+  responses: {
+    201: { 
+      description: "Resource created successfully", 
+      content: CreatedResourceSchema 
+    },
+    400: { 
+      description: "Invalid request body", 
+      content: ApiErrorSchema 
+    },
+    401: { 
+      description: "Authentication required", 
+      content: ApiErrorSchema 
+    },
+    403: { 
+      description: "Forbidden - insufficient permissions", 
+      content: ApiErrorSchema 
+    },
+    500: { 
+      description: "Internal server error", 
+      content: ApiErrorSchema 
+    },
+  },
+  action: async (params, req) => {
+    const requestId = `req_${nanoid()}`
+    console.log(`➕ [${requestId}] POST /api/v2/resources - Starting creation`)
+    
+    // Extract validated requestBody from params
+    // Type assertion is safe because Zod validation ensures correct shape
+    const requestBody = params.body as CreateResourceType
+    
+    // Cast to NextRequest for validateRequest compatibility
+    const request = req as unknown as NextRequest
+    
+    try {
+      const { userId, error } = await validateRequest(request)
+      if (!userId) {
+        const apiError = buildApiError({
+          status: 401,
+          code: ERROR_CODES.AUTHENTICATION_REQUIRED,
+          title: 'Authentication Required',
+          detail: error || 'Valid API key required',
+          instance: '/api/v2/resources',
+          category: 'authentication_error',
+          suggestion: 'Include Authorization: Bearer <api_key> header',
+          requestId,
+        })
+        return NextResponse.json(apiError, { status: 401 })
+      }
+      
+      // requestBody is already validated by Zod
+      const { name, description, type, config } = requestBody
+      
+      // Your existing business logic here
+      // ...
+      
+      return NextResponse.json(
+        { id: 'new_id', name, type, createdAt: new Date() },
+        { status: 201 }
+      )
+    } catch (err) {
+      console.error(`❌ [${requestId}] POST /api/v2/resources - Error:`, err)
+      const apiError = buildApiError({
+        status: 500,
+        code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+        title: 'Internal Server Error',
+        detail: 'An unexpected error occurred while creating resource',
+        instance: '/api/v2/resources',
+        category: 'server_error',
+        suggestion: 'Please try again later or contact support',
+        requestId,
+      })
+      return NextResponse.json(apiError, { status: 500 })
+    }
+  }
+})
+```
+
+### Dynamic Route with Path Parameters
+
+```typescript
+import { defineRoute } from "@omer-x/next-openapi-route-handler"
+import { z } from "zod"
+import { ApiErrorSchema, buildApiError, ERROR_CODES } from '../schemas/errors'
+import { nanoid } from 'nanoid'
+
+const PathParamsSchema = z.object({
+  id: z.string().min(1),
+})
+
+const ResourceDetailsSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.string(),
+  // ... other fields
+})
+
+export const { GET } = defineRoute({
+  operationId: "getResourceById",
+  method: "GET",
+  summary: "Get resource by ID",
+  description: "Retrieves detailed information about a specific resource",
+  tags: ["Resources"],
+  pathParams: PathParamsSchema,
+  responses: {
+    200: { 
+      description: "Resource found", 
+      content: ResourceDetailsSchema 
+    },
+    401: { 
+      description: "Authentication required", 
+      content: ApiErrorSchema 
+    },
+    404: { 
+      description: "Resource not found", 
+      content: ApiErrorSchema 
+    },
+    500: { 
+      description: "Internal server error", 
+      content: ApiErrorSchema 
+    },
+  },
+  action: async (params, req) => {
+    const requestId = `req_${nanoid()}`
+    
+    // Extract validated pathParams from params
+    // Type assertion is safe because Zod validation ensures correct shape
+    const pathParams = params.path as { id: string }
+    const { id } = pathParams
+    
+    console.log(`🌐 [${requestId}] GET /api/v2/resources/[id] - Starting request for:`, id)
+    
+    // Cast to NextRequest for validateRequest compatibility
+    const request = req as unknown as NextRequest
+    
+    try {
+      const { userId, error } = await validateRequest(request)
+      if (!userId) {
+        const apiError = buildApiError({
+          status: 401,
+          code: ERROR_CODES.AUTHENTICATION_REQUIRED,
+          title: 'Authentication Required',
+          detail: error || 'Valid API key required',
+          instance: `/api/v2/resources/${id}`,
+          category: 'authentication_error',
+          suggestion: 'Include Authorization: Bearer <api_key> header',
+          requestId,
+        })
+        return NextResponse.json(apiError, { status: 401 })
+      }
+      
+      // pathParams.id is already validated by Zod
+      
+      // Your existing business logic here
+      // Check if resource exists...
+      const resourceExists = false // Replace with actual check
+      if (!resourceExists) {
+        const apiError = buildApiError({
+          status: 404,
+          code: ERROR_CODES.RESOURCE_NOT_FOUND,
+          title: 'Resource Not Found',
+          detail: `Resource with ID ${id} does not exist`,
+          instance: `/api/v2/resources/${id}`,
+          category: 'not_found_error',
+          requestId,
+        })
+        return NextResponse.json(apiError, { status: 404 })
+      }
+      
+      return NextResponse.json({
+        id,
+        name: 'Resource Name',
+        status: 'active',
+      })
+    } catch (err) {
+      console.error(`❌ [${requestId}] GET /api/v2/resources/[id] - Error:`, err)
+      const apiError = buildApiError({
+        status: 500,
+        code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+        title: 'Internal Server Error',
+        detail: 'An unexpected error occurred while fetching resource',
+        instance: `/api/v2/resources/${id}`,
+        category: 'server_error',
+        suggestion: 'Please try again later or contact support',
+        requestId,
+      })
+      return NextResponse.json(apiError, { status: 500 })
+    }
+  }
+})
+```
+
+### Multiple HTTP Methods in One File
+
+```typescript
+import { defineRoute } from "@omer-x/next-openapi-route-handler"
+import { z } from "zod"
+import { ApiErrorSchema } from '../schemas/errors'
+
+// GET endpoint
+const GetQuerySchema = z.object({
+  limit: z.coerce.number().min(1).max(100).optional().default(50),
+})
+
+export const { GET } = defineRoute({
+  operationId: "listItems",
+  method: "GET",
+  summary: "List items",
+  description: "Get a list of items",
+  tags: ["Items"],
+  queryParams: GetQuerySchema,
+  responses: {
+    200: { description: "Success", content: z.object({ data: z.array(z.any()) }) },
+    401: { description: "Unauthorized", content: ApiErrorSchema },
+  },
+  action: async (params) => {
+    const queryParams = params.query as { limit: number }
+    // GET logic here
+    return NextResponse.json({ data: [] })
+  }
+})
+
+// POST endpoint
+const CreateItemSchema = z.object({
+  name: z.string(),
+})
+
+export const { POST } = defineRoute({
+  operationId: "createItem",
+  method: "POST",
+  summary: "Create item",
+  description: "Create a new item",
+  tags: ["Items"],
+  requestBody: CreateItemSchema,
+  responses: {
+    201: { description: "Created", content: z.object({ id: z.string() }) },
+    400: { description: "Bad request", content: ApiErrorSchema },
+    401: { description: "Unauthorized", content: ApiErrorSchema },
+  },
+  action: async (params) => {
+    const requestBody = params.body as { name: string }
+    // POST logic here
+    return NextResponse.json({ id: 'new_id' }, { status: 201 })
+  }
+})
+
+// PUT endpoint
+export const { PUT } = defineRoute({
+  operationId: "updateItem",
+  method: "PUT",
+  summary: "Update item",
+  description: "Update an existing item",
+  tags: ["Items"],
+  requestBody: CreateItemSchema,
+  responses: {
+    200: { description: "Updated", content: z.object({ id: z.string() }) },
+    400: { description: "Bad request", content: ApiErrorSchema },
+    401: { description: "Unauthorized", content: ApiErrorSchema },
+    404: { description: "Not found", content: ApiErrorSchema },
+  },
+  action: async (params) => {
+    const requestBody = params.body as { name: string }
+    // PUT logic here
+    return NextResponse.json({ id: 'updated_id' })
+  }
+})
+
+// DELETE endpoint
+export const { DELETE } = defineRoute({
+  operationId: "deleteItem",
+  method: "DELETE",
+  summary: "Delete item",
+  description: "Delete an item",
+  tags: ["Items"],
+  pathParams: z.object({ id: z.string() }),
+  responses: {
+    200: { description: "Deleted", content: z.object({ success: z.boolean() }) },
+    401: { description: "Unauthorized", content: ApiErrorSchema },
+    404: { description: "Not found", content: ApiErrorSchema },
+  },
+  action: async (params) => {
+    const pathParams = params.path as { id: string }
+    // DELETE logic here
+    return NextResponse.json({ success: true })
+  }
+})
+
+// PATCH endpoint
+export const { PATCH } = defineRoute({
+  operationId: "patchItem",
+  method: "PATCH",
+  summary: "Partially update item",
+  description: "Partially update an item",
+  tags: ["Items"],
+  pathParams: z.object({ id: z.string() }),
+  requestBody: z.object({
+    name: z.string().optional(),
+    status: z.string().optional(),
+  }),
+  responses: {
+    200: { description: "Updated", content: z.object({ id: z.string() }) },
+    400: { description: "Bad request", content: ApiErrorSchema },
+    401: { description: "Unauthorized", content: ApiErrorSchema },
+    404: { description: "Not found", content: ApiErrorSchema },
+  },
+  action: async (params) => {
+    const pathParams = params.path as { id: string }
+    const requestBody = params.body as { name?: string; status?: string }
+    // PATCH logic here
+    return NextResponse.json({ id: pathParams.id })
+  }
+})
+```
+
+## Common Zod Schema Patterns
+
+### Pagination Schema (Reusable)
+
+```typescript
+export const PaginationQuerySchema = z.object({
+  limit: z.coerce.number().min(1).max(100).optional().default(50),
+  offset: z.coerce.number().min(0).optional().default(0),
+})
+
+export const PaginationResponseSchema = z.object({
+  limit: z.number(),
+  offset: z.number(),
+  total: z.number(),
+  hasMore: z.boolean(),
+})
+```
+
+### Email Validation
+
+```typescript
+export const EmailSchema = z.string().email()
+
+export const EmailAddressSchema = z.object({
+  email: EmailSchema,
+  name: z.string().optional(),
+})
+```
+
+### Domain Validation
+
+```typescript
+export const DomainSchema = z.string().regex(
+  /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/,
+  "Invalid domain format"
+).max(253)
+```
+
+### Date/Time Schema
+
+```typescript
+export const DateTimeSchema = z.coerce.date()
+
+export const ISODateTimeSchema = z.string().datetime()
+```
+
+### Enum Schema
+
+```typescript
+export const StatusSchema = z.enum(['pending', 'verified', 'failed'])
+
+export const EndpointTypeSchema = z.enum(['webhook', 'email', 'email_group'])
+```
+
+### Nested Object Schema
+
+```typescript
+export const WebhookConfigSchema = z.object({
+  url: z.string().url(),
+  timeout: z.number().min(1).max(300).optional(),
+  retryAttempts: z.number().min(0).max(10).optional(),
+  headers: z.record(z.string()).optional(),
+})
+```
+
+### Array Schema with Validation
+
+```typescript
+export const EmailListSchema = z.array(
+  z.string().email()
+).min(1, "At least one email required").max(50, "Maximum 50 emails allowed")
+```
+
+### Conditional/Union Schema
+
+```typescript
+export const EndpointConfigSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("webhook"),
+    url: z.string().url(),
+    timeout: z.number().optional(),
+  }),
+  z.object({
+    type: z.literal("email"),
+    forwardTo: z.string().email(),
+  }),
+  z.object({
+    type: z.literal("email_group"),
+    emails: z.array(z.string().email()),
+  }),
+])
+```
+
+## Before/After Examples
+
+### Example 1: Simple POST Endpoint
+
+#### Before (Traditional)
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+import { validateRequest } from '../helper/main'
+
+export interface PostEmailsRequest {
+    from: string
+    to: string | string[]
+    subject: string
+    html?: string
+    text?: string
+}
+
+export interface PostEmailsResponse {
+    id: string
+    messageId: string
+}
+
+export async function POST(request: NextRequest) {
+    console.log('📧 POST /api/v2/emails - Starting request')
+    
+    try {
+        const { userId, error } = await validateRequest(request)
+        if (!userId) {
+            return NextResponse.json({ error }, { status: 401 })
+        }
+        
+        const body: PostEmailsRequest = await request.json()
+        
+        // Manual validation
+        if (!body.from || !body.to || !body.subject) {
+            return NextResponse.json(
+                { error: 'Missing required fields' },
+                { status: 400 }
+            )
+        }
+        
+        if (!body.html && !body.text) {
+            return NextResponse.json(
+                { error: 'Either html or text required' },
+                { status: 400 }
+            )
+        }
+        
+        // Business logic here
+        
+        return NextResponse.json({ id: 'email_123', messageId: 'msg_456' })
+    } catch (error) {
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    }
+}
+```
+
+#### After (OpenAPI with Zod + RFC 9457 Errors)
+
+```typescript
+import { defineRoute } from "@omer-x/next-openapi-route-handler"
+import { z } from "zod"
+import { NextRequest, NextResponse } from 'next/server'
+import { validateRequest } from '../helper/main'
+import { ApiErrorSchema, buildApiError, ERROR_CODES } from '../schemas/errors'
+import { nanoid } from 'nanoid'
+
+const PostEmailsRequestSchema = z.object({
+    from: z.string().email(),
+    to: z.union([z.string().email(), z.array(z.string().email())]),
+    subject: z.string().min(1),
+    html: z.string().optional(),
+    text: z.string().optional(),
+}).refine(
+    (data) => data.html || data.text,
+    { message: "Either html or text must be provided" }
+)
+
+const PostEmailsResponseSchema = z.object({
+    id: z.string(),
+    messageId: z.string(),
+})
+
+export const { POST } = defineRoute({
+    operationId: "sendEmail",
+    method: "POST",
+    summary: "Send an email",
+    description: "Sends an email using AWS SES and returns an email ID",
+    tags: ["Emails"],
+    requestBody: PostEmailsRequestSchema,
+    responses: {
+        200: { description: "Email sent successfully", content: PostEmailsResponseSchema },
+        400: { description: "Invalid request body", content: ApiErrorSchema },
+        401: { description: "Unauthorized", content: ApiErrorSchema },
+        500: { description: "Internal server error", content: ApiErrorSchema },
+    },
+    action: async (params, req) => {
+        const requestId = `req_${nanoid()}`
+        console.log(`📧 [${requestId}] POST /api/v2/emails - Starting request`)
+        
+        // Extract validated requestBody from params
+        // Type assertion is safe because Zod validation ensures correct shape
+        const requestBody = params.body as PostEmailsRequest
+        
+        // Cast to NextRequest for validateRequest compatibility
+        const request = req as unknown as NextRequest
+        
+        try {
+            const { userId, error } = await validateRequest(request)
+            if (!userId) {
+                const apiError = buildApiError({
+                    status: 401,
+                    code: ERROR_CODES.AUTHENTICATION_REQUIRED,
+                    title: 'Authentication Required',
+                    detail: error || 'Valid API key required',
+                    instance: '/api/v2/emails',
+                    category: 'authentication_error',
+                    suggestion: 'Include Authorization: Bearer <api_key> header',
+                    requestId,
+                })
+                return NextResponse.json(apiError, { status: 401 })
+            }
+            
+            // requestBody is already validated by Zod - no manual checks needed!
+            const { from, to, subject, html, text } = requestBody
+            
+            // Business logic here (same as before)
+            
+            return NextResponse.json({ id: 'email_123', messageId: 'msg_456' })
+        } catch (error) {
+            const apiError = buildApiError({
+                status: 500,
+                code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+                title: 'Internal Server Error',
+                detail: 'An unexpected error occurred while sending email',
+                instance: '/api/v2/emails',
+                category: 'server_error',
+                suggestion: 'Please try again later or contact support',
+                requestId,
+            })
+            return NextResponse.json(apiError, { status: 500 })
+        }
+    }
+})
+```
+
+### Example 2: GET with Pagination
+
+#### Before (Traditional)
+
+```typescript
+export interface GetDomainsRequest {
+    limit?: number
+    offset?: number
+    status?: 'pending' | 'verified' | 'failed'
+}
+
+export async function GET(request: NextRequest) {
+    const { searchParams } = new URL(request.url)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100)
+    const offset = parseInt(searchParams.get('offset') || '0')
+    const status = searchParams.get('status')
+    
+    if (limit < 1 || limit > 100) {
+        return NextResponse.json({ error: 'Invalid limit' }, { status: 400 })
+    }
+    
+    if (offset < 0) {
+        return NextResponse.json({ error: 'Invalid offset' }, { status: 400 })
+    }
+    
+    // Business logic...
+}
+```
+
+#### After (OpenAPI with Zod + RFC 9457 Errors)
+
+```typescript
+const GetDomainsQuerySchema = z.object({
+    limit: z.coerce.number().min(1).max(100).optional().default(50),
+    offset: z.coerce.number().min(0).optional().default(0),
+    status: z.enum(['pending', 'verified', 'failed']).optional(),
+})
+
+export const { GET } = defineRoute({
+    operationId: "getDomains",
+    method: "GET",
+    summary: "List domains",
+    description: "Retrieves a paginated list of domains",
+    tags: ["Domains"],
+    queryParams: GetDomainsQuerySchema,
+    responses: {
+        200: { description: "Success", content: z.object({
+            data: z.array(z.any()),
+            pagination: z.object({
+                limit: z.number(),
+                offset: z.number(),
+                total: z.number(),
+                hasMore: z.boolean(),
+            })
+        }) },
+        400: { description: "Invalid parameters", content: ErrorResponseSchema },
+        401: { description: "Unauthorized", content: ErrorResponseSchema },
+    },
+    action: async (params) => {
+        // Extract validated queryParams from params
+        const queryParams = params.query as { limit: number; offset: number; status?: string }
+        
+        // queryParams are already validated and coerced to correct types!
+        const { limit, offset, status } = queryParams
+        
+        // Business logic (no validation needed)...
+    }
+})
+```
+
+## Best Practices
+
+### 1. Reuse Schemas
+
+Create a shared schemas file for common patterns:
+
+```typescript
+// app/api/v2/schemas/common.ts
+import { z } from "zod"
+
+export const PaginationQuerySchema = z.object({
+  limit: z.coerce.number().min(1).max(100).optional().default(50),
+  offset: z.coerce.number().min(0).optional().default(0),
+})
+
+export const IdSchema = z.string().min(1)
+
+// Import error schemas from the errors file
+export { ApiErrorSchema, buildApiError, ERROR_CODES } from './errors'
+```
+
+### 2. Export Schemas for Testing
+
+```typescript
+// Export schemas for use in tests
+export { PostEmailsRequestSchema, PostEmailsResponseSchema }
+```
+
+### 3. Use Descriptive Operation IDs
+
+Operation IDs should follow the pattern: `{verb}{Resource}` or `{verb}{Resource}By{Property}`
+
+- `getEmails`, `createEmail`, `deleteEmail`
+- `getDomainById`, `updateDomainById`
+- `listEmailAddresses`, `createEmailAddress`
+
+### 4. Group Related Endpoints with Tags
+
+Use consistent tag names for related endpoints:
+- "Emails" for all email-related endpoints
+- "Domains" for domain management
+- "Endpoints" for webhook/forwarding endpoints
+- "Email Addresses" for email address management
+
+### 5. Use RFC 9457 Error Format Consistently
+
+ALWAYS use `buildApiError` for all error responses:
+
+```typescript
+// Authentication errors
+const apiError = buildApiError({
+  status: 401,
+  code: ERROR_CODES.AUTHENTICATION_REQUIRED,
+  title: 'Authentication Required',
+  detail: 'Valid API key required',
+  instance: request.url,
+  category: 'authentication_error',
+  suggestion: 'Include Authorization: Bearer <api_key> header',
+  requestId,
+})
+
+// Validation errors (from Zod)
+const apiError = zodErrorToApiError(zodError, '/api/v2/resource', requestId)
+
+// Not found errors
+const apiError = buildApiError({
+  status: 404,
+  code: ERROR_CODES.RESOURCE_NOT_FOUND,
+  title: 'Resource Not Found',
+  detail: `Resource with ID ${id} does not exist`,
+  instance: `/api/v2/resources/${id}`,
+  category: 'not_found_error',
+  requestId,
+})
+
+// Server errors
+const apiError = buildApiError({
+  status: 500,
+  code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+  title: 'Internal Server Error',
+  detail: 'An unexpected error occurred',
+  instance: request.url,
+  category: 'server_error',
+  suggestion: 'Please try again later or contact support',
+  requestId,
+})
+```
+
+### 6. Generate Request IDs for Tracking
+
+Always generate a unique request ID at the start of each handler:
+
+```typescript
+import { nanoid } from 'nanoid'
+
+action: async (params, req) => {
+  const requestId = `req_${nanoid()}`
+  console.log(`[${requestId}] Starting request`)
+  
+  // Use requestId in all errors and logs
+}
+```
+
+### 7. Preserve Existing Patterns
+
+- Keep all authentication logic (`validateRequest`)
+- Maintain all logging with emojis
+- Include request IDs in all logs
+- Keep user scoping and multi-tenancy checks
+- Maintain idempotency key handling
+
+### 6. Handle Request Object Access
+
+The library provides a standard `Request` object as the second parameter. Cast it to `NextRequest` if needed for auth helpers:
+
+```typescript
+action: async (params, req) => {
+  // Extract validated parameters
+  const requestBody = params.body as YourRequestType
+  
+  // Cast to NextRequest for auth helpers  
+  const request = req as unknown as NextRequest
+  
+  // Now you have access to request
+  const { userId, error } = await validateRequest(request)
+  // ...
+}
+```
+
+### 7. Validate Complex Business Logic
+
+Use Zod's `.refine()` for complex validation:
+
+```typescript
+const CreateDomainSchema = z.object({
+  domain: z.string().regex(/^[a-z0-9.-]+$/),
+  enableCatchAll: z.boolean(),
+  catchAllEndpointId: z.string().optional(),
+}).refine(
+  (data) => !data.enableCatchAll || data.catchAllEndpointId,
+  { message: "catchAllEndpointId required when enableCatchAll is true" }
+)
+```
+
+## Response Type Patterns
+
+### Standard Success Response
+
+```typescript
+z.object({
+  id: z.string(),
+  ...otherFields
+})
+```
+
+### List Response with Pagination
+
+```typescript
+z.object({
+  data: z.array(ResourceSchema),
+  pagination: PaginationResponseSchema,
+  meta: z.object({
+    // Optional metadata
+  }).optional(),
+})
+```
+
+### Delete Response
+
+```typescript
+z.object({
+  success: z.boolean(),
+  message: z.string(),
+  deletedResources: z.object({
+    // Breakdown of what was deleted
+  }).optional(),
+})
+```
+
+### Error Response (Standardized)
+
+```typescript
+z.object({
+  error: z.string(),
+  code: z.string().optional(),
+  field: z.string().optional(),
+  details: z.string().optional(),
+})
+```
+
+## Migration Checklist
+
+When converting an existing route to use `defineRoute`:
+
+- [ ] Install required dependencies
+- [ ] Import `defineRoute` and `z` at the top
+- [ ] Convert TypeScript interfaces to Zod schemas
+- [ ] Wrap each HTTP method handler with `defineRoute`
+- [ ] Move validation logic into Zod schemas (remove manual checks)
+- [ ] Update action signature to destructure validated params
+- [ ] Preserve all existing auth calls
+- [ ] Preserve all logging statements
+- [ ] Preserve all business logic
+- [ ] Define all response status codes with schemas
+- [ ] Add descriptive `operationId`, `summary`, and `description`
+- [ ] Set appropriate `tags` for grouping
+- [ ] Export schemas for testing if needed
+- [ ] Test the converted route
+
+## Status Code Guidelines
+
+Use these status codes consistently:
+
+- **200**: Successful GET, PUT, PATCH operations
+- **201**: Successful POST (resource created)
+- **400**: Bad request (validation errors, missing fields)
+- **401**: Unauthorized (missing or invalid authentication)
+- **403**: Forbidden (authenticated but no permission)
+- **404**: Not found (resource doesn't exist)
+- **409**: Conflict (duplicate resource, state conflict)
+- **429**: Too many requests (rate limiting)
+- **500**: Internal server error (unexpected errors)
+
+## Naming Conventions
+
+### Schema Names
+- Request body: `{Verb}{Resource}RequestSchema` (e.g., `CreateEmailRequestSchema`)
+- Response: `{Verb}{Resource}ResponseSchema` or `{Resource}Schema`
+- Query params: `Get{Resource}QuerySchema`
+- Path params: `{Resource}PathParamsSchema`
+- Common/shared: `{Purpose}Schema` (e.g., `ErrorResponseSchema`, `PaginationSchema`)
+
+### Operation IDs
+- List: `list{Resources}` or `get{Resources}`
+- Get by ID: `get{Resource}ById`
+- Create: `create{Resource}`
+- Update: `update{Resource}` or `update{Resource}ById`
+- Delete: `delete{Resource}` or `delete{Resource}ById`
+- Patch: `patch{Resource}` or `patch{Resource}ById`
+
+## Summary
+
+This approach provides:
+1. **Type Safety**: TypeScript types inferred from Zod schemas
+2. **Runtime Validation**: Automatic input validation
+3. **Self-Documentation**: OpenAPI specs generated from code
+4. **Single Source of Truth**: Schemas define validation and docs
+5. **Better DX**: Validation errors are clear and actionable
+6. **Consistency**: Standardized patterns across all endpoints
+7. **Testability**: Schemas can be tested independently
+
+The key is to preserve all existing logic (auth, logging, business rules) while moving validation into Zod schemas and wrapping handlers with `defineRoute`.

@@ -338,7 +338,7 @@ export interface Query {
     _structure: Scalars['JSON']
     _sys: RepoSys
     blogPosts: BlogPosts
-    homePage: Homepage
+    homepage: Homepage
     __typename: 'Query'
 }
 
@@ -1047,7 +1047,7 @@ export interface QueryGenqlSelection{
     withTypeOptions?: (Scalars['Boolean'] | null)} } | boolean | number
     _sys?: RepoSysGenqlSelection
     blogPosts?: BlogPostsGenqlSelection
-    homePage?: HomepageGenqlSelection
+    homepage?: HomepageGenqlSelection
     __typename?: boolean | number
     __fragmentOn?: "Query"
 }
