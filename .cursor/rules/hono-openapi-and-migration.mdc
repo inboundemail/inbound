@@ -1,0 +1,188 @@
+---
+description: Hono + OpenAPI patterns and a /command to migrate existing API files to Hono with OpenAPI annotations
+globs: app/api/**/*.ts,app/api/**/*.tsx
+---
+## H2 API with Hono + OpenAPI
+
+Use Hono routers for all `h2` endpoints and generate an OpenAPI spec via `hono-openapi`.
+
+Key requirements
+- Use Bun for packages. Install: `bun add hono-openapi @hono/standard-validator @upstash/redis @upstash/ratelimit`
+- Each feature exports a default `Hono` router using `basePath("/<feature>")`
+- Annotate handlers with `describeRoute` and add `validator` for `query`/`json`/`param`/`form` when applicable
+- Catch-all `app/api/h2/[[...routes]]/route.ts` mounts all feature routers and exposes `GET /openapi` via `openAPIRouteHandler`
+- **Always use `validateRequest` from `../lib/helper`** for auth + rate limiting (4 req/sec per user via Upstash Redis)
+- Keep routes minimal, default export the router, no custom styles/variants here (server-only)
+
+Templates
+
+```ts
+// Feature router template with auth + rate limiting
+import { Hono } from 'hono'
+import { describeRoute } from 'hono-openapi'
+import { validateRequest } from '../lib/helper'
+
+const router = new Hono().basePath('/feature')
+
+router.get(
+  '/',
+  describeRoute({
+    summary: 'List feature resources',
+    responses: {
+      200: {
+        description: 'OK',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: { ok: { type: 'boolean' } },
+              required: ['ok']
+            }
+          }
+        }
+      },
+      401: { description: 'Unauthorized' },
+      429: { description: 'Rate limit exceeded' }
+    }
+  }),
+  async (c) => {
+    const auth = await validateRequest(c.req.raw)
+    
+    if (!('userId' in auth)) {
+      return c.json({ error: auth.error || 'Unauthorized' }, 401)
+    }
+
+    // Check for rate limit
+    if (auth.error === 'Rate limit exceeded') {
+      c.header('X-RateLimit-Limit', String(auth.rateLimit?.limit || 0))
+      c.header('X-RateLimit-Remaining', String(auth.rateLimit?.remaining || 0))
+      c.header('X-RateLimit-Reset', auth.rateLimit?.reset || '')
+      return c.json({ error: 'Rate limit exceeded', rateLimit: auth.rateLimit }, 429)
+    }
+
+    // Add rate limit headers
+    if (auth.rateLimit) {
+      c.header('X-RateLimit-Limit', String(auth.rateLimit.limit))
+      c.header('X-RateLimit-Remaining', String(auth.rateLimit.remaining))
+      c.header('X-RateLimit-Reset', auth.rateLimit.reset)
+    }
+
+    return c.json({ ok: true })
+  }
+)
+
+export default router
+```
+
+Examples
+
+```ts
+// emails router with request validation and detailed responses
+import { Hono } from 'hono'
+import { describeRoute, validator } from 'hono-openapi'
+
+const router = new Hono().basePath('/emails')
+
+// Simple Standard Schema (JSON Schema-like)
+const listEmailsQuerySchema = {
+  type: 'object',
+  properties: {
+    limit: { type: 'integer', minimum: 1, maximum: 100 },
+    cursor: { type: 'string' }
+  }
+}
+
+router.get(
+  '/',
+  describeRoute({
+    summary: 'List emails',
+    description: 'Returns a paginated list of emails',
+    responses: {
+      200: {
+        description: 'OK',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                items: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string' },
+                      subject: { type: 'string' }
+                    },
+                    required: ['id', 'subject']
+                  }
+                },
+                nextCursor: { type: 'string', nullable: true }
+              },
+              required: ['items']
+            }
+          }
+        }
+      },
+      401: { description: 'Unauthorized' }
+    }
+  }),
+  validator('query', listEmailsQuerySchema),
+  async (c) => {
+    // Example body
+    return c.json({ items: [], nextCursor: null })
+  }
+)
+
+export default router
+```
+
+```ts
+// Catch-all snippet (additions)
+import { openAPIRouteHandler } from 'hono-openapi'
+
+app.get(
+  '/openapi',
+  openAPIRouteHandler(app, {
+    documentation: {
+      info: { title: 'inbound API', version: '0.1.0', description: 'Endpoints for the inbound API' },
+      servers: [
+        { url: process.env.NEXT_PUBLIC_BETTER_AUTH_URL || 'http://localhost:3000', description: 'Local' },
+        { url: 'https://inbound.new', description: 'Production' }
+      ]
+    }
+  })
+)
+```
+
+Rate Limiting with validateRequest
+
+```ts
+// app/api/h2/lib/helper.ts structure (reference only - already implemented)
+import { Redis } from '@upstash/redis'
+import { Ratelimit } from '@upstash/ratelimit'
+
+const ratelimit = new Ratelimit({
+  redis: new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! }),
+  limiter: Ratelimit.slidingWindow(4, '1 s'), // 4 requests per second
+  analytics: true,
+  prefix: 'h2-api',
+})
+
+export async function validateRequest(request: Request) {
+  // Returns: { userId: string, rateLimit: { limit, remaining, reset } }
+  // OR: { error: string, rateLimit?: { limit, remaining, reset } }
+}
+```
+
+All h2 routes MUST:
+1. Import and call `validateRequest(c.req.raw)`
+2. Check `if (!('userId' in auth))` for unauthorized
+3. Check `if (auth.error === 'Rate limit exceeded')` for 429
+4. Add rate limit headers (`X-RateLimit-*`) to all responses
+5. Use `anyOf: [{ type: 'string' }, { type: 'null' }]` for nullable fields (not `nullable: true`)
+
+References
+- Hono OpenAPI example: [hono.dev/examples/hono-openapi](https://hono.dev/examples/hono-openapi)
+- Middleware concepts: [hono.dev/docs/concepts/middleware](https://hono.dev/docs/concepts/middleware)
+- Next.js integration: [hono.dev/docs/getting-started/nextjs](https://hono.dev/docs/getting-started/nextjs)
+- Better Auth example (mounting): [hono.dev/examples/better-auth](https://hono.dev/examples/better-auth)
