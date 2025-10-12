@@ -12,7 +12,7 @@ import {
   threads,
 } from "../(routes)";
 
-const app = new Hono({ strict: false }).basePath('/api/h2');
+const app = new Hono({ strict: false }).basePath('/api/v3');
 
 // Mount feature routers
 const routes = [
@@ -36,7 +36,7 @@ app.get(
     documentation: {
       info: {
         title: "inbound API",
-        version: "0.1.0",
+        version: "3.0.0",
         description: "Endpoints for the inbound API",
       },
       servers: [

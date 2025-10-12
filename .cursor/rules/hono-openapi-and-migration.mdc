@@ -2,15 +2,15 @@
 description: Hono + OpenAPI patterns and a /command to migrate existing API files to Hono with OpenAPI annotations
 globs: app/api/**/*.ts,app/api/**/*.tsx
 ---
-## H2 API with Hono + OpenAPI
+## v3 API with Hono + OpenAPI
 
-Use Hono routers for all `h2` endpoints and generate an OpenAPI spec via `hono-openapi`.
+Use Hono routers for all `v3` endpoints and generate an OpenAPI spec via `hono-openapi`.
 
 Key requirements
 - Use Bun for packages. Install: `bun add hono-openapi @hono/standard-validator @upstash/redis @upstash/ratelimit`
 - Each feature exports a default `Hono` router using `basePath("/<feature>")`
 - Annotate handlers with `describeRoute` and add `validator` for `query`/`json`/`param`/`form` when applicable
-- Catch-all `app/api/h2/[[...routes]]/route.ts` mounts all feature routers and exposes `GET /openapi` via `openAPIRouteHandler`
+- Catch-all `app/api/v3/[[...routes]]/route.ts` mounts all feature routers and exposes `GET /openapi` via `openAPIRouteHandler`
 - **Always use `validateRequest` from `../lib/helper`** for auth + rate limiting (4 req/sec per user via Upstash Redis)
 - Keep routes minimal, default export the router, no custom styles/variants here (server-only)
 
@@ -157,7 +157,7 @@ app.get(
 Rate Limiting with validateRequest
 
 ```ts
-// app/api/h2/lib/helper.ts structure (reference only - already implemented)
+// app/api/v3/lib/helper.ts structure (reference only - already implemented)
 import { Redis } from '@upstash/redis'
 import { Ratelimit } from '@upstash/ratelimit'
 
@@ -165,7 +165,7 @@ const ratelimit = new Ratelimit({
   redis: new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! }),
   limiter: Ratelimit.slidingWindow(4, '1 s'), // 4 requests per second
   analytics: true,
-  prefix: 'h2-api',
+  prefix: 'v3-api',
 })
 
 export async function validateRequest(request: Request) {
@@ -174,7 +174,7 @@ export async function validateRequest(request: Request) {
 }
 ```
 
-All h2 routes MUST:
+All v3 routes MUST:
 1. Import and call `validateRequest(c.req.raw)`
 2. Check `if (!('userId' in auth))` for unauthorized
 3. Check `if (auth.error === 'Rate limit exceeded')` for 429

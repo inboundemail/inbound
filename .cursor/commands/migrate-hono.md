@@ -1,6 +1,6 @@
 ---
 title: Migrate a file to Hono
-description: Convert an API file to a Hono router with OpenAPI annotations and mount it in h2
+description: Convert an API file to a Hono router with OpenAPI annotations and mount it in v3
 ---
 
 Usage
@@ -15,12 +15,12 @@ What this does
    - Define request schemas where possible; otherwise add placeholders
    - Add `describeRoute` for responses; add `validator` for known request shapes
 3) Implement
-   - Create `app/api/h2/(routes)/<feature>.ts` exporting default Hono router
-   - Mount in `app/api/h2/[[...routes]]/route.ts` with `app.route('/', router)`
+   - Create `app/api/v3/(routes)/<feature>.ts` exporting default Hono router
+   - Mount in `app/api/v3/[[...routes]]/route.ts` with `app.route('/', router)`
 4) Double-check
    - Run lints on edited files; resolve any errors
 5) Self-test (static)
-   - Verify `/api/h2/openapi` would include the new path(s)
+   - Verify `/api/v3/openapi` would include the new path(s)
    - Ensure `basePath` matches intended resource path
 6) Handoff
    - Summarize changes and list new endpoints
@@ -51,7 +51,7 @@ export async function GET(req: Request) {
 
 After (Hono router with OpenAPI + auth + rate limiting):
 ```ts
-// app/api/h2/(routes)/widgets.ts
+// app/api/v3/(routes)/widgets.ts
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { validateRequest } from '../lib/helper'
@@ -116,7 +116,7 @@ export default router
 
 Mount in catch-all:
 ```ts
-// app/api/h2/[[...routes]]/route.ts
+// app/api/v3/[[...routes]]/route.ts
 import widgets from '../(routes)/widgets'
 app.route('/', widgets)
 ```
@@ -131,7 +131,7 @@ Key patterns enforced:
 - **Response codes**: Always include 401 and 429 in `describeRoute` responses
 
 Verify
-- OpenAPI spec available at `/api/h2/openapi` and includes `/widgets` GET
+- OpenAPI spec available at `/api/v3/openapi` and includes `/widgets` GET
 - Lints pass on edited files
 - Rate limiting: 4 requests/sec per user enforced via Upstash Redis
 
