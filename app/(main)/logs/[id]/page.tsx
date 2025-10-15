@@ -316,7 +316,7 @@ export default async function LogDetailPage({ params }: { params: Promise<{ id: 
       reply_to: reply_to.length ? reply_to : [null],
       last_event: row.status === 'sent' ? 'delivered' : row.status || 'created',
       provider: row.provider || undefined,
-      status: row.status || undefined,
+      status: row.status || 'pending',
       failureReason: row.failureReason || null,
       providerResponse,
     }
