@@ -255,7 +255,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Create sent email record
-        const emailId = nanoid()
+        const emailId = `outbnd_${nanoid()}`
         console.log('💾 Creating sent email record:', emailId)
         
         const sentEmailRecord = await db.insert(sentEmails).values({

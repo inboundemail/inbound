@@ -292,7 +292,7 @@ async function handleSimpleReply(
   }
 
   // Create basic email record
-  const replyEmailId = nanoid();
+  const replyEmailId = `outbnd_${nanoid()}`;
   const messageId = `${replyEmailId}@${fromDomain}`;
 
   console.log("💾 Creating simple email record:", replyEmailId);
@@ -847,7 +847,7 @@ export async function POST(
     }
 
     // Create sent email record
-    const replyEmailId = nanoid();
+    const replyEmailId = `outbnd_${nanoid()}`;
 
     // Check if a custom Message-ID is provided (case-insensitive)
     let messageId = `${replyEmailId}@${fromDomain}`;

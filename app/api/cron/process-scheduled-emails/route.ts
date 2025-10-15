@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
                 })
 
                 // Create sent email record first (for tracking)
-                const sentEmailId = nanoid()
+                const sentEmailId = `outbnd_${nanoid()}`
                 const sentEmailData = {
                     id: sentEmailId,
                     from: scheduledEmail.fromAddress,

@@ -612,7 +612,7 @@ export async function POST(
     }
 
     // Create email record
-    const replyEmailId = nanoid();
+    const replyEmailId = `outbnd_${nanoid()}`;
     const messageId = `${replyEmailId}@${fromDomain}`;
 
     // Build threading headers using exact original Message-ID

@@ -85,7 +85,7 @@ export default async function LogDetailPage({ params }: { params: Promise<{ id: 
 
   // Fetch rich details based on type
   let inboundDetails: (GetMailByIdResponse & { deliveries?: Array<any> }) | null = null
-  let outboundDetails: (GetEmailByIdResponse & { provider?: string; status?: string; failureReason?: string | null; providerResponse?: any }) | null = null
+  let outboundDetails: (GetEmailByIdResponse & { messageId?: string | null; provider?: string; status?: string; failureReason?: string | null; providerResponse?: any }) | null = null
 
   if (type === 'inbound') {
     // Get full inbound email details by reusing the same projection as the API
@@ -264,6 +264,7 @@ export default async function LogDetailPage({ params }: { params: Promise<{ id: 
     const details = await db
       .select({
         id: sentEmails.id,
+        messageId: sentEmails.messageId,
         from: sentEmails.from,
         to: sentEmails.to,
         cc: sentEmails.cc,
@@ -305,6 +306,7 @@ export default async function LogDetailPage({ params }: { params: Promise<{ id: 
     outboundDetails = {
       object: 'email',
       id: row.id,
+      messageId: row.messageId,
       to,
       from: row.from,
       created_at: row.createdAt?.toISOString() || new Date().toISOString(),
@@ -599,11 +601,11 @@ export default async function LogDetailPage({ params }: { params: Promise<{ id: 
                       </div>
                     </div>
                   )}
-                  {((isInbound && inboundDetails?.messageId) || (outboundDetails && 'id' in outboundDetails)) && (
+                  {((isInbound && inboundDetails?.messageId) || (outboundDetails && 'messageId' in outboundDetails)) && (
                     <div>
                       <span className="text-muted-foreground">Message ID (RFC 822):</span>
                       <div className="mt-1">
-                        <ClickableId id={isInbound ? inboundDetails?.messageId || '' : outboundDetails?.id || ''} preview={true} />
+                        <ClickableId id={isInbound ? inboundDetails?.messageId || '' : outboundDetails?.messageId || ''} preview={true} />
                       </div>
                     </div>
                   )}
