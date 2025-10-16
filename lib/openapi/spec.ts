@@ -366,39 +366,6 @@ export async function getOpenAPISpec(): Promise<OpenAPIV3.Document> {
           },
         },
       },
-      '/api/v2/domains/{id}/dns-records': {
-        get: {
-          summary: 'Get DNS records for domain',
-          description: 'Retrieve DNS records for a specific domain with validation status',
-          tags: ['Domains'],
-          security: [{ bearerAuth: [] }],
-          parameters: [
-            {
-              name: 'id',
-              in: 'path',
-              required: true,
-              description: 'Domain ID',
-              schema: {
-                type: 'string',
-                format: 'uuid',
-              },
-            },
-          ],
-          responses: {
-            '200': {
-              description: 'DNS records retrieved successfully',
-              content: {
-                'application/json': {
-                  schema: { $ref: '#/components/schemas/GetDomainDnsRecordsResponse' },
-                },
-              },
-            },
-            '401': { $ref: '#/components/responses/UnauthorizedError' },
-            '404': { $ref: '#/components/responses/NotFoundError' },
-            '500': { $ref: '#/components/responses/InternalServerError' },
-          },
-        },
-      },
     },
     components: {
       securitySchemes: {
@@ -490,89 +457,6 @@ export async function getOpenAPISpec(): Promise<OpenAPIV3.Document> {
             },
           },
           required: ['type', 'name', 'value', 'isVerified', 'isRequired'],
-        },
-        DnsRecordV2: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'string',
-              format: 'uuid',
-              example: '123e4567-e89b-12d3-a456-426614174000',
-            },
-            domainId: {
-              type: 'string',
-              format: 'uuid',
-              example: '123e4567-e89b-12d3-a456-426614174000',
-            },
-            recordType: {
-              type: 'string',
-              enum: ['TXT', 'MX', 'CNAME'],
-              example: 'TXT',
-            },
-            name: {
-              type: 'string',
-              example: '_amazonses.example.com',
-            },
-            value: {
-              type: 'string',
-              example: 'verification-token-here',
-            },
-            priority: {
-              type: 'integer',
-              nullable: true,
-              example: 10,
-            },
-            isRequired: {
-              type: 'boolean',
-              example: true,
-            },
-            isVerified: {
-              type: 'boolean',
-              example: true,
-            },
-            lastChecked: {
-              type: 'string',
-              format: 'date-time',
-              nullable: true,
-              example: '2024-01-15T10:30:00Z',
-            },
-            createdAt: {
-              type: 'string',
-              format: 'date-time',
-              example: '2024-01-15T10:30:00Z',
-            },
-            updatedAt: {
-              type: 'string',
-              format: 'date-time',
-              example: '2024-01-15T10:30:00Z',
-            },
-          },
-          required: ['id', 'domainId', 'recordType', 'name', 'value', 'isRequired', 'isVerified', 'createdAt', 'updatedAt'],
-        },
-        GetDomainDnsRecordsResponse: {
-          type: 'object',
-          properties: {
-            domainId: {
-              type: 'string',
-              format: 'uuid',
-              example: '123e4567-e89b-12d3-a456-426614174000',
-            },
-            domain: {
-              type: 'string',
-              format: 'hostname',
-              example: 'example.com',
-            },
-            records: {
-              type: 'array',
-              items: { $ref: '#/components/schemas/DnsRecordV2' },
-            },
-            valid: {
-              type: 'boolean',
-              description: 'True if all required DNS records are verified',
-              example: true,
-            },
-          },
-          required: ['domainId', 'domain', 'records', 'valid'],
         },
         EmailAddress: {
           type: 'object',
