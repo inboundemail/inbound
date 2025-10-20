@@ -1,0 +1,147 @@
+---
+title: Enhanced Webhook Payload Size Handling
+date: 2025-10-20
+version: 1.12.3
+summary: Improved webhook payload optimization with better error handling for large email payloads
+---
+
+## Overview
+We've significantly enhanced how Inbound.new handles large webhook payloads, addressing issues where users received "payload too large" errors when receiving webhooks for emails with large attachments or content.
+
+## What Changed
+
+### Increased Size Limits
+- **Maximum payload size**: Increased from 1MB to 5MB
+- **Optimization threshold**: 1MB (payloads larger than this are automatically optimized)
+- **Better size calculations**: More accurate payload size detection
+
+### Enhanced Optimization Strategy
+The system now applies multiple optimization levels automatically:
+
+1. **Attachment body removal**: Strips base64-encoded attachment content while preserving metadata
+2. **Header stripping**: Removes detailed email headers if still too large  
+3. **Content truncation**: Creates minimal payload with essential data as last resort
+4. **Graceful failure**: Proper error handling when optimization isn't sufficient
+
+### New Error Handling
+Instead of cryptic "payload too large" errors, users now receive:
+- Clear error messages explaining the issue
+- Specific size information (original vs. optimized)
+- Actionable suggestions for accessing full email data
+- Proper HTTP status codes (413 Request Entity Too Large)
+
+### Optimization Metadata
+Optimized payloads now include a `_meta` field:
+
+```json
+{
+  "email": { ... },
+  "_meta": {
+    "payloadOptimized": true,
+    "originalSize": 2500000,
+    "optimizedSize": 980000,
+    "note": "Use the email ID to fetch full content via API if needed."
+  }
+}
+```
+
+## Technical Details
+
+### Before
+- Hard 1MB limit with basic attachment stripping
+- No fallback handling for still-large payloads
+- Generic error messages
+- No optimization tracking
+
+### After
+- Intelligent 3-tier optimization system
+- 5MB maximum with graceful degradation
+- Detailed error responses with actionable guidance
+- Optimization metadata for webhook consumers
+
+### Optimization Process
+```
+Email > 1MB → Remove attachment bodies
+Still > 5MB → Also remove headers  
+Still > 5MB → Create minimal payload
+Still > 5MB → Fail with detailed error
+```
+
+## Impact
+
+### For Webhook Recipients
+- **Reduced failures**: Emails that previously failed now deliver successfully
+- **Better reliability**: More consistent webhook delivery for large emails
+- **Clearer errors**: When failures occur, you know exactly why and how to fix it
+- **Hybrid approach enabled**: Easy detection of optimized payloads for API fallback
+
+### For Large Email Handling
+- **Attachment-heavy emails**: Better handling of emails with multiple or large attachments
+- **Email threads**: Long conversation threads now optimize automatically
+- **Rich content**: Complex HTML emails with embedded images process reliably
+
+### Performance
+- **Faster delivery**: Smaller payloads improve webhook response times
+- **Lower bandwidth**: Optimized payloads reduce data transfer
+- **Better reliability**: Fewer timeout errors from webhook endpoints
+
+## Migration Guide
+
+### Detecting Optimized Payloads
+Check for the `_meta` field in webhook payloads:
+
+```javascript
+function handleWebhook(payload) {
+  if (payload._meta?.payloadOptimized) {
+    console.log('Email was optimized due to size');
+    // Optionally fetch full content via API
+    const fullEmail = await fetchFullEmail(payload.email.id);
+  }
+  
+  // Process email (either optimized or full)
+  processEmail(payload.email);
+}
+```
+
+### Error Handling
+Update error handling for 413 status codes:
+
+```javascript
+if (response.status === 413) {
+  const error = await response.json();
+  console.log('Payload too large:', error.details);
+  console.log('Suggestion:', error.details.suggestion);
+}
+```
+
+### API Fallback Pattern
+Implement hybrid webhook + API approach:
+
+```javascript
+async function processInboundEmail(webhookPayload) {
+  let emailData = webhookPayload.email;
+  
+  // Check if we need full content
+  if (webhookPayload._meta?.payloadOptimized) {
+    emailData = await fetchFullEmail(emailData.id);
+  }
+  
+  return processEmail(emailData);
+}
+```
+
+## Alternative Solutions
+
+For consistently large emails, consider:
+
+1. **Email API**: Fetch full email data via REST API instead of webhooks
+2. **Attachment API**: Access large attachments separately 
+3. **Webhook notifications**: Use webhooks for notifications, API for data
+
+## Related Documentation
+
+- [Webhook Payload Size Limits](/docs/webhook-payload-size-limits)
+- [Email API Reference](/docs/api/emails)
+- [Attachment API Guide](/docs/api/attachments)
+
+No action required - all changes are backward compatible and automatic.

@@ -8,8 +8,9 @@ import { nanoid } from 'nanoid'
 import { EmailForwarder } from '@/lib/email-management/email-forwarder'
 import { sanitizeHtml, type ParsedEmailData } from '@/lib/email-management/email-parser'
 
-// Maximum webhook payload size (5MB safety margin)
-const MAX_WEBHOOK_PAYLOAD_SIZE = 1_000_000
+// Maximum webhook payload size - increased to 5MB with better optimization
+const MAX_WEBHOOK_PAYLOAD_SIZE = 5_000_000 // 5MB
+const SAFE_WEBHOOK_PAYLOAD_SIZE = 1_000_000 // 1MB - preferred size after optimization
 
 // Force rebuild
 /**
@@ -454,15 +455,88 @@ async function handleWebhookEndpoint(emailId: string, endpoint: any, emailData: 
             }
           }
           const payloadStringWithCleanedRawAndNoHeaders = JSON.stringify(payloadWithCleanedRawAndNoHeaders)
-          finalPayload = payloadWithCleanedRawAndNoHeaders
-          finalPayloadString = payloadStringWithCleanedRawAndNoHeaders
-          strippedFields.push('raw (attachment bodies removed)', 'headers')
-          console.warn(`⚠️ handleWebhookEndpoint - Also removed headers, final size: ${payloadStringWithCleanedRawAndNoHeaders.length} bytes`)
+          
+          if (payloadStringWithCleanedRawAndNoHeaders.length <= MAX_WEBHOOK_PAYLOAD_SIZE) {
+            finalPayload = payloadWithCleanedRawAndNoHeaders
+            finalPayloadString = payloadStringWithCleanedRawAndNoHeaders
+            strippedFields.push('raw (attachment bodies removed)', 'headers')
+            console.warn(`⚠️ handleWebhookEndpoint - Also removed headers, final size: ${payloadStringWithCleanedRawAndNoHeaders.length} bytes`)
+          } else {
+            // Still too large after all optimizations - create minimal payload
+            const minimalPayload = {
+              email: {
+                id: webhookPayload.email.id,
+                messageId: webhookPayload.email.messageId,
+                subject: webhookPayload.email.subject,
+                from: webhookPayload.email.from,
+                to: webhookPayload.email.to,
+                cc: webhookPayload.email.cc,
+                bcc: webhookPayload.email.bcc,
+                date: webhookPayload.email.date,
+                parsedData: {
+                  subject: enhancedParsedData.subject,
+                  from: enhancedParsedData.from,
+                  to: enhancedParsedData.to,
+                  textBody: enhancedParsedData.textBody?.substring(0, 1000) + (enhancedParsedData.textBody?.length > 1000 ? '...[truncated]' : ''),
+                  htmlBody: enhancedParsedData.htmlBody?.substring(0, 1000) + (enhancedParsedData.htmlBody?.length > 1000 ? '...[truncated]' : ''),
+                  date: enhancedParsedData.date,
+                  messageId: enhancedParsedData.messageId,
+                  attachments: (enhancedParsedData.attachments || []).map(att => ({
+                    filename: att.filename,
+                    contentType: att.contentType,
+                    size: att.size || att.content?.length || 0,
+                    contentId: att.contentId,
+                    // Note: Content removed due to size limits - use Attachments API
+                  }))
+                }
+              },
+              timestamp: webhookPayload.timestamp,
+              _meta: {
+                payloadOptimized: true,
+                originalSize: payloadString.length,
+                optimizedSize: 'calculated below',
+                note: 'Payload was too large and has been heavily optimized. Use the email ID to fetch full content via API if needed.'
+              }
+            }
+            
+            const minimalPayloadString = JSON.stringify(minimalPayload)
+            finalPayload = minimalPayload
+            finalPayloadString = minimalPayloadString
+            strippedFields.push('raw (attachment bodies removed)', 'headers', 'content (heavily truncated)', 'attachment content (kept metadata only)')
+            
+            // Update the meta size info
+            finalPayload._meta.optimizedSize = finalPayloadString.length
+            finalPayloadString = JSON.stringify(finalPayload)
+            
+            console.warn(`⚠️ handleWebhookEndpoint - Payload still too large after all optimizations. Created minimal payload: ${finalPayloadString.length} bytes (was ${payloadString.length} bytes)`)
+          }
         }
       }
       
+      // Final size validation
+      if (finalPayloadString.length > MAX_WEBHOOK_PAYLOAD_SIZE) {
+        const errorMessage = `Webhook payload too large even after optimization: ${finalPayloadString.length} bytes (max: ${MAX_WEBHOOK_PAYLOAD_SIZE} bytes). Email ID: ${emailId}`
+        console.error(`❌ handleWebhookEndpoint - ${errorMessage}`)
+        
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'Email resend failed',
+            error: 'Webhook payload too large even after optimization. This email contains too much data to deliver via webhook. Please use the Email API to fetch the full content instead.',
+            details: {
+              originalSize: payloadString.length,
+              finalSize: finalPayloadString.length,
+              maxSize: MAX_WEBHOOK_PAYLOAD_SIZE,
+              emailId: emailId,
+              suggestion: `Use GET /api/v2/emails/${emailId} to fetch the full email content`
+            }
+          },
+          { status: 413 } // 413 Request Entity Too Large
+        )
+      }
+      
       if (strippedFields.length > 0) {
-        console.log(`📋 handleWebhookEndpoint - Cleaned payload for ${endpoint.name}: ${strippedFields.join(', ')}`)
+        console.log(`📋 handleWebhookEndpoint - Optimized payload for ${endpoint.name}: ${strippedFields.join(', ')} - Final size: ${finalPayloadString.length} bytes`)
       }
     }
 
