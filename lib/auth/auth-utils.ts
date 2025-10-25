@@ -25,7 +25,7 @@ export async function isCurrentUserAdmin(): Promise<boolean> {
  * @param role - The user role to check
  * @returns boolean - true if role is admin, false otherwise
  */
-export async function isAdminRole(role: string | null | undefined): Promise<boolean> {
+export function isAdminRole(role: string | null | undefined): boolean {
   return role === 'admin'
 }
 

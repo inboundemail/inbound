@@ -1,21 +1,7 @@
-import { redirect } from "next/navigation"
-import { getCurrentSession, isAdminRole } from "@/lib/auth/auth-utils"
-import AdminPageClient from './admin-page-client'
+"use client"
 
-export default async function AdminPage() {
-  // Check if user is authenticated and has admin role
-  const session = await getCurrentSession()
-  
-  if (!session) {
-    redirect("/login")
-  }
-  
-  if (!isAdminRole(session.user.role)) {
-    redirect("/logs")
-  }
-
-  return <AdminPageClient />
-}
+import { useEffect, useState } from "react"
+import { useSession, authClient as auth } from "@/lib/auth/auth-client"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -115,7 +101,7 @@ interface EmailAddress {
   updatedAt: Date
 }
 
-export default function AdminPage() {
+export default function AdminPageClient() {
   const { data: session, isPending, error } = useSession()
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)

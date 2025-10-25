@@ -2576,6 +2576,8 @@ export async function downloadAttachment(
 }
 
 export async function getAllDomainsForAdmin() {
+  await requireAdmin()
+  
   try {
     const session = await auth.api.getSession({
       headers: await headers(),
@@ -2653,6 +2655,8 @@ export async function getAllDomainsForAdmin() {
 }
 
 export async function getDomainEmailAddressesForAdmin(domainId: string) {
+  await requireAdmin()
+  
   try {
     const session = await auth.api.getSession({
       headers: await headers(),

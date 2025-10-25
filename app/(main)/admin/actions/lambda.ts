@@ -1,5 +1,6 @@
 'use server'
 
+import { requireAdmin } from "@/lib/auth/auth-utils"
 import { 
   CloudWatchLogsClient, 
   DescribeLogGroupsCommand, 
@@ -62,6 +63,7 @@ export interface LambdaFunctionInfo {
 }
 
 export async function getLambdaFunctionInfo(): Promise<{ success: boolean; data?: LambdaFunctionInfo; error?: string }> {
+  await requireAdmin()
   try {
     const command = new GetFunctionConfigurationCommand({
       FunctionName: LAMBDA_FUNCTION_NAME,
@@ -95,6 +97,7 @@ export async function getLambdaFunctionInfo(): Promise<{ success: boolean; data?
 }
 
 export async function getLambdaLogStreams(): Promise<{ success: boolean; data?: LogStreamInfo[]; error?: string }> {
+  await requireAdmin()
   try {
     const logGroupName = `/aws/lambda/${LAMBDA_FUNCTION_NAME}`
     
@@ -133,6 +136,7 @@ export async function getLambdaLogs(
   startTime?: number,
   limit: number = 100
 ): Promise<{ success: boolean; data?: LogEvent[]; nextToken?: string; error?: string }> {
+  await requireAdmin()
   try {
     const logGroupName = `/aws/lambda/${LAMBDA_FUNCTION_NAME}`
     
@@ -194,6 +198,7 @@ export async function getLambdaRecentLogs(
   minutes: number = 30,
   limit: number = 500
 ): Promise<{ success: boolean; data?: LogEvent[]; nextToken?: string; error?: string }> {
+  await requireAdmin()
   try {
     const startTime = Date.now() - (minutes * 60 * 1000)
     
@@ -213,6 +218,7 @@ export async function getLambdaMoreLogs(
   nextToken: string,
   limit: number = 200
 ): Promise<{ success: boolean; data?: LogEvent[]; nextToken?: string; error?: string }> {
+  await requireAdmin()
   try {
     const logGroupName = `/aws/lambda/${LAMBDA_FUNCTION_NAME}`
     const startTime = Date.now() - (minutes * 60 * 1000)
@@ -248,6 +254,7 @@ export async function getLambdaMoreLogs(
 
 // AWS initialization check
 export async function checkAWSConnection(): Promise<{ success: boolean; error?: string }> {
+  await requireAdmin()
   try {
     // Try to list functions to test connection
     const command = new ListFunctionsCommand({

@@ -1,21 +1,7 @@
-import { redirect } from "next/navigation"
-import { getCurrentSession, isAdminRole } from "@/lib/auth/auth-utils"
-import UserInformationPageClient from './user-information-page-client'
+'use client'
 
-export default async function UserInformationPage() {
-  // Check if user is authenticated and has admin role
-  const session = await getCurrentSession()
-  
-  if (!session) {
-    redirect("/login")
-  }
-  
-  if (!isAdminRole(session.user.role)) {
-    redirect("/logs")
-  }
-
-  return <UserInformationPageClient />
-}
+import { useState, useEffect } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -86,7 +72,7 @@ const getSeverityVariant = (severity: string) => {
   }
 }
 
-export default function UserInformationPage() {
+export default function UserInformationPageClient() {
   const [data, setData] = useState<UserAnalyticsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

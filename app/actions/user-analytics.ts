@@ -1,5 +1,6 @@
 "use server"
 
+import { requireAdmin } from "@/lib/auth/auth-utils"
 import { auth } from "@/lib/auth/auth"
 import { headers } from "next/headers"
 import { db } from '@/lib/db'
@@ -80,6 +81,7 @@ export interface UserAnalyticsData {
 
 // Export emails service: returns JSON blob for a user over a time window
 export async function exportUserEmails(params: { userId: string; days: 1 | 7 | 30 }) {
+  await requireAdmin()
   const session = await auth.api.getSession({
     headers: await headers(),
   })
@@ -636,6 +638,7 @@ const getCachedTrends = unstable_cache(
 
 // Main user analytics function
 export const getUserAnalytics = async (): Promise<{ success: true; data: UserAnalyticsData } | { success: false; error: string }> => {
+  await requireAdmin()
   try {
     // Get user session and check admin permissions
     const session = await auth.api.getSession({
@@ -691,6 +694,7 @@ export const getUserAnalytics = async (): Promise<{ success: true; data: UserAna
 
 // Cache invalidation function
 export const invalidateUserAnalyticsCache = async () => {
+  await requireAdmin()
   revalidateTag('user-analytics-overview')
   revalidateTag('user-analytics-top-users') 
   revalidateTag('user-analytics-suspicious')
