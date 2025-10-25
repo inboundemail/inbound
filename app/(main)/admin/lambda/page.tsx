@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useSession } from '@/lib/auth/auth-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import CircleWarning2 from '@/components/icons/circle-warning-2'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -33,6 +35,25 @@ import {
 } from '../actions/lambda'
 
 export default function LambdaPage() {
+  // This page is protected by the admin layout and middleware, but add client-side check as well
+  const { data: session } = useSession()
+  
+  // Additional client-side protection
+  if (session && session.user.role !== 'admin') {
+    console.warn('Non-admin user attempted to access lambda page:', session.user.email)
+    return (
+      <div className="flex flex-1 flex-col gap-6 p-6">
+        <Card className="border-destructive/50 bg-destructive/10">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-destructive">
+              <CircleWarning2 width="16" height="16" />
+              <span>Access denied. Admin privileges required.</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
   const [functionInfo, setFunctionInfo] = useState<LambdaFunctionInfo | null>(null)
   const [logStreams, setLogStreams] = useState<LogStreamInfo[]>([])
   const [logs, setLogs] = useState<LogEvent[]>([])

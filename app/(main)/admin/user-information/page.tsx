@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSession } from '@/lib/auth/auth-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -73,6 +74,25 @@ const getSeverityVariant = (severity: string) => {
 }
 
 export default function UserInformationPage() {
+  // This page is protected by the admin layout and middleware, but add client-side check as well
+  const { data: session } = useSession()
+  
+  // Additional client-side protection
+  if (session && session.user.role !== 'admin') {
+    console.warn('Non-admin user attempted to access user information page:', session.user.email)
+    return (
+      <div className="flex flex-1 flex-col gap-6 p-6">
+        <Card className="border-destructive/50 bg-destructive/10">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-destructive">
+              <CircleWarning2 width="16" height="16" />
+              <span>Access denied. Admin privileges required.</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
   const [data, setData] = useState<UserAnalyticsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

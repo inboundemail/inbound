@@ -147,8 +147,9 @@ export default function AdminPage() {
         return
       }
 
-      // Check if user has admin role
+      // Check if user has admin role - redirect immediately if not admin
       if (session.user.role !== 'admin') {
+        console.warn('Non-admin user attempted to access admin panel:', session.user.email)
         router.push("/logs")
         return
       }

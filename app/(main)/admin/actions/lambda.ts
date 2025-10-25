@@ -13,6 +13,7 @@ import {
   GetFunctionConfigurationCommand,
   ListFunctionsCommand
 } from "@aws-sdk/client-lambda"
+import { requireAdmin } from "@/lib/auth/auth-utils"
 
 // Initialize AWS clients
 const cloudWatchLogsClient = new CloudWatchLogsClient({
@@ -63,6 +64,8 @@ export interface LambdaFunctionInfo {
 
 export async function getLambdaFunctionInfo(): Promise<{ success: boolean; data?: LambdaFunctionInfo; error?: string }> {
   try {
+    // Require admin access
+    await requireAdmin()
     const command = new GetFunctionConfigurationCommand({
       FunctionName: LAMBDA_FUNCTION_NAME,
     })
@@ -96,6 +99,8 @@ export async function getLambdaFunctionInfo(): Promise<{ success: boolean; data?
 
 export async function getLambdaLogStreams(): Promise<{ success: boolean; data?: LogStreamInfo[]; error?: string }> {
   try {
+    // Require admin access
+    await requireAdmin()
     const logGroupName = `/aws/lambda/${LAMBDA_FUNCTION_NAME}`
     
     const command = new DescribeLogStreamsCommand({
@@ -134,6 +139,8 @@ export async function getLambdaLogs(
   limit: number = 100
 ): Promise<{ success: boolean; data?: LogEvent[]; nextToken?: string; error?: string }> {
   try {
+    // Require admin access
+    await requireAdmin()
     const logGroupName = `/aws/lambda/${LAMBDA_FUNCTION_NAME}`
     
     if (logStreamName) {
@@ -195,6 +202,8 @@ export async function getLambdaRecentLogs(
   limit: number = 500
 ): Promise<{ success: boolean; data?: LogEvent[]; nextToken?: string; error?: string }> {
   try {
+    // Require admin access
+    await requireAdmin()
     const startTime = Date.now() - (minutes * 60 * 1000)
     
     const result = await getLambdaLogs(undefined, startTime, limit)
@@ -214,6 +223,8 @@ export async function getLambdaMoreLogs(
   limit: number = 200
 ): Promise<{ success: boolean; data?: LogEvent[]; nextToken?: string; error?: string }> {
   try {
+    // Require admin access
+    await requireAdmin()
     const logGroupName = `/aws/lambda/${LAMBDA_FUNCTION_NAME}`
     const startTime = Date.now() - (minutes * 60 * 1000)
     
@@ -249,6 +260,8 @@ export async function getLambdaMoreLogs(
 // AWS initialization check
 export async function checkAWSConnection(): Promise<{ success: boolean; error?: string }> {
   try {
+    // Require admin access
+    await requireAdmin()
     // Try to list functions to test connection
     const command = new ListFunctionsCommand({
       MaxItems: 1,
