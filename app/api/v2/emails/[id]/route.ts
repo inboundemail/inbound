@@ -137,15 +137,25 @@ export async function GET(
                 recipient: emailData.recipient
             })
 
-            // Parse JSON fields
-            const fromData: ParsedEmailAddress | null = emailData.fromData ? JSON.parse(emailData.fromData) : null
-            const toData: ParsedEmailAddress | null = emailData.toData ? JSON.parse(emailData.toData) : null
-            const ccData: ParsedEmailAddress | null = emailData.ccData ? JSON.parse(emailData.ccData) : null
-            const bccData: ParsedEmailAddress | null = emailData.bccData ? JSON.parse(emailData.bccData) : null
-            const replyToData: ParsedEmailAddress | null = emailData.replyToData ? JSON.parse(emailData.replyToData) : null
-            const attachments = emailData.attachments ? JSON.parse(emailData.attachments) : []
-            const headers = emailData.headers ? JSON.parse(emailData.headers) : null
-            const references = emailData.references ? JSON.parse(emailData.references) : null
+            // Safe JSON parser with fallback
+            const safeParse = <T,>(s: string | null, fallback: T): T => {
+                try { 
+                    return s ? (JSON.parse(s) as T) : fallback 
+                } catch (error) { 
+                    console.warn('JSON parse error:', error)
+                    return fallback 
+                }
+            }
+
+            // Parse JSON fields safely
+            const fromData = safeParse<ParsedEmailAddress | null>(emailData.fromData, null)
+            const toData = safeParse<ParsedEmailAddress | null>(emailData.toData, null)
+            const ccData = safeParse<ParsedEmailAddress | null>(emailData.ccData, null)
+            const bccData = safeParse<ParsedEmailAddress | null>(emailData.bccData, null)
+            const replyToData = safeParse<ParsedEmailAddress | null>(emailData.replyToData, null)
+            const attachments = safeParse<any[]>(emailData.attachments, [])
+            const headers = safeParse<Record<string, any> | null>(emailData.headers, null)
+            const references = safeParse<string[] | null>(emailData.references, null)
 
             // Build inbound email response
             const response: InboundEmailResponse = {
@@ -207,11 +217,21 @@ export async function GET(
                 status: emailData.status
             })
 
-            // Parse JSON fields
-            const toAddresses = emailData.to ? JSON.parse(emailData.to) : []
-            const ccAddresses = emailData.cc ? JSON.parse(emailData.cc) : []
-            const bccAddresses = emailData.bcc ? JSON.parse(emailData.bcc) : []
-            const replyToAddresses = emailData.replyTo ? JSON.parse(emailData.replyTo) : []
+            // Safe JSON parser with fallback
+            const safeParse = <T,>(s: string | null, fallback: T): T => {
+                try { 
+                    return s ? (JSON.parse(s) as T) : fallback 
+                } catch (error) { 
+                    console.warn('JSON parse error:', error)
+                    return fallback 
+                }
+            }
+
+            // Parse JSON fields safely
+            const toAddresses = safeParse<string[]>(emailData.to, [])
+            const ccAddresses = safeParse<string[]>(emailData.cc, [])
+            const bccAddresses = safeParse<string[]>(emailData.bcc, [])
+            const replyToAddresses = safeParse<string[]>(emailData.replyTo, [])
 
             // Map status to last_event
             let lastEvent = 'created'

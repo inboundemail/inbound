@@ -25,7 +25,7 @@ import ArrowBoldLeft from '@/components/icons/arrow-bold-left'
 import { format } from 'date-fns'
 
 import type { GetMailByIdResponse } from '@/app/api/v2/mail/[id]/route'
-import type { GetEmailByIdResponse } from '@/app/api/v2/emails/[id]/route'
+import type { GetEmailByIdResponse, OutboundEmailResponse } from '@/app/api/v2/emails/[id]/route'
 
 // Import the attachment list component
 import { AttachmentList } from '@/components/logs/attachment-list'
@@ -85,7 +85,7 @@ export default async function LogDetailPage({ params }: { params: Promise<{ id: 
 
   // Fetch rich details based on type
   let inboundDetails: (GetMailByIdResponse & { deliveries?: Array<any> }) | null = null
-  let outboundDetails: (GetEmailByIdResponse & { provider?: string; status?: string; failureReason?: string | null; providerResponse?: any }) | null = null
+  let outboundDetails: (OutboundEmailResponse & { provider?: string; status?: string; failureReason?: string | null; providerResponse?: any }) | null = null
 
   if (type === 'inbound') {
     // Get full inbound email details by reusing the same projection as the API
@@ -305,6 +305,7 @@ export default async function LogDetailPage({ params }: { params: Promise<{ id: 
     outboundDetails = {
       object: 'email',
       id: row.id,
+      direction: 'outbound' as const,
       to,
       from: row.from,
       created_at: row.createdAt?.toISOString() || new Date().toISOString(),
@@ -315,6 +316,7 @@ export default async function LogDetailPage({ params }: { params: Promise<{ id: 
       cc: cc.length ? cc : [null],
       reply_to: reply_to.length ? reply_to : [null],
       last_event: row.status === 'sent' ? 'delivered' : row.status || 'created',
+      sent_at: row.sentAt?.toISOString() || null,
       provider: row.provider || undefined,
       status: row.status || 'pending',
       failureReason: row.failureReason || null,

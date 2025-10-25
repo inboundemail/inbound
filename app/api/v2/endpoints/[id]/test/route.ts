@@ -152,6 +152,8 @@ function buildMockInboundWebhookPayload(endpoint: {
       recipient: "test@yourdomain.com",
       subject: "Test Email - Inbound Email Service",
       receivedAt: nowIso,
+      threadId: null,
+      threadPosition: null,
       parsedData: {
         messageId: msgId,
         date: new Date(nowIso),
