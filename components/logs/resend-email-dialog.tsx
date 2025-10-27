@@ -50,7 +50,7 @@ interface Endpoint {
   name: string
   type: 'webhook' | 'email' | 'email_group'
   isActive: boolean
-  description?: string
+  description?: string | null
 }
 
 // Fetch user endpoints
@@ -59,8 +59,8 @@ async function fetchEndpoints(): Promise<Endpoint[]> {
   if (!response.ok) {
     throw new Error('Failed to fetch endpoints')
   }
-  const data = await response.json()
-  return data.endpoints || []
+  const result = await response.json()
+  return result.data || []
 }
 
 // Resend email to specific endpoint
