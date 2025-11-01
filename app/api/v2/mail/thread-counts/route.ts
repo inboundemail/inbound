@@ -96,14 +96,22 @@ function getAllThreadMessageIds(email: any): Set<string> {
 
 export async function POST(request: NextRequest) {
     try {
-        const { userId, error } = await validateRequest(request)
-        
-        if (error) {
+        const authResult = await validateRequest(request)
+
+        if ('error' in authResult) {
+            const status = authResult.status || 401
+            const headers: Record<string, string> = {}
+            if (status === 429 && authResult.retryAfter) {
+                headers['Retry-After'] = authResult.retryAfter.toString()
+                headers['X-RateLimit-Limit'] = (authResult.limit || 0).toString()
+                headers['X-RateLimit-Remaining'] = (authResult.remaining || 0).toString()
+            }
             return NextResponse.json(
-                { success: false, error },
-                { status: 401 }
+                { success: false, error: authResult.error },
+                { status, headers }
             )
         }
+        const { userId } = authResult
 
         const body: ThreadCountsRequest = await request.json()
         

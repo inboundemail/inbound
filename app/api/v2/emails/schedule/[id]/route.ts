@@ -17,10 +17,24 @@ export async function GET(
     console.log('📋 GET /api/v2/emails/schedule/[id] - Starting request')
     
     try {
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            return NextResponse.json({ error }, { status: 401 })
+        const result = await validateRequest(request)
+        if ('error' in result) {
+            console.log('❌ Authentication/Rate limit failed:', result.error)
+            const status = result.status || 401
+            const headers: Record<string, string> = {}
+
+            if (status === 429 && result.retryAfter) {
+                headers['Retry-After'] = result.retryAfter.toString()
+                headers['X-RateLimit-Limit'] = (result.limit || 0).toString()
+                headers['X-RateLimit-Remaining'] = (result.remaining || 0).toString()
+            }
+
+            return NextResponse.json(
+                { error: result.error },
+                { status, headers }
+            )
         }
+        const { userId } = result
 
         const { id } = await params
         console.log('🔍 Fetching scheduled email:', id)
@@ -85,10 +99,24 @@ export async function DELETE(
     console.log('🗑️ DELETE /api/v2/emails/schedule/[id] - Starting request')
     
     try {
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            return NextResponse.json({ error }, { status: 401 })
+        const result = await validateRequest(request)
+        if ('error' in result) {
+            console.log('❌ Authentication/Rate limit failed:', result.error)
+            const status = result.status || 401
+            const headers: Record<string, string> = {}
+
+            if (status === 429 && result.retryAfter) {
+                headers['Retry-After'] = result.retryAfter.toString()
+                headers['X-RateLimit-Limit'] = (result.limit || 0).toString()
+                headers['X-RateLimit-Remaining'] = (result.remaining || 0).toString()
+            }
+
+            return NextResponse.json(
+                { error: result.error },
+                { status, headers }
+            )
         }
+        const { userId } = result
 
         const { id } = await params
         console.log('🗑️ Cancelling scheduled email:', id)
@@ -179,10 +207,24 @@ export async function PATCH(
     console.log('✏️ PATCH /api/v2/emails/schedule/[id] - Starting request')
     
     try {
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            return NextResponse.json({ error }, { status: 401 })
+        const result = await validateRequest(request)
+        if ('error' in result) {
+            console.log('❌ Authentication/Rate limit failed:', result.error)
+            const status = result.status || 401
+            const headers: Record<string, string> = {}
+
+            if (status === 429 && result.retryAfter) {
+                headers['Retry-After'] = result.retryAfter.toString()
+                headers['X-RateLimit-Limit'] = (result.limit || 0).toString()
+                headers['X-RateLimit-Remaining'] = (result.remaining || 0).toString()
+            }
+
+            return NextResponse.json(
+                { error: result.error },
+                { status, headers }
+            )
         }
+        const { userId } = result
 
         const { id } = await params
         console.log('✏️ Updating scheduled email:', id)

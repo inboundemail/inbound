@@ -22,13 +22,21 @@ import type { CreateGuardRuleRequest } from '@/features/guard/types';
 // GET /api/v2/guard - List all guard rules for the user
 export async function GET(request: NextRequest) {
   try {
-    const { userId, error: authError } = await validateRequest(request);
-    if (authError || !userId) {
-      return NextResponse.json({ 
+    const authResult = await validateRequest(request);
+    if ('error' in authResult) {
+      const status = authResult.status || 401
+      const headers: Record<string, string> = {}
+      if (status === 429 && authResult.retryAfter) {
+        headers['Retry-After'] = authResult.retryAfter.toString()
+        headers['X-RateLimit-Limit'] = (authResult.limit || 0).toString()
+        headers['X-RateLimit-Remaining'] = (authResult.remaining || 0).toString()
+      }
+      return NextResponse.json({
         success: false,
-        error: 'Unauthorized' 
-      }, { status: 401 });
+        error: authResult.error
+      }, { status, headers });
     }
+    const { userId } = authResult
 
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get('search');
@@ -111,10 +119,18 @@ export async function GET(request: NextRequest) {
 // POST /api/v2/guard - Create a new guard rule
 export async function POST(request: NextRequest) {
   try {
-    const { userId, error: authError } = await validateRequest(request);
-    if (authError || !userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authResult = await validateRequest(request)
+    if ('error' in authResult) {
+      const status = authResult.status || 401
+      const headers: Record<string, string> = {}
+      if (status === 429 && authResult.retryAfter) {
+        headers['Retry-After'] = authResult.retryAfter.toString()
+        headers['X-RateLimit-Limit'] = (authResult.limit || 0).toString()
+        headers['X-RateLimit-Remaining'] = (authResult.remaining || 0).toString()
+      }
+      return NextResponse.json({ error: authResult.error }, { status, headers })
     }
+    const { userId } = authResult
 
     const body: CreateGuardRuleRequest = await request.json();
 

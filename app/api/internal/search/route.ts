@@ -67,14 +67,24 @@ export async function GET(request: NextRequest) {
     console.log('🔍 Internal Search API - Starting search request')
 
     // Validate authentication
-    const { userId, error } = await validateRequest(request)
-    if (!userId) {
-      console.log('❌ Internal Search API - Authentication failed:', error)
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    const result = await validateRequest(request)
+        if ('error' in result) {
+            console.log('❌ Authentication/Rate limit failed:', result.error)
+            const status = result.status || 401
+            const headers: Record<string, string> = {}
+
+            if (status === 429 && result.retryAfter) {
+                headers['Retry-After'] = result.retryAfter.toString()
+                headers['X-RateLimit-Limit'] = (result.limit || 0).toString()
+                headers['X-RateLimit-Remaining'] = (result.remaining || 0).toString()
+            }
+
+            return NextResponse.json(
+                { error: result.error },
+                { status, headers }
+            )
+        }
+        const { userId } = result
 
     // Get search query
     const { searchParams } = new URL(request.url)

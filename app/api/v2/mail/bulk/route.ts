@@ -34,14 +34,24 @@ export async function POST(request: NextRequest) {
     
     try {
         console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
+        const authResult = await validateRequest(request)
+        if ('error' in authResult) {
+            console.log('❌ Authentication/Rate limit failed:', authResult.error)
+            const status = authResult.status || 401
+            const headers: Record<string, string> = {}
+
+            if (status === 429 && authResult.retryAfter) {
+                headers['Retry-After'] = authResult.retryAfter.toString()
+                headers['X-RateLimit-Limit'] = (authResult.limit || 0).toString()
+                headers['X-RateLimit-Remaining'] = (authResult.remaining || 0).toString()
+            }
+
             return NextResponse.json(
-                { error: error },
-                { status: 401 }
+                { error: authResult.error },
+                { status, headers }
             )
         }
+        const { userId } = authResult
         console.log('✅ Authentication successful for userId:', userId)
 
         console.log('📝 Parsing request body')

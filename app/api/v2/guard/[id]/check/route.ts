@@ -9,10 +9,29 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { userId, error: authError } = await validateRequest(request);
-    if (authError || !userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authResult = await validateRequest(request)
+
+    if ('error' in authResult) {
+
+      const status = authResult.status || 401
+
+      const headers: Record<string, string> = {}
+
+      if (status === 429 && authResult.retryAfter) {
+
+        headers['Retry-After'] = authResult.retryAfter.toString()
+
+        headers['X-RateLimit-Limit'] = (authResult.limit || 0).toString()
+
+        headers['X-RateLimit-Remaining'] = (authResult.remaining || 0).toString()
+
+      }
+
+      return NextResponse.json({ error: authResult.error }, { status, headers })
+
     }
+
+    const { userId } = authResult
 
     const { id: ruleId } = await params;
     const body: CheckRuleMatchRequest = await request.json();

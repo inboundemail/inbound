@@ -132,8 +132,18 @@ export async function POST(
   console.log('🔐 POST /api/v2/domains/{id}/auth - Init domain auth for:', id)
   
   try {
-    const { userId, error } = await validateRequest(request)
-    if (!userId) return NextResponse.json({ error }, { status: 401 })
+    const authResult = await validateRequest(request)
+    if ('error' in authResult) {
+      const status = authResult.status || 401
+      const headers: Record<string, string> = {}
+      if (status === 429 && authResult.retryAfter) {
+        headers['Retry-After'] = authResult.retryAfter.toString()
+        headers['X-RateLimit-Limit'] = (authResult.limit || 0).toString()
+        headers['X-RateLimit-Remaining'] = (authResult.remaining || 0).toString()
+      }
+      return NextResponse.json({ error: authResult.error }, { status, headers })
+    }
+    const { userId } = authResult
 
     // Get domain
     const domainResult = await db
@@ -313,8 +323,18 @@ export async function PATCH(
   console.log('🔍 PATCH /api/v2/domains/{id}/auth - Verify auth for:', id)
 
   try {
-    const { userId, error } = await validateRequest(request)
-    if (!userId) return NextResponse.json({ error }, { status: 401 })
+    const authResult = await validateRequest(request)
+    if ('error' in authResult) {
+      const status = authResult.status || 401
+      const headers: Record<string, string> = {}
+      if (status === 429 && authResult.retryAfter) {
+        headers['Retry-After'] = authResult.retryAfter.toString()
+        headers['X-RateLimit-Limit'] = (authResult.limit || 0).toString()
+        headers['X-RateLimit-Remaining'] = (authResult.remaining || 0).toString()
+      }
+      return NextResponse.json({ error: authResult.error }, { status, headers })
+    }
+    const { userId } = authResult
 
     const domainResult = await db
       .select({ id: emailDomains.id, domain: emailDomains.domain, userId: emailDomains.userId, status: emailDomains.status })

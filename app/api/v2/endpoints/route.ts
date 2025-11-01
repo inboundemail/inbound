@@ -58,14 +58,24 @@ export async function GET(request: NextRequest) {
     
     try {
         console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
+        const result = await validateRequest(request)
+        if ('error' in result) {
+            console.log('❌ Authentication/Rate limit failed:', result.error)
+            const status = result.status || 401
+            const headers: Record<string, string> = {}
+
+            if (status === 429 && result.retryAfter) {
+                headers['Retry-After'] = result.retryAfter.toString()
+                headers['X-RateLimit-Limit'] = (result.limit || 0).toString()
+                headers['X-RateLimit-Remaining'] = (result.remaining || 0).toString()
+            }
+
             return NextResponse.json(
-                { error: error },
-                { status: 401 }
+                { error: result.error },
+                { status, headers }
             )
         }
+        const { userId } = result
         console.log('✅ Authentication successful for userId:', userId)
 
         const { searchParams } = new URL(request.url)
@@ -284,14 +294,24 @@ export async function POST(request: NextRequest) {
     
     try {
         console.log('🔐 Validating request authentication')
-        const { userId, error } = await validateRequest(request)
-        if (!userId) {
-            console.log('❌ Authentication failed:', error)
+        const result = await validateRequest(request)
+        if ('error' in result) {
+            console.log('❌ Authentication/Rate limit failed:', result.error)
+            const status = result.status || 401
+            const headers: Record<string, string> = {}
+
+            if (status === 429 && result.retryAfter) {
+                headers['Retry-After'] = result.retryAfter.toString()
+                headers['X-RateLimit-Limit'] = (result.limit || 0).toString()
+                headers['X-RateLimit-Remaining'] = (result.remaining || 0).toString()
+            }
+
             return NextResponse.json(
-                { error: error },
-                { status: 401 }
+                { error: result.error },
+                { status, headers }
             )
         }
+        const { userId } = result
         console.log('✅ Authentication successful for userId:', userId)
 
         const data: CreateEndpointData = await request.json()

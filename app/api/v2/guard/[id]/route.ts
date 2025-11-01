@@ -23,10 +23,29 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { userId, error: authError } = await validateRequest(request);
-    if (authError || !userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const result = await validateRequest(request)
+
+    if ('error' in result) {
+
+      const status = result.status || 401
+
+      const headers: Record<string, string> = {}
+
+      if (status === 429 && result.retryAfter) {
+
+        headers['Retry-After'] = result.retryAfter.toString()
+
+        headers['X-RateLimit-Limit'] = (result.limit || 0).toString()
+
+        headers['X-RateLimit-Remaining'] = (result.remaining || 0).toString()
+
+      }
+
+      return NextResponse.json({ error: result.error }, { status, headers })
+
     }
+
+    const { userId } = result
 
     const { id: ruleId } = await params;
 
@@ -59,10 +78,29 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { userId, error: authError } = await validateRequest(request);
-    if (authError || !userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const result = await validateRequest(request)
+
+    if ('error' in result) {
+
+      const status = result.status || 401
+
+      const headers: Record<string, string> = {}
+
+      if (status === 429 && result.retryAfter) {
+
+        headers['Retry-After'] = result.retryAfter.toString()
+
+        headers['X-RateLimit-Limit'] = (result.limit || 0).toString()
+
+        headers['X-RateLimit-Remaining'] = (result.remaining || 0).toString()
+
+      }
+
+      return NextResponse.json({ error: result.error }, { status, headers })
+
     }
+
+    const { userId } = result
 
     const { id: ruleId } = await params;
     const body: UpdateGuardRuleRequest = await request.json();
@@ -137,10 +175,29 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { userId, error: authError } = await validateRequest(request);
-    if (authError || !userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const result = await validateRequest(request)
+
+    if ('error' in result) {
+
+      const status = result.status || 401
+
+      const headers: Record<string, string> = {}
+
+      if (status === 429 && result.retryAfter) {
+
+        headers['Retry-After'] = result.retryAfter.toString()
+
+        headers['X-RateLimit-Limit'] = (result.limit || 0).toString()
+
+        headers['X-RateLimit-Remaining'] = (result.remaining || 0).toString()
+
+      }
+
+      return NextResponse.json({ error: result.error }, { status, headers })
+
     }
+
+    const { userId } = result
 
     const { id: ruleId } = await params;
 
