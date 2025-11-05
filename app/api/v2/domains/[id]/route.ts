@@ -61,11 +61,20 @@ export interface GetDomainByIdResponse {
     mailFromDomain: string | null
     mailFromDomainStatus: string | null
     mailFromDomainVerifiedAt: Date | null
+    supportsWildcardSubdomains: boolean
+    wildcardEndpointId: string | null
+    wildcardReceiptRuleName: string | null
     createdAt: Date
     updatedAt: Date
     userId: string
     stats: DomainStats
     catchAllEndpoint?: {
+        id: string
+        name: string
+        type: string
+        isActive: boolean
+    } | null
+    wildcardEndpoint?: {
         id: string
         name: string
         type: string
@@ -179,8 +188,26 @@ export async function GET(
                 .from(endpoints)
                 .where(eq(endpoints.id, domain.catchAllEndpointId))
                 .limit(1)
-            
+
             catchAllEndpoint = endpointResult[0] || null
+        }
+
+        // Get wildcard subdomain endpoint information
+        let wildcardEndpoint = null
+        if (domain.wildcardEndpointId) {
+            console.log('🔍 Getting wildcard subdomain endpoint information')
+            const wildcardEndpointResult = await db
+                .select({
+                    id: endpoints.id,
+                    name: endpoints.name,
+                    type: endpoints.type,
+                    isActive: endpoints.isActive
+                })
+                .from(endpoints)
+                .where(eq(endpoints.id, domain.wildcardEndpointId))
+                .limit(1)
+
+            wildcardEndpoint = wildcardEndpointResult[0] || null
         }
 
         // Calculate time-based email statistics (simplified for now)
@@ -220,6 +247,9 @@ export async function GET(
             mailFromDomain: domain.mailFromDomain,
             mailFromDomainStatus: domain.mailFromDomainStatus,
             mailFromDomainVerifiedAt: domain.mailFromDomainVerifiedAt,
+            supportsWildcardSubdomains: domain.supportsWildcardSubdomains || false,
+            wildcardEndpointId: domain.wildcardEndpointId,
+            wildcardReceiptRuleName: domain.wildcardReceiptRuleName,
             createdAt: domain.createdAt || new Date(),
             updatedAt: domain.updatedAt || new Date(),
             userId: domain.userId,
@@ -227,6 +257,10 @@ export async function GET(
             catchAllEndpoint: catchAllEndpoint ? {
                 ...catchAllEndpoint,
                 isActive: catchAllEndpoint.isActive || false
+            } : null,
+            wildcardEndpoint: wildcardEndpoint ? {
+                ...wildcardEndpoint,
+                isActive: wildcardEndpoint.isActive || false
             } : null
         }
 
@@ -854,12 +888,21 @@ export async function DELETE(
             sesReceiptRules: false
         }
 
-        // 1. Delete AWS SES receipt rules (both catch-all and individual)
+        // 1. Delete AWS SES receipt rules (catch-all, wildcard, and individual)
         if (domain.domain) {
             try {
                 console.log('🔧 Removing AWS SES receipt rules')
                 const sesManager = new AWSSESReceiptRuleManager()
-                
+
+                // Remove wildcard subdomain rule if exists
+                if (domain.supportsWildcardSubdomains || domain.wildcardReceiptRuleName) {
+                    console.log('🔧 Removing wildcard subdomain receipt rule')
+                    const wildcardRemoved = await sesManager.removeWildcardSubdomainRule(domain.domain)
+                    if (wildcardRemoved) {
+                        deletionStats.sesReceiptRules = true
+                    }
+                }
+
                 // Remove catch-all rule if exists
                 if (domain.isCatchAllEnabled || domain.catchAllReceiptRuleName) {
                     console.log('🔧 Removing catch-all receipt rule')

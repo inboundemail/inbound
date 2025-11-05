@@ -458,6 +458,131 @@ export class AWSSESReceiptRuleManager {
   }
 
   /**
+   * Configure wildcard subdomain email receiving for a domain
+   * This creates a receipt rule that captures ALL emails sent to ANY subdomain of the domain
+   * Uses the AWS SES pattern: .domain.com (note the leading period)
+   * Example: .slkb.app catches user@test.slkb.app, admin@api.slkb.app, etc. (but NOT user@slkb.app)
+   */
+  async configureWildcardSubdomainRule(config: {
+    domain: string
+    endpointId?: string
+    lambdaFunctionArn: string
+    s3BucketName: string
+    ruleSetName?: string
+  }): Promise<ReceiptRuleResult> {
+    const ruleSetName = config.ruleSetName || 'inbound-email-rules'
+    const ruleName = `${config.domain}-wildcard-rule`
+
+    try {
+      console.log(`🌐 SES Rules - Configuring wildcard subdomain for domain: ${config.domain}`)
+      console.log(`🔀 SES Rules - Endpoint ID: ${config.endpointId || 'none (will use domain catch-all)'}`)
+
+      // Ensure rule set exists
+      await this.ensureRuleSetExists(ruleSetName)
+
+      // Create receipt rule for wildcard subdomains
+      // According to AWS SES docs, use .domain.com (with leading period) to match ALL subdomains
+      const wildcardPattern = `.${config.domain}`
+
+      const rule: ReceiptRule = {
+        Name: ruleName,
+        Enabled: true,
+        Recipients: [wildcardPattern], // .domain.com catches all subdomains but NOT the parent domain
+        Actions: [
+          // Store email in S3
+          {
+            S3Action: {
+              BucketName: config.s3BucketName,
+              ObjectKeyPrefix: `emails/${config.domain}/wildcard/`,
+              TopicArn: undefined
+            }
+          },
+          // Invoke Lambda function
+          {
+            LambdaAction: {
+              FunctionArn: config.lambdaFunctionArn,
+              InvocationType: 'Event'
+            }
+          }
+        ]
+      }
+
+      // Check if wildcard rule already exists
+      const existingWildcardRule = await this.getRuleIfExists(ruleSetName, ruleName)
+      let status: 'created' | 'updated' | 'failed' = 'created'
+
+      if (existingWildcardRule) {
+        console.log(`🔄 SES Rules - Updating existing wildcard subdomain rule: ${ruleName}`)
+        const updateCommand = new UpdateReceiptRuleCommand({
+          RuleSetName: ruleSetName,
+          Rule: rule
+        })
+        await this.sesClient.send(updateCommand)
+        status = 'updated'
+      } else {
+        console.log(`➕ SES Rules - Creating new wildcard subdomain rule: ${ruleName}`)
+        const createCommand = new CreateReceiptRuleCommand({
+          RuleSetName: ruleSetName,
+          Rule: rule
+        })
+        await this.sesClient.send(createCommand)
+        status = 'created'
+      }
+
+      // Set as active rule set
+      await this.setActiveRuleSet(ruleSetName)
+
+      console.log(`✅ SES Rules - Successfully ${status} wildcard subdomain rule for ${config.domain}`)
+
+      return {
+        ruleName,
+        domain: config.domain,
+        emailAddresses: [wildcardPattern],
+        status
+      }
+    } catch (error) {
+      console.error('💥 SES Rules - Failed to configure wildcard subdomain:', error)
+      return {
+        ruleName,
+        domain: config.domain,
+        emailAddresses: [`.${config.domain}`],
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  /**
+   * Remove wildcard subdomain receipt rule for a domain
+   */
+  async removeWildcardSubdomainRule(domain: string, ruleSetName: string = 'inbound-email-rules'): Promise<boolean> {
+    try {
+      const ruleName = `${domain}-wildcard-rule`
+
+      const command = new DeleteReceiptRuleCommand({
+        RuleSetName: ruleSetName,
+        RuleName: ruleName
+      })
+
+      await this.sesClient.send(command)
+      console.log(`✅ SES Rules - Successfully removed wildcard subdomain rule for ${domain}`)
+      return true
+    } catch (error) {
+      console.error('Failed to remove wildcard subdomain receipt rule:', error)
+      return false
+    }
+  }
+
+  /**
+   * Check if a domain has wildcard subdomain configured
+   */
+  async isWildcardSubdomainConfigured(domain: string, ruleSetName: string = 'inbound-email-rules'): Promise<boolean> {
+    const ruleName = `${domain}-wildcard-rule`
+    const existingRule = await this.getRuleIfExists(ruleSetName, ruleName)
+    return existingRule !== null
+  }
+
+  /**
    * Restore individual email rules when disabling catch-all
    * This recreates the individual email rule with existing email addresses
    */

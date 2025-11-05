@@ -444,13 +444,71 @@ async function findEndpointForEmail(recipient: string, userId: string): Promise<
       }
     }
 
-    // Step 2: Check for domain-level catch-all configuration
+    // Step 2: Check for wildcard subdomain configuration
     const domain = recipient.split('@')[1]
     if (!domain) {
       console.warn(`⚠️ findEndpointForEmail - Invalid email format: ${recipient}`)
       return null
     }
 
+    // Check if this is a subdomain email (e.g., user@test.domain.com)
+    const domainParts = domain.split('.')
+    const isSubdomain = domainParts.length > 2
+
+    if (isSubdomain) {
+      // Extract the root domain (e.g., domain.com from test.domain.com)
+      const rootDomain = domainParts.slice(-2).join('.')
+      console.log(`🌐 findEndpointForEmail - Checking wildcard subdomain configuration for root domain: ${rootDomain}`)
+
+      const wildcardDomainRecord = await db
+        .select({
+          supportsWildcardSubdomains: emailDomains.supportsWildcardSubdomains,
+          wildcardEndpointId: emailDomains.wildcardEndpointId,
+          catchAllEndpointId: emailDomains.catchAllEndpointId,
+          catchAllWebhookId: emailDomains.catchAllWebhookId,
+          domain: emailDomains.domain,
+        })
+        .from(emailDomains)
+        .where(and(
+          eq(emailDomains.domain, rootDomain),
+          eq(emailDomains.supportsWildcardSubdomains, true),
+          eq(emailDomains.userId, userId)
+        ))
+        .limit(1)
+
+      if (wildcardDomainRecord[0]) {
+        const { wildcardEndpointId, catchAllEndpointId, catchAllWebhookId } = wildcardDomainRecord[0]
+        console.log(`🌐 findEndpointForEmail - Found wildcard subdomain domain: ${rootDomain}`)
+
+        // Priority: wildcardEndpointId → catchAllEndpointId → catchAllWebhookId
+        const endpointIdToUse = wildcardEndpointId || catchAllEndpointId
+
+        if (endpointIdToUse) {
+          const wildcardEndpointRecord = await db
+            .select()
+            .from(endpoints)
+            .where(and(
+              eq(endpoints.id, endpointIdToUse),
+              eq(endpoints.isActive, true),
+              eq(endpoints.userId, userId)
+            ))
+            .limit(1)
+
+          if (wildcardEndpointRecord[0]) {
+            console.log(`🌐 findEndpointForEmail - Found wildcard subdomain endpoint: ${wildcardEndpointRecord[0].name} for ${recipient}`)
+            return wildcardEndpointRecord[0]
+          }
+        }
+
+        // Fall back to catch-all webhook if configured
+        if (catchAllWebhookId) {
+          console.log(`🔄 findEndpointForEmail - Using catch-all legacy webhook ${catchAllWebhookId} for wildcard subdomain ${recipient}`)
+          return null // Return null to trigger legacy webhook processing
+        }
+      }
+    }
+
+    // Step 3: Check for domain-level catch-all configuration
     console.log(`🌐 findEndpointForEmail - Checking catch-all configuration for domain: ${domain}`)
 
     const domainRecord = await db

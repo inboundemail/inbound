@@ -90,6 +90,10 @@ export const emailDomains = pgTable('email_domains', {
   catchAllReceiptRuleName: varchar('catch_all_receipt_rule_name', { length: 255 }),
   // DMARC email configuration
   receiveDmarcEmails: boolean('receive_dmarc_emails').default(false), // Whether to receive DMARC report emails (dmarc@domain)
+  // Wildcard subdomain configuration
+  supportsWildcardSubdomains: boolean('supports_wildcard_subdomains').default(false), // Whether wildcard subdomain receiving is enabled (*.domain.com)
+  wildcardReceiptRuleName: varchar('wildcard_receipt_rule_name', { length: 255 }), // AWS SES receipt rule name for wildcard subdomains
+  wildcardEndpointId: varchar('wildcard_endpoint_id', { length: 255 }), // Endpoint to route wildcard subdomain emails to
   // Tenant association (NEW)
   tenantId: varchar('tenant_id', { length: 255 }), // References sesTenants.id
   createdAt: timestamp('created_at').defaultNow(),

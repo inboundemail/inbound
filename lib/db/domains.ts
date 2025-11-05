@@ -370,6 +370,54 @@ export async function getDomainWithCatchAll(domain: string, userId: string): Pro
 }
 
 /**
+ * Enable wildcard subdomain receiving for a domain
+ */
+export async function enableDomainWildcardSubdomains(
+  domainId: string,
+  endpointId: string | null,
+  receiptRuleName: string
+): Promise<EmailDomain> {
+  const [updated] = await db
+    .update(emailDomains)
+    .set({
+      supportsWildcardSubdomains: true,
+      wildcardEndpointId: endpointId,
+      wildcardReceiptRuleName: receiptRuleName,
+      updatedAt: new Date(),
+    })
+    .where(eq(emailDomains.id, domainId))
+    .returning()
+
+  if (!updated) {
+    throw new Error('Domain not found')
+  }
+
+  return updated
+}
+
+/**
+ * Disable wildcard subdomain receiving for a domain
+ */
+export async function disableDomainWildcardSubdomains(domainId: string): Promise<EmailDomain> {
+  const [updated] = await db
+    .update(emailDomains)
+    .set({
+      supportsWildcardSubdomains: false,
+      wildcardEndpointId: null,
+      wildcardReceiptRuleName: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(emailDomains.id, domainId))
+    .returning()
+
+  if (!updated) {
+    throw new Error('Domain not found')
+  }
+
+  return updated
+}
+
+/**
  * Check if domain has catch-all enabled
  */
 export async function isDomainCatchAllEnabled(domainId: string): Promise<boolean> {

@@ -200,6 +200,13 @@ export async function initiateDomainVerification(
         name: mailFromDomain,
         value: 'v=spf1 include:amazonses.com ~all',
         description: 'SPF record for MAIL FROM domain'
+      },
+      // Wildcard subdomain MX record (optional - for receiving emails at any subdomain)
+      {
+        type: 'MX',
+        name: `*.${domain}`,
+        value: `10 inbound-smtp.${awsRegion}.amazonaws.com`,
+        description: 'Wildcard subdomain email routing (optional - enables email receiving for all subdomains like user@anything.domain.com)'
       }
     ]
 
