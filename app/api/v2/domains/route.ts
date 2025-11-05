@@ -364,6 +364,43 @@ export async function GET(request: NextRequest) {
                                         })
                                         .where(eq(emailDomains.id, domain.id))
                                     enhancedDomain.status = 'failed'
+                                } else if (sesStatus === 'NotFound' && isSubdomain(domain.domain)) {
+                                    // Special handling for subdomains with verified parents
+                                    const parentDomain = await getVerifiedParentDomain(domain.domain, domain.userId)
+                                    if (parentDomain) {
+                                        console.log(`🔍 Subdomain ${domain.domain} has verified parent ${parentDomain.domain}, checking MX record...`)
+                                        
+                                        // Check if MX record is verified
+                                        const mxRecordVerified = verificationResults.some(r => 
+                                            r.type === 'MX' && r.isVerified
+                                        )
+                                        
+                                        if (mxRecordVerified && domain.status !== 'verified') {
+                                            console.log(`✅ MX record verified for subdomain ${domain.domain}, marking as verified`)
+                                            await db
+                                                .update(emailDomains)
+                                                .set({
+                                                    status: 'verified',
+                                                    canReceiveEmails: true,
+                                                    hasMxRecords: true,
+                                                    lastSesCheck: new Date(),
+                                                    lastDnsCheck: new Date(),
+                                                    updatedAt: new Date()
+                                                })
+                                                .where(eq(emailDomains.id, domain.id))
+                                            enhancedDomain.status = 'verified'
+                                            enhancedDomain.canReceiveEmails = true
+                                            enhancedDomain.hasMxRecords = true
+                                        }
+                                    } else {
+                                        // Just update last check time
+                                        await db
+                                            .update(emailDomains)
+                                            .set({
+                                                lastSesCheck: new Date()
+                                            })
+                                            .where(eq(emailDomains.id, domain.id))
+                                    }
                                 } else {
                                     // Just update last check time
                                     await db
@@ -381,7 +418,20 @@ export async function GET(request: NextRequest) {
 
                         const allDnsVerified = verificationResults.length > 0 && 
                             verificationResults.every(r => r.isVerified)
-                        const isFullyVerified = allDnsVerified && sesStatus === 'Success'
+                        
+                        // For subdomains with verified parents, consider them fully verified if MX is verified
+                        let isFullyVerified = false
+                        if (isSubdomain(domain.domain)) {
+                            const parentDomain = await getVerifiedParentDomain(domain.domain, domain.userId)
+                            if (parentDomain) {
+                                const mxRecordVerified = verificationResults.some(r => r.type === 'MX' && r.isVerified)
+                                isFullyVerified = mxRecordVerified
+                            } else {
+                                isFullyVerified = allDnsVerified && sesStatus === 'Success'
+                            }
+                        } else {
+                            isFullyVerified = allDnsVerified && sesStatus === 'Success'
+                        }
 
                         enhancedDomain.verificationCheck = {
                             dnsRecords: verificationResults,
@@ -635,23 +685,45 @@ export async function POST(request: NextRequest) {
                 console.log(`✅ Subdomain detected with verified parent: ${parent.domain}`)
                 parentDomain = parent.domain
                 
-                // Mark domain as verified immediately (inherits from parent)
+                // Keep status as 'pending' until MX record is verified
+                // The subdomain inherits SES verification (can send) but needs MX for receiving
                 await db
                     .update(emailDomains)
                     .set({
-                        status: 'verified',
-                        verificationToken: null, // Not needed
+                        status: 'pending', // Keep pending until MX is verified
+                        verificationToken: null, // Not needed for SES (inherited)
                         updatedAt: new Date()
                     })
                     .where(eq(emailDomains.id, domainRecord.id))
+                
+                // Save MX record to database so it shows up on domain details page
+                const mxRecordId = `dns_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+                const mxRecordData = {
+                    id: mxRecordId,
+                    domainId: domainRecord.id,
+                    recordType: 'MX',
+                    name: domain,
+                    value: `10 inbound-smtp.${awsRegion}.amazonaws.com`,
+                    isRequired: true,
+                    isVerified: false,
+                    createdAt: new Date(),
+                }
+                
+                try {
+                    await db.insert(domainDnsRecords).values(mxRecordData)
+                    console.log(`✅ Saved MX record to database for subdomain: ${domain}`)
+                } catch (dnsError) {
+                    console.error('⚠️ Failed to save MX record to database:', dnsError)
+                    // Continue even if DNS record insertion fails
+                }
                 
                 // Return simplified response with only MX record
                 const response: PostDomainsResponse = {
                     id: domainRecord.id,
                     domain: domainRecord.domain,
-                    status: 'verified', // Inherit from parent
-                    canReceiveEmails: domainRecord.canReceiveEmails || false,
-                    hasMxRecords: domainRecord.hasMxRecords || false,
+                    status: 'pending', // Pending MX record verification
+                    canReceiveEmails: false, // Not until MX is verified
+                    hasMxRecords: false, // Not yet
                     domainProvider: domainRecord.domainProvider,
                     providerConfidence: domainRecord.providerConfidence,
                     dnsRecords: [
@@ -667,11 +739,12 @@ export async function POST(request: NextRequest) {
                     updatedAt: new Date()
                 }
                 
-                console.log(`✅ Subdomain created with parent verification: ${domain} inherits from ${parent.domain}`)
+                console.log(`✅ Subdomain created with parent SES verification (can send): ${domain} inherits from ${parent.domain}`)
+                console.log(`⏳ Subdomain pending MX verification (for receiving): ${domain}`)
                 return NextResponse.json({
                     ...response,
                     parentDomain: parent.domain,
-                    message: `Subdomain inherits verification from ${parent.domain}. Only MX record needed for receiving.`
+                    message: `Subdomain inherits SES verification from ${parent.domain} (can send emails). Add the MX record below to receive emails.`
                 }, { status: 201 })
             }
         }

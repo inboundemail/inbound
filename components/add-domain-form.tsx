@@ -426,7 +426,7 @@ export default function AddDomainForm({
         onSuccess(successResult.id);
       }
 
-      // Redirect to domain details page
+      // Always redirect to domain details page after creation
       toast.success("Domain added successfully! Redirecting...");
       setTimeout(() => {
         router.push(`/emails/${successResult.id}`);

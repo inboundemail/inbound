@@ -94,6 +94,7 @@ import {
 } from "@/lib/utils/zone-file-generator";
 import ArrowBoldRight from "@/components/icons/arrow-bold-right";
 import CircleXmark from "@/components/icons/circle-xmark";
+import { isSubdomain } from "@/lib/domains-and-dns/domain-utils";
 
 export default function DomainDetailPage() {
   const { data: session } = useSession();
@@ -1070,8 +1071,10 @@ export default function DomainDetailPage() {
         )}
 
         {/* MAIL FROM Configuration - no card */}
+        {/* Only show for root domains (subdomains inherit SES from parent) */}
         {status === DOMAIN_STATUS.VERIFIED &&
-          !domainWithMailFrom?.mailFromDomain && (
+          !domainWithMailFrom?.mailFromDomain &&
+          !isSubdomain(domain) && (
             <div className="p-2">
               <div className="flex items-center justify-between">
                 <div className="flex-1">

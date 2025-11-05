@@ -232,6 +232,15 @@ export async function GET(
             } : null
         }
 
+        // Check if this is a subdomain with verified parent (used by both verification and recommendations)
+        let parentDomain: any = null
+        if (check) {
+            const { getVerifiedParentDomain } = await import('@/lib/db/domains')
+            parentDomain = !isRootDomain(domain.domain) 
+                ? await getVerifiedParentDomain(domain.domain, domain.userId)
+                : null
+        }
+        
         // If check=true, perform DNS and SES verification checks
         if (check) {
             console.log(`🔍 Performing verification check for domain: ${domain.domain}`)
@@ -264,27 +273,31 @@ export async function GET(
                     dbId: record.id
                 }))
                 
-                // Also check for SPF and DMARC even if not in database
-                const spfRecord = dnsRecords.find(r => r.recordType === 'TXT' && r.name === domain.domain && (r.value || '').toLowerCase().includes('v=spf1'))
-                if (!spfRecord) {
-                    // Add SPF to verification list
-                    recordsToVerify.push({
-                        type: 'TXT',
-                        name: domain.domain,
-                        value: 'v=spf1 include:amazonses.com ~all',
-                        dbId: null
-                    })
-                }
-                
-                const dmarcRecord = dnsRecords.find(r => r.recordType === 'TXT' && r.name === `_dmarc.${domain.domain}`)
-                if (!dmarcRecord) {
-                    // Add DMARC to verification list
-                    recordsToVerify.push({
-                        type: 'TXT',
-                        name: `_dmarc.${domain.domain}`,
-                        value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain.domain}; ruf=mailto:dmarc@${domain.domain}; fo=1; aspf=r; adkim=r`,
-                        dbId: null
-                    })
+                // Only add SPF and DMARC if NOT a subdomain with verified parent
+                // Subdomains inherit SES verification and only need MX for receiving
+                if (!parentDomain) {
+                    // Also check for SPF and DMARC even if not in database
+                    const spfRecord = dnsRecords.find(r => r.recordType === 'TXT' && r.name === domain.domain && (r.value || '').toLowerCase().includes('v=spf1'))
+                    if (!spfRecord) {
+                        // Add SPF to verification list
+                        recordsToVerify.push({
+                            type: 'TXT',
+                            name: domain.domain,
+                            value: 'v=spf1 include:amazonses.com ~all',
+                            dbId: null
+                        })
+                    }
+                    
+                    const dmarcRecord = dnsRecords.find(r => r.recordType === 'TXT' && r.name === `_dmarc.${domain.domain}`)
+                    if (!dmarcRecord) {
+                        // Add DMARC to verification list
+                        recordsToVerify.push({
+                            type: 'TXT',
+                            name: `_dmarc.${domain.domain}`,
+                            value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain.domain}; ruf=mailto:dmarc@${domain.domain}; fo=1; aspf=r; adkim=r`,
+                            dbId: null
+                        })
+                    }
                 }
 
                 if (recordsToVerify.length > 0) {
@@ -427,6 +440,46 @@ export async function GET(
                                 .set(updateData)
                                 .where(eq(emailDomains.id, domain.id))
                             response.status = 'failed'
+                        } else if (sesStatus === 'NotFound' && !isRootDomain(domain.domain)) {
+                            // Special handling for subdomains with verified parents
+                            const { getVerifiedParentDomain } = await import('@/lib/db/domains')
+                            const parentDomain = await getVerifiedParentDomain(domain.domain, domain.userId)
+                            if (parentDomain) {
+                                console.log(`🔍 Subdomain ${domain.domain} has verified parent ${parentDomain.domain}, checking MX record...`)
+                                
+                                // Check if MX record is verified
+                                const mxRecordVerified = verificationResults.some(r => 
+                                    r.type === 'MX' && r.isVerified
+                                )
+                                
+                                if (mxRecordVerified && domain.status !== 'verified') {
+                                    console.log(`✅ MX record verified for subdomain ${domain.domain}, marking as verified`)
+                                    updateData.status = 'verified'
+                                    updateData.canReceiveEmails = true
+                                    updateData.hasMxRecords = true
+                                    updateData.lastDnsCheck = new Date()
+                                    updateData.updatedAt = new Date()
+                                    await db
+                                        .update(emailDomains)
+                                        .set(updateData)
+                                        .where(eq(emailDomains.id, domain.id))
+                                    response.status = 'verified'
+                                    response.canReceiveEmails = true
+                                    response.hasMxRecords = true
+                                } else {
+                                    // Just update last check time and MAIL FROM status
+                                    await db
+                                        .update(emailDomains)
+                                        .set(updateData)
+                                        .where(eq(emailDomains.id, domain.id))
+                                }
+                            } else {
+                                // Just update last check time and MAIL FROM status
+                                await db
+                                    .update(emailDomains)
+                                    .set(updateData)
+                                    .where(eq(emailDomains.id, domain.id))
+                            }
                         } else {
                             // Just update last check time and MAIL FROM status
                             await db
@@ -442,7 +495,21 @@ export async function GET(
 
                 const allDnsVerified = verificationResults.length > 0 && 
                     verificationResults.every(r => r.isVerified)
-                const isFullyVerified = allDnsVerified && sesStatus === 'Success'
+                
+                // For subdomains with verified parents, consider them fully verified if MX is verified
+                let isFullyVerified = false
+                if (!isRootDomain(domain.domain)) {
+                    const { getVerifiedParentDomain } = await import('@/lib/db/domains')
+                    const parentDomain = await getVerifiedParentDomain(domain.domain, domain.userId)
+                    if (parentDomain) {
+                        const mxRecordVerified = verificationResults.some(r => r.type === 'MX' && r.isVerified)
+                        isFullyVerified = mxRecordVerified
+                    } else {
+                        isFullyVerified = allDnsVerified && sesStatus === 'Success'
+                    }
+                } else {
+                    isFullyVerified = allDnsVerified && sesStatus === 'Success'
+                }
 
                 response.verificationCheck = {
                     dnsRecords: verificationResults,
@@ -481,40 +548,44 @@ export async function GET(
             }
             
             // Build recommendations if SPF/DMARC missing or not verified
+            // Skip for subdomains with verified parents (they don't need SPF/DMARC)
             try {
-                // Check verification results to see if SPF/DMARC are verified
-                const verificationCheckResults = response.verificationCheck?.dnsRecords || []
-                const spfVerified = verificationCheckResults.some((r: any) => 
-                    r.type === 'TXT' && 
-                    r.name === domain.domain && 
-                    r.isVerified
-                )
-                const dmarcVerified = verificationCheckResults.some((r: any) => 
-                    r.type === 'TXT' && 
-                    r.name === `_dmarc.${domain.domain}` && 
-                    r.isVerified
-                )
-                
-                const recommendations: GetDomainByIdResponse['authRecommendations'] = {}
-                
-                if (!spfVerified) {
-                    recommendations.spf = {
-                        name: domain.domain,
-                        value: 'v=spf1 include:amazonses.com ~all',
-                        description: 'SPF record for root domain (recommended)'
+                // Check if subdomain with verified parent (already calculated earlier)
+                if (!parentDomain) {
+                    // Check verification results to see if SPF/DMARC are verified
+                    const verificationCheckResults = response.verificationCheck?.dnsRecords || []
+                    const spfVerified = verificationCheckResults.some((r: any) => 
+                        r.type === 'TXT' && 
+                        r.name === domain.domain && 
+                        r.isVerified
+                    )
+                    const dmarcVerified = verificationCheckResults.some((r: any) => 
+                        r.type === 'TXT' && 
+                        r.name === `_dmarc.${domain.domain}` && 
+                        r.isVerified
+                    )
+                    
+                    const recommendations: GetDomainByIdResponse['authRecommendations'] = {}
+                    
+                    if (!spfVerified) {
+                        recommendations.spf = {
+                            name: domain.domain,
+                            value: 'v=spf1 include:amazonses.com ~all',
+                            description: 'SPF record for root domain (recommended)'
+                        }
                     }
-                }
-                
-                if (!dmarcVerified) {
-                    recommendations.dmarc = {
-                        name: `_dmarc.${domain.domain}`,
-                        value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain.domain}; ruf=mailto:dmarc@${domain.domain}; fo=1; aspf=r; adkim=r`,
-                        description: 'DMARC policy record (starts with p=none for monitoring)'
+                    
+                    if (!dmarcVerified) {
+                        recommendations.dmarc = {
+                            name: `_dmarc.${domain.domain}`,
+                            value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain.domain}; ruf=mailto:dmarc@${domain.domain}; fo=1; aspf=r; adkim=r`,
+                            description: 'DMARC policy record (starts with p=none for monitoring)'
+                        }
                     }
-                }
-                
-                if (recommendations.spf || recommendations.dmarc) {
-                    response.authRecommendations = recommendations
+                    
+                    if (recommendations.spf || recommendations.dmarc) {
+                        response.authRecommendations = recommendations
+                    }
                 }
             } catch (recError) {
                 console.warn('⚠️ Failed to build auth recommendations:', recError)
