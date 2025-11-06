@@ -58,19 +58,6 @@ function generateBoundary(): string {
 }
 
 /**
- * Encode content for email transmission
- * Uses quoted-printable for text and base64 for attachments
- */
-function encodeQuotedPrintable(text: string): string {
-  // Simple quoted-printable encoding for basic text
-  // For production, consider using a proper library
-  return text
-    .replace(/=/g, '=3D')
-    .replace(/\r\n/g, '\n')
-    .replace(/\n/g, '\r\n')
-}
-
-/**
  * Build raw email message with full MIME support including attachments
  */
 export function buildRawEmailMessage(params: EmailMessageParams): string {

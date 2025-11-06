@@ -815,23 +815,23 @@ export async function POST(
           rawMessage += `--${altBoundary}\r\n`;
           rawMessage += `Content-Type: text/plain; charset=UTF-8\r\n`;
           rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-          rawMessage += `${body.text}\r\n`;
+          rawMessage += `${encodeQuotedPrintable(body.text || '')}\r\n`;
 
           // HTML part
           rawMessage += `--${altBoundary}\r\n`;
           rawMessage += `Content-Type: text/html; charset=UTF-8\r\n`;
           rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-          rawMessage += `${body.html}\r\n`;
+          rawMessage += `${encodeQuotedPrintable(body.html || '')}\r\n`;
 
           rawMessage += `--${altBoundary}--\r\n`;
         } else if (body.html) {
           rawMessage += `Content-Type: text/html; charset=UTF-8\r\n`;
           rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-          rawMessage += `${body.html}\r\n`;
+          rawMessage += `${encodeQuotedPrintable(body.html || '')}\r\n`;
         } else {
           rawMessage += `Content-Type: text/plain; charset=UTF-8\r\n`;
           rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-          rawMessage += `${body.text}\r\n`;
+          rawMessage += `${encodeQuotedPrintable(body.text || '')}\r\n`;
         }
 
         // Add attachments
@@ -854,25 +854,25 @@ export async function POST(
           rawMessage += `--${boundary}\r\n`;
           rawMessage += `Content-Type: text/plain; charset=UTF-8\r\n`;
           rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-          rawMessage += `${body.text}\r\n`;
+          rawMessage += `${encodeQuotedPrintable(body.text || '')}\r\n`;
 
           // HTML part
           rawMessage += `--${boundary}\r\n`;
           rawMessage += `Content-Type: text/html; charset=UTF-8\r\n`;
           rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-          rawMessage += `${body.html}\r\n`;
+          rawMessage += `${encodeQuotedPrintable(body.html || '')}\r\n`;
 
           rawMessage += `--${boundary}--\r\n`;
         } else if (body.html) {
           // HTML only
           rawMessage += `Content-Type: text/html; charset=UTF-8\r\n`;
           rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-          rawMessage += `${body.html}\r\n`;
+          rawMessage += `${encodeQuotedPrintable(body.html || '')}\r\n`;
         } else {
           // Text only
           rawMessage += `Content-Type: text/plain; charset=UTF-8\r\n`;
           rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-          rawMessage += `${body.text}\r\n`;
+          rawMessage += `${encodeQuotedPrintable(body.text || '')}\r\n`;
         }
       }
 

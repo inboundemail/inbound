@@ -23,6 +23,7 @@ import {
   extractDomain,
   extractEmailName,
 } from "@/lib/email-management/agent-email-helper";
+import { encodeQuotedPrintable } from "@/lib/email-management/encoding";
 
 /**
  * POST /api/v2/emails/[id]/reply
@@ -431,25 +432,25 @@ async function handleSimpleReply(
       rawMessage += `--${boundary}\r\n`;
       rawMessage += `Content-Type: text/plain; charset=UTF-8\r\n`;
       rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-      rawMessage += `${body.text}\r\n`;
+      rawMessage += `${encodeQuotedPrintable(body.text || '')}\r\n`;
 
       // HTML part
       rawMessage += `--${boundary}\r\n`;
       rawMessage += `Content-Type: text/html; charset=UTF-8\r\n`;
       rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-      rawMessage += `${body.html}\r\n`;
+      rawMessage += `${encodeQuotedPrintable(body.html || '')}\r\n`;
 
       rawMessage += `--${boundary}--\r\n`;
     } else if (body.html) {
       // HTML only
       rawMessage += `Content-Type: text/html; charset=UTF-8\r\n`;
       rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-      rawMessage += `${body.html}\r\n`;
+      rawMessage += `${encodeQuotedPrintable(body.html || '')}\r\n`;
     } else {
       // Text only
       rawMessage += `Content-Type: text/plain; charset=UTF-8\r\n`;
       rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-      rawMessage += `${body.text}\r\n`;
+      rawMessage += `${encodeQuotedPrintable(body.text || '')}\r\n`;
     }
 
     // Use SendRawEmailCommand for proper header support
