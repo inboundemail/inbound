@@ -37,7 +37,7 @@ export function LoginForm({
     try {
       await authClient.signIn.social({
         provider: "github",
-        callbackURL: "/logs",
+        callbackURL: "/logs?from=login",
         errorCallbackURL: "/login?error=auth_failed",
       });
       // Don't reset loading state here as we'll be redirecting
@@ -52,7 +52,7 @@ export function LoginForm({
     try {
       await authClient.signIn.social({
         provider: "google",
-        callbackURL: "/logs",
+        callbackURL: "/logs?from=login",
         errorCallbackURL: "/login?error=auth_failed",
       });
       // Don't reset loading state here as we'll be redirecting
@@ -79,7 +79,7 @@ export function LoginForm({
     try {
       const { data, error } = await (authClient.signIn as any).magicLink({
         email: email.trim(),
-        callbackURL: "/login?success=magic_link", // Will show success state before redirect
+        callbackURL: "/logs?from=login&success=magic_link", // Will show success state before redirect
       });
 
       if (error) {

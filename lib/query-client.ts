@@ -18,8 +18,8 @@ export const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       // Refetch on reconnect
       refetchOnReconnect: true,
-      // Only refetch on mount if data is stale (improves navigation performance)
-      refetchOnMount: false,
+      // Refetch on mount if data is stale (ensures fresh data after login)
+      refetchOnMount: 'always',
     },
     mutations: {
       // Retry failed mutations once

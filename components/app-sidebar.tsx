@@ -45,8 +45,10 @@ import { Input } from "./ui/input";
 import { useQuery } from "@tanstack/react-query";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { data: session } = useSession();
+  const { data: session, isPending, error, refetch } = useSession();
   const [isUpdating, setIsUpdating] = React.useState(false);
+  const [retryCount, setRetryCount] = React.useState(0);
+  const maxRetries = 3;
 
   const handleUpdateProfile = async (formData: FormData) => {
     setIsUpdating(true);
@@ -66,9 +68,54 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     }
   };
 
-  // Don't render sidebar if no session (this shouldn't happen due to layout protection)
+  // Retry session fetch if it fails or session is missing
+  React.useEffect(() => {
+    if (!isPending && !session?.user && retryCount < maxRetries) {
+      const timer = setTimeout(() => {
+        console.log(`Retrying session fetch (attempt ${retryCount + 1}/${maxRetries})`);
+        refetch();
+        setRetryCount(prev => prev + 1);
+      }, 500 * (retryCount + 1)); // Exponential backoff: 500ms, 1000ms, 1500ms
+      
+      return () => clearTimeout(timer);
+    }
+  }, [session?.user, isPending, retryCount, refetch]);
+
+  // Show loading state while session is loading or retrying
+  if (isPending || (!session?.user && retryCount < maxRetries)) {
+    return (
+      <Sidebar variant="inset" collapsible="icon" {...props}>
+        <SidebarContent className="flex items-center justify-center p-4">
+          <div className="flex flex-col items-center gap-2 text-sidebar-foreground/70">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sidebar-foreground"></div>
+            <span className="text-sm">Loading sidebar...</span>
+          </div>
+        </SidebarContent>
+      </Sidebar>
+    );
+  }
+
+  // After max retries, show error state
   if (!session?.user) {
-    return null;
+    return (
+      <Sidebar variant="inset" collapsible="icon" {...props}>
+        <SidebarContent className="flex items-center justify-center p-4">
+          <div className="flex flex-col items-center gap-2 text-sidebar-foreground/70 text-center">
+            <span className="text-sm">Unable to load sidebar</span>
+            <Button 
+              size="sm" 
+              variant="secondary"
+              onClick={() => {
+                setRetryCount(0);
+                refetch();
+              }}
+            >
+              Retry
+            </Button>
+          </div>
+        </SidebarContent>
+      </Sidebar>
+    );
   }
 
   // Get the user's active or trialing product to display in the sidebar

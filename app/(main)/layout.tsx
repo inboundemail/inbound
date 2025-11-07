@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { data: session, isPending } = useSession()
+  const { data: session, isPending, refetch } = useSession()
   const router = useRouter()
   const { open, setOpen } = useCommandBar()
   
@@ -23,6 +23,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       router.push("/login")
     }
   }, [session, isPending, router])
+
+  // Ensure session is fresh after navigation from login
+  useEffect(() => {
+    // If we just logged in (check for query param or recent navigation)
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.get('from') === 'login' && session) {
+      // Refetch session to ensure all data is loaded
+      refetch()
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [session, refetch])
 
   // Show loading state while checking authentication
   if (isPending) {
