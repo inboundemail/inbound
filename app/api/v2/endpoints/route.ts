@@ -71,7 +71,8 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url)
 
         // Extract query parameters
-        const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100)
+        // Increased max limit to 500 for endpoints (they're lighter than email queries)
+        const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 500)
         const offset = parseInt(searchParams.get('offset') || '0')
         const type = searchParams.get('type')
         const active = searchParams.get('active')
@@ -86,10 +87,10 @@ export async function GET(request: NextRequest) {
         })
 
         // Validate parameters
-        if (limit < 1 || limit > 100) {
+        if (limit < 1 || limit > 500) {
             console.log('⚠️ Invalid limit parameter:', limit)
             return NextResponse.json(
-                { error: 'Limit must be between 1 and 100' },
+                { error: 'Limit must be between 1 and 500' },
                 { status: 400 }
             )
         }

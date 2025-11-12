@@ -6,6 +6,9 @@ import type { EndpointWithStats } from '../types'
 async function fetchEndpoints(sortBy?: 'newest' | 'oldest'): Promise<EndpointWithStats[]> {
   const params = new URLSearchParams()
   if (sortBy) params.set('sortBy', sortBy)
+  // Request a high limit to get all endpoints (max 500 per API)
+  // This should cover most users - very few will have more than 500 endpoints
+  params.set('limit', '500')
   
   const response = await fetch(`/api/v2/endpoints${params.toString() ? `?${params}` : ''}`)
   
@@ -14,6 +17,12 @@ async function fetchEndpoints(sortBy?: 'newest' | 'oldest'): Promise<EndpointWit
   }
   
   const data = await response.json()
+  
+  // Check if there are more endpoints (hasMore from pagination)
+  if (data.pagination?.hasMore) {
+    console.warn('⚠️ More than 500 endpoints exist. Only showing first 500. Consider implementing pagination.')
+  }
+  
   return data.data || []
 }
 
