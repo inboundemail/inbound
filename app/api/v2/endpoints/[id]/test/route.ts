@@ -8,6 +8,7 @@ import type { WebhookFormat } from "@/lib/db/schema";
 import { nanoid } from "nanoid";
 import { getOrCreateVerificationToken, generateNewWebhookVerificationToken } from "@/lib/webhooks/verification";
 import { sanitizeHtml } from "@/lib/email-management/email-parser";
+import { createHmac } from "crypto";
 import type {
   InboundWebhookPayload,
   InboundEmailAddress,
@@ -377,7 +378,16 @@ export async function POST(
                 .where(eq(endpoints.id, endpoint.id));
             }
 
-            const requestHeaders = {
+            // Create webhook signature if secret exists
+            const payloadString = JSON.stringify(testPayload);
+            let signature: string | null = null;
+            if (config.secret) {
+              const hmac = createHmac("sha256", config.secret);
+              hmac.update(payloadString);
+              signature = `sha256=${hmac.digest("hex")}`;
+            }
+
+            const requestHeaders: Record<string, string> = {
               "Content-Type": "application/json",
               "User-Agent": "InboundEmail-Webhook/1.0",
               "X-Webhook-Event": "email.received",
@@ -388,6 +398,11 @@ export async function POST(
               "X-Webhook-Verification-Token": verificationToken, // Non-breaking verification token
               ...customHeaders,
             };
+
+            // Add signature header if it exists
+            if (signature) {
+              requestHeaders["X-Webhook-Signature"] = signature;
+            }
 
             console.log(
               "📤 Sending test payload to webhook (inbound):",
@@ -457,7 +472,16 @@ export async function POST(
                 .where(eq(endpoints.id, endpoint.id));
             }
 
-            const requestHeaders = {
+            // Create webhook signature if secret exists
+            const payloadString2 = JSON.stringify(testPayload);
+            let signature2: string | null = null;
+            if (config.secret) {
+              const hmac = createHmac("sha256", config.secret);
+              hmac.update(payloadString2);
+              signature2 = `sha256=${hmac.digest("hex")}`;
+            }
+
+            const requestHeaders: Record<string, string> = {
               "Content-Type": "application/json",
               "User-Agent": "InboundEmail-Test/2.0",
               "X-Test-Request": "true",
@@ -466,6 +490,11 @@ export async function POST(
               "X-Webhook-Verification-Token": verificationToken2, // Non-breaking verification token
               ...customHeaders,
             };
+
+            // Add signature header if it exists
+            if (signature2) {
+              requestHeaders["X-Webhook-Signature"] = signature2;
+            }
 
             console.log(
               "📤 Sending test payload to webhook (discord/slack):",

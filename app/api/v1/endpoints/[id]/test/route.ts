@@ -7,6 +7,7 @@ import { eq, and } from 'drizzle-orm'
 import { generateTestPayload } from '@/lib/webhooks/webhook-formats'
 import type { WebhookFormat } from '@/lib/db/schema'
 import { getOrCreateVerificationToken } from '@/lib/webhooks/verification'
+import { createHmac } from 'crypto'
 
 export async function POST(
   request: NextRequest,
@@ -110,13 +111,27 @@ export async function POST(
               .where(eq(endpoints.id, endpoint[0].id))
           }
 
-          const requestHeaders = {
+          // Create webhook signature if secret exists
+          const payloadString = JSON.stringify(testPayload)
+          let signature: string | null = null
+          if (config.secret) {
+            const hmac = createHmac('sha256', config.secret)
+            hmac.update(payloadString)
+            signature = `sha256=${hmac.digest('hex')}`
+          }
+
+          const requestHeaders: Record<string, string> = {
             'Content-Type': 'application/json',
             'User-Agent': 'InboundEmail-Test/1.0',
             'X-Test-Request': 'true',
             'X-Endpoint-ID': endpoint[0].id,
             'X-Webhook-Verification-Token': verificationToken, // Non-breaking verification token
             ...customHeaders
+          }
+
+          // Add signature header if it exists
+          if (signature) {
+            requestHeaders['X-Webhook-Signature'] = signature
           }
 
           console.log(`📤 Test payload:`, JSON.stringify(testPayload, null, 2))
