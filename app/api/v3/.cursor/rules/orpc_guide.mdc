@@ -1,0 +1,999 @@
+---
+globs: app/api/v3/*
+alwaysApply: false
+---
+# oRPC v3 API Development Guide
+
+This guide explains how to create new endpoints for the v3 API using oRPC patterns.
+
+## Table of Contents
+- [Architecture Overview](#architecture-overview)
+- [File Structure](#file-structure)
+- [Creating a New Endpoint](#creating-a-new-endpoint)
+- [Authentication & Authorization](#authentication--authorization)
+- [Rate Limiting](#rate-limiting)
+- [Error Handling](#error-handling)
+- [Testing](#testing)
+
+## Architecture Overview
+
+The v3 API is built on [oRPC](https://orpc.unnoq.com/) - a type-safe framework that generates OpenAPI specs automatically from Zod schemas.
+
+### Key Benefits
+- ✅ **Type Safety**: End-to-end type safety from server to OpenAPI spec
+- ✅ **Auto Documentation**: OpenAPI spec generated automatically
+- ✅ **Zod Schemas**: Input/output validation with Zod
+- ✅ **Middleware**: Composable authentication, rate limiting, logging
+- ✅ **No `any` Types**: Fully typed middleware and handlers
+
+## File Structure
+
+```
+app/api/v3/
+├── [[...rest]]/
+│   └── route.ts           # Main route handler (catch-all pattern)
+├── _lib/
+│   ├── context.ts         # Context types and creation
+│   ├── middleware.ts      # Auth & rate limiting middleware
+│   ├── procedures.ts      # Base procedures (public, authenticated)
+│   └── handler.ts         # OpenAPI handler configuration
+├── domains/
+│   ├── create.ts          # POST /domains
+│   ├── list.ts            # GET /domains
+│   ├── get.ts             # GET /domains/{id}
+│   ├── update.ts          # PATCH /domains/{id}
+│   └── delete.ts          # DELETE /domains/{id}
+└── endpoints/
+    ├── create.ts
+    ├── list.ts
+    └── ...
+```
+
+## Creating a New Endpoint
+
+### Step 1: Create the Endpoint File
+
+Create a new file in the appropriate resource directory (e.g., `domains/get.ts`):
+
+```typescript
+import { z } from 'zod'
+import { ORPCError } from '@orpc/server'
+import { authenticatedProcedure } from '../_lib/procedures'
+import { db } from '@/lib/db'
+import { emailDomains } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
+
+/**
+ * Input schema - Define all query/path parameters
+ */
+const GetDomainInput = z.object({
+  id: z
+    .string()
+    .uuid()
+    .describe('The unique identifier of the domain'),
+})
+
+/**
+ * Output schema - Define the response structure
+ */
+const GetDomainOutput = z.object({
+  id: z.string().describe('Unique domain identifier'),
+  domain: z.string().describe('The domain name'),
+  status: z.enum(['pending', 'verified', 'failed']).describe('Verification status'),
+  canReceiveEmails: z.boolean().describe('Whether domain can receive emails'),
+  createdAt: z.date().describe('Creation timestamp'),
+  updatedAt: z.date().describe('Last update timestamp'),
+  // ... add all other fields
+})
+
+/**
+ * GET /api/v3/domains/{id}
+ * 
+ * Retrieves a specific domain by ID
+ * 
+ * @authenticated Required - Session or API key
+ * @rateLimit 100 requests per minute (session), 50 per minute (API key)
+ */
+export const getDomain = authenticatedProcedure
+  .route({
+    method: 'GET',
+    path: '/domains/{id}',
+    summary: 'Get domain by ID',
+    description: 'Retrieve detailed information about a specific domain',
+    tags: ['domains'],
+  })
+  .input(GetDomainInput)
+  .output(GetDomainOutput)
+  .handler(async ({ input, context }) => {
+    const { id } = input
+    const { userId } = context
+
+    console.log('🔍 v3: Getting domain:', id, 'for userId:', userId)
+
+    // Query the database
+    const domain = await db
+      .select()
+      .from(emailDomains)
+      .where(eq(emailDomains.id, id))
+      .limit(1)
+
+    if (!domain[0]) {
+      throw new ORPCError('NOT_FOUND', {
+        message: 'Domain not found',
+      })
+    }
+
+    // Check ownership
+    if (domain[0].userId !== userId) {
+      throw new ORPCError('FORBIDDEN', {
+        message: 'You do not have access to this domain',
+      })
+    }
+
+    // Return the domain
+    return {
+      id: domain[0].id,
+      domain: domain[0].domain,
+      status: domain[0].status as 'pending' | 'verified' | 'failed',
+      canReceiveEmails: domain[0].canReceiveEmails || false,
+      createdAt: domain[0].createdAt || new Date(),
+      updatedAt: domain[0].updatedAt || new Date(),
+      // ... map all other fields
+    }
+  })
+```
+
+### Step 2: Add to Router
+
+Update `app/api/v3/[[...rest]]/route.ts`:
+
+```typescript
+import { getDomain } from '../domains/get'
+
+export const router = {
+  domains: {
+    list: listDomains,
+    create: createDomain,
+    get: getDomain, // ← Add your new procedure here
+    // ...
+  },
+}
+```
+
+### Step 3: Test Your Endpoint
+
+```bash
+# Using session auth (if logged in)
+curl -X GET http://localhost:3000/api/v3/domains/your-domain-id \
+  -b "session=your_session_cookie"
+
+# Using API key auth
+curl -X GET http://localhost:3000/api/v3/domains/your-domain-id \
+  -H "Authorization: Bearer your_api_key"
+```
+
+## Authentication & Authorization
+
+### Public Endpoints (No Auth Required)
+
+Use `publicProcedure` for endpoints that don't require authentication:
+
+```typescript
+import { publicProcedure } from '../_lib/procedures'
+
+export const getStatus = publicProcedure
+  .route({
+    method: 'GET',
+    path: '/status',
+    summary: 'API health check',
+    tags: ['meta'],
+  })
+  .handler(async () => {
+    return { status: 'ok', version: '3.0.0' }
+  })
+```
+
+### Authenticated Endpoints
+
+Use `authenticatedProcedure` for endpoints requiring auth:
+
+```typescript
+import { authenticatedProcedure } from '../_lib/procedures'
+
+export const myEndpoint = authenticatedProcedure
+  .route({ method: 'GET', path: '/my-resource' })
+  .handler(async ({ context }) => {
+    const { userId, authMethod } = context
+    // userId is guaranteed to exist here
+  })
+```
+
+### Custom Authorization Logic
+
+Add ownership checks or permission logic in your handler:
+
+```typescript
+export const updateDomain = authenticatedProcedure
+  .route({ method: 'PATCH', path: '/domains/{id}' })
+  .input(UpdateDomainInput)
+  .output(UpdateDomainOutput)
+  .handler(async ({ input, context }) => {
+    const domain = await getDomainById(input.id)
+    
+    // Check ownership
+    if (domain.userId !== context.userId) {
+      throw new ORPCError('FORBIDDEN', {
+        message: 'You do not have permission to update this domain',
+      })
+    }
+    
+    // Proceed with update...
+  })
+```
+
+## Rate Limiting
+
+Rate limiting is **automatically applied** to all procedures via middleware:
+
+- **Session Auth**: 100 requests/minute
+- **API Key Auth**: 50 requests/minute
+- **Unauthenticated**: 50 requests/minute (IP-based)
+
+The rate limiter returns RFC-compliant error responses:
+
+```json
+{
+  "code": "TOO_MANY_REQUESTS",
+  "status": 429,
+  "message": "Rate limit exceeded. Please try again later.",
+  "data": {
+    "limit": 50,
+    "remaining": 0,
+    "resetAt": "2024-01-01T00:05:00.000Z",
+    "retryAfter": 60
+  }
+}
+```
+
+### Custom Rate Limits
+
+To create a custom rate limit for specific endpoints, create a new middleware:
+
+```typescript
+// In _lib/middleware.ts
+export const strictRateLimit = os
+  .$context<BaseContext>()
+  .middleware(async ({ context, next }) => {
+    const limiter = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(10, '1 m'), // 10 per minute
+    })
+    
+    const identifier = 'userId' in context ? context.userId : context.ip || 'unknown'
+    const { success } = await limiter.limit(identifier)
+    
+    if (!success) {
+      throw new ORPCError('TOO_MANY_REQUESTS', {
+        message: 'This endpoint has stricter rate limits',
+      })
+    }
+    
+    return next()
+  })
+
+// Use it in your procedure
+export const sensitiveEndpoint = authenticatedProcedure
+  .use(strictRateLimit)
+  .handler(async () => { ... })
+```
+
+## Error Handling
+
+### Standard Error Codes
+
+oRPC provides standard error codes that map to HTTP status codes:
+
+```typescript
+import { ORPCError } from '@orpc/server'
+
+// 400 Bad Request
+throw new ORPCError('BAD_REQUEST', {
+  message: 'Invalid input data',
+})
+
+// 401 Unauthorized
+throw new ORPCError('UNAUTHORIZED', {
+  message: 'Authentication required',
+})
+
+// 403 Forbidden
+throw new ORPCError('FORBIDDEN', {
+  message: 'You do not have permission',
+})
+
+// 404 Not Found
+throw new ORPCError('NOT_FOUND', {
+  message: 'Resource not found',
+})
+
+// 409 Conflict
+throw new ORPCError('CONFLICT', {
+  message: 'Resource already exists',
+})
+
+// 429 Too Many Requests
+throw new ORPCError('TOO_MANY_REQUESTS', {
+  message: 'Rate limit exceeded',
+})
+
+// 500 Internal Server Error
+throw new ORPCError('INTERNAL_SERVER_ERROR', {
+  message: 'Something went wrong',
+})
+```
+
+### Error Responses
+
+All errors are automatically serialized to JSON:
+
+```json
+{
+  "code": "NOT_FOUND",
+  "status": 404,
+  "message": "Domain not found",
+  "data": undefined
+}
+```
+
+### Custom Error Data
+
+You can include additional data in errors:
+
+```typescript
+throw new ORPCError('TOO_MANY_REQUESTS', {
+  message: 'Rate limit exceeded',
+  data: {
+    limit: 100,
+    remaining: 0,
+    resetAt: new Date().toISOString(),
+  },
+})
+```
+
+## Input/Output Schemas
+
+### Using Zod for Validation
+
+All inputs and outputs MUST be defined with Zod schemas:
+
+```typescript
+import { z } from 'zod'
+
+// Simple input
+const SimpleInput = z.object({
+  name: z.string().min(1).max(100),
+  email: z.string().email(),
+})
+
+// Optional fields
+const OptionalInput = z.object({
+  limit: z.number().int().min(1).max(100).default(50),
+  offset: z.number().int().min(0).default(0),
+  search: z.string().optional(),
+})
+
+// Enums
+const StatusInput = z.enum(['pending', 'verified', 'failed'])
+
+// Path parameters (use z.coerce for URL params)
+const PathInput = z.object({
+  id: z.string().uuid(),
+  // For numbers in URLs, use z.coerce
+  numericId: z.coerce.number().int().min(1),
+})
+
+// Arrays
+const ArrayOutput = z.array(z.object({
+  id: z.string(),
+  name: z.string(),
+}))
+
+// Nested objects
+const NestedOutput = z.object({
+  user: z.object({
+    id: z.string(),
+    email: z.string().email(),
+  }),
+  metadata: z.record(z.string(), z.any()),
+})
+```
+
+### Input/Output Structure for OpenAPI
+
+For proper OpenAPI generation, structure your inputs based on the HTTP method:
+
+#### GET Requests (Query Parameters)
+```typescript
+const ListInput = z.object({
+  limit: z.number().default(50),
+  offset: z.number().default(0),
+  search: z.string().optional(),
+})
+
+export const list = authenticatedProcedure
+  .route({ method: 'GET', path: '/resources' })
+  .input(ListInput)
+  .handler(async ({ input }) => {
+    // All fields come from query string
+    const { limit, offset, search } = input
+  })
+```
+
+#### GET with Path Parameters
+```typescript
+const GetInput = z.object({
+  id: z.string().uuid(),
+})
+
+export const get = authenticatedProcedure
+  .route({ method: 'GET', path: '/resources/{id}' })
+  .input(GetInput)
+  .handler(async ({ input }) => {
+    const { id } = input
+  })
+```
+
+#### POST/PUT/PATCH Requests (Request Body)
+```typescript
+const CreateInput = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+})
+
+export const create = authenticatedProcedure
+  .route({ method: 'POST', path: '/resources' })
+  .input(CreateInput)
+  .handler(async ({ input }) => {
+    // All fields come from request body
+    const { name, description } = input
+  })
+```
+
+#### Mixed Input (Path + Body)
+```typescript
+const UpdateInput = z.object({
+  id: z.string().uuid(), // From URL path
+  name: z.string(),      // From request body
+  description: z.string().optional(),
+})
+
+export const update = authenticatedProcedure
+  .route({ method: 'PATCH', path: '/resources/{id}' })
+  .input(UpdateInput)
+  .handler(async ({ input }) => {
+    const { id, name, description } = input
+  })
+```
+
+## Route Configuration
+
+### Basic Route
+
+```typescript
+export const myProcedure = authenticatedProcedure
+  .route({
+    method: 'GET',                    // HTTP method
+    path: '/resources',               // URL path
+    summary: 'List resources',        // OpenAPI summary
+    description: 'Get all resources', // OpenAPI description
+    tags: ['resources'],              // OpenAPI tags for grouping
+    successStatus: 200,               // Success status code (optional)
+  })
+  .input(InputSchema)
+  .output(OutputSchema)
+  .handler(async ({ input, context }) => {
+    // Your logic here
+  })
+```
+
+### Path Parameters
+
+Use curly braces for path parameters:
+
+```typescript
+.route({ 
+  method: 'GET', 
+  path: '/resources/{id}' 
+})
+```
+
+### Multiple Path Parameters
+
+```typescript
+.route({ 
+  method: 'GET', 
+  path: '/domains/{domainId}/addresses/{addressId}' 
+})
+
+.input(z.object({
+  domainId: z.string().uuid(),
+  addressId: z.string().uuid(),
+}))
+```
+
+## Common Patterns
+
+### Pattern 1: List with Pagination
+
+```typescript
+import { z } from 'zod'
+import { authenticatedProcedure } from '../_lib/procedures'
+
+const ListInput = z.object({
+  limit: z.number().int().min(1).max(100).default(50),
+  offset: z.number().int().min(0).default(0),
+  search: z.string().optional(),
+})
+
+const ListOutput = z.object({
+  data: z.array(ResourceSchema),
+  pagination: z.object({
+    limit: z.number(),
+    offset: z.number(),
+    total: z.number(),
+    hasMore: z.boolean(),
+  }),
+})
+
+export const listResources = authenticatedProcedure
+  .route({
+    method: 'GET',
+    path: '/resources',
+    summary: 'List resources',
+    tags: ['resources'],
+  })
+  .input(ListInput)
+  .output(ListOutput)
+  .handler(async ({ input, context }) => {
+    const { limit, offset, search } = input
+    const { userId } = context
+
+    // Query with pagination
+    const resources = await db.query.resources.findMany({
+      where: eq(resources.userId, userId),
+      limit,
+      offset,
+    })
+
+    const total = await db.select({ count: count() })
+      .from(resources)
+      .where(eq(resources.userId, userId))
+
+    return {
+      data: resources,
+      pagination: {
+        limit,
+        offset,
+        total: total[0]?.count || 0,
+        hasMore: offset + limit < (total[0]?.count || 0),
+      },
+    }
+  })
+```
+
+### Pattern 2: Get by ID with Ownership Check
+
+```typescript
+export const getResource = authenticatedProcedure
+  .route({
+    method: 'GET',
+    path: '/resources/{id}',
+    summary: 'Get resource',
+    tags: ['resources'],
+  })
+  .input(z.object({ id: z.string().uuid() }))
+  .output(ResourceSchema)
+  .handler(async ({ input, context }) => {
+    const resource = await db.query.resources.findFirst({
+      where: eq(resources.id, input.id),
+    })
+
+    if (!resource) {
+      throw new ORPCError('NOT_FOUND', {
+        message: 'Resource not found',
+      })
+    }
+
+    if (resource.userId !== context.userId) {
+      throw new ORPCError('FORBIDDEN', {
+        message: 'You do not have access to this resource',
+      })
+    }
+
+    return resource
+  })
+```
+
+### Pattern 3: Create with Validation
+
+```typescript
+export const createResource = authenticatedProcedure
+  .route({
+    method: 'POST',
+    path: '/resources',
+    summary: 'Create resource',
+    tags: ['resources'],
+    successStatus: 201,
+  })
+  .input(z.object({
+    name: z.string().min(1).max(100),
+    type: z.enum(['webhook', 'email']),
+  }))
+  .output(ResourceSchema)
+  .handler(async ({ input, context }) => {
+    // Check for duplicates
+    const existing = await db.query.resources.findFirst({
+      where: and(
+        eq(resources.userId, context.userId),
+        eq(resources.name, input.name)
+      ),
+    })
+
+    if (existing) {
+      throw new ORPCError('CONFLICT', {
+        message: 'A resource with this name already exists',
+      })
+    }
+
+    // Create the resource
+    const [resource] = await db
+      .insert(resources)
+      .values({
+        ...input,
+        userId: context.userId,
+      })
+      .returning()
+
+    return resource
+  })
+```
+
+### Pattern 4: Update (Partial)
+
+```typescript
+export const updateResource = authenticatedProcedure
+  .route({
+    method: 'PATCH',
+    path: '/resources/{id}',
+    summary: 'Update resource',
+    tags: ['resources'],
+  })
+  .input(z.object({
+    id: z.string().uuid(),
+    name: z.string().optional(),
+    description: z.string().optional(),
+    isActive: z.boolean().optional(),
+  }))
+  .output(ResourceSchema)
+  .handler(async ({ input, context }) => {
+    const { id, ...updates } = input
+
+    // Verify ownership
+    const existing = await db.query.resources.findFirst({
+      where: eq(resources.id, id),
+    })
+
+    if (!existing) {
+      throw new ORPCError('NOT_FOUND', { message: 'Resource not found' })
+    }
+
+    if (existing.userId !== context.userId) {
+      throw new ORPCError('FORBIDDEN', { message: 'Access denied' })
+    }
+
+    // Update
+    const [updated] = await db
+      .update(resources)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(resources.id, id))
+      .returning()
+
+    return updated
+  })
+```
+
+### Pattern 5: Delete
+
+```typescript
+export const deleteResource = authenticatedProcedure
+  .route({
+    method: 'DELETE',
+    path: '/resources/{id}',
+    summary: 'Delete resource',
+    tags: ['resources'],
+    successStatus: 204,
+  })
+  .input(z.object({ id: z.string().uuid() }))
+  .output(z.object({ success: z.boolean() }))
+  .handler(async ({ input, context }) => {
+    // Verify ownership
+    const existing = await db.query.resources.findFirst({
+      where: eq(resources.id, input.id),
+    })
+
+    if (!existing) {
+      throw new ORPCError('NOT_FOUND', { message: 'Resource not found' })
+    }
+
+    if (existing.userId !== context.userId) {
+      throw new ORPCError('FORBIDDEN', { message: 'Access denied' })
+    }
+
+    // Delete
+    await db.delete(resources).where(eq(resources.id, input.id))
+
+    return { success: true }
+  })
+```
+
+## Middleware Details
+
+### Available Procedures
+
+- **`publicProcedure`**: Logging + Rate Limiting
+- **`authenticatedProcedure`**: Logging + Rate Limiting + Authentication
+
+### Context Available in Handlers
+
+**Public Procedure:**
+```typescript
+{
+  headers: Record<string, string | string[] | undefined>
+  ip?: string
+  userAgent?: string
+  rateLimit: {
+    limit: number
+    remaining: number
+    reset: Date
+  }
+}
+```
+
+**Authenticated Procedure (adds):**
+```typescript
+{
+  userId: string
+  sessionId: string | undefined
+  authMethod: 'session' | 'api-key'
+  // ... plus all fields from public procedure
+}
+```
+
+## Testing
+
+### Manual Testing with cURL
+
+```bash
+# GET with query parameters
+curl -X GET "http://localhost:3000/api/v3/domains?limit=10&offset=0" \
+  -H "Authorization: Bearer your_api_key"
+
+# GET with path parameter
+curl -X GET "http://localhost:3000/api/v3/domains/domain-id-here" \
+  -H "Authorization: Bearer your_api_key"
+
+# POST with body
+curl -X POST http://localhost:3000/api/v3/domains \
+  -H "Authorization: Bearer your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{"domain": "example.com"}'
+
+# PATCH with body
+curl -X PATCH http://localhost:3000/api/v3/domains/domain-id-here \
+  -H "Authorization: Bearer your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Updated Name"}'
+
+# DELETE
+curl -X DELETE http://localhost:3000/api/v3/domains/domain-id-here \
+  -H "Authorization: Bearer your_api_key"
+```
+
+### View OpenAPI Spec
+
+```bash
+# Get the full OpenAPI specification
+curl http://localhost:3000/api/v3/openapi.json
+
+# Pretty print with jq
+curl http://localhost:3000/api/v3/openapi.json | jq
+```
+
+### Using Session Auth
+
+```bash
+# Export session cookie from browser dev tools
+curl -X GET http://localhost:3000/api/v3/domains \
+  -b "session=your_session_cookie_value"
+```
+
+## Best Practices
+
+### ✅ DO
+
+1. **Always define input and output schemas** - This enables automatic OpenAPI generation
+2. **Use descriptive names** - `createDomain` not `create`
+3. **Add descriptions to schemas** - Use `.describe()` for better API docs
+4. **Check ownership** - Always verify user owns the resource
+5. **Use proper error codes** - Match HTTP semantics
+6. **Log important operations** - Use console.log for debugging
+7. **Return consistent structures** - Match your output schema exactly
+8. **Handle null values** - Use `|| false`, `|| 0`, `|| new Date()` for nullable DB fields
+
+### ❌ DON'T
+
+1. **Don't use `any` types** - oRPC is fully typed, leverage it
+2. **Don't skip input validation** - Trust Zod, not the client
+3. **Don't expose internal errors** - Catch and convert to user-friendly messages
+4. **Don't forget authentication** - Use `authenticatedProcedure` for protected routes
+5. **Don't duplicate schemas** - Reuse and compose schemas
+6. **Don't hardcode values** - Use environment variables
+7. **Don't skip logging** - Console logs help with debugging
+
+## Adding to Router
+
+After creating your endpoints, add them to the router in `app/api/v3/[[...rest]]/route.ts`:
+
+```typescript
+export const router = {
+  domains: {
+    list: listDomains,
+    create: createDomain,
+    get: getDomain,
+    update: updateDomain,
+    delete: deleteDomain,
+  },
+  endpoints: {
+    list: listEndpoints,
+    create: createEndpoint,
+    get: getEndpoint,
+    update: updateEndpoint,
+    delete: deleteEndpoint,
+  },
+  emailAddresses: {
+    list: listEmailAddresses,
+    create: createEmailAddress,
+    // ...
+  },
+}
+```
+
+## Checklist for New Endpoints
+
+- [ ] Created endpoint file in appropriate directory
+- [ ] Defined Zod input schema with descriptions
+- [ ] Defined Zod output schema with descriptions
+- [ ] Used correct procedure (`publicProcedure` or `authenticatedProcedure`)
+- [ ] Configured `.route()` with method, path, summary, tags
+- [ ] Implemented handler logic
+- [ ] Added ownership checks (if applicable)
+- [ ] Handled errors with proper `ORPCError` codes
+- [ ] Added logging statements
+- [ ] Imported and added to router
+- [ ] Tested with cURL
+- [ ] Verified in OpenAPI spec
+
+## Example: Complete Endpoint
+
+Here's a complete example showing all best practices:
+
+```typescript
+import { z } from 'zod'
+import { ORPCError } from '@orpc/server'
+import { authenticatedProcedure } from '../_lib/procedures'
+import { db } from '@/lib/db'
+import { webhooks } from '@/lib/db/schema'
+import { eq, and } from 'drizzle-orm'
+
+/**
+ * Input schema
+ */
+const UpdateWebhookInput = z.object({
+  id: z.string().uuid().describe('Webhook ID'),
+  name: z.string().min(1).max(100).optional().describe('Webhook name'),
+  url: z.string().url().optional().describe('Webhook URL'),
+  isActive: z.boolean().optional().describe('Whether webhook is active'),
+})
+
+/**
+ * Output schema
+ */
+const WebhookSchema = z.object({
+  id: z.string().describe('Unique webhook identifier'),
+  name: z.string().describe('Webhook name'),
+  url: z.string().describe('Webhook URL'),
+  isActive: z.boolean().describe('Whether webhook is active'),
+  createdAt: z.date().describe('Creation timestamp'),
+  updatedAt: z.date().describe('Last update timestamp'),
+})
+
+/**
+ * PATCH /api/v3/webhooks/{id}
+ * 
+ * Updates an existing webhook
+ * 
+ * @authenticated Required
+ * @rateLimit Standard (100/min session, 50/min API key)
+ */
+export const updateWebhook = authenticatedProcedure
+  .route({
+    method: 'PATCH',
+    path: '/webhooks/{id}',
+    summary: 'Update webhook',
+    description: 'Update webhook properties. Only provided fields will be updated.',
+    tags: ['webhooks'],
+  })
+  .input(UpdateWebhookInput)
+  .output(WebhookSchema)
+  .handler(async ({ input, context }) => {
+    const { id, ...updates } = input
+    const { userId } = context
+
+    console.log('✏️ v3: Updating webhook:', id, 'for userId:', userId)
+
+    // Verify webhook exists and user owns it
+    const webhook = await db.query.webhooks.findFirst({
+      where: eq(webhooks.id, id),
+    })
+
+    if (!webhook) {
+      console.log('❌ v3: Webhook not found:', id)
+      throw new ORPCError('NOT_FOUND', {
+        message: 'Webhook not found',
+      })
+    }
+
+    if (webhook.userId !== userId) {
+      console.log('❌ v3: Access denied for webhook:', id)
+      throw new ORPCError('FORBIDDEN', {
+        message: 'You do not have permission to update this webhook',
+      })
+    }
+
+    // Update webhook
+    const [updated] = await db
+      .update(webhooks)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(webhooks.id, id))
+      .returning()
+
+    console.log('✅ v3: Successfully updated webhook:', id)
+
+    return {
+      id: updated.id,
+      name: updated.name,
+      url: updated.url,
+      isActive: updated.isActive || false,
+      createdAt: updated.createdAt || new Date(),
+      updatedAt: updated.updatedAt || new Date(),
+    }
+  })
+```
+
+## References
+
+- [oRPC Documentation](https://orpc.unnoq.com/)
+- [oRPC Next.js Adapter](https://orpc.unnoq.com/docs/adapters/next)
+- [Zod Documentation](https://zod.dev/)
+- [OpenAPI Specification](https://swagger.io/specification/)
+
+## Need Help?
+
+1. Check existing endpoints in `domains/` for examples
+2. Review the oRPC docs for specific features
+3. Check the OpenAPI spec at `/api/v3/openapi.json` to verify your endpoint appears correctly
+4. Use the debug logs to troubleshoot issues
+

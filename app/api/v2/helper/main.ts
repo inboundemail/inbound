@@ -13,6 +13,7 @@ export async function validateRequest(request: NextRequest) {
 
         const apiKey = request.headers.get('Authorization')?.replace('Bearer ', '') || ""
 
+        // @ts-ignore - better-auth 'verifyApiKey' doesn't have a type definition for some reason
         const apiSession = await auth.api.verifyApiKey({
             body: {
                 key: apiKey
