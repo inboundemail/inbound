@@ -42,11 +42,15 @@ export const publicProcedure = base
 /**
  * Authenticated procedure
  * Requires valid authentication (session or API key)
- * Includes: logging + rate limiting + authentication
+ * Includes: logging + authentication + rate limiting
  * Context will include userId, authMethod, etc.
+ * 
+ * Note: authMiddleware runs BEFORE rateLimitMiddleware so that
+ * userId is available for auth-type-specific rate limiting
+ * (100 RPS for sessions, 50 RPS for API keys)
  */
 export const authenticatedProcedure = base
   .use(loggingMiddleware)
-  .use(rateLimitMiddleware)
   .use(authMiddleware)
+  .use(rateLimitMiddleware)
 

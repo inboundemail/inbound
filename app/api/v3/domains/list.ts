@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { authenticatedProcedure } from '../_lib/procedures'
 import { db } from '@/lib/db'
 import { emailDomains, emailAddresses, endpoints } from '@/lib/db/schema'
-import { eq, and, desc, count } from 'drizzle-orm'
+import { eq, and, desc, count, inArray, sql, sum } from 'drizzle-orm'
 
 /**
  * Input schema for listing domains
@@ -194,51 +194,68 @@ export const listDomains = authenticatedProcedure
 
     console.log('📊 v3: Found', domains.length, 'domains out of', totalCount, 'total')
 
-    // Enhance domains with additional data
-    const enhancedDomains = await Promise.all(
-      domains.map(async (domain) => {
-        // Get email address count
-        const emailCountResult = await db
-          .select({ count: count() })
-          .from(emailAddresses)
-          .where(eq(emailAddresses.domainId, domain.id))
-        
-        const emailCount = emailCountResult[0]?.count || 0
+    // Batch query optimization: Get all stats and endpoints in 2 queries instead of N+1
+    const domainIds = domains.map(d => d.id)
 
-        // Get active email address count
-        const activeEmailCountResult = await db
-          .select({ count: count() })
+    // Get all email stats in ONE query
+    const emailStatsQuery = domainIds.length > 0 
+      ? await db
+          .select({
+            domainId: emailAddresses.domainId,
+            totalCount: count(),
+            activeCount: sum(
+              sql<number>`CASE WHEN ${emailAddresses.isActive} = true THEN 1 ELSE 0 END`
+            ).mapWith(Number),
+          })
           .from(emailAddresses)
-          .where(and(
-            eq(emailAddresses.domainId, domain.id),
-            eq(emailAddresses.isActive, true)
-          ))
-        
-        const activeEmailCount = activeEmailCountResult[0]?.count || 0
+          .where(inArray(emailAddresses.domainId, domainIds))
+          .groupBy(emailAddresses.domainId)
+      : []
 
-        // Get catch-all endpoint info if configured
-        let catchAllEndpoint = null
-        if (domain.catchAllEndpointId) {
-          const endpointResult = await db
-            .select({
-              id: endpoints.id,
-              name: endpoints.name,
-              type: endpoints.type,
-              isActive: endpoints.isActive,
-            })
-            .from(endpoints)
-            .where(eq(endpoints.id, domain.catchAllEndpointId))
-            .limit(1)
-          
-          if (endpointResult[0]) {
-            catchAllEndpoint = {
-              id: endpointResult[0].id,
-              name: endpointResult[0].name,
-              type: endpointResult[0].type,
-              isActive: endpointResult[0].isActive || false,
-            }
+    // Get all catch-all endpoints in ONE query
+    const catchAllEndpointIds = domains
+      .filter(d => d.catchAllEndpointId)
+      .map(d => d.catchAllEndpointId!)
+
+    const catchAllEndpointsQuery = catchAllEndpointIds.length > 0
+      ? await db
+          .select({
+            id: endpoints.id,
+            name: endpoints.name,
+            type: endpoints.type,
+            isActive: endpoints.isActive,
+          })
+          .from(endpoints)
+          .where(inArray(endpoints.id, catchAllEndpointIds))
+      : []
+
+    // Create lookup maps for O(1) access
+    const emailStatsMap = new Map(
+      emailStatsQuery.map(stat => [stat.domainId, stat])
+    )
+    const endpointsMap = new Map(
+      catchAllEndpointsQuery.map(endpoint => [endpoint.id, endpoint])
+    )
+
+    // Map data together (fast, in-memory operation)
+    const enhancedDomains = domains.map((domain) => {
+      const stats = emailStatsMap.get(domain.id)
+      const emailCount = stats?.totalCount || 0
+      const activeEmailCount = stats?.activeCount || 0
+
+      // Get catch-all endpoint info if configured
+      let catchAllEndpoint = null
+      if (domain.catchAllEndpointId) {
+        const endpoint = endpointsMap.get(domain.catchAllEndpointId)
+        if (endpoint) {
+          catchAllEndpoint = {
+            id: endpoint.id,
+            name: endpoint.name,
+            type: endpoint.type,
+            isActive: endpoint.isActive || false,
           }
         }
+      }
 
         return {
           id: domain.id,
@@ -266,7 +283,6 @@ export const listDomains = authenticatedProcedure
           catchAllEndpoint,
         }
       })
-    )
 
     // Calculate meta statistics
     const verifiedCount = enhancedDomains.filter(d => d.status === 'verified').length

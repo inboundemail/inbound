@@ -19,7 +19,7 @@ const sessionRateLimit = new Ratelimit({
 
 const apiKeyRateLimit = new Ratelimit({
   redis,
-  limiter: Ratelimit.slidingWindow(50, '1 m'), // 60 requests per minute for API keys
+  limiter: Ratelimit.slidingWindow(50, '1 m'), // 50 requests per minute for API keys
   prefix: 'v3:apikey',
 })
 
