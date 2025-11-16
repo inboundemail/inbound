@@ -3,6 +3,9 @@ import { createV3Handler } from '../_lib/handler'
 import { createContext } from '../_lib/context'
 import { createDomain } from '../domains/create'
 import { listDomains } from '../domains/list'
+import { getDomain } from '../domains/get'
+import { updateDomain } from '../domains/update'
+import { deleteDomain } from '../domains/delete'
 import { OpenAPIGenerator } from '@orpc/openapi'
 import { ZodToJsonSchemaConverter } from '@orpc/zod/zod4'
 
@@ -14,10 +17,9 @@ export const router = {
   domains: {
     list: listDomains,
     create: createDomain,
-    // Additional domain procedures will be added here:
-    // get: getDomain,
-    // update: updateDomain,
-    // delete: deleteDomain,
+    get: getDomain,
+    update: updateDomain,
+    delete: deleteDomain,
   },
   // Additional resources will be added here:
   // endpoints: { ... },
