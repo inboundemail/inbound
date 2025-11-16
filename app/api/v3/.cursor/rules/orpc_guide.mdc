@@ -1,8 +1,7 @@
 ---
-globs: app/api/v3/*
 alwaysApply: false
 ---
-# oRPC v3 API Development Guide
+# oRPC v3 API Development Guide for All v3 API Endpoints
 
 This guide explains how to create new endpoints for the v3 API using oRPC patterns.
 
