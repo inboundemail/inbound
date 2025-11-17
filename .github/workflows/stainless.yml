@@ -12,11 +12,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
-env:
-  STAINLESS_ORG: YOUR_ORG
-  STAINLESS_PROJECT: YOUR_PROJECT
-  OAS_PATH: YOUR_OAS_PATH
-
 jobs:
   preview:
     if: github.event.action != 'closed'
@@ -34,9 +29,9 @@ jobs:
       - name: Run preview builds
         uses: stainless-api/upload-openapi-spec-action/preview@v1
         with:
-          org: ${{ env.STAINLESS_ORG }}
-          project: ${{ env.STAINLESS_PROJECT }}
-          oas_path: ${{ env.OAS_PATH }}
+          org: ${{ secrets.STAINLESS_ORG }}
+          project: ${{ secrets.STAINLESS_PROJECT }}
+          oas_path: ${{ secrets.OAS_PATH }}
 
   merge:
     if: github.event.action == 'closed' && github.event.pull_request.merged == true
@@ -54,6 +49,6 @@ jobs:
       - name: Run merge build
         uses: stainless-api/upload-openapi-spec-action/merge@v1
         with:
-          org: ${{ env.STAINLESS_ORG }}
-          project: ${{ env.STAINLESS_PROJECT }}
-          oas_path: ${{ env.OAS_PATH }}
+          org: ${{ secrets.STAINLESS_ORG }}
+          project: ${{ secrets.STAINLESS_PROJECT }}
+          oas_path: ${{ secrets.OAS_PATH }}
