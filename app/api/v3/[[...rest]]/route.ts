@@ -97,7 +97,6 @@ async function handleRequest(request: NextRequest) {
     headers: request.headers,
     ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
   })
-
   try {
     // Handle the request with the OpenAPI handler
     const { response } = await handler.handle(request as any, {
@@ -124,7 +123,7 @@ async function handleRequest(request: NextRequest) {
     return new Response(
       JSON.stringify({
         error: 'Internal Server Error',
-        message: error instanceof Error ? error.message : 'Unknown error',
+        message: 'Something went wrong. Please try again later.',
       }),
       {
         status: 500,
@@ -149,12 +148,27 @@ export const HEAD = handleRequest
  * OPTIONS handler for CORS preflight requests
  */
 export async function OPTIONS(request: NextRequest) {
+  const requestOrigin = request.headers.get('origin') || ''
+
+  const allowedOrigins = [
+    process.env.NODE_ENV === 'development'
+      ? 'http://localhost:3000'
+      : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : 'https://inbound.new',
+  ]
+
+  const origin =
+    allowedOrigins.find((allowed) => allowed === requestOrigin) ?? allowedOrigins[0]
+
   return new NextResponse(null, {
     status: 204,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': origin,
+      'Vary': 'Origin',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
       'Access-Control-Max-Age': '86400',
     },
   })
