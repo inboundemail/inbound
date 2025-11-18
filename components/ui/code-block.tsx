@@ -42,11 +42,12 @@ export interface CodeBlockProps
   language?: string;
   copy?: boolean;
   syntaxHighlighting?: boolean;
+  forceDark?: boolean;
 }
 
 export const CodeBlock = React.forwardRef<HTMLDivElement, CodeBlockProps>(
   (
-    { code, language, variant, size, wrap, copy = true, syntaxHighlighting = false, className, ...props },
+    { code, language, variant, size, wrap, copy = true, syntaxHighlighting = false, forceDark = false, className, ...props },
     ref
   ) => {
     const [copied, setCopied] = React.useState(false);
@@ -79,7 +80,7 @@ export const CodeBlock = React.forwardRef<HTMLDivElement, CodeBlockProps>(
       syntaxHighlighting ? (
         <SyntaxHighlighter
           language={language}
-          style={isDark ? vscDarkPlus : oneLight}
+          style={(isDark || forceDark) ? vscDarkPlus : oneLight}
           customStyle={{
             margin: 0,
             background: "transparent",
@@ -127,5 +128,3 @@ export const CodeBlock = React.forwardRef<HTMLDivElement, CodeBlockProps>(
 );
 
 CodeBlock.displayName = "CodeBlock";
-
-
