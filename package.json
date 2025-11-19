@@ -10,6 +10,7 @@
     "build": "basehub build && next build --turbopack",
     "test-api": "bun run app/api/v2/api.test.ts",
     "test-sdk": "bun run app/api/v2/sdk.test.ts",
+    "test-v3-endpoints": "bun test app/api/v3/endpoints.test.ts",
     "start": "next start",
     "lint": "next lint",
     "db-prepare": "bun run scripts/db-prepare.ts",
@@ -29,7 +30,9 @@
     "migrate:batch-catchall:force": "FORCE_MIGRATE=true bun run scripts/migrate-to-batch-catchall.ts",
     "migrate:batch-catchall:force:dry": "DRY_RUN=true FORCE_MIGRATE=true bun run scripts/migrate-to-batch-catchall.ts",
     "check": "tsc --noEmit && prettier --check . --ignore-path .gitignore || true",
-    "registry:build": "shadcn build"
+    "registry:build": "shadcn build",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push"
   },
   "dependencies": {
     "@ai-sdk/openai": "1.0.2",

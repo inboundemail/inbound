@@ -143,6 +143,10 @@ export const webhooks = pgTable('webhooks', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
   userId: varchar('user_id', { length: 255 }).notNull(),
+  // Migration fields for v2 → v3 migration
+  migratedToEndpointId: varchar('migrated_to_endpoint_id', { length: 255 }),
+  migrationStatus: varchar('migration_status', { length: 50 }).default('not_migrated'), // 'not_migrated', 'migrated', 'migration_failed'
+  migratedAt: timestamp('migrated_at'),
 });
 
 // SES Events table - stores raw SES event data
@@ -381,11 +385,22 @@ export const domainDnsRecords = pgTable('domain_dns_records', {
   description: text('description'), // Human-readable description of the record purpose
 });
 
+// Svix Applications table - stores Svix application mappings for users
+export const svixApplications = pgTable('svix_applications', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull().unique(),
+  svixApplicationId: varchar('svix_application_id', { length: 255 }).notNull().unique(),
+  svixApplicationName: varchar('svix_application_name', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+  lastSyncedAt: timestamp('last_synced_at'),
+});
+
 // Endpoints table - unified system for webhooks, email forwards, and email groups
 export const endpoints = pgTable('endpoints', {
   id: varchar('id', { length: 255 }).primaryKey(),
   name: varchar('name', { length: 255 }).notNull(), // User-friendly name
-  type: varchar('type', { length: 50 }).notNull(), // 'webhook', 'email', 'email_group'
+  type: varchar('type', { length: 50 }).notNull(), // 'webhook', 'email_forward', 'email_group'
   webhookFormat: varchar('webhook_format', { length: 50 }).default('inbound'), // 'inbound', 'discord', 'slack', etc.
   config: text('config').notNull(), // JSON configuration based on type
   isActive: boolean('is_active').default(true),
@@ -393,6 +408,9 @@ export const endpoints = pgTable('endpoints', {
   userId: varchar('user_id', { length: 255 }).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
+  // Svix integration fields (for v3 webhook endpoints)
+  svixEndpointId: varchar('svix_endpoint_id', { length: 255 }), // NULL for non-webhook types
+  svixFormat: varchar('svix_format', { length: 20 }).default('full'), // 'full' or 'simple'
 });
 
 // Email Groups table - stores individual email addresses for email group endpoints
@@ -633,6 +651,8 @@ export type EmailGroup = typeof emailGroups.$inferSelect;
 export type NewEmailGroup = typeof emailGroups.$inferInsert;
 export type EndpointDelivery = typeof endpointDeliveries.$inferSelect;
 export type NewEndpointDelivery = typeof endpointDeliveries.$inferInsert;
+export type SvixApplication = typeof svixApplications.$inferSelect;
+export type NewSvixApplication = typeof svixApplications.$inferInsert;
 export type BlockedEmail = typeof blockedEmails.$inferSelect;
 export type NewBlockedEmail = typeof blockedEmails.$inferInsert;
 export type SentEmail = typeof sentEmails.$inferSelect;
@@ -675,7 +695,7 @@ export const WEBHOOK_STATUS = {
 
 export const ENDPOINT_TYPES = {
   WEBHOOK: 'webhook',
-  EMAIL: 'email',
+  EMAIL_FORWARD: 'email_forward',
   EMAIL_GROUP: 'email_group'
 } as const;
 
@@ -700,7 +720,8 @@ export const DELIVERY_TYPES = {
 export const DELIVERY_STATUS = {
   PENDING: 'pending',
   SUCCESS: 'success',
-  FAILED: 'failed'
+  FAILED: 'failed',
+  SENT_TO_SVIX: 'sent_to_svix', // New status for Svix-managed deliveries
 } as const;
 
 export const SENT_EMAIL_STATUS = {

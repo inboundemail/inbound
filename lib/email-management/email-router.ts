@@ -6,7 +6,7 @@
  */
 
 import { db } from '@/lib/db'
-import { structuredEmails, emailAddresses, endpoints, endpointDeliveries, emailDomains } from '@/lib/db/schema'
+import { structuredEmails, emailAddresses, endpoints, endpointDeliveries, emailDomains, svixApplications } from '@/lib/db/schema'
 import { eq, and, or, asc } from 'drizzle-orm'
 import { triggerEmailAction } from './webhook-trigger'
 import { EmailForwarder } from './email-forwarder'
@@ -18,6 +18,8 @@ import type { Endpoint } from '@/features/endpoints/types'
 import { evaluateGuardRules } from '../guard/rule-matcher'
 import { Autumn as autumn } from 'autumn-js'
 import { getOrCreateVerificationToken } from '@/lib/webhooks/verification'
+import { sendSvixMessage } from '@/lib/svix/client'
+import { formatWebhookPayload } from '@/lib/svix/formatters'
 
 // Maximum webhook payload size (5MB safety margin)
 const MAX_WEBHOOK_PAYLOAD_SIZE = 1_000_000
@@ -511,9 +513,129 @@ async function findEndpointForEmail(recipient: string, userId: string): Promise<
 }
 
 /**
+ * Handle Svix webhook endpoint routing (v3)
+ * Publishes events to Svix API which handles delivery, retries, and logging
+ */
+async function handleSvixWebhook(emailId: string, endpoint: Endpoint): Promise<void> {
+  // PRE-CREATE delivery record to prevent race condition duplicates
+  const deliveryId = nanoid()
+  
+  try {
+    // Insert delivery record BEFORE sending to Svix to prevent race conditions
+    await db.insert(endpointDeliveries).values({
+      id: deliveryId,
+      emailId,
+      endpointId: endpoint.id,
+      deliveryType: 'webhook',
+      status: 'pending',
+      attempts: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    console.log(`🔒 handleSvixWebhook - Created delivery lock ${deliveryId} for ${emailId} → ${endpoint.id}`)
+  } catch (error: any) {
+    // Check if this is a unique constraint violation (another request already processing)
+    if (error?.code === '23505' || error?.message?.includes('duplicate key') || error?.message?.includes('unique constraint')) {
+      console.log(`⏭️  handleSvixWebhook - Delivery already in progress for emailId=${emailId}, endpointId=${endpoint.id}. Skipping duplicate.`)
+      return // Exit early - another request is handling this delivery
+    }
+    throw error // Re-throw other errors
+  }
+
+  try {
+    console.log(`📡 handleSvixWebhook - Processing Svix webhook endpoint: ${endpoint.name}`)
+
+    // Get email with structured data
+    const emailData = await getEmailWithStructuredData(emailId)
+    if (!emailData) {
+      throw new Error('Email not found or missing structured data')
+    }
+
+    // Get user's Svix Application
+    const svixApp = await db
+      .select()
+      .from(svixApplications)
+      .where(eq(svixApplications.userId, emailData.userId))
+      .limit(1)
+
+    if (!svixApp[0]) {
+      throw new Error('Svix application not found for user')
+    }
+
+    // Parse endpoint config
+    const config = JSON.parse(endpoint.config)
+    const format = endpoint.svixFormat || 'full'
+
+    // Reconstruct parsed email data
+    const parsedEmailData = reconstructParsedEmailData(emailData)
+
+    // Add recipient to parsed email data for formatter
+    const emailDataWithRecipient = {
+      ...parsedEmailData,
+      recipient: emailData.recipient || undefined,
+    }
+
+    // Format payload based on format type
+    const payload = formatWebhookPayload(emailId, emailDataWithRecipient, format as 'full' | 'simple')
+
+    // Send to Svix
+    const svixResponse = await sendSvixMessage(
+      svixApp[0].svixApplicationId,
+      'email.received',
+      payload
+    )
+
+    // Update delivery record
+    await db
+      .update(endpointDeliveries)
+      .set({
+        status: 'sent_to_svix',
+        lastAttemptAt: new Date(),
+        attempts: 1,
+        responseData: JSON.stringify({
+          svixMessageId: svixResponse.id,
+          eventType: svixResponse.eventType,
+        }),
+        updatedAt: new Date(),
+      })
+      .where(eq(endpointDeliveries.id, deliveryId))
+
+    console.log(`✅ handleSvixWebhook - Message sent to Svix: ${svixResponse.id} for endpoint: ${endpoint.name}`)
+  } catch (error: any) {
+    // Update delivery record with error
+    await db
+      .update(endpointDeliveries)
+      .set({
+        status: 'failed',
+        lastAttemptAt: new Date(),
+        attempts: 1,
+        responseData: JSON.stringify({
+          error: error.message || 'Unknown error',
+        }),
+        updatedAt: new Date(),
+      })
+      .where(eq(endpointDeliveries.id, deliveryId))
+
+    console.error(`❌ handleSvixWebhook - Error sending to Svix:`, error)
+    throw error
+  }
+}
+
+/**
  * Handle webhook endpoint routing (direct implementation for unified endpoints)
+ * Supports both v2 (direct HTTP) and v3 (Svix) webhook endpoints
+ * TODO: Migrate v2 webhooks to v3 Svix system
  */
 async function handleWebhookEndpoint(emailId: string, endpoint: Endpoint): Promise<void> {
+  // Check if this is a v3 Svix webhook
+  if (endpoint.svixEndpointId) {
+    console.log(`🔷 handleWebhookEndpoint - Svix webhook detected (v3), using Svix delivery for endpoint: ${endpoint.name}`);
+    return await handleSvixWebhook(emailId, endpoint);
+  }
+
+  // Legacy v2 webhook - direct HTTP delivery
+  console.log(`🔶 handleWebhookEndpoint - Legacy v2 webhook, using direct HTTP delivery for endpoint: ${endpoint.name}`);
+  
   // PRE-CREATE delivery record to prevent race condition duplicates
   // The unique constraint on (emailId, endpointId) acts as a distributed lock
   const deliveryId = nanoid()

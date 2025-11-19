@@ -6,6 +6,12 @@ import { listDomains } from '../domains/list'
 import { getDomain } from '../domains/get'
 import { updateDomain } from '../domains/update'
 import { deleteDomain } from '../domains/delete'
+import { createEndpoint } from '../endpoints/create'
+import { listEndpoints } from '../endpoints/list'
+import { getEndpoint } from '../endpoints/get'
+import { updateEndpoint } from '../endpoints/update'
+import { deleteEndpoint } from '../endpoints/delete'
+import { sendTestEvent } from '../endpoints/send'
 import { OpenAPIGenerator } from '@orpc/openapi'
 import { ZodToJsonSchemaConverter } from '@orpc/zod/zod4'
 
@@ -21,8 +27,15 @@ export const router = {
     update: updateDomain,
     delete: deleteDomain,
   },
+  endpoints: {
+    list: listEndpoints,
+    create: createEndpoint,
+    get: getEndpoint,
+    update: updateEndpoint,
+    delete: deleteEndpoint,
+    send: sendTestEvent,
+  },
   // Additional resources will be added here:
-  // endpoints: { ... },
   // emailAddresses: { ... },
   // etc.
 }
