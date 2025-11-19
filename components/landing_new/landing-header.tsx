@@ -106,6 +106,9 @@ export function LandingHeader() {
             <button
               className="md:hidden text-white p-2"
               onClick={() => setIsMobileMenuOpen(true)}
+              aria-label="Open navigation menu"
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="landing-mobile-menu"
             >
               <Menu width={24} height={24} />
             </button>
@@ -126,13 +129,18 @@ export function LandingHeader() {
               exit={{ x: "100%" }}
               transition={{ ease: "easeOut", duration: 0.3 }}
               className="absolute right-0 top-0 h-full w-80 bg-[#0f0a1f] border-l border-white/10 shadow-2xl p-6"
+              id="landing-mobile-menu"
             >
               <div className="flex justify-between items-center mb-8">
                 <Link href="/" className="flex items-center gap-2 text-white">
                     <InboundIconWhite width={32} height={32} className="text-[#7c3aed]" />
                     <span className="text-xl font-bold">inbound</span>
                 </Link>
-                <button onClick={() => setIsMobileMenuOpen(false)} className="text-white/70 hover:text-white">
+                <button 
+                  onClick={() => setIsMobileMenuOpen(false)} 
+                  className="text-white/70 hover:text-white"
+                  aria-label="Close navigation menu"
+                >
                   <CircleXmark width={24} height={24} />
                 </button>
               </div>

@@ -33,19 +33,56 @@ export async function getOrCreateSvixApplication(userId: string): Promise<{
   
   const svixApp = await createSvixApplication(userId, appName);
 
-  // Store in database
-  const [record] = await db
-    .insert(svixApplications)
-    .values({
-      id: nanoid(),
-      userId,
-      svixApplicationId: svixApp.id,
-      svixApplicationName: appName,
-      lastSyncedAt: new Date(),
-    })
-    .returning();
+  try {
+    // Store in database with conflict handling
+    const [record] = await db
+      .insert(svixApplications)
+      .values({
+        id: nanoid(),
+        userId,
+        svixApplicationId: svixApp.id,
+        svixApplicationName: appName,
+        lastSyncedAt: new Date(),
+      })
+      .onConflictDoNothing({ target: svixApplications.userId })
+      .returning();
 
-  console.log(`✅ getOrCreateSvixApplication - Created and stored Svix application: ${record.id}`);
-  return record;
+    if (record) {
+      console.log(`✅ getOrCreateSvixApplication - Created and stored Svix application: ${record.id}`);
+      return record;
+    }
+
+    // Another concurrent request created it, fetch the existing record
+    console.log(`⚠️ getOrCreateSvixApplication - Concurrent creation detected, fetching existing record for user: ${userId}`);
+    const [existingRecord] = await db
+      .select()
+      .from(svixApplications)
+      .where(eq(svixApplications.userId, userId))
+      .limit(1);
+
+    if (!existingRecord) {
+      throw new Error(`Failed to create or retrieve Svix application for user: ${userId}`);
+    }
+
+    return existingRecord;
+  } catch (error) {
+    // If we get a unique constraint error despite onConflictDoNothing,
+    // try to fetch the existing record
+    console.error('⚠️ getOrCreateSvixApplication - Error during insert:', error);
+    
+    const [existingRecord] = await db
+      .select()
+      .from(svixApplications)
+      .where(eq(svixApplications.userId, userId))
+      .limit(1);
+
+    if (existingRecord) {
+      console.log(`✅ getOrCreateSvixApplication - Recovered existing record after conflict for user: ${userId}`);
+      return existingRecord;
+    }
+
+    // If we still can't find it, throw the original error
+    throw error;
+  }
 }
 

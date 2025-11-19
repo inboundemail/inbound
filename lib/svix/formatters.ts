@@ -4,8 +4,7 @@ import type { WebhookPayloadFormat } from './types';
 /**
  * Format webhook payload based on format type
  * @param emailId - The email ID
- * @param emailData - Parsed email data
- * @param recipient - The recipient email address
+ * @param emailData - Parsed email data (with optional recipient property)
  * @param format - Payload format ('full' or 'simple')
  * @returns Formatted webhook payload
  */

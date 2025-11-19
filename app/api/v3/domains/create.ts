@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm'
 import { checkDomainCanReceiveEmails } from '@/lib/domains-and-dns/dns'
 import { createDomainVerification, getVerifiedParentDomain } from '@/lib/db/domains'
 import { initiateDomainVerification } from '@/lib/domains-and-dns/domain-verification'
-import { Autumn as autumn } from 'autumn-js'
+import { autumn } from '@/lib/autumn/client'
 import { isSubdomain } from '@/lib/domains-and-dns/domain-utils'
 
 // AWS configuration

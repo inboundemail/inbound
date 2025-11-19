@@ -2,7 +2,7 @@ import { authenticatedProcedure } from '../_lib/procedures';
 import { ListEndpointsInput, EndpointSchema } from './_schemas';
 import { db } from '@/lib/db';
 import { endpoints } from '@/lib/db/schema';
-import { eq, and, count, sql } from 'drizzle-orm';
+import { eq, and, or, count, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 /**
@@ -42,7 +42,22 @@ export const listEndpoints = authenticatedProcedure
       
       // Build where conditions
       const conditions = [eq(endpoints.userId, userId)];
-      if (normalizedTypeFilter) conditions.push(eq(endpoints.type, normalizedTypeFilter));
+      
+      // Handle type filter: when filtering by 'email_forward', include legacy 'email' records
+      if (normalizedTypeFilter) {
+        if (normalizedTypeFilter === 'email_forward') {
+          // Query for both 'email_forward' AND legacy 'email' type
+          conditions.push(
+            or(
+              eq(endpoints.type, 'email_forward'),
+              eq(endpoints.type, 'email')
+            )!
+          );
+        } else {
+          conditions.push(eq(endpoints.type, normalizedTypeFilter));
+        }
+      }
+      
       if (active !== undefined) conditions.push(eq(endpoints.isActive, active));
       
       // Create where clause (handle single condition)

@@ -1,6 +1,7 @@
 import { OpenAPIHandler } from '@orpc/openapi/fetch'
 import { CORSPlugin } from '@orpc/server/plugins'
 import { onError } from '@orpc/server'
+import type { router as AppRouter } from '../[[...rest]]/route'
 
 /**
  * Creates an OpenAPI handler for the v3 API
@@ -9,7 +10,7 @@ import { onError } from '@orpc/server'
  * - Error logging
  * - Request handling
  */
-export function createV3Handler(router: any) {
+export function createV3Handler(router: typeof AppRouter) {
   return new OpenAPIHandler(router, {
     // Plugins
     plugins: [

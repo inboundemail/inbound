@@ -8,7 +8,8 @@ import { getDependentSubdomains } from '@/lib/db/domains'
 import { isRootDomain } from '@/lib/domains-and-dns/domain-utils'
 import { AWSSESReceiptRuleManager } from '@/lib/aws-ses/aws-ses-rules'
 import { deleteDomainFromSES } from '@/lib/domains-and-dns/domain-verification'
-import { Autumn as autumn } from 'autumn-js'
+import { autumn } from '@/lib/autumn/client'
+import { BatchRuleManager } from '@/lib/aws-ses/batch-rule-manager'
 
 /**
  * Input schema for domain deletion
@@ -225,7 +226,33 @@ export const deleteDomain = authenticatedProcedure
       })
     }
 
-    // 6. Delete the domain itself
+    // 6. Decrement batch rule capacity if domain was using a batch rule (BEFORE deletion)
+    if (domain.catchAllReceiptRuleName && domain.catchAllReceiptRuleName.startsWith('batch-rule-')) {
+      try {
+        console.log('🔧 v3: Decrementing batch rule capacity for:', domain.catchAllReceiptRuleName)
+        
+        // Get the batch rule record to find its ID
+        const { sesReceiptRules } = await import('@/lib/db/schema')
+        const batchRule = await db
+          .select()
+          .from(sesReceiptRules)
+          .where(eq(sesReceiptRules.ruleName, domain.catchAllReceiptRuleName))
+          .limit(1)
+        
+        if (batchRule[0]) {
+          const batchRuleManager = new BatchRuleManager()
+          await batchRuleManager.decrementRuleCapacity(batchRule[0].id, 1)
+          console.log(`✅ v3: Decremented batch rule capacity for ${domain.catchAllReceiptRuleName}`)
+        } else {
+          console.warn(`⚠️ v3: Batch rule ${domain.catchAllReceiptRuleName} not found in database`)
+        }
+      } catch (batchRuleError) {
+        console.error('⚠️ v3: Failed to decrement batch rule capacity:', batchRuleError)
+        // Don't fail the deletion if batch rule decrement fails
+      }
+    }
+
+    // 7. Delete the domain itself
     try {
       console.log('🔧 v3: Deleting domain record')
       await db
@@ -243,7 +270,7 @@ export const deleteDomain = authenticatedProcedure
       })
     }
 
-    // 7. Track domain deletion with Autumn to free up domain spot
+    // 8. Track domain deletion with Autumn to free up domain spot
     try {
       console.log('📊 v3: Tracking domain deletion with Autumn for user:', userId)
       const { error: trackError } = await autumn.track({

@@ -177,9 +177,10 @@ export const rateLimitMiddleware = os
         limit: rateLimitInfo.limit,
       })
 
-      // Continue with rate limit info attached
+      // Continue with rate limit info attached (merge with existing context)
       return next({ 
         context: {
+          ...context,
           rateLimit: rateLimitInfo,
         },
       })
@@ -190,7 +191,7 @@ export const rateLimitMiddleware = os
 
       console.error('❌ v3: Rate limit check error:', error)
       // On rate limit check failure, allow the request but log the error
-      return next({ context: {} })
+      return next({ context })
     }
   })
 

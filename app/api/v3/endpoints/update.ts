@@ -46,8 +46,17 @@ export const updateEndpoint = authenticatedProcedure
     
     // For webhooks, sync to Svix if URL is being updated
     if (existing.type === 'webhook' && existing.svixEndpointId && updates.config?.url) {
+      // Validate webhook URL format
+      let url: URL;
+      try {
+        url = new URL(updates.config.url);
+      } catch (error) {
+        throw new ORPCError('BAD_REQUEST', {
+          message: 'Invalid webhook URL format. Please provide a valid URL.',
+        });
+      }
+      
       // Validate webhook URL (must be HTTPS in production)
-      const url = new URL(updates.config.url);
       if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') {
         throw new ORPCError('BAD_REQUEST', {
           message: 'Webhook URLs must use HTTPS in production',
