@@ -9,6 +9,7 @@ import Menu from "./icons/menu";
 import CircleXmark from "./icons/circle-xmark";
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
+import { FeedbackButton } from "./feedback-button";
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -170,6 +171,7 @@ export function SiteHeader() {
                   </Link>
                 )
               )}
+              <FeedbackButton />
               {session?.user ? (
                 <Button variant="primary" asChild>
                   <Link href="/logs">
@@ -304,6 +306,9 @@ export function SiteHeader() {
                 </nav>
 
                 <div className="p-6 border-t border-border space-y-4">
+                  <div className="flex justify-center">
+                    <FeedbackButton />
+                  </div>
                   {session?.user ? (
                     <Button variant="primary" asChild className="w-full">
                       <Link href="/logs" onClick={closeMobileMenu}>

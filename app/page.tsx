@@ -12,9 +12,9 @@ export default async function HomePage() {
       ? homepageResult.data
       : {
         _title: "HomePage",
-        heroPrimaryText: "Email platform for builders",
+        heroPrimaryText: "The API for your email.",
         heroSublineText:
-          "A complete email platform for Developers to Send, Receive & Reply",
+          "Recieve email to webhooks & send them via TypeScript, perfect for agents.",
         ctaButtonPrimaryText: "Get Started",
       };
 
