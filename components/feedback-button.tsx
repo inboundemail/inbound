@@ -58,7 +58,7 @@ export function FeedbackButton() {
       <PopoverTrigger asChild>
         <Button
           variant="primary"
-          className="rounded-full gap-2 px-4 h-9"
+          className="gap-2 px-4 h-9"
         >
           <ChatBubble2 width={14} height={14} />
           <span className="hidden sm:inline">Feedback</span>
@@ -67,7 +67,7 @@ export function FeedbackButton() {
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-80 p-0"
+        className="w-80 p-0 z-[200]"
       >
         <div className="p-4">
           <h3 className="font-semibold text-base mb-1">Share Your Feedback</h3>
