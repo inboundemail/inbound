@@ -6,7 +6,7 @@
  */
 
 // This will be properly typed once we have the AppRouter
-export type AppRouter = any
+export type AppRouter = typeof import('@/app/api/v3/[[...rest]]/route').router
 
 // Client configuration
 export const v3ClientConfig = {

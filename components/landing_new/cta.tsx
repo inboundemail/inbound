@@ -19,13 +19,13 @@ export function CTANew() {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-            <Button size="lg" className="h-14 px-8 text-lg rounded-full" asChild>
+            <Button size="lg" asChild>
               <Link href="/login">
                 Get Started Now
                 <ArrowBoldRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
-            <Button variant="outline" size="lg" className="h-14 px-8 text-lg rounded-full" asChild>
+            <Button variant="outline" size="lg" asChild>
               <Link href="/contact">
                 Contact Sales
               </Link>

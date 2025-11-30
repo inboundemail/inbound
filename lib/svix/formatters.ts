@@ -1,5 +1,6 @@
 import type { ParsedEmailData } from '@/lib/email-management/email-parser';
 import type { WebhookPayloadFormat } from './types';
+import { SVIX_EVENT_TYPES } from '@/lib/svix/event-types';
 
 /**
  * Format webhook payload based on format type
@@ -15,7 +16,7 @@ export function formatWebhookPayload(
 ) {
   const basePayload = {
     id: emailId,
-    type: 'email.received',
+    type: SVIX_EVENT_TYPES.EMAIL_RECEIVED,
     timestamp: new Date().toISOString(),
   };
 

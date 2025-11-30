@@ -71,13 +71,20 @@ export const getEndpoint = authenticatedProcedure
     
     // Normalize legacy type values: 'email' -> 'email_forward'
     const normalizedType = endpoint.type === 'email' ? 'email_forward' : endpoint.type;
+    // Safely parse endpoint config
+    let parsedConfig: Record<string, unknown> = {};
+    try {
+      parsedConfig = endpoint.config ? JSON.parse(endpoint.config) : {};
+    } catch {
+      parsedConfig = {};
+    }
     
     return {
       endpoint: {
         id: endpoint.id,
         name: endpoint.name,
         type: normalizedType as 'webhook' | 'email_forward' | 'email_group',
-        config: JSON.parse(endpoint.config),
+        config: parsedConfig,
         isActive: endpoint.isActive ?? true,
         description: endpoint.description,
         createdAt: endpoint.createdAt ? new Date(endpoint.createdAt) : new Date(),
