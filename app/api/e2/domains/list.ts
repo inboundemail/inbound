@@ -33,8 +33,8 @@ if (awsAccessKeyId && awsSecretAccessKey) {
 
 // Request/Response Types (OpenAPI-compatible)
 const ListDomainsQuery = t.Object({
-  limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 50 })),
-  offset: t.Optional(t.Integer({ minimum: 0, default: 0 })),
+  limit: t.Optional(t.Number({ minimum: 1, maximum: 100, default: 50 })),
+  offset: t.Optional(t.Number({ minimum: 0, default: 0 })),
   status: t.Optional(t.String({ enum: ["pending", "verified", "failed"] })),
   canReceive: t.Optional(t.String({ enum: ["true", "false"] })),
   check: t.Optional(t.String({ enum: ["true"] })),

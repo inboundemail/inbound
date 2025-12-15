@@ -11,8 +11,8 @@ import { eq, and, desc, count } from "drizzle-orm";
 
 // Request/Response Types (OpenAPI-compatible)
 const ListEmailAddressesQuery = t.Object({
-  limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 50 })),
-  offset: t.Optional(t.Integer({ minimum: 0, default: 0 })),
+  limit: t.Optional(t.Number({ minimum: 1, maximum: 100, default: 50 })),
+  offset: t.Optional(t.Number({ minimum: 0, default: 0 })),
   domainId: t.Optional(t.String()),
   isActive: t.Optional(t.String({ enum: ["true", "false"] })),
   isReceiptRuleConfigured: t.Optional(t.String({ enum: ["true", "false"] })),

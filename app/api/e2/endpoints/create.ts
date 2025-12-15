@@ -6,16 +6,21 @@ import { nanoid } from "nanoid";
 import { validateEndpointConfig } from "./validation";
 
 // Request/Response Types (OpenAPI-compatible)
+// Define headers schema with explicit additionalProperties for proper OpenAPI generation
+const HeadersSchema = t.Optional(
+  t.Unsafe<Record<string, string>>({
+    type: "object",
+    additionalProperties: { type: "string" },
+    description: "Custom headers to include with webhook requests",
+  })
+);
+
 const WebhookConfigSchema = t.Object(
   {
     url: t.String(),
     timeout: t.Optional(t.Number({ minimum: 1, maximum: 300 })),
     retryAttempts: t.Optional(t.Number({ minimum: 0, maximum: 10 })),
-    headers: t.Optional(
-      t.Record(t.String(), t.String(), {
-        description: "Custom headers to include with webhook requests",
-      })
-    ),
+    headers: HeadersSchema,
   },
   { title: "WebhookConfig" }
 );

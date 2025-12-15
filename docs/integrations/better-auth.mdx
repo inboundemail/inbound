@@ -19,7 +19,9 @@ npm install inboundemail better-auth
 
 ## Quick Start
 
-### Server Setup
+### Setup
+
+Add the plugin to your Better Auth configuration:
 
 ```typescript
 import { betterAuth } from 'better-auth';
@@ -36,16 +38,79 @@ export const auth = betterAuth({
 });
 ```
 
-### Client Setup (Optional)
+### With React Email Templates
 
-For proper type inference on the client side:
+For beautiful, responsive emails, use our pre-built React Email templates. First install the peer dependency:
 
-```typescript
-import { createAuthClient } from 'better-auth/react';
-import { inboundEmailClientPlugin } from 'inboundemail/better-auth/client';
+```bash
+npm install @react-email/components
+```
 
-export const authClient = createAuthClient({
-  plugins: [inboundEmailClientPlugin()],
+Then configure specific events with React templates:
+
+```tsx
+import { betterAuth } from 'better-auth';
+import { inboundEmailPlugin } from 'inboundemail/better-auth';
+import {
+  BetterAuthPasswordChanged,
+  BetterAuthNewDeviceSignin,
+  BetterAuthAccountCreated,
+} from 'inboundemail/better-auth/react-email';
+
+export const auth = betterAuth({
+  // ... your Better Auth config
+  plugins: [
+    inboundEmailPlugin({
+      client: { apiKey: process.env.INBOUND_API_KEY! },
+      from: 'security@yourdomain.com',
+      events: {
+        'password-changed': {
+          template: (ctx) => ({
+            subject: 'Your password was changed',
+            react: (
+              <BetterAuthPasswordChanged
+                userEmail={ctx.email}
+                timestamp={new Date(ctx.timestamp).toLocaleString()}
+                appName="My App"
+                supportEmail="support@myapp.com"
+              />
+            ),
+          }),
+        },
+        'new-device-sign-in': {
+          template: (ctx) => ({
+            subject: 'New sign-in to your account',
+            react: (
+              <BetterAuthNewDeviceSignin
+                userEmail={ctx.email}
+                deviceInfo={{
+                  browser: ctx.device?.browser,
+                  os: ctx.device?.os,
+                  ipAddress: ctx.ipAddress ?? undefined,
+                  timestamp: new Date(ctx.timestamp).toLocaleString(),
+                }}
+                appName="My App"
+              />
+            ),
+          }),
+        },
+        'account-created': {
+          template: (ctx) => ({
+            subject: 'Welcome to My App!',
+            react: (
+              <BetterAuthAccountCreated
+                userEmail={ctx.email}
+                userName={ctx.name ?? undefined}
+                method={ctx.method}
+                provider={ctx.provider}
+                appName="My App"
+              />
+            ),
+          }),
+        },
+      },
+    }),
+  ],
 });
 ```
 
@@ -398,6 +463,9 @@ inboundEmailPlugin({
 | `BetterAuthMagicLink` | Magic link sign-in | `magicLink`, `userEmail`, `appName`, `expirationMinutes`, `logoUrl` |
 | `BetterAuthPasswordReset` | Password reset email | `resetLink`, `userEmail`, `appName`, `expirationMinutes`, `logoUrl` |
 | `BetterAuthVerifyEmail` | Email verification OTP | `verificationCode`, `userEmail`, `appName`, `expirationMinutes`, `logoUrl` |
+| `BetterAuthAccountCreated` | Welcome email for new accounts | `userEmail`, `userName`, `timestamp`, `method`, `provider`, `appName`, `supportEmail`, `logoUrl`, `dashboardLink` |
+| `BetterAuthTwoFactorEnabled` | 2FA enabled notification | `userEmail`, `userName`, `timestamp`, `method`, `appName`, `supportEmail`, `logoUrl`, `secureAccountLink` |
+| `BetterAuthTwoFactorDisabled` | 2FA disabled warning | `userEmail`, `userName`, `timestamp`, `method`, `appName`, `supportEmail`, `logoUrl`, `secureAccountLink` |
 
 #### Organization Templates
 

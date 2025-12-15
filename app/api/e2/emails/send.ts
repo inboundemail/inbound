@@ -83,7 +83,11 @@ const SendEmailBodySchema = t.Object({
   bcc: t.Optional(t.Union([t.String(), t.Array(t.String())])),
   reply_to: t.Optional(t.Union([t.String(), t.Array(t.String())])),
   headers: t.Optional(
-    t.Record(t.String(), t.String(), { description: "Custom email headers" })
+    t.Unsafe<Record<string, string>>({
+      type: "object",
+      additionalProperties: { type: "string" },
+      description: "Custom email headers",
+    })
   ),
   attachments: t.Optional(t.Array(AttachmentSchema)),
   tags: t.Optional(t.Array(TagSchema)),
@@ -697,6 +701,7 @@ export const sendEmail = new Elysia().post(
     body: SendEmailBodySchema,
     response: {
       200: EmailSendSuccessResponse,
+      201: EmailSendSuccessResponse,
       400: ErrorResponse,
       401: ErrorResponse,
       403: ErrorResponse,

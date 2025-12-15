@@ -79,7 +79,11 @@ const ReplyEmailBodySchema = t.Object({
     t.String({ description: "Plain text content of the email" })
   ),
   headers: t.Optional(
-    t.Record(t.String(), t.String(), { description: "Custom email headers" })
+    t.Unsafe<Record<string, string>>({
+      type: "object",
+      additionalProperties: { type: "string" },
+      description: "Custom email headers",
+    })
   ),
   attachments: t.Optional(t.Array(AttachmentSchema)),
   reply_all: t.Optional(

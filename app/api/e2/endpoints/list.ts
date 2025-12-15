@@ -6,8 +6,8 @@ import { eq, and, desc, asc, count, ilike, or } from "drizzle-orm";
 
 // Request/Response Types (OpenAPI-compatible)
 const ListEndpointsQuery = t.Object({
-  limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 50 })),
-  offset: t.Optional(t.Integer({ minimum: 0, default: 0 })),
+  limit: t.Optional(t.Number({ minimum: 1, maximum: 100, default: 50 })),
+  offset: t.Optional(t.Number({ minimum: 0, default: 0 })),
   type: t.Optional(t.String({ enum: ["webhook", "email", "email_group"] })),
   active: t.Optional(t.String({ enum: ["true", "false"] })),
   sortBy: t.Optional(t.String({ enum: ["newest", "oldest"] })),
