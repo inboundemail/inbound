@@ -1,0 +1,3 @@
+[submodule "packages/inbound-typescript-sdk"]
+	path = packages/inbound-typescript-sdk
+	url = https://github.com/inboundemail/inbound-typescript-sdk.git

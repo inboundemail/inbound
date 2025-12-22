@@ -5,7 +5,7 @@
 @layer base {
   :root {
     /* Selection highlight (light mode) */
-    --selection-bg: #BE9DF7;
+    --selection-bg: #dc2626;
     --selection-fg: #ffffff;
     /* DNS table background */
     --dns-table-bg: #FBFBFB;
@@ -27,9 +27,9 @@
     --primary-foreground: 98% 0.02 240;
     --secondary: 96% 0.02 240;
     --secondary-foreground: 15% 0.05 264;
-    /* Muted surfaces (light): subtle brand-tinted purple */
-    --muted: 270 100% 97%; /* very light lavender */
-    --muted-foreground: 264 32% 34%; /* readable purple foreground */
+    /* Muted surfaces (light): subtle Christmas green tint */
+    --muted: 140 40% 96%; /* very light green */
+    --muted-foreground: 140 30% 30%; /* readable green foreground */
     --accent: 96% 0.02 240;
     --accent-foreground: 15% 0.05 264;
     --destructive: 65% 0.2 30;
@@ -58,11 +58,11 @@
     --sidebar-radius: 30px;
     --sidebar-ring: 65% 0.18 240;
     
-    /* Inbound Custom Colors */
-    --purple-primary: #8b5cf6;
-    --purple-dark: #7c3aed;
-    --purple-light: #a855f7;
-    --purple-glow: rgba(139, 92, 246, 0.3);
+    /* Inbound Custom Colors - Christmas Theme */
+    --purple-primary: #dc2626;
+    --purple-dark: #b91c1c;
+    --purple-light: #ef4444;
+    --purple-glow: rgba(220, 38, 38, 0.3);
     --text-primary: #1f2937;
     --text-secondary: #4b5563;
     --text-muted: #6b7280;
@@ -71,11 +71,11 @@
     --bg-card: #ffffff;
     --bg-card-hover: #f9fafb;
 
-    /* Alert (light) - from Figma */
-    --alert-info-from: #ede8fe7a; /* semi-transparent violet */
+    /* Alert (light) - Christmas green */
+    --alert-info-from: rgba(34, 197, 94, 0.15); /* semi-transparent green */
     --alert-info-to: #ffffff00;   /* transparent */
-    --alert-info-border: rgba(128, 97, 255, 0.13);
-    --alert-info-text: #7c3aed;   /* violet-600 */
+    --alert-info-border: rgba(34, 197, 94, 0.20);
+    --alert-info-text: #16a34a;   /* green-600 */
     /* Tabs (light) */
     --tabs-bg: #ffffff;
     --tabs-active-bg: #fbfbfb;
@@ -84,9 +84,9 @@
     --tabs-text-active: #000000;
     --tabs-radius: 10px;
     --tabs-pill-radius: 7px;
-    /* Badges (light) */
-    --badge-default-bg: rgba(108, 71, 255, 0.10);
-    --badge-default-text: #2e00e4;
+    /* Badges (light) - Christmas red */
+    --badge-default-bg: rgba(220, 38, 38, 0.10);
+    --badge-default-text: #b91c1c;
     --badge-default-border: transparent;
 
     --badge-secondary-bg: rgba(255, 182, 99, 0.13);
@@ -101,11 +101,11 @@
     --badge-outline-text: #000000;
     --badge-outline-border: rgba(0, 0, 0, 0.05);
 
-    /* Button (light) */
-    --button-primary-bg: #8161FF;
+    /* Button (light) - Christmas red */
+    --button-primary-bg: #dc2626;
     --button-primary-shadow-top: rgba(0, 0, 0, 0.25);
     --button-primary-shadow-bottom: rgba(255, 255, 255, 0.26);
-    --button-primary-border: #735ACF; /* Figma border for primary button */
+    --button-primary-border: #b91c1c; /* Christmas red border */
     --button-secondary-bg: #FFFFFF;
     --button-secondary-border: rgba(0, 0, 0, 0.2);
     --button-destructive-bg: #FFEDED;
