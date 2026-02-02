@@ -232,10 +232,10 @@ export const auth = betterAuth({
 							: undefined,
 		}),
 		apiKey({
+			// Rate limiting disabled - handled by Upstash in E2 middleware (app/api/e2/lib/auth.ts)
+			// This avoids duplicate rate limiting and ensures proper 429 responses instead of 401
 			rateLimit: {
-				enabled: true,
-				timeWindow: 1000, // 1 second in milliseconds
-				maxRequests: 4, // 4 requests per second
+				enabled: false,
 			},
 		}),
 		admin(),
