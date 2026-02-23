@@ -57,6 +57,50 @@ export default async function PricingPage() {
 								reject, flag, or accept spam in your mailbox settings.
 							</p>
 						</div>
+						<div>
+							<p className="text-[#1c1917]">
+								Can I upgrade or downgrade my plan?
+							</p>
+							<p className="text-sm text-[#52525b] mt-1">
+								Yes, you can change your plan at any time. Upgrades take effect
+								immediately, and downgrades apply at the end of your current
+								billing period.
+							</p>
+						</div>
+						<div>
+							<p className="text-[#1c1917]">
+								What happens if I exceed my plan limits?
+							</p>
+							<p className="text-sm text-[#52525b] mt-1">
+								We'll notify you when you approach your limit. You can upgrade
+								to a higher tier or continue with reduced service until the next
+								billing cycle.
+							</p>
+						</div>
+						<div>
+							<p className="text-[#1c1917]">Do you offer refunds?</p>
+							<p className="text-sm text-[#52525b] mt-1">
+								Yes, we offer a 30-day money-back guarantee for new customers.
+								No questions asked.
+							</p>
+						</div>
+						<div>
+							<p className="text-[#1c1917]">Is there a free trial?</p>
+							<p className="text-sm text-[#52525b] mt-1">
+								Yes, all new accounts include a 14-day free trial with full
+								access to all features. No credit card required.
+							</p>
+						</div>
+						<div>
+							<p className="text-[#1c1917]">
+								What payment methods do you accept?
+							</p>
+							<p className="text-sm text-[#52525b] mt-1">
+								We accept all major credit cards, debit cards, and ACH transfers
+								for annual plans. All payments are processed securely through
+								Stripe.
+							</p>
+						</div>
 					</div>
 				</section>
 
