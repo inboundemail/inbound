@@ -1,4 +1,5 @@
-import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
+import { type SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
+import { requireSesClient } from '@/lib/aws-ses/ses-client'
 import type { ParsedEmailData } from './email-parser'
 import { generateEmailBannerHTML } from '@/components/email-banner'
 
@@ -6,9 +7,7 @@ export class EmailForwarder {
   private sesClient: SESv2Client
 
   constructor() {
-    this.sesClient = new SESv2Client({ 
-      region: process.env.AWS_REGION || 'us-east-2' 
-    })
+    this.sesClient = requireSesClient()
   }
 
   async forwardEmail(

@@ -23,12 +23,12 @@ import { evaluateGuardRules } from "../guard/rule-matcher";
 import { checkRecipientsAgainstBlocklist } from "./email-blocking";
 import { EmailForwarder } from "./email-forwarder";
 import type { ParsedEmailData } from "./email-parser";
-import { sanitizeHtml } from "./email-parser";
 import { EmailThreader, type ThreadingResult } from "./email-threader";
 import { triggerEmailAction } from "./webhook-trigger";
-
-// Maximum webhook payload size (5MB safety margin)
-const MAX_WEBHOOK_PAYLOAD_SIZE = 1_000_000;
+import {
+	constructWebhookPayload,
+	ensurePayloadSize,
+} from "./webhook-payload";
 
 /**
  * Main email routing function - routes emails to appropriate endpoints
@@ -797,52 +797,13 @@ async function handleWebhookEndpoint(
 				downloadUrl: `${baseUrl}/api/e2/attachments/${emailData.structuredId}/${encodeURIComponent(att.filename || "attachment")}`,
 			})) || [];
 
-		// Create enhanced parsedData with download URLs
-		const enhancedParsedData = {
-			...parsedEmailData,
-			attachments: attachmentsWithUrls,
-		};
-
-		// Create webhook payload with the exact structure expected
-		const webhookPayload = {
-			event: "email.received",
-			timestamp: new Date().toISOString(),
-			email: {
-				id: emailData.structuredId, // Use structured email ID for v2 API compatibility
-				messageId: emailData.messageId,
-				from: emailData.fromData ? JSON.parse(emailData.fromData) : null,
-				to: emailData.toData ? JSON.parse(emailData.toData) : null,
-				recipient: emailData.recipient,
-				subject: emailData.subject,
-				receivedAt: emailData.date,
-
-				// Threading information
-				threadId: emailData.threadId || null,
-				threadPosition: emailData.threadPosition || null,
-
-				// Full ParsedEmailData structure with download URLs
-				parsedData: enhancedParsedData,
-
-				// Cleaned content for backward compatibility
-				cleanedContent: {
-					html: parsedEmailData.htmlBody
-						? sanitizeHtml(parsedEmailData.htmlBody)
-						: null,
-					text: parsedEmailData.textBody || null,
-					hasHtml: !!parsedEmailData.htmlBody,
-					hasText: !!parsedEmailData.textBody,
-					attachments: attachmentsWithUrls, // Include download URLs in cleaned content too
-					headers: parsedEmailData.headers || {},
-				},
-			},
-			endpoint: {
-				id: endpoint.id,
-				name: endpoint.name,
-				type: endpoint.type,
-			},
-		};
-
-		const payloadString = JSON.stringify(webhookPayload);
+		// Build webhook payload
+		const webhookPayload = constructWebhookPayload(
+			emailData,
+			parsedEmailData,
+			attachmentsWithUrls,
+			endpoint,
+		);
 
 		// Prepare headers
 		const headers: HeadersInit = {
@@ -858,76 +819,8 @@ async function handleWebhookEndpoint(
 		};
 
 		// Check payload size and strip fields if necessary
-		let finalPayload = webhookPayload;
-		let finalPayloadString = payloadString;
-		const strippedFields: string[] = [];
-
-		if (payloadString.length > MAX_WEBHOOK_PAYLOAD_SIZE) {
-			console.warn(
-				`⚠️ handleWebhookEndpoint - Webhook payload too large (${payloadString.length} bytes), stripping attachment bodies from raw field`,
-			);
-
-			// Try stripping attachment bodies from raw field first
-			if (enhancedParsedData.raw) {
-				// Remove base64-encoded attachment bodies while preserving MIME structure and headers
-				// This regex finds ALL base64 content from header until next MIME boundary
-				const cleanedRaw = enhancedParsedData.raw.replace(
-					/Content-Transfer-Encoding:\s*base64\s*[\r\n]+[\r\n]+([\s\S]+?)(?=\r?\n--|\r?\n\r?\nContent-|$)/gi,
-					"Content-Transfer-Encoding: base64\r\n\r\n[binary attachment data removed - use Attachments API]\r\n",
-				);
-
-				const payloadWithCleanedRaw = {
-					...webhookPayload,
-					email: {
-						...webhookPayload.email,
-						parsedData: {
-							...enhancedParsedData,
-							raw: cleanedRaw,
-						},
-					},
-				};
-				const payloadStringWithCleanedRaw = JSON.stringify(
-					payloadWithCleanedRaw,
-				);
-
-				if (payloadStringWithCleanedRaw.length <= MAX_WEBHOOK_PAYLOAD_SIZE) {
-					finalPayload = payloadWithCleanedRaw;
-					finalPayloadString = payloadStringWithCleanedRaw;
-					strippedFields.push("raw (attachment bodies removed)");
-					console.log(
-						`✅ handleWebhookEndpoint - Removed attachment bodies from raw field, new size: ${payloadStringWithCleanedRaw.length} bytes`,
-					);
-				} else {
-					// Still too large, also strip headers
-					const payloadWithCleanedRawAndNoHeaders = {
-						...payloadWithCleanedRaw,
-						email: {
-							...payloadWithCleanedRaw.email,
-							parsedData: {
-								...enhancedParsedData,
-								raw: cleanedRaw,
-								headers: {},
-							},
-						},
-					};
-					const payloadStringWithCleanedRawAndNoHeaders = JSON.stringify(
-						payloadWithCleanedRawAndNoHeaders,
-					);
-					finalPayload = payloadWithCleanedRawAndNoHeaders;
-					finalPayloadString = payloadStringWithCleanedRawAndNoHeaders;
-					strippedFields.push("raw (attachment bodies removed)", "headers");
-					console.warn(
-						`⚠️ handleWebhookEndpoint - Also removed headers, final size: ${payloadStringWithCleanedRawAndNoHeaders.length} bytes`,
-					);
-				}
-			}
-
-			if (strippedFields.length > 0) {
-				console.log(
-					`📋 handleWebhookEndpoint - Cleaned payload for ${endpoint.name}: ${strippedFields.join(", ")}`,
-				);
-			}
-		}
+		const { payloadString: finalPayloadString, strippedFields } =
+			ensurePayloadSize(webhookPayload);
 
 		// Send the webhook
 		const startTime = Date.now();

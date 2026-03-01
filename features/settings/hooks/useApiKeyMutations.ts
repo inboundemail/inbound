@@ -1,6 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type {
+	CreateApiKeyData,
+	UpdateApiKeyData,
+} from "@/features/settings/types";
 import { authClient } from "@/lib/auth/auth-client";
-import { CreateApiKeyData, UpdateApiKeyData } from "@/features/settings/types";
 
 export const useCreateApiKeyMutation = () => {
 	const queryClient = useQueryClient();
@@ -98,11 +101,11 @@ export const useRevokeAllApiKeysMutation = () => {
 				throw new Error(listError.message);
 			}
 
-			if (!apiKeys || apiKeys.length === 0) {
+			if (!apiKeys?.apiKeys || apiKeys.apiKeys.length === 0) {
 				return { count: 0 };
 			}
 
-			const enabledKeys = apiKeys.filter((key) => key.enabled);
+			const enabledKeys = apiKeys.apiKeys.filter((key) => key.enabled);
 			if (enabledKeys.length === 0) {
 				return { count: 0 };
 			}

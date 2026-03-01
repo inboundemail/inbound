@@ -2,13 +2,7 @@ import { db } from '@/lib/db'
 import { blockedEmails, emailDomains, emailAddresses } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
-
-/**
- * Extract domain from email address
- */
-function extractDomain(email: string): string {
-  return email.split('@')[1]?.toLowerCase() || ''
-}
+import { extractDomainFromEmail, extractEmailAddress, isValidEmail } from '@/lib/utils/email-utils'
 
 /**
  * Check if an email address is already blocked
@@ -43,10 +37,7 @@ export async function checkRecipientsAgainstBlocklist(
 
     // Normalize all email addresses
     const normalizedRecipients = recipients.map(email => {
-      // Extract email from "Name <email@domain.com>" format if needed
-      const match = email.match(/<([^>]+)>/)
-      const extracted = match ? match[1] : email
-      return extracted.toLowerCase().trim()
+      return extractEmailAddress(email).toLowerCase().trim()
     })
 
     // Query all blocked addresses at once
@@ -82,8 +73,7 @@ export async function blockEmail(
 ): Promise<{ success: boolean; error?: string; message?: string }> {
   try {
     // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(emailAddress)) {
+    if (!isValidEmail(emailAddress)) {
       return {
         success: false,
         error: 'Invalid email format'
@@ -91,7 +81,7 @@ export async function blockEmail(
     }
 
     const normalizedEmail = emailAddress.toLowerCase()
-    const domain = extractDomain(normalizedEmail)
+    const domain = extractDomainFromEmail(normalizedEmail)
 
     if (!domain) {
       return {

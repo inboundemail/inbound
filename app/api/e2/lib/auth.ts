@@ -137,9 +137,9 @@ export async function validateAndRateLimit(
 		} else if (
 			apiSession?.valid &&
 			!apiSession?.error &&
-			apiSession?.key?.userId
+			apiSession?.key?.referenceId
 		) {
-			userId = apiSession.key.userId;
+			userId = apiSession.key.referenceId;
 			console.log("🔑 [E2] Auth Type: API_KEY");
 			console.log("🔑 [E2] API Key:", apiKey);
 			console.log("✅ API key authentication successful for userId:", userId);

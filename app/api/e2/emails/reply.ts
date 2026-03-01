@@ -1,4 +1,4 @@
-import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
+import { SendEmailCommand } from "@aws-sdk/client-sesv2";
 import { waitUntil } from "@vercel/functions";
 import { Autumn as autumn } from "autumn-js";
 import { and, eq } from "drizzle-orm";
@@ -8,6 +8,7 @@ import {
 	getTenantSendingInfoForDomainOrParent,
 	type TenantSendingInfo,
 } from "@/lib/aws-ses/identity-arn-helper";
+import { getSesClient } from "@/lib/aws-ses/ses-client";
 import { db } from "@/lib/db";
 import {
 	SENT_EMAIL_STATUS,
@@ -32,22 +33,7 @@ import {
 } from "../helper/attachment-processor";
 import { validateAndRateLimit } from "../lib/auth";
 
-// Initialize SES client
-const awsRegion = process.env.AWS_REGION || "us-east-2";
-const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
-const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-
-let sesClient: SESv2Client | null = null;
-
-if (awsAccessKeyId && awsSecretAccessKey) {
-	sesClient = new SESv2Client({
-		region: awsRegion,
-		credentials: {
-			accessKeyId: awsAccessKeyId,
-			secretAccessKey: awsSecretAccessKey,
-		},
-	});
-}
+const sesClient = getSesClient();
 
 // Request schema
 const AttachmentSchema = t.Object({

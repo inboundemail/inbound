@@ -3,55 +3,18 @@
  * This email can be used by any user for sending emails through the v2 APIs
  */
 
+import { extractDomainFromEmail, extractEmailAddress } from "@/lib/utils/email-utils";
+
+// Re-export shared utilities so existing callers don't break
+export { extractEmailAddress, extractEmailName } from "@/lib/utils/email-utils";
+export { extractDomainFromEmail as extractDomain } from "@/lib/utils/email-utils";
+
 /**
  * Check if an email address is the special agent@inbnd.dev address
  */
 export function isAgentEmail(email: string): boolean {
-  // Extract just the email address part, removing any name formatting
-  const emailMatch = email.match(/<([^>]+)>/) || [null, email]
-  const cleanEmail = emailMatch[1] || email
-  
-  return cleanEmail.toLowerCase() === 'agent@inbnd.dev'
-}
-
-/**
- * Extract domain from email address
- */
-export function extractDomain(email: string): string {
-  // Extract just the email address part, removing any name formatting
-  const emailMatch = email.match(/<([^>]+)>/) || [null, email]
-  const cleanEmail = emailMatch[1] || email
-  
-  const parts = cleanEmail.split('@')
-  return parts.length === 2 ? parts[1].toLowerCase() : ''
-}
-
-/**
- * Extract email address from formatted email (removes name part)
- */
-export function extractEmailAddress(email: string): string {
-  // Handle "Name <email@domain.com>" format
-  const emailMatch = email.match(/<([^>]+)>/)
-  if (emailMatch) {
-    return emailMatch[1]
-  }
-  
-  // Handle plain "email@domain.com" format
-  return email
-}
-
-/**
- * Extract name from formatted email (removes email part)
- */
-export function extractEmailName(email: string): string | null {
-  // Handle "Name <email@domain.com>" format
-  const nameMatch = email.match(/^(.+?)\s*<[^>]+>$/)
-  if (nameMatch) {
-    return nameMatch[1].trim().replace(/^["']|["']$/g, '') // Remove quotes if present
-  }
-  
-  // No name part found
-  return null
+	const cleanEmail = extractEmailAddress(email);
+	return cleanEmail.toLowerCase() === "agent@inbnd.dev";
 }
 
 /**
@@ -60,12 +23,15 @@ export function extractEmailName(email: string): string | null {
  * 1. The email is agent@inbnd.dev (allowed for all users)
  * 2. The user owns the domain (checked separately in the API)
  */
-export function canUserSendFromEmail(email: string): { isAgentEmail: boolean; domain: string } {
-  const domain = extractDomain(email)
-  const isAgent = isAgentEmail(email)
-  
-  return {
-    isAgentEmail: isAgent,
-    domain
-  }
+export function canUserSendFromEmail(email: string): {
+	isAgentEmail: boolean;
+	domain: string;
+} {
+	const domain = extractDomainFromEmail(email);
+	const isAgent = isAgentEmail(email);
+
+	return {
+		isAgentEmail: isAgent,
+		domain,
+	};
 }

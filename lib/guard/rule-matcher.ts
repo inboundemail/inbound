@@ -222,7 +222,7 @@ async function checkExplicitRule(
 /**
  * Check string-based criteria (subject, hasWords)
  */
-function checkStringCriteria(
+export function checkStringCriteria(
   content: string,
   values: string[],
   operator: 'OR' | 'AND'
@@ -237,7 +237,7 @@ function checkStringCriteria(
 /**
  * Check email-based criteria (from) with wildcard support
  */
-function checkEmailCriteria(
+export function checkEmailCriteria(
   emailAddresses: string[],
   patterns: string[],
   operator: 'OR' | 'AND'

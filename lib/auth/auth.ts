@@ -1,13 +1,16 @@
+import { apiKey } from "@better-auth/api-key";
+import { dash } from "@better-auth/infra";
 import { passkey } from "@better-auth/passkey";
 import { render } from "@react-email/components";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
-import { admin, apiKey, magicLink, oAuthProxy } from "better-auth/plugins";
+import { admin, magicLink, oAuthProxy } from "better-auth/plugins";
 import { and, eq } from "drizzle-orm";
 import Inbound from "inboundemail";
 
 import MagicLinkEmail from "@/emails/magic-link-email";
+import { extractDomainFromEmail } from "@/lib/utils/email-utils";
 import { db } from "../db/index";
 import * as schema from "../db/schema";
 
@@ -73,7 +76,7 @@ const inbound = new Inbound({
  * Check if an email domain is blocked from signing up
  */
 async function isBlockedEmailDomain(email: string): Promise<boolean> {
-	const domain = email.split("@")[1]?.toLowerCase();
+	const domain = extractDomainFromEmail(email);
 	if (!domain) return false;
 
 	if (BLOCKED_SIGNUP_DOMAINS.includes(domain)) {
@@ -203,6 +206,7 @@ export const auth = betterAuth({
 				}
 			},
 		}),
+		dash(),
 	],
 	hooks: {
 		before: createAuthMiddleware(async (ctx) => {

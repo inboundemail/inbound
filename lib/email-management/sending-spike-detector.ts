@@ -7,7 +7,7 @@ import { redis } from "@/lib/redis"
 
 const SLACK_ADMIN_WEBHOOK_URL = process.env.SLACK_ADMIN_WEBHOOK_URL
 
-const SPIKE_DETECTION_CONFIG = {
+export const SPIKE_DETECTION_CONFIG = {
 	HISTORICAL_DAYS: 14,
 	SPIKE_THRESHOLD_MULTIPLIER: 8,
 	MIN_HISTORICAL_DAILY_AVERAGE: 50,
@@ -32,7 +32,7 @@ const SPIKE_AWS_REPUTATION_CACHE_KEY = "spike-alert:aws-reputation-cache"
 
 type AlertSeverity = "medium" | "high" | "critical"
 
-type AwsReputationSnapshot = {
+export type AwsReputationSnapshot = {
 	latestBounceRatePercent: number
 	latestComplaintRatePercent: number
 	latestRejectRatePercent: number
@@ -106,7 +106,7 @@ async function getUserInfo(
 	return result[0] || null
 }
 
-function getUserAgeInDays(createdAt: Date | string): number {
+export function getUserAgeInDays(createdAt: Date | string): number {
 	const created = createdAt instanceof Date ? createdAt : new Date(createdAt)
 	return Math.max(0, (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24))
 }
@@ -186,7 +186,7 @@ async function getAwsReputationSnapshot(): Promise<AwsReputationSnapshot | null>
 	}
 }
 
-function getSeverity(
+export function getSeverity(
 	current15m: number,
 	current1h: number,
 	current24h: number,

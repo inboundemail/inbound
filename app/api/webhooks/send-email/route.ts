@@ -1,15 +1,10 @@
-import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 import { Receiver } from "@upstash/qstash";
 import { waitUntil } from "@vercel/functions";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { type NextRequest, NextResponse } from "next/server";
 import type { PostEmailsRequest } from "@/lib/api-types";
-import {
-	getAgentIdentityArn,
-	getTenantSendingInfoForDomainOrParent,
-	type TenantSendingInfo,
-} from "@/lib/aws-ses/identity-arn-helper";
+import { getSesClient } from "@/lib/aws-ses/ses-client";
 import { db } from "@/lib/db";
 import {
 	SCHEDULED_EMAIL_STATUS,
@@ -17,7 +12,6 @@ import {
 	scheduledEmails,
 	sentEmails,
 } from "@/lib/db/schema";
-import { getRootDomain, isSubdomain } from "@/lib/domains-and-dns/domain-utils";
 import {
 	canUserSendFromEmail,
 	extractEmailAddress,
@@ -25,7 +19,10 @@ import {
 import { evaluateSending } from "@/lib/email-management/email-evaluation";
 import { enforceOutboundSendGuard } from "@/lib/email-management/outbound-send-guard";
 import { checkSendingSpike } from "@/lib/email-management/sending-spike-detector";
+import { normalizeAttachments } from "@/lib/utils/attachment-utils";
 import { buildRawEmailMessage } from "../../e2/helper/email-builder";
+import { buildSesCommand } from "./build-ses-command";
+import { resolveTenantInfo } from "./resolve-tenant-info";
 
 /**
  * POST /api/webhooks/send-email
@@ -39,26 +36,7 @@ import { buildRawEmailMessage } from "../../e2/helper/email-builder";
  * Has types? ✅
  */
 
-// Initialize SES client
-const awsRegion = process.env.AWS_REGION || "us-east-2";
-const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
-const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-
-let sesClient: SESv2Client | null = null;
-
-if (awsAccessKeyId && awsSecretAccessKey) {
-	sesClient = new SESv2Client({
-		region: awsRegion,
-		credentials: {
-			accessKeyId: awsAccessKeyId,
-			secretAccessKey: awsSecretAccessKey,
-		},
-	});
-} else {
-	console.warn(
-		"⚠️ AWS credentials not configured. Scheduled email processing will not work.",
-	);
-}
+const sesClient = getSesClient();
 
 // Initialize QStash receiver for signature verification
 const qstashReceiver = new Receiver({
@@ -74,13 +52,6 @@ interface QStashPayload {
 	emailData?: PostEmailsRequest; // for batch
 	batchId?: string; // for batch
 	batchIndex?: number; // for batch
-}
-
-interface StoredAttachment {
-	filename?: string;
-	contentType?: string;
-	content_type?: string;
-	[key: string]: unknown;
 }
 
 export async function POST(request: NextRequest) {
@@ -257,71 +228,7 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			: [];
 
 		// Validate and fix attachment data - ensure contentType is set
-		const attachments = rawAttachments.map(
-			(att: StoredAttachment, index: number) => {
-				if (!att.contentType && !att.content_type) {
-					console.log(
-						`⚠️ Attachment ${index + 1} missing contentType, using fallback`,
-					);
-					const filename = att.filename || "unknown";
-					const ext = filename.toLowerCase().split(".").pop();
-					let contentType = "application/octet-stream";
-
-					// Common file type mappings
-					switch (ext) {
-						case "pdf":
-							contentType = "application/pdf";
-							break;
-						case "jpg":
-						case "jpeg":
-							contentType = "image/jpeg";
-							break;
-						case "png":
-							contentType = "image/png";
-							break;
-						case "gif":
-							contentType = "image/gif";
-							break;
-						case "txt":
-							contentType = "text/plain";
-							break;
-						case "html":
-							contentType = "text/html";
-							break;
-						case "json":
-							contentType = "application/json";
-							break;
-						case "zip":
-							contentType = "application/zip";
-							break;
-						case "doc":
-							contentType = "application/msword";
-							break;
-						case "docx":
-							contentType =
-								"application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-							break;
-						case "xls":
-							contentType = "application/vnd.ms-excel";
-							break;
-						case "xlsx":
-							contentType =
-								"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-							break;
-					}
-
-					return {
-						...att,
-						contentType: contentType,
-					};
-				}
-
-				return {
-					...att,
-					contentType: att.contentType || att.content_type,
-				};
-			},
-		);
+		const attachments = normalizeAttachments(rawAttachments);
 
 		// Create sent email record first (for tracking)
 		const sentEmailId = nanoid();
@@ -365,95 +272,25 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			textBody: scheduledEmail.textBody || undefined,
 			htmlBody: scheduledEmail.htmlBody || undefined,
 			customHeaders: headers,
-			attachments: attachments,
+			attachments,
 			date: new Date(),
 		});
 
-		// Get the tenant sending info (identity ARN, configuration set, and tenant name) for tenant-level tracking
-		const fromDomain = scheduledEmail.fromDomain;
+		// Resolve tenant sending info and build SES command
+		const tenantSendingInfo = await resolveTenantInfo(
+			scheduledEmail.userId,
+			scheduledEmail.fromDomain,
+			isAgentEmail,
+			"scheduled email",
+		);
 
-		let tenantSendingInfo: TenantSendingInfo = {
-			identityArn: null,
-			configurationSetName: null,
-			tenantName: null,
-		};
-		if (isAgentEmail) {
-			tenantSendingInfo = {
-				identityArn: getAgentIdentityArn(),
-				configurationSetName: null,
-				tenantName: null,
-			};
-		} else {
-			const parentDomain = isSubdomain(fromDomain)
-				? getRootDomain(fromDomain)
-				: undefined;
-			tenantSendingInfo = await getTenantSendingInfoForDomainOrParent(
-				scheduledEmail.userId,
-				fromDomain,
-				parentDomain || undefined,
-			);
-		}
-
-		if (tenantSendingInfo.identityArn) {
-			console.log(
-				`🏢 Using SourceArn for scheduled email tenant tracking: ${tenantSendingInfo.identityArn}`,
-			);
-		} else {
-			console.warn(
-				"⚠️ No SourceArn available - scheduled email will not be tracked at tenant level",
-			);
-		}
-
-		if (tenantSendingInfo.configurationSetName) {
-			console.log(
-				`📋 Using ConfigurationSet for scheduled email tenant tracking: ${tenantSendingInfo.configurationSetName}`,
-			);
-		} else {
-			console.warn(
-				"⚠️ No ConfigurationSet available - scheduled email metrics may not be tracked correctly",
-			);
-		}
-
-		if (tenantSendingInfo.tenantName) {
-			console.log(
-				`🏠 Using TenantName for scheduled email AWS SES tracking: ${tenantSendingInfo.tenantName}`,
-			);
-		} else {
-			console.warn(
-				"⚠️ No TenantName available - scheduled email will NOT appear in tenant dashboard!",
-			);
-		}
-
-		// Send via AWS SES using SESv2 SendEmailCommand with TenantName
-		// Per AWS docs: https://docs.aws.amazon.com/ses/latest/dg/tenants.html
-		// Use full fromAddress (with display name) for proper sender name display
-		const rawCommand = new SendEmailCommand({
-			FromEmailAddress: scheduledEmail.fromAddress,
-			...(tenantSendingInfo.identityArn && {
-				FromEmailAddressIdentityArn: tenantSendingInfo.identityArn,
-			}),
-			Destination: {
-				ToAddresses: toAddresses.map(extractEmailAddress),
-				CcAddresses:
-					ccAddresses.length > 0
-						? ccAddresses.map(extractEmailAddress)
-						: undefined,
-				BccAddresses:
-					bccAddresses.length > 0
-						? bccAddresses.map(extractEmailAddress)
-						: undefined,
-			},
-			Content: {
-				Raw: {
-					Data: Buffer.from(rawMessage),
-				},
-			},
-			...(tenantSendingInfo.configurationSetName && {
-				ConfigurationSetName: tenantSendingInfo.configurationSetName,
-			}),
-			...(tenantSendingInfo.tenantName && {
-				TenantName: tenantSendingInfo.tenantName,
-			}),
+		const rawCommand = buildSesCommand({
+			fromAddress: scheduledEmail.fromAddress,
+			toAddresses,
+			ccAddresses,
+			bccAddresses,
+			rawMessage,
+			tenantSendingInfo,
 		});
 
 		const sesResponse = await sesClient.send(rawCommand);
@@ -666,71 +503,7 @@ async function handleBatchEmail(
 			: [];
 
 		// Validate and fix attachment data - ensure contentType is set
-		const attachments = rawAttachments.map(
-			(att: StoredAttachment, index: number) => {
-				if (!att.contentType && !att.content_type) {
-					console.log(
-						`⚠️ Attachment ${index + 1} missing contentType, using fallback`,
-					);
-					const filename = att.filename || "unknown";
-					const ext = filename.toLowerCase().split(".").pop();
-					let contentType = "application/octet-stream";
-
-					// Common file type mappings
-					switch (ext) {
-						case "pdf":
-							contentType = "application/pdf";
-							break;
-						case "jpg":
-						case "jpeg":
-							contentType = "image/jpeg";
-							break;
-						case "png":
-							contentType = "image/png";
-							break;
-						case "gif":
-							contentType = "image/gif";
-							break;
-						case "txt":
-							contentType = "text/plain";
-							break;
-						case "html":
-							contentType = "text/html";
-							break;
-						case "json":
-							contentType = "application/json";
-							break;
-						case "zip":
-							contentType = "application/zip";
-							break;
-						case "doc":
-							contentType = "application/msword";
-							break;
-						case "docx":
-							contentType =
-								"application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-							break;
-						case "xls":
-							contentType = "application/vnd.ms-excel";
-							break;
-						case "xlsx":
-							contentType =
-								"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-							break;
-					}
-
-					return {
-						...att,
-						contentType: contentType,
-					};
-				}
-
-				return {
-					...att,
-					contentType: att.contentType || att.content_type,
-				};
-			},
-		);
+		const attachments = normalizeAttachments(rawAttachments);
 
 		// Build raw email message
 		console.log("📧 Building raw email message for batch email");
@@ -744,95 +517,25 @@ async function handleBatchEmail(
 			textBody: sentEmail.textBody || undefined,
 			htmlBody: sentEmail.htmlBody || undefined,
 			customHeaders: headers,
-			attachments: attachments,
+			attachments,
 			date: new Date(),
 		});
 
-		// Get the tenant sending info (identity ARN, configuration set, and tenant name) for tenant-level tracking
-		const batchFromDomain = sentEmail.fromDomain;
+		// Resolve tenant sending info and build SES command
+		const batchTenantInfo = await resolveTenantInfo(
+			effectiveUserId,
+			sentEmail.fromDomain,
+			batchIsAgentEmail,
+			"batch email",
+		);
 
-		let batchTenantInfo: TenantSendingInfo = {
-			identityArn: null,
-			configurationSetName: null,
-			tenantName: null,
-		};
-		if (batchIsAgentEmail) {
-			batchTenantInfo = {
-				identityArn: getAgentIdentityArn(),
-				configurationSetName: null,
-				tenantName: null,
-			};
-		} else {
-			const batchParentDomain = isSubdomain(batchFromDomain)
-				? getRootDomain(batchFromDomain)
-				: undefined;
-			batchTenantInfo = await getTenantSendingInfoForDomainOrParent(
-				effectiveUserId,
-				batchFromDomain,
-				batchParentDomain || undefined,
-			);
-		}
-
-		if (batchTenantInfo.identityArn) {
-			console.log(
-				`🏢 Using SourceArn for batch email tenant tracking: ${batchTenantInfo.identityArn}`,
-			);
-		} else {
-			console.warn(
-				"⚠️ No SourceArn available - batch email will not be tracked at tenant level",
-			);
-		}
-
-		if (batchTenantInfo.configurationSetName) {
-			console.log(
-				`📋 Using ConfigurationSet for batch email tenant tracking: ${batchTenantInfo.configurationSetName}`,
-			);
-		} else {
-			console.warn(
-				"⚠️ No ConfigurationSet available - batch email metrics may not be tracked correctly",
-			);
-		}
-
-		if (batchTenantInfo.tenantName) {
-			console.log(
-				`🏠 Using TenantName for batch email AWS SES tracking: ${batchTenantInfo.tenantName}`,
-			);
-		} else {
-			console.warn(
-				"⚠️ No TenantName available - batch email will NOT appear in tenant dashboard!",
-			);
-		}
-
-		// Send via AWS SES using SESv2 SendEmailCommand with TenantName
-		// Per AWS docs: https://docs.aws.amazon.com/ses/latest/dg/tenants.html
-		// Use sentEmail.from (with display name) for proper sender name display
-		const rawCommand = new SendEmailCommand({
-			FromEmailAddress: sentEmail.from,
-			...(batchTenantInfo.identityArn && {
-				FromEmailAddressIdentityArn: batchTenantInfo.identityArn,
-			}),
-			Destination: {
-				ToAddresses: toAddresses.map(extractEmailAddress),
-				CcAddresses:
-					ccAddresses.length > 0
-						? ccAddresses.map(extractEmailAddress)
-						: undefined,
-				BccAddresses:
-					bccAddresses.length > 0
-						? bccAddresses.map(extractEmailAddress)
-						: undefined,
-			},
-			Content: {
-				Raw: {
-					Data: Buffer.from(rawMessage),
-				},
-			},
-			...(batchTenantInfo.configurationSetName && {
-				ConfigurationSetName: batchTenantInfo.configurationSetName,
-			}),
-			...(batchTenantInfo.tenantName && {
-				TenantName: batchTenantInfo.tenantName,
-			}),
+		const rawCommand = buildSesCommand({
+			fromAddress: sentEmail.from,
+			toAddresses,
+			ccAddresses,
+			bccAddresses,
+			rawMessage,
+			tenantSendingInfo: batchTenantInfo,
 		});
 
 		const sesResponse = await sesClient.send(rawCommand);

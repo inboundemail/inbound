@@ -55,7 +55,9 @@
     "@aws-sdk/client-ses": "^3.817.0",
     "@aws-sdk/client-sesv2": "^3.883.0",
     "@aws-sdk/client-sns": "^3.940.0",
-    "@better-auth/passkey": "^1.4.5",
+    "@better-auth/infra": "^0.1.8",
+    "@better-auth/api-key": "^1.5.0",
+    "@better-auth/passkey": "^1.5.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",
@@ -110,7 +112,7 @@
     "async_hooks": "^1.0.0",
     "atmn": "^0.0.22",
     "autumn-js": "0.1.48",
-    "better-auth": "^1.4.4",
+    "better-auth": "^1.5.0",
     "bun-types": "^1.2.18",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -183,6 +185,15 @@
     "typescript": "^5"
   },
   "overrides": {
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@better-auth/core": "1.5.0"
+  }
+}
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@better-auth/core": "1.5.0"
+  }
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3"
   }

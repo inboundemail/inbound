@@ -43,7 +43,7 @@ const DAILY_LIMITS: Record<number, number> = {
 /**
  * Get the daily limit for a given account age
  */
-function getDailyLimitForAge(accountAgeInDays: number): number | null {
+export function getDailyLimitForAge(accountAgeInDays: number): number | null {
   // After warmup period, return null (unlimited - rely on billing limits)
   if (accountAgeInDays > WARMUP_PERIOD_DAYS) {
     return null

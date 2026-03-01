@@ -22,6 +22,7 @@ import {
 	emailDeliveryEvents,
 	type NewEmailDeliveryEvent,
 } from "@/lib/db/schema";
+import { extractDomainFromEmail } from "@/lib/utils/email-utils";
 import { dispatchEmailBouncedEvent } from "@/lib/svix/event-dispatcher";
 import { getDsnSourceInfo, parseDsn } from "./dsn-parser";
 
@@ -58,7 +59,7 @@ export interface RecordDeliveryEventResult {
 /**
  * Determine the bounce sub-type from status code
  */
-function getBounceSubType(
+export function getBounceSubType(
 	statusCode: string | undefined,
 	diagnosticCode: string | undefined,
 ): BounceSubType {
@@ -88,15 +89,6 @@ function getBounceSubType(
 	};
 
 	return statusMap[statusCode] || BOUNCE_SUB_TYPES.GENERAL_FAILURE;
-}
-
-/**
- * Extract domain from email address
- */
-function extractDomain(email: string): string | undefined {
-	const atIndex = email.indexOf("@");
-	if (atIndex === -1) return undefined;
-	return email.substring(atIndex + 1).toLowerCase();
 }
 
 /**
@@ -145,7 +137,7 @@ export async function recordDeliveryEventFromDsn(
 		}
 
 		const eventId = `evt_${nanoid()}`;
-		const failedRecipientDomain = extractDomain(failedRecipient);
+		const failedRecipientDomain = extractDomainFromEmail(failedRecipient) || undefined;
 
 		// Prepare the event record
 		const eventRecord: NewEmailDeliveryEvent = {

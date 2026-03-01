@@ -11,6 +11,7 @@ import { and, count, eq, gte } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { emailDeliveryEvents, sentEmails, sesTenants } from "@/lib/db/schema";
+import { extractDomainFromEmail } from "@/lib/utils/email-utils";
 
 // Rate thresholds for tenant alerting and automatic suspension
 export const RATE_THRESHOLDS = {
@@ -93,7 +94,7 @@ export async function storeSESEvent(params: {
 			bounceSubType: params.bounceSubType,
 			diagnosticCode: params.diagnosticCode,
 			failedRecipient: params.recipient,
-			failedRecipientDomain: params.recipient.split("@")[1] || null,
+			failedRecipientDomain: extractDomainFromEmail(params.recipient) || null,
 			originalMessageId: params.messageId,
 			userId: tenant?.userId || null,
 			tenantId: tenant?.id || null,
