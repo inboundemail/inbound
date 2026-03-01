@@ -70,14 +70,14 @@ export async function validateRequest(request: NextRequest) {
 				?.replace("Bearer ", "");
 
 			if (apiKey) {
-				const apiKeyResult = (await (auth.api as any).verifyApiKey({
-					body: {
-						key: apiKey,
-					},
-				})) as { valid: boolean; key?: { userId: string } } | null;
+			const apiKeyResult = (await (auth.api as any).verifyApiKey({
+				body: {
+					key: apiKey,
+				},
+			})) as { valid: boolean; key?: { referenceId: string } } | null;
 
-				if (apiKeyResult?.key?.userId) {
-					userId = apiKeyResult.key.userId;
+			if (apiKeyResult?.key?.referenceId) {
+				userId = apiKeyResult.key.referenceId;
 					console.log("🔑 [V2] Auth Type: API_KEY");
 					console.log("🔑 [V2] API Key:", apiKey);
 					console.log("✅ Authenticated via API key:", userId);
