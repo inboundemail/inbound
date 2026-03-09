@@ -160,3 +160,13 @@ All list endpoints return:
 4. Don't use `t.Union()` for Elysia responses
 5. Don't run drizzle-kit commands directly
 6. Don't skip `validateAndRateLimit()` in handlers
+
+## Cursor Cloud specific instructions
+
+- **Dev server**: `bun run dev` starts Next.js 16 with Turbopack on port 3000. The first page compile takes ~7s; subsequent compiles are fast.
+- **Lint**: `bun run lint` runs Biome. The codebase has pre-existing warnings/errors (~329 errors, ~989 warnings); these are not caused by your changes.
+- **API tests hit remote**: Tests in `app/api/e2/**/*.test.ts` call `https://dev.inbound.new/api/e2` (not localhost). They require the `INBOUND_API_KEY` secret.
+- **No Docker/local DB**: All infrastructure (Neon Postgres, Upstash Redis, AWS SES/S3/Lambda) is cloud-hosted SaaS. No containers needed.
+- **NEXT_PUBLIC_ vars**: `NEXT_PUBLIC_APP_URL` is injected as a secret. For local dev it defaults to `http://localhost:3000` in code fallbacks.
+- **OpenAPI docs**: Available at `/api/e2/docs` when the dev server is running. Generate the spec with `bun run generate:openapi`.
+- **Blocked postinstall**: `bun install` blocks 1 postinstall script (esbuild). This is expected and does not affect functionality.
