@@ -2164,7 +2164,16 @@ export async function main(args: string[]): Promise<void> {
 	await runCommand(parsed);
 }
 
-if (import.meta.main) {
+function isDirectExecution(): boolean {
+	const entry = process.argv[1];
+	if (!entry) {
+		return false;
+	}
+
+	return entry.includes("investigate-abuse.ts");
+}
+
+if (isDirectExecution()) {
 	main(process.argv.slice(2)).catch((error) => {
 		console.error(`investigate-abuse failed: ${getErrorMessage(error)}`);
 		printUsage();
