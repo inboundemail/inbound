@@ -18,7 +18,10 @@ import {
 	endpoints,
 	structuredEmails,
 } from "@/lib/db/schema";
-import { getOrCreateVerificationToken } from "@/lib/webhooks/verification";
+import {
+	createWebhookSignature,
+	getOrCreateVerificationToken,
+} from "@/lib/webhooks/verification";
 import { evaluateGuardRules } from "../guard/rule-matcher";
 import { checkRecipientsAgainstBlocklist } from "./email-blocking";
 import { EmailForwarder } from "./email-forwarder";
@@ -991,6 +994,10 @@ async function handleWebhookEndpoint(
 				);
 			}
 		}
+
+		const signature = createWebhookSignature(finalPayloadString, verificationToken);
+		headers["X-Webhook-Signature"] = signature;
+		headers["X-Inbound-Signature"] = signature;
 
 		// Send the webhook
 		const startTime = Date.now();

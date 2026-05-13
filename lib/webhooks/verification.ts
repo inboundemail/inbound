@@ -5,7 +5,7 @@
  * Tokens are stored in the endpoint config so end users can access them via the API.
  */
 
-import { randomBytes } from 'crypto'
+import { createHmac, randomBytes } from 'crypto'
 
 /**
  * Generate a new random verification token
@@ -15,6 +15,17 @@ import { randomBytes } from 'crypto'
  */
 export function generateNewWebhookVerificationToken(): string {
   return randomBytes(32).toString('hex')
+}
+
+/**
+ * Create an HMAC signature for a webhook payload.
+ *
+ * @param payload - The exact JSON payload string sent in the request body
+ * @param secret - The webhook verification secret/token
+ * @returns Signature header value in the form sha256=<hex digest>
+ */
+export function createWebhookSignature(payload: string, secret: string): string {
+  return `sha256=${createHmac('sha256', secret).update(payload).digest('hex')}`
 }
 
 /**
@@ -51,4 +62,3 @@ export function verifyWebhookToken(config: any, token: string): boolean {
   
   return config.verificationToken === token
 }
-

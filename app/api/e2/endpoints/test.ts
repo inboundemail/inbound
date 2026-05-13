@@ -10,7 +10,10 @@ import type {
 	InboundEmailHeaders,
 	InboundWebhookPayload,
 } from "@/lib/types/inbound-webhooks";
-import { getOrCreateVerificationToken } from "@/lib/webhooks/verification";
+import {
+	createWebhookSignature,
+	getOrCreateVerificationToken,
+} from "@/lib/webhooks/verification";
 import { generateTestPayload } from "@/lib/webhooks/webhook-formats";
 import { validateAndRateLimit } from "../lib/auth";
 
@@ -360,10 +363,15 @@ export const testEndpoint = new Elysia().post(
 							name: endpoint.name,
 							type: endpoint.type as any,
 						});
+						const testPayloadString = JSON.stringify(testPayload);
 
 						// Get or create verification token for this endpoint
 						const hadToken = !!config.verificationToken;
 						const verificationToken = getOrCreateVerificationToken(config);
+						const signature = createWebhookSignature(
+							testPayloadString,
+							verificationToken,
+						);
 
 						// Save token if it was newly generated
 						if (!hadToken) {
@@ -385,6 +393,8 @@ export const testEndpoint = new Elysia().post(
 							"X-Email-ID": testPayload.email.id,
 							"X-Message-ID": testPayload.email.messageId || "",
 							"X-Webhook-Verification-Token": verificationToken,
+							"X-Webhook-Signature": signature,
+							"X-Inbound-Signature": signature,
 							...customHeaders,
 						};
 
@@ -400,7 +410,7 @@ export const testEndpoint = new Elysia().post(
 						const response = await fetch(effectiveUrl, {
 							method: "POST",
 							headers: requestHeaders,
-							body: JSON.stringify(testPayload),
+							body: testPayloadString,
 							redirect: "error",
 							referrerPolicy: "no-referrer",
 							signal: AbortSignal.timeout(timeoutMs),
@@ -442,10 +452,15 @@ export const testEndpoint = new Elysia().post(
 								recipient: "test@yourdomain.com",
 							},
 						);
+						const testPayloadString = JSON.stringify(testPayload);
 
 						// Get or create verification token for this endpoint
 						const hadToken2 = !!config.verificationToken;
 						const verificationToken2 = getOrCreateVerificationToken(config);
+						const signature = createWebhookSignature(
+							testPayloadString,
+							verificationToken2,
+						);
 
 						// Save token if it was newly generated
 						if (!hadToken2) {
@@ -465,6 +480,8 @@ export const testEndpoint = new Elysia().post(
 							"X-Endpoint-ID": endpoint.id,
 							"X-Webhook-Format": preferredFormat,
 							"X-Webhook-Verification-Token": verificationToken2,
+							"X-Webhook-Signature": signature,
+							"X-Inbound-Signature": signature,
 							...customHeaders,
 						};
 
@@ -480,7 +497,7 @@ export const testEndpoint = new Elysia().post(
 						const response = await fetch(effectiveUrl, {
 							method: "POST",
 							headers: requestHeaders,
-							body: JSON.stringify(testPayload),
+							body: testPayloadString,
 							redirect: "error",
 							referrerPolicy: "no-referrer",
 							signal: AbortSignal.timeout(timeoutMs2),

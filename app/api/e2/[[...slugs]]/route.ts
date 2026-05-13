@@ -131,6 +131,8 @@ Every webhook request includes security headers:
 
 | Header | Description |
 |--------|-------------|
+| \`X-Inbound-Signature\` | HMAC-SHA256 signature of the webhook payload |
+| \`X-Webhook-Signature\` | Backward-compatible alias for \`X-Inbound-Signature\` |
 | \`X-Webhook-Verification-Token\` | Unique verification token for your endpoint |
 | \`X-Endpoint-ID\` | ID of the endpoint that triggered this webhook |
 | \`X-Webhook-Event\` | Event type (e.g., \`email.received\`) |

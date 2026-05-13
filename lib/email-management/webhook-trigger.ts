@@ -4,7 +4,7 @@
  * and provide a clean interface for triggering email actions.
  */
 
-import { createHash, createHmac } from "crypto";
+import { createHash } from "crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
@@ -13,7 +13,10 @@ import {
 	webhookDeliveries,
 	webhooks,
 } from "@/lib/db/schema";
-import { generateNewWebhookVerificationToken } from "@/lib/webhooks/verification";
+import {
+	createWebhookSignature,
+	generateNewWebhookVerificationToken,
+} from "@/lib/webhooks/verification";
 import { type ParsedEmailData, sanitizeHtml } from "./email-parser";
 
 function buildLegacyWebhookDeliveryId(
@@ -320,9 +323,7 @@ export async function triggerEmailAction(
 		// Create webhook signature if secret exists
 		let signature = null;
 		if (webhook.secret) {
-			const hmac = createHmac("sha256", webhook.secret);
-			hmac.update(payloadString);
-			signature = `sha256=${hmac.digest("hex")}`;
+			signature = createWebhookSignature(payloadString, webhook.secret);
 		}
 
 		// For legacy webhooks, generate a token (not persisted - endpoints have proper storage)
@@ -355,6 +356,7 @@ export async function triggerEmailAction(
 
 		if (signature) {
 			headers["X-Webhook-Signature"] = signature;
+			headers["X-Inbound-Signature"] = signature;
 		}
 
 		// Add custom headers if any
