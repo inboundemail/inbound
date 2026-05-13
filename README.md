@@ -126,6 +126,9 @@ bun install
 # Start the dev server
 bun run dev
 
+# Clear local dev build/cache artifacts
+bun run clear:dev
+
 # Test email webhooks locally (no AWS needed)
 bun run inbound-webhook-test test@yourdomain.com
 ```

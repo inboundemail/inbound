@@ -17,6 +17,7 @@
     "test:e2:domains": "bun test app/api/e2/domains/domains.test.ts",
     "test:e2e": "bun test app/api/e2/e2e.test.ts",
     "start": "next start",
+    "clear:dev": "bun run scripts/clear-local-dev.ts",
     "lint": "biome lint .",
     "lint:noany": "biome lint . --diagnostic-level=error",
     "db-prepare": "bun run scripts/db-prepare.ts",
