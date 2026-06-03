@@ -175,7 +175,8 @@ export async function validateAndRateLimit(
 		} else if (apiSession?.valid && !apiSession?.error && apiKeyUserId) {
 			userId = apiKeyUserId;
 			console.log("🔑 [E2] Auth Type: API_KEY");
-			console.log("🔑 [E2] API Key:", apiKey);
+			// Never log any portion of the API key.
+			console.log("🔑 [E2] API Key: [redacted]", `(${apiKey.length} chars)`);
 			console.log("✅ API key authentication successful for userId:", userId);
 		} else {
 			console.log("❌ Authentication failed: No valid session or API key");

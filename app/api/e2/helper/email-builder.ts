@@ -33,6 +33,47 @@ function extractDomain(email: string): string {
 }
 
 /**
+ * Strip CR/LF (and other control chars) from a value destined for an email
+ * header. This is the primary defense against email header / MIME injection
+ * (CWE-93): every header field below is assembled by string interpolation and
+ * the parts are joined with CRLF, so an embedded CR/LF in any value would
+ * otherwise start an attacker-controlled header line or terminate the header
+ * block. Folding whitespace is collapsed to a single space so the resulting
+ * value stays a single logical header line.
+ */
+function sanitizeHeaderValue(value: string): string {
+  // Replace CR/LF/tab with a single space, then drop any remaining C0/DEL
+  // control characters. Regular spaces and printable content are preserved.
+  return String(value).replace(/[\r\n\t]+/g, " ").replace(/[\x00-\x1F\x7F]/g, "").trim();
+}
+
+/**
+ * Sanitize a custom header NAME. Header names may not contain CR/LF, spaces,
+ * colons or other separators (RFC 5322 field-name = printable US-ASCII minus
+ * ':'). Anything illegal is dropped.
+ */
+function sanitizeHeaderName(name: string): string {
+  return String(name).replace(/[^A-Za-z0-9!#$%&'*+\-.^_`|~]/g, '')
+}
+
+/**
+ * Sanitize an attachment filename for use inside a quoted parameter value
+ * (filename="..."). Strips CR/LF and removes double quotes so the value cannot
+ * break out of the quoted string and inject additional header lines.
+ */
+function sanitizeFilename(filename: string): string {
+  return String(filename).replace(/[\r\n\t]+/g, ' ').replace(/"/g, '').trim()
+}
+
+/**
+ * Sanitize a Content-ID value placed inside <...>. Strips CR/LF and angle
+ * brackets so it cannot escape the Content-ID header.
+ */
+function sanitizeContentId(contentId: string): string {
+  return String(contentId).replace(/[\r\n\t<>]+/g, '').trim()
+}
+
+/**
  * Format date for email headers (RFC 2822)
  */
 function formatEmailDate(date: Date): string {
@@ -62,12 +103,66 @@ function generateBoundary(): string {
  * Uses quoted-printable for text and base64 for attachments
  */
 function encodeQuotedPrintable(text: string): string {
-  // Simple quoted-printable encoding for basic text
-  // For production, consider using a proper library
-  return text
-    .replace(/=/g, '=3D')
-    .replace(/\r\n/g, '\n')
-    .replace(/\n/g, '\r\n')
+  // RFC 2045 quoted-printable encoding.
+  // Encodes any byte that is not a printable ASCII "safe" character (and the
+  // '=' escape char) as =XX, preserves spaces/tabs except at end-of-line, and
+  // enforces the 76-character soft line-length limit with "=\r\n" soft breaks.
+  // This prevents the prior implementation's RFC 5321 998-octet line-length
+  // violations and mislabelled raw 8-bit (UTF-8) bytes under a declared QP body.
+  const bytes = Buffer.from(text, 'utf-8')
+  const lines: string[] = []
+  let line = ''
+
+  const pushSoftBreak = () => {
+    // RFC 2045: whitespace must not sit at the end of an encoded line. If the
+    // line ends in a space/tab, carry it to the start of the next line (legal
+    // there) instead of emitting "<space>=", which decoders may strip.
+    let carry = ''
+    if (line.endsWith(' ') || line.endsWith('\t')) {
+      carry = line.slice(-1)
+      line = line.slice(0, -1)
+    }
+    lines.push(`${line}=`)
+    line = carry
+  }
+
+  const appendToken = (token: string) => {
+    // Keep room for a trailing soft-break '=' within the 76-char limit
+    if (line.length + token.length > 75) {
+      pushSoftBreak()
+    }
+    line += token
+  }
+
+  for (let i = 0; i < bytes.length; i++) {
+    const byte = bytes[i]
+
+    // Hard line break: normalize CR, LF and CRLF to a single CRLF
+    if (byte === 0x0d || byte === 0x0a) {
+      if (byte === 0x0d && bytes[i + 1] === 0x0a) i++ // consume LF of CRLF pair
+      lines.push(line)
+      line = ''
+      continue
+    }
+
+    const isSpace = byte === 0x20 || byte === 0x09 // space or tab
+    const isPrintable = byte >= 0x21 && byte <= 0x7e && byte !== 0x3d // '!'..'~' except '='
+
+    if (isPrintable) {
+      appendToken(String.fromCharCode(byte))
+    } else if (isSpace) {
+      // A space/tab is literal unless it is the last char before a line break,
+      // in which case it must be encoded. Look ahead to decide.
+      const next = bytes[i + 1]
+      const atEndOfLine = next === undefined || next === 0x0d || next === 0x0a
+      appendToken(atEndOfLine ? `=${byte.toString(16).toUpperCase().padStart(2, '0')}` : String.fromCharCode(byte))
+    } else {
+      appendToken(`=${byte.toString(16).toUpperCase().padStart(2, '0')}`)
+    }
+  }
+
+  lines.push(line)
+  return lines.join('\r\n')
 }
 
 /**
@@ -78,7 +173,6 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
     from,
     to,
     cc,
-    bcc,
     replyTo,
     subject,
     textBody,
@@ -93,8 +187,7 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
 
   const hasText = !!textBody
   const hasHtml = !!htmlBody
-  const hasAttachments = attachments.length > 0
-  
+
   // Separate CID attachments from regular attachments
   const cidAttachments = attachments.filter(att => att.content_id)
   const regularAttachments = attachments.filter(att => !att.content_id)
@@ -144,25 +237,31 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
     })
   }
   
-  // Build headers
+  // Build headers. Every interpolated value is passed through
+  // sanitizeHeaderValue to strip CR/LF/control characters, preventing email
+  // header / MIME injection (CWE-93) - the parts below are joined with CRLF, so
+  // an unsanitized newline in any field would inject attacker-controlled header
+  // lines or terminate the header block.
   const headers = [
-    `From: ${from}`,
-    `To: ${to.join(', ')}`,
-    cc && cc.length > 0 ? `Cc: ${cc.join(', ')}` : null,
-    replyTo && replyTo.length > 0 ? `Reply-To: ${replyTo.join(', ')}` : null,
-    `Subject: ${subject}`,
+    `From: ${sanitizeHeaderValue(from)}`,
+    `To: ${to.map(sanitizeHeaderValue).join(', ')}`,
+    cc && cc.length > 0 ? `Cc: ${cc.map(sanitizeHeaderValue).join(', ')}` : null,
+    replyTo && replyTo.length > 0 ? `Reply-To: ${replyTo.map(sanitizeHeaderValue).join(', ')}` : null,
+    `Subject: ${sanitizeHeaderValue(subject)}`,
     // Only add Message-ID if not provided in custom headers
-    formattedMessageId ? `Message-ID: ${formattedMessageId}` : null,
-    formattedInReplyTo ? `In-Reply-To: ${formattedInReplyTo}` : null,
-    formattedReferences.length > 0 ? `References: ${formattedReferences.join(' ')}` : null,
+    formattedMessageId ? `Message-ID: ${sanitizeHeaderValue(formattedMessageId)}` : null,
+    formattedInReplyTo ? `In-Reply-To: ${sanitizeHeaderValue(formattedInReplyTo)}` : null,
+    formattedReferences.length > 0 ? `References: ${formattedReferences.map(sanitizeHeaderValue).join(' ')}` : null,
     `Date: ${formatEmailDate(date)}`,
     'MIME-Version: 1.0',
   ].filter((header): header is string => header !== null)
-  
-  // Add custom headers
+
+  // Add custom headers (name and value both sanitized; empty/invalid names skipped)
   if (customHeaders) {
     for (const [key, value] of Object.entries(customHeaders)) {
-      headers.push(`${key}: ${value}`)
+      const safeKey = sanitizeHeaderName(key)
+      if (!safeKey) continue
+      headers.push(`${safeKey}: ${sanitizeHeaderValue(value)}`)
     }
   }
   
@@ -242,11 +341,11 @@ function addContentAndCidAttachments(
   // CID attachments
   for (const attachment of cidAttachments) {
     messageParts.push(`--${relatedBoundary}`)
-    messageParts.push(`Content-Type: ${attachment.contentType}`)
+    messageParts.push(`Content-Type: ${sanitizeHeaderValue(attachment.contentType)}`)
     messageParts.push('Content-Transfer-Encoding: base64')
-    messageParts.push(`Content-ID: <${attachment.content_id}>`)
-    messageParts.push(`Content-Disposition: inline; filename="${attachment.filename}"`)
-    console.log(`📎 Added CID attachment: <${attachment.content_id}> for ${attachment.filename}`)
+    messageParts.push(`Content-ID: <${sanitizeContentId(attachment.content_id || '')}>`)
+    messageParts.push(`Content-Disposition: inline; filename="${sanitizeFilename(attachment.filename)}"`)
+    console.log(`📎 Added CID attachment: <${sanitizeContentId(attachment.content_id || '')}> for ${sanitizeFilename(attachment.filename)}`)
     messageParts.push('')
     
     // Split base64 content into 76-character lines (RFC requirement)
@@ -263,9 +362,9 @@ function addContentAndCidAttachments(
  */
 function addRegularAttachment(messageParts: string[], boundary: string, attachment: ProcessedAttachment) {
   messageParts.push(`--${boundary}`)
-  messageParts.push(`Content-Type: ${attachment.contentType}`)
+  messageParts.push(`Content-Type: ${sanitizeHeaderValue(attachment.contentType)}`)
   messageParts.push('Content-Transfer-Encoding: base64')
-  messageParts.push(`Content-Disposition: attachment; filename="${attachment.filename}"`)
+  messageParts.push(`Content-Disposition: attachment; filename="${sanitizeFilename(attachment.filename)}"`)
   messageParts.push('')
   
   // Split base64 content into 76-character lines (RFC requirement)

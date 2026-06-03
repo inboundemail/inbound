@@ -30,14 +30,16 @@ import { checkSendingSpike } from "@/lib/email-management/sending-spike-detector
 import {
 	formatScheduledDate,
 	parseScheduledAt,
+	type ParsedScheduleDate,
 	validateScheduledDate,
 } from "@/lib/utils/date-parser";
 import {
 	attachmentsToStorageFormat,
 	processAttachments,
-} from "../helper/attachment-processor";
-import { buildRawEmailMessage } from "../helper/email-builder";
-import { validateAndRateLimit } from "../lib/auth";
+	type ProcessedAttachment,
+} from "@/app/api/e2/helper/attachment-processor";
+import { buildRawEmailMessage } from "@/app/api/e2/helper/email-builder";
+import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
 
 // Initialize SES client
 const awsRegion = process.env.AWS_REGION || "us-east-2";
@@ -59,9 +61,15 @@ if (awsAccessKeyId && awsSecretAccessKey) {
 // Request schema
 const AttachmentSchema = t.Object({
 	filename: t.String(),
-	content: t.String(),
-	content_type: t.Optional(t.String()),
+	content: t.String({ description: "Base64 encoded attachment content" }),
 	path: t.Optional(t.String()),
+	contentType: t.Optional(t.String({ description: "MIME type of the attachment" })),
+	content_type: t.Optional(t.String()),
+	content_id: t.Optional(
+		t.String({
+			description: "Content-ID used by inline HTML references such as cid:logo",
+		}),
+	),
 });
 
 const TagSchema = t.Object({
@@ -145,7 +153,7 @@ function formatEmailWithName(email: string, name?: string): string {
 }
 
 // Check warmup limits for new accounts
-async function checkNewAccountWarmupLimits(userId: string): Promise<{
+async function checkNewAccountWarmupLimits(_userId: string): Promise<{
 	allowed: boolean;
 	error?: string;
 	emailsSentToday?: number;
@@ -218,7 +226,7 @@ export const sendEmail = new Elysia().post(
 		}
 
 		// Handle scheduled_at if provided
-		let parsedDate: any = null;
+		let parsedDate: ParsedScheduleDate | null = null;
 		if (body.scheduled_at) {
 			console.log("⏰ Scheduled email detected");
 
@@ -226,7 +234,7 @@ export const sendEmail = new Elysia().post(
 			if (!parsedDate.isValid) {
 				console.log("❌ Invalid scheduled_at:", parsedDate.error);
 				set.status = 400;
-				return { error: parsedDate.error };
+				return { error: parsedDate.error || "Invalid scheduled_at value" };
 			}
 
 			const dateValidation = validateScheduledDate(parsedDate.date);
@@ -313,7 +321,7 @@ export const sendEmail = new Elysia().post(
 
 		// Process attachments
 		console.log("📎 Processing attachments");
-		let processedAttachments: any[] = [];
+		let processedAttachments: ProcessedAttachment[] = [];
 		if (body.attachments && body.attachments.length > 0) {
 			try {
 				processedAttachments = await processAttachments(body.attachments);

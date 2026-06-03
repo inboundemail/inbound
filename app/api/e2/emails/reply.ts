@@ -29,8 +29,10 @@ import { checkSendingSpike } from "@/lib/email-management/sending-spike-detector
 import {
 	attachmentsToStorageFormat,
 	processAttachments,
-} from "../helper/attachment-processor";
-import { validateAndRateLimit } from "../lib/auth";
+	type ProcessedAttachment,
+} from "@/app/api/e2/helper/attachment-processor";
+import { buildRawEmailMessage } from "@/app/api/e2/helper/email-builder";
+import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
 
 // Initialize SES client
 const awsRegion = process.env.AWS_REGION || "us-east-2";
@@ -52,9 +54,15 @@ if (awsAccessKeyId && awsSecretAccessKey) {
 // Request schema
 const AttachmentSchema = t.Object({
 	filename: t.String(),
-	content: t.String(),
-	content_type: t.Optional(t.String()),
+	content: t.String({ description: "Base64 encoded attachment content" }),
 	path: t.Optional(t.String()),
+	contentType: t.Optional(t.String({ description: "MIME type of the attachment" })),
+	content_type: t.Optional(t.String()),
+	content_id: t.Optional(
+		t.String({
+			description: "Content-ID used by inline HTML references such as cid:logo",
+		}),
+	),
 });
 
 const TagSchema = t.Object({
@@ -121,43 +129,29 @@ function formatSenderAddress(email: string, name?: string): string {
 	}
 }
 
-function formatEmailDate(date: Date): string {
-	const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-	const months = [
-		"Jan",
-		"Feb",
-		"Mar",
-		"Apr",
-		"May",
-		"Jun",
-		"Jul",
-		"Aug",
-		"Sep",
-		"Oct",
-		"Nov",
-		"Dec",
-	];
-
-	const day = days[date.getUTCDay()];
-	const dayNum = date.getUTCDate();
-	const month = months[date.getUTCMonth()];
-	const year = date.getUTCFullYear();
-	const hours = date.getUTCHours().toString().padStart(2, "0");
-	const minutes = date.getUTCMinutes().toString().padStart(2, "0");
-	const seconds = date.getUTCSeconds().toString().padStart(2, "0");
-
-	return `${day}, ${dayNum} ${month} ${year} ${hours}:${minutes}:${seconds} +0000`;
-}
-
 function extractEmailsFromParsedData(parsedData: string | null): string[] {
 	if (!parsedData) return [];
 
 	try {
-		const parsed = JSON.parse(parsedData);
-		if (parsed?.addresses && Array.isArray(parsed.addresses)) {
+		const parsed: unknown = JSON.parse(parsedData);
+		if (
+			typeof parsed === "object" &&
+			parsed !== null &&
+			"addresses" in parsed &&
+			Array.isArray(parsed.addresses)
+		) {
 			return parsed.addresses
-				.map((addr: any) => addr.address)
-				.filter((email: string) => email && typeof email === "string");
+				.map((address) =>
+					typeof address === "object" &&
+					address !== null &&
+					"address" in address
+						? address.address
+						: undefined,
+				)
+				.filter(
+					(email): email is string =>
+						typeof email === "string" && email.length > 0,
+				);
 		}
 	} catch (e) {
 		console.error("Failed to parse email data:", e);
@@ -167,7 +161,7 @@ function extractEmailsFromParsedData(parsedData: string | null): string[] {
 }
 
 // Check warmup limits for new accounts
-async function checkNewAccountWarmupLimits(userId: string): Promise<{
+async function checkNewAccountWarmupLimits(_userId: string): Promise<{
 	allowed: boolean;
 	error?: string;
 }> {
@@ -438,7 +432,7 @@ export const replyToEmail = new Elysia().post(
 
 		// Process attachments
 		console.log("📎 Processing reply attachments");
-		let processedAttachments: any[] = [];
+		let processedAttachments: ProcessedAttachment[] = [];
 		if (body.attachments && body.attachments.length > 0) {
 			try {
 				processedAttachments = await processAttachments(body.attachments);
@@ -585,108 +579,35 @@ export const replyToEmail = new Elysia().post(
 		try {
 			console.log("📤 Sending reply email via AWS SES");
 
-			// Build raw email message
-			const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).substring(2)}`;
-			let rawMessage = "";
+			const customHeaders = body.headers
+				? Object.fromEntries(
+						Object.entries(body.headers).filter(
+							([key]) =>
+								![
+									"from",
+									"to",
+									"subject",
+									"message-id",
+									"in-reply-to",
+									"references",
+								].includes(key.toLowerCase()),
+						),
+					)
+				: undefined;
 
-			const formattedMessageId = formatMessageId(messageId);
-
-			rawMessage += `From: ${formattedFromAddress}\r\n`;
-			rawMessage += `To: ${toAddresses.join(", ")}\r\n`;
-			rawMessage += `Subject: ${subject}\r\n`;
-			rawMessage += `Message-ID: ${formattedMessageId}\r\n`;
-
-			if (inReplyTo) {
-				rawMessage += `In-Reply-To: ${inReplyTo}\r\n`;
-			}
-			if (referencesString) {
-				rawMessage += `References: ${referencesString}\r\n`;
-			}
-
-			if (body.headers) {
-				for (const [key, value] of Object.entries(body.headers)) {
-					if (
-						![
-							"from",
-							"to",
-							"subject",
-							"message-id",
-							"in-reply-to",
-							"references",
-						].includes(key.toLowerCase())
-					) {
-						rawMessage += `${key}: ${value}\r\n`;
-					}
-				}
-			}
-
-			rawMessage += `Date: ${formatEmailDate(new Date())}\r\n`;
-			rawMessage += `MIME-Version: 1.0\r\n`;
-
-			// Handle content and attachments
-			if (processedAttachments.length > 0) {
-				rawMessage += `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n`;
-				rawMessage += `--${boundary}\r\n`;
-
-				if (body.html && body.text) {
-					const altBoundary = `----=_Alt_${Date.now()}_${Math.random().toString(36).substring(2)}`;
-					rawMessage += `Content-Type: multipart/alternative; boundary="${altBoundary}"\r\n\r\n`;
-
-					rawMessage += `--${altBoundary}\r\n`;
-					rawMessage += `Content-Type: text/plain; charset=UTF-8\r\n`;
-					rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-					rawMessage += `${body.text}\r\n`;
-
-					rawMessage += `--${altBoundary}\r\n`;
-					rawMessage += `Content-Type: text/html; charset=UTF-8\r\n`;
-					rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-					rawMessage += `${body.html}\r\n`;
-
-					rawMessage += `--${altBoundary}--\r\n`;
-				} else if (body.html) {
-					rawMessage += `Content-Type: text/html; charset=UTF-8\r\n`;
-					rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-					rawMessage += `${body.html}\r\n`;
-				} else {
-					rawMessage += `Content-Type: text/plain; charset=UTF-8\r\n`;
-					rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-					rawMessage += `${body.text}\r\n`;
-				}
-
-				for (const attachment of processedAttachments) {
-					rawMessage += `--${boundary}\r\n`;
-					rawMessage += `Content-Type: ${attachment.contentType}\r\n`;
-					rawMessage += `Content-Transfer-Encoding: base64\r\n`;
-					rawMessage += `Content-Disposition: attachment; filename="${attachment.filename}"\r\n\r\n`;
-					rawMessage += `${attachment.content}\r\n`;
-				}
-
-				rawMessage += `--${boundary}--\r\n`;
-			} else {
-				if (body.html && body.text) {
-					rawMessage += `Content-Type: multipart/alternative; boundary="${boundary}"\r\n\r\n`;
-
-					rawMessage += `--${boundary}\r\n`;
-					rawMessage += `Content-Type: text/plain; charset=UTF-8\r\n`;
-					rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-					rawMessage += `${body.text}\r\n`;
-
-					rawMessage += `--${boundary}\r\n`;
-					rawMessage += `Content-Type: text/html; charset=UTF-8\r\n`;
-					rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-					rawMessage += `${body.html}\r\n`;
-
-					rawMessage += `--${boundary}--\r\n`;
-				} else if (body.html) {
-					rawMessage += `Content-Type: text/html; charset=UTF-8\r\n`;
-					rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-					rawMessage += `${body.html}\r\n`;
-				} else {
-					rawMessage += `Content-Type: text/plain; charset=UTF-8\r\n`;
-					rawMessage += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
-					rawMessage += `${body.text}\r\n`;
-				}
-			}
+			const rawMessage = buildRawEmailMessage({
+				from: formattedFromAddress,
+				to: toAddresses,
+				subject,
+				textBody: body.text,
+				htmlBody: body.html,
+				messageId,
+				inReplyTo: inReplyTo || undefined,
+				references,
+				customHeaders,
+				attachments: processedAttachments,
+				date: new Date(),
+			});
 
 			// Get tenant sending info
 			const parentDomain = isSubdomain(fromDomain)

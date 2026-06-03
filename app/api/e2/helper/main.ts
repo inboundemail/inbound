@@ -94,7 +94,8 @@ export async function validateRequest(request: NextRequest) {
 				if (apiKeyUserId) {
 					userId = apiKeyUserId;
 					console.log("🔑 [V2] Auth Type: API_KEY");
-					console.log("🔑 [V2] API Key:", apiKey);
+					// Never log any portion of the API key.
+					console.log("🔑 [V2] API Key: [redacted]", `(${apiKey.length} chars)`);
 					console.log("✅ Authenticated via API key:", userId);
 				}
 			}

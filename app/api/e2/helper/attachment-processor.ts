@@ -4,6 +4,98 @@
  * Maintains backward compatibility with existing attachment format
  */
 
+import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
+
+/**
+ * Returns true if an IP address is in a private, loopback, link-local, or
+ * otherwise non-public range that should never be reachable via a
+ * user-supplied attachment URL (SSRF protection - blocks cloud metadata
+ * endpoints like 169.254.169.254, internal services, and loopback).
+ */
+function isBlockedIp(ip: string): boolean {
+  const family = isIP(ip)
+
+  if (family === 4) {
+    const parts = ip.split('.').map(Number)
+    if (parts.length !== 4 || parts.some(p => Number.isNaN(p) || p < 0 || p > 255)) {
+      return true
+    }
+    const [a, b] = parts
+    if (a === 0) return true // 0.0.0.0/8 "this network"
+    if (a === 10) return true // 10.0.0.0/8 private
+    if (a === 127) return true // 127.0.0.0/8 loopback
+    if (a === 169 && b === 254) return true // 169.254.0.0/16 link-local (incl. cloud metadata)
+    if (a === 172 && b >= 16 && b <= 31) return true // 172.16.0.0/12 private
+    if (a === 192 && b === 168) return true // 192.168.0.0/16 private
+    if (a === 100 && b >= 64 && b <= 127) return true // 100.64.0.0/10 CGNAT
+    if (a >= 224) return true // 224.0.0.0/4 multicast + 240.0.0.0/4 reserved
+    return false
+  }
+
+  if (family === 6) {
+    const lower = ip.toLowerCase().replace(/^\[|\]$/g, '')
+    if (lower === '::' || lower === '::1') return true // unspecified / loopback
+    const firstHextet = parseInt(lower.split(':')[0], 16)
+    if (firstHextet >= 0xfe80 && firstHextet <= 0xfebf) return true // link-local fe80::/10
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return true // unique local (fc00::/7)
+    if (lower.startsWith('ff')) return true // multicast
+    // IPv4-mapped / IPv4-compatible - re-check the embedded IPv4. The address may
+    // appear in dotted form (::ffff:127.0.0.1) OR hex form (::ffff:7f00:1) - note
+    // that the WHATWG URL parser normalizes the dotted form to hex, so both must
+    // be handled or loopback/private mapped literals slip through.
+    const dotted = lower.match(/(?:::ffff:|::)(\d+\.\d+\.\d+\.\d+)$/)
+    if (dotted) return isBlockedIp(dotted[1])
+    const hex = lower.match(/(?:::ffff:|::)([0-9a-f]{1,4}):([0-9a-f]{1,4})$/)
+    if (hex) {
+      const high = parseInt(hex[1], 16)
+      const low = parseInt(hex[2], 16)
+      return isBlockedIp(
+        `${(high >> 8) & 0xff}.${high & 0xff}.${(low >> 8) & 0xff}.${low & 0xff}`,
+      )
+    }
+    return false
+  }
+
+  // Not a recognizable IP literal - block to be safe
+  return true
+}
+
+/**
+ * Validate a user-supplied attachment URL against SSRF. Enforces http/https and
+ * resolves the hostname, throwing if it (or any resolved A/AAAA address) is
+ * private/loopback/link-local/metadata. Note: this does not pin the resolved IP
+ * for the subsequent fetch, so a DNS-rebinding attacker could still race the
+ * resolution - redirects are disabled by the caller to narrow that window.
+ */
+async function assertUrlIsSafe(parsedUrl: URL): Promise<void> {
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    throw new Error('Only HTTP and HTTPS URLs are supported')
+  }
+
+  const hostname = parsedUrl.hostname.replace(/^\[|\]$/g, '')
+
+  // If the host is an IP literal, validate it directly.
+  if (isIP(hostname)) {
+    if (isBlockedIp(hostname)) {
+      throw new Error('URL host resolves to a non-public address and is not allowed')
+    }
+    return
+  }
+
+  // Otherwise resolve all A/AAAA records and ensure none are private.
+  let resolved: { address: string }[]
+  try {
+    resolved = await lookup(hostname, { all: true })
+  } catch {
+    throw new Error('Unable to resolve attachment URL host')
+  }
+
+  if (resolved.length === 0 || resolved.some(r => isBlockedIp(r.address))) {
+    throw new Error('URL host resolves to a non-public address and is not allowed')
+  }
+}
+
 export interface AttachmentInput {
   // Resend-compatible: either path OR content
   path?: string        // Remote file URL
@@ -134,18 +226,20 @@ async function fetchRemoteFile(url: string): Promise<{ content: string; contentT
   console.log('📥 Fetching remote file:', url)
   
   try {
-    // Validate URL format
+    // Validate URL format + SSRF protection (blocks private/loopback/link-local
+    // and cloud-metadata addresses, e.g. 169.254.169.254).
     const parsedUrl = new URL(url)
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-      throw new Error('Only HTTP and HTTPS URLs are supported')
-    }
-    
+    await assertUrlIsSafe(parsedUrl)
+
     // Fetch with timeout and size limits
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
-    
+
     const response = await fetch(url, {
       signal: controller.signal,
+      // Do not follow redirects: a redirect to an internal address would bypass
+      // the SSRF check performed above against the original URL.
+      redirect: 'error',
       headers: {
         'User-Agent': 'InboundEmail-AttachmentFetcher/1.0'
       }
@@ -208,12 +302,20 @@ function processBase64Content(content: string, declaredContentType?: string): { 
   try {
     // Remove data URL prefix if present (e.g., "data:image/png;base64,")
     const base64Content = content.replace(/^data:[^;]+;base64,/, '')
-    
+
+    // Reject oversized payloads BEFORE decoding to avoid allocating a huge
+    // buffer for content that will fail the size check anyway. Base64 expands
+    // by ~4/3, so a string longer than MAX*4/3 (+ padding slack) cannot decode
+    // to a permitted size.
+    if (base64Content.length > Math.ceil(MAX_ATTACHMENT_SIZE * 1.4)) {
+      throw new Error(`File too large (max: ${MAX_ATTACHMENT_SIZE} bytes)`)
+    }
+
     // Validate base64 format
     if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64Content)) {
       throw new Error('Invalid base64 format')
     }
-    
+
     // Calculate size
     const buffer = Buffer.from(base64Content, 'base64')
     const size = buffer.byteLength
@@ -290,7 +392,7 @@ function detectContentTypeFromBase64(base64: string): string | null {
     }
     
     return null
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -351,6 +453,12 @@ function validateContentIds(attachments: AttachmentInput[]): void {
     const attachment = attachments[i]
     
     if (attachment.content_id) {
+      // Reject control characters and angle brackets that would allow MIME
+      // header injection when the content_id is emitted as Content-ID: <...>
+      if (/[\r\n\t<>"]/.test(attachment.content_id)) {
+        throw new Error(`Attachment ${i + 1}: content_id contains invalid characters`)
+      }
+
       // Check length limit (Resend spec: max 128 characters)
       if (attachment.content_id.length > 128) {
         throw new Error(`Attachment ${i + 1}: content_id must be less than 128 characters (current: ${attachment.content_id.length})`)
@@ -475,11 +583,13 @@ export function attachmentsToStorageFormat(attachments: ProcessedAttachment[]): 
   filename: string
   content_type: string
   size?: number
+  content_id?: string
 }> {
   return attachments.map(att => ({
     content: att.content,
     filename: att.filename,
     content_type: att.contentType,
-    size: att.size
+    size: att.size,
+    content_id: att.content_id
   }))
 }

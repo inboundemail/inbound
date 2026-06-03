@@ -556,6 +556,8 @@ export interface AttachmentInput {
 	filename: string;
 	content: string; // Base64 encoded
 	contentType?: string;
+	content_type?: string;
+	content_id?: string;
 }
 
 export interface PostEmailsRequest {
