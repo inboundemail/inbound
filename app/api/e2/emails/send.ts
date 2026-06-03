@@ -241,7 +241,7 @@ export const sendEmail = new Elysia().post(
 			if (!dateValidation.isValid) {
 				console.log("❌ Invalid schedule time:", dateValidation.error);
 				set.status = 400;
-				return { error: dateValidation.error };
+				return { error: dateValidation.error || "Invalid scheduled_at value" };
 			}
 
 			console.log(

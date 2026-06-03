@@ -453,9 +453,9 @@ function validateContentIds(attachments: AttachmentInput[]): void {
     const attachment = attachments[i]
     
     if (attachment.content_id) {
-      // Reject control characters and angle brackets that would allow MIME
+      // Reject whitespace-only values, control characters, and angle brackets that would allow MIME
       // header injection when the content_id is emitted as Content-ID: <...>
-      if (/[\r\n\t<>"]/.test(attachment.content_id)) {
+      if (!attachment.content_id.trim() || /[\x00-\x1F\x7F<>"]/.test(attachment.content_id)) {
         throw new Error(`Attachment ${i + 1}: content_id contains invalid characters`)
       }
 

@@ -124,6 +124,30 @@ describe("header injection hardening", () => {
 			]),
 		).rejects.toThrow(/invalid characters/i);
 	});
+
+	it("rejects whitespace-only content_id values", async () => {
+		await expect(
+			processAttachments([
+				{
+					filename: "logo.png",
+					content: "iVBORw0KGgo=",
+					content_id: "   ",
+				},
+			]),
+		).rejects.toThrow(/invalid characters/i);
+	});
+
+	it("rejects non-whitespace C0 controls in content_id", async () => {
+		await expect(
+			processAttachments([
+				{
+					filename: "logo.png",
+					content: "iVBORw0KGgo=",
+					content_id: "logo\u0000suffix",
+				},
+			]),
+		).rejects.toThrow(/invalid characters/i);
+	});
 });
 
 describe("quoted-printable encoding", () => {

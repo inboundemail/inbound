@@ -70,7 +70,7 @@ function sanitizeFilename(filename: string): string {
  * brackets so it cannot escape the Content-ID header.
  */
 function sanitizeContentId(contentId: string): string {
-  return String(contentId).replace(/[\r\n\t<>]+/g, '').trim()
+  return String(contentId).replace(/[\x00-\x1F\x7F<>]+/g, '').trim()
 }
 
 /**

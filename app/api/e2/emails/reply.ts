@@ -579,10 +579,11 @@ export const replyToEmail = new Elysia().post(
 		try {
 			console.log("📤 Sending reply email via AWS SES");
 
-			const customHeaders = body.headers
+			const customHeaders: Record<string, string> | undefined = body.headers
 				? Object.fromEntries(
 						Object.entries(body.headers).filter(
-							([key]) =>
+							(entry): entry is [string, string] =>
+								typeof entry[1] === "string" &&
 								![
 									"from",
 									"to",
@@ -590,7 +591,7 @@ export const replyToEmail = new Elysia().post(
 									"message-id",
 									"in-reply-to",
 									"references",
-								].includes(key.toLowerCase()),
+								].includes(entry[0].toLowerCase()),
 						),
 					)
 				: undefined;
