@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { suspendTenantSending } from "@/lib/aws-ses/aws-ses-tenants";
 import { getTenantOwnerByConfigurationSet } from "@/lib/db/tenants";
 import { sendReputationAlertNotification } from "@/lib/email-management/email-notifications";
+import { getSesConfigurationSetName } from "@/lib/ses-monitoring/configuration-set";
 import {
 	processSESEvent,
 	type RateAlert,
@@ -65,7 +66,7 @@ interface SESEvent {
 		sendingAccountId: string;
 		callerIdentity: string;
 		configurationSetName?: string;
-		tags: {
+		tags?: {
 			[key: string]: string[];
 		};
 		commonHeaders: {
@@ -290,6 +291,9 @@ function parseSNSNotification(snsData: SNSNotification) {
 			// SES v2 sends events as flat objects with eventType + mail at the top level —
 			// wrap them in Records[] so downstream handlers work unchanged.
 			else if (parsedMessage.eventType && parsedMessage.mail) {
+				const configurationSetName = getSesConfigurationSetName(
+					parsedMessage.mail,
+				);
 				// SES v2 sends eventType capitalized ("Bounce", "Complaint", "Delivery", ...)
 				// but downstream code compares against lowercase values. Normalize here.
 				const normalizedEvent = {
@@ -298,6 +302,10 @@ function parseSNSNotification(snsData: SNSNotification) {
 						typeof parsedMessage.eventType === "string"
 							? parsedMessage.eventType.toLowerCase()
 							: parsedMessage.eventType,
+					mail: {
+						...parsedMessage.mail,
+						configurationSetName,
+					},
 				};
 				console.log(
 					`📨 parseSNSNotification - Flat SES v2 event detected: ${normalizedEvent.eventType} (raw: ${parsedMessage.eventType})`,
