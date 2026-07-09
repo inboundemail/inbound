@@ -3,6 +3,7 @@ import { suspendTenantSending } from "@/lib/aws-ses/aws-ses-tenants";
 import { getTenantOwnerByConfigurationSet } from "@/lib/db/tenants";
 import { sendReputationAlertNotification } from "@/lib/email-management/email-notifications";
 import { getSesConfigurationSetName } from "@/lib/ses-monitoring/configuration-set";
+import { shouldTrackSesReputationEvent } from "@/lib/ses-monitoring/event-filter";
 import {
 	processSESEvent,
 	type RateAlert,
@@ -94,6 +95,7 @@ interface SESEvent {
 		complainedRecipients: Array<{
 			emailAddress: string;
 		}>;
+		complaintSubType?: string | null;
 		timestamp: string;
 		feedbackId: string;
 		userAgent: string;
@@ -217,6 +219,13 @@ export async function POST(request: NextRequest) {
 					`Configuration Set: ${event.mail.configurationSetName || "N/A"}`,
 				);
 				console.log(`Message ID: ${event.mail.messageId}`);
+
+				if (!shouldTrackSesReputationEvent(event)) {
+					console.log(
+						"Skipping suppression-list complaint for reputation tracking",
+					);
+					continue;
+				}
 
 				// Process bounce and complaint events for rate tracking
 				if (
