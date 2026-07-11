@@ -32,6 +32,17 @@ export const AUTO_SUSPEND_MIN_SENDS = {
 	complaint: 1000,
 } as const;
 
+export const WARNING_MINIMUMS = {
+	bounce: {
+		sends: 100,
+		events: 3,
+	},
+	complaint: {
+		sends: 500,
+		events: 2,
+	},
+} as const;
+
 // Time window for rate calculation (24 hours)
 const RATE_WINDOW_HOURS = 24;
 
@@ -228,6 +239,12 @@ export function checkRateThresholds(rates: TenantRates): RateAlert[] {
 		rates.totalSends >= AUTO_SUSPEND_MIN_SENDS.bounce;
 	const canAutoSuspendForComplaint =
 		rates.totalSends >= AUTO_SUSPEND_MIN_SENDS.complaint;
+	const canWarnForBounce =
+		rates.totalSends >= WARNING_MINIMUMS.bounce.sends ||
+		rates.totalBounces >= WARNING_MINIMUMS.bounce.events;
+	const canWarnForComplaint =
+		rates.totalSends >= WARNING_MINIMUMS.complaint.sends ||
+		rates.totalComplaints >= WARNING_MINIMUMS.complaint.events;
 
 	// Check bounce rate
 	if (
@@ -242,7 +259,10 @@ export function checkRateThresholds(rates: TenantRates): RateAlert[] {
 			configurationSetName: rates.configurationSetName,
 			tenantId: rates.tenantId,
 		});
-	} else if (rates.bounceRate >= RATE_THRESHOLDS.bounce.warning) {
+	} else if (
+		canWarnForBounce &&
+		rates.bounceRate >= RATE_THRESHOLDS.bounce.warning
+	) {
 		alerts.push({
 			alertType: "bounce",
 			severity: "warning",
@@ -266,7 +286,10 @@ export function checkRateThresholds(rates: TenantRates): RateAlert[] {
 			configurationSetName: rates.configurationSetName,
 			tenantId: rates.tenantId,
 		});
-	} else if (rates.complaintRate >= RATE_THRESHOLDS.complaint.warning) {
+	} else if (
+		canWarnForComplaint &&
+		rates.complaintRate >= RATE_THRESHOLDS.complaint.warning
+	) {
 		alerts.push({
 			alertType: "complaint",
 			severity: "warning",

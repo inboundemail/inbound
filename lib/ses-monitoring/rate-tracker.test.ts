@@ -22,6 +22,98 @@ function buildRates(overrides: Partial<TenantRates>): TenantRates {
 }
 
 describe("checkRateThresholds", () => {
+	it("does not warn for a single bounce from a single send", () => {
+		const alerts = checkRateThresholds(
+			buildRates({
+				totalSends: 1,
+				totalBounces: 1,
+				bounceRate: 1,
+			}),
+		);
+
+		expect(alerts).toEqual([]);
+	});
+
+	it("warns for severe low-volume bounce patterns", () => {
+		const alerts = checkRateThresholds(
+			buildRates({
+				totalSends: 10,
+				totalBounces: 3,
+				bounceRate: 3 / 10,
+			}),
+		);
+
+		expect(alerts).toEqual([
+			{
+				alertType: "bounce",
+				severity: "warning",
+				currentRate: 3 / 10,
+				threshold: RATE_THRESHOLDS.bounce.warning,
+				configurationSetName: "cfg-test",
+				tenantId: "tenant_test",
+			},
+		]);
+	});
+
+	it("warns at the bounce send-volume gate", () => {
+		const alerts = checkRateThresholds(
+			buildRates({
+				totalSends: 100,
+				totalBounces: 2,
+				bounceRate: RATE_THRESHOLDS.bounce.warning,
+			}),
+		);
+
+		expect(alerts[0]?.alertType).toBe("bounce");
+		expect(alerts[0]?.severity).toBe("warning");
+	});
+
+	it("does not warn for a single complaint at low volume", () => {
+		const alerts = checkRateThresholds(
+			buildRates({
+				totalSends: 1,
+				totalComplaints: 1,
+				complaintRate: 1,
+			}),
+		);
+
+		expect(alerts).toEqual([]);
+	});
+
+	it("warns at the complaint send-volume gate", () => {
+		const alerts = checkRateThresholds(
+			buildRates({
+				totalSends: 500,
+				totalComplaints: 1,
+				complaintRate: 1 / 500,
+			}),
+		);
+
+		expect(alerts[0]?.alertType).toBe("complaint");
+		expect(alerts[0]?.severity).toBe("warning");
+	});
+
+	it("warns for repeated low-volume complaints", () => {
+		const alerts = checkRateThresholds(
+			buildRates({
+				totalSends: 10,
+				totalComplaints: 2,
+				complaintRate: 2 / 10,
+			}),
+		);
+
+		expect(alerts).toEqual([
+			{
+				alertType: "complaint",
+				severity: "warning",
+				currentRate: 2 / 10,
+				threshold: RATE_THRESHOLDS.complaint.warning,
+				configurationSetName: "cfg-test",
+				tenantId: "tenant_test",
+			},
+		]);
+	});
+
 	it("emits critical bounce alert at or above 2.5% with enough volume", () => {
 		const rates = buildRates({
 			totalSends: 200,
