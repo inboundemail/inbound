@@ -7,10 +7,13 @@
  * Cost savings: ~$165/month (eliminated 1,652 CloudWatch alarms)
  */
 
-import { and, count, eq, gte } from "drizzle-orm";
-import { nanoid } from "nanoid";
+import { and, count, eq, gte, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { emailDeliveryEvents, sentEmails, sesTenants } from "@/lib/db/schema";
+import {
+	countUniqueDeliveryEvents,
+	insertDeliveryEventOnce,
+} from "@/lib/email-management/delivery-event-dedupe";
 
 // Rate thresholds for tenant alerting and automatic suspension
 export const RATE_THRESHOLDS = {
@@ -78,22 +81,18 @@ export async function storeSESEvent(params: {
 			.where(eq(sesTenants.configurationSetName, params.configurationSetName))
 			.limit(1);
 
-		const eventId = `evt_${nanoid()}`;
-
 		// Determine bounce type classification
 		let bounceTypeClassified = params.bounceType;
 		if (params.eventType === "bounce" && !bounceTypeClassified) {
 			bounceTypeClassified = "unknown";
 		}
 
-		await db.insert(emailDeliveryEvents).values({
-			id: eventId,
+		const storedEvent = await insertDeliveryEventOnce({
 			eventType: params.eventType,
 			bounceType: bounceTypeClassified,
 			bounceSubType: params.bounceSubType,
 			diagnosticCode: params.diagnosticCode,
 			failedRecipient: params.recipient,
-			failedRecipientDomain: params.recipient.split("@")[1] || null,
 			originalMessageId: params.messageId,
 			userId: tenant?.userId || null,
 			tenantId: tenant?.id || null,
@@ -102,10 +101,29 @@ export async function storeSESEvent(params: {
 			updatedAt: params.timestamp,
 		});
 
+		if (!storedEvent.inserted) {
+			await db
+				.update(emailDeliveryEvents)
+				.set({
+					userId: tenant?.userId || null,
+					tenantId: tenant?.id || null,
+					tenantName: tenant?.tenantName || params.configurationSetName,
+					...(params.eventType === "bounce"
+						? {
+								bounceType: bounceTypeClassified,
+								bounceSubType: params.bounceSubType,
+								diagnosticCode: params.diagnosticCode,
+							}
+						: {}),
+					updatedAt: params.timestamp,
+				})
+				.where(eq(emailDeliveryEvents.id, storedEvent.eventId));
+		}
+
 		console.log(
-			`📊 storeSESEvent - Stored ${params.eventType} event: ${eventId}`,
+			`📊 storeSESEvent - ${storedEvent.inserted ? "Stored" : "Deduplicated"} ${params.eventType} event: ${storedEvent.eventId}`,
 		);
-		return { success: true, eventId };
+		return { success: true, eventId: storedEvent.eventId };
 	} catch (error) {
 		console.error("❌ storeSESEvent - Error storing event:", error);
 		return {
@@ -145,29 +163,24 @@ export async function getTenantRates(
 			return null;
 		}
 
-		// Count bounces in the window
-		const [bounceResult] = await db
-			.select({ count: count() })
+		const deliveryEvents = await db
+			.select({
+				id: emailDeliveryEvents.id,
+				eventType: emailDeliveryEvents.eventType,
+				originalMessageId: emailDeliveryEvents.originalMessageId,
+				dsnEmailId: emailDeliveryEvents.dsnEmailId,
+				failedRecipient: emailDeliveryEvents.failedRecipient,
+			})
 			.from(emailDeliveryEvents)
 			.where(
 				and(
 					eq(emailDeliveryEvents.tenantId, tenant.id),
-					eq(emailDeliveryEvents.eventType, "bounce"),
+					inArray(emailDeliveryEvents.eventType, ["bounce", "complaint"]),
 					gte(emailDeliveryEvents.createdAt, windowStart),
 				),
 			);
 
-		// Count complaints in the window
-		const [complaintResult] = await db
-			.select({ count: count() })
-			.from(emailDeliveryEvents)
-			.where(
-				and(
-					eq(emailDeliveryEvents.tenantId, tenant.id),
-					eq(emailDeliveryEvents.eventType, "complaint"),
-					gte(emailDeliveryEvents.createdAt, windowStart),
-				),
-			);
+		const deliveryEventCounts = countUniqueDeliveryEvents(deliveryEvents);
 
 		// Count total sends in the window (from sentEmails table)
 		const [sendResult] = await db
@@ -181,8 +194,8 @@ export async function getTenantRates(
 				),
 			);
 
-		const totalBounces = bounceResult?.count || 0;
-		const totalComplaints = complaintResult?.count || 0;
+		const totalBounces = deliveryEventCounts.bounces;
+		const totalComplaints = deliveryEventCounts.complaints;
 		const totalSends = sendResult?.count || 0;
 
 		// Calculate rates (avoid division by zero)

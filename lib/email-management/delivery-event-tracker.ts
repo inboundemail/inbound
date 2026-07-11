@@ -23,6 +23,10 @@ import {
 	type NewEmailDeliveryEvent,
 } from "@/lib/db/schema";
 import { dispatchEmailBouncedEvent } from "@/lib/svix/event-dispatcher";
+import {
+	insertDeliveryEventOnce,
+	normalizeDeliveryEventRecipient,
+} from "./delivery-event-dedupe";
 import { getDsnSourceInfo, parseDsn } from "./dsn-parser";
 
 export interface RecordDeliveryEventOptions {
@@ -134,9 +138,9 @@ export async function recordDeliveryEventFromDsn(
 			dsn.deliveryStatus?.status,
 			dsn.deliveryStatus?.diagnosticCode,
 		);
-		const failedRecipient = dsn.deliveryStatus?.finalRecipient;
+		const parsedFailedRecipient = dsn.deliveryStatus?.finalRecipient;
 
-		if (!failedRecipient) {
+		if (!parsedFailedRecipient) {
 			return {
 				success: false,
 				error: "No failed recipient found in DSN",
@@ -144,12 +148,13 @@ export async function recordDeliveryEventFromDsn(
 			};
 		}
 
-		const eventId = `evt_${nanoid()}`;
+		const failedRecipient = normalizeDeliveryEventRecipient(
+			parsedFailedRecipient,
+		);
 		const failedRecipientDomain = extractDomain(failedRecipient);
 
 		// Prepare the event record
-		const eventRecord: NewEmailDeliveryEvent = {
-			id: eventId,
+		const eventRecord: Omit<NewEmailDeliveryEvent, "id"> = {
 			eventType,
 			bounceType,
 			bounceSubType,
@@ -183,8 +188,41 @@ export async function recordDeliveryEventFromDsn(
 			rawDsnContent: storeRawContent ? rawDsnContent : undefined,
 		};
 
-		// Insert the event
-		await db.insert(emailDeliveryEvents).values(eventRecord);
+		const storedEvent = await insertDeliveryEventOnce(eventRecord);
+		const eventId = storedEvent.eventId;
+
+		if (!storedEvent.inserted) {
+			await db
+				.update(emailDeliveryEvents)
+				.set({
+					...(storedEvent.existingDsnEmailId
+						? {
+								bounceType: eventRecord.bounceType,
+								bounceSubType: eventRecord.bounceSubType,
+								diagnosticCode: eventRecord.diagnosticCode,
+							}
+						: {}),
+					statusCode: eventRecord.statusCode,
+					statusClass: eventRecord.statusClass,
+					statusCategory: eventRecord.statusCategory,
+					originalSentEmailId: eventRecord.originalSentEmailId,
+					originalFrom: eventRecord.originalFrom,
+					originalTo: eventRecord.originalTo,
+					originalSubject: eventRecord.originalSubject,
+					originalSentAt: eventRecord.originalSentAt,
+					dsnEmailId: eventRecord.dsnEmailId,
+					dsnReceivedAt: eventRecord.dsnReceivedAt,
+					reportingMta: eventRecord.reportingMta,
+					remoteMta: eventRecord.remoteMta,
+					userId: eventRecord.userId,
+					domainId: eventRecord.domainId,
+					domainName: eventRecord.domainName,
+					tenantId: eventRecord.tenantId,
+					tenantName: eventRecord.tenantName,
+					updatedAt: new Date(),
+				})
+				.where(eq(emailDeliveryEvents.id, eventId));
+		}
 
 		const result: RecordDeliveryEventResult = {
 			success: true,

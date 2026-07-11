@@ -6,7 +6,7 @@
  */
 
 import { db } from '@/lib/db'
-import { sentEmails, emailDeliveryEvents, user } from '@/lib/db/schema'
+import { sentEmails, emailDeliveryEvents } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { sendMessage, isSvixEnabled } from './index'
 import {
@@ -180,12 +180,13 @@ export async function dispatchEmailBouncedEvent(deliveryEventId: string): Promis
     
     // Send both the specific bounce type and the general bounce event
     const eventType = getBounceEventType(bounceType)
+    const bounceAttemptKey = `${deliveryEventId}-${bounceType}-${event.statusCode || 'unknown'}`
     
     const result = await sendMessage(
       event.userId,
       eventType,
       payload,
-      `bounce-${deliveryEventId}` // Idempotency key
+      `bounce-${bounceAttemptKey}` // Idempotency key
     )
     
     // Also send the general email.bounced event
@@ -193,7 +194,7 @@ export async function dispatchEmailBouncedEvent(deliveryEventId: string): Promis
       event.userId,
       SVIX_EVENT_TYPES.EMAIL_BOUNCED,
       payload,
-      `bounce-general-${deliveryEventId}`
+      `bounce-general-${bounceAttemptKey}`
     )
     
     if (result) {
