@@ -3,6 +3,7 @@ import { getAwsSesStats } from "@/lib/aws-ses/aws-stats-core"
 import { user } from "@/lib/db/auth-schema"
 import { db } from "@/lib/db"
 import { sentEmails } from "@/lib/db/schema"
+import { quarterHourBucket, sendHarkNotification } from "@/lib/notifications/hark"
 import { redis } from "@/lib/redis"
 
 const SLACK_ADMIN_WEBHOOK_URL = process.env.SLACK_ADMIN_WEBHOOK_URL
@@ -210,7 +211,7 @@ function getSeverity(
 	return "medium"
 }
 
-async function sendSpikeAlert(params: {
+interface SpikeAlertParams {
 	userId: string
 	userEmail: string
 	userName: string | null
@@ -222,10 +223,40 @@ async function sendSpikeAlert(params: {
 	severity: AlertSeverity
 	reasons: string[]
 	reputation: AwsReputationSnapshot | null
-}): Promise<void> {
+}
+
+/**
+ * Push notify admins about a sending spike.
+ *
+ * Keyed by user, severity, and 15-minute bucket: an escalation from high to
+ * critical still pages, but a burst of sends inside one bucket does not.
+ */
+async function sendSpikeHarkAlert(params: SpikeAlertParams): Promise<boolean> {
+	const emoji =
+		params.severity === "critical" ? "🚨" : params.severity === "high" ? "⚠️" : "🔎"
+	const multiplierText =
+		params.spikeMultiplier === null ? "N/A" : `${params.spikeMultiplier.toFixed(1)}x`
+
+	const body = [
+		`${emoji} Sending spike (${params.severity})`,
+		`15m ${params.current15m.toLocaleString()} · 1h ${params.current1h.toLocaleString()} · 24h ${params.current24h.toLocaleString()}`,
+		`${multiplierText} vs ${params.historicalAverage.toFixed(1)}/day avg`,
+		`User ${params.userEmail}`,
+		`Triggers: ${params.reasons.join(", ")}`,
+	].join("\n")
+
+	return await sendHarkNotification({
+		title: "inbound",
+		body,
+		url: "https://inbound.new/admin",
+		idempotencyKey: `sending-spike:${params.userId}:${params.severity}:${quarterHourBucket()}`,
+	})
+}
+
+async function sendSpikeSlackAlert(params: SpikeAlertParams): Promise<boolean> {
 	if (!SLACK_ADMIN_WEBHOOK_URL) {
 		console.log("⚠️ SLACK_ADMIN_WEBHOOK_URL not configured, skipping spike alert")
-		return
+		return false
 	}
 
 	const emoji =
@@ -328,13 +359,40 @@ async function sendSpikeAlert(params: {
 
 		if (!response.ok) {
 			console.error(`❌ Slack spike alert failed: ${response.status} ${response.statusText}`)
-			return
+			return false
 		}
 
 		console.log(`✅ Slack spike alert sent for user: ${params.userEmail}`)
-		await markAlertSent(params.userId)
+		return true
 	} catch (error) {
 		console.error("❌ Failed to send Slack spike alert:", error)
+		return false
+	}
+}
+
+/**
+ * Alert admins about a spike on every configured channel.
+ *
+ * The redis dedupe marker is only written when at least one channel accepted the
+ * alert, so a total delivery failure does not silence the next detection.
+ */
+async function sendSpikeAlert(params: SpikeAlertParams): Promise<void> {
+	const results = await Promise.allSettled([
+		sendSpikeSlackAlert(params),
+		sendSpikeHarkAlert(params),
+	])
+
+	let anyDelivered = false
+	for (const result of results) {
+		if (result.status === "rejected") {
+			console.error("❌ Spike alert channel failed:", result.reason)
+		} else if (result.value) {
+			anyDelivered = true
+		}
+	}
+
+	if (anyDelivered) {
+		await markAlertSent(params.userId)
 	}
 }
 

@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { suspendTenantSending } from "@/lib/aws-ses/aws-ses-tenants";
 import { getTenantOwnerByConfigurationSet } from "@/lib/db/tenants";
 import { sendReputationAlertNotification } from "@/lib/email-management/email-notifications";
+import { sendHarkNotification } from "@/lib/notifications/hark";
 import { getSesConfigurationSetName } from "@/lib/ses-monitoring/configuration-set";
 import { shouldTrackSesReputationEvent } from "@/lib/ses-monitoring/event-filter";
 import {
@@ -383,7 +384,7 @@ async function handleCloudWatchAlarm(alarm: CloudWatchAlarmMessage) {
 				: `${alertInfo.currentRate.toFixed(0)} delayed`;
 
 		// Send Slack notification to admin for ALL alerts
-		await sendSlackAdminNotification({
+		await sendAdminAlert({
 			alertType: alertInfo.alertType,
 			severity: alertInfo.severity,
 			currentRate: rateDisplay,
@@ -416,7 +417,7 @@ async function handleCloudWatchAlarm(alarm: CloudWatchAlarmMessage) {
 				);
 
 				// Send additional Slack notification about auto-suspend
-				await sendSlackAdminNotification({
+				await sendAdminAlert({
 					alertType: alertInfo.alertType,
 					severity: "critical",
 					currentRate: rateDisplay,
@@ -579,6 +580,81 @@ async function sendSlackAdminNotification(data: {
 	}
 }
 
+interface ReputationAlertData {
+	alertType: "bounce" | "complaint" | "delivery_delay";
+	severity: "warning" | "critical";
+	currentRate: string;
+	threshold: string;
+	configurationSet: string;
+	tenantName: string;
+	userEmail: string;
+	triggeredAt: Date;
+	action?: "SENDING_SUSPENDED";
+}
+
+/**
+ * Send a Hark push notification to admins about a reputation alert.
+ *
+ * The idempotency key is derived from the alarm identity and its trigger time,
+ * so SNS redelivering the same alarm collapses into one notification. The
+ * suspension follow-up carries a distinct key so it is never swallowed.
+ */
+async function sendHarkAdminNotification(data: ReputationAlertData) {
+	const alertTypeDisplay =
+		data.alertType === "bounce"
+			? "Bounce rate"
+			: data.alertType === "complaint"
+				? "Complaint rate"
+				: "Delivery delay";
+
+	const suspended = data.action === "SENDING_SUSPENDED";
+	const emoji = suspended ? "🛑" : data.severity === "critical" ? "🚨" : "⚠️";
+
+	const headline = suspended
+		? `${emoji} Sending suspended: ${data.tenantName}`
+		: `${emoji} SES ${data.severity} — ${alertTypeDisplay}`;
+
+	const body = [
+		headline,
+		`${alertTypeDisplay} ${data.currentRate} (threshold ${data.threshold})`,
+		`Tenant ${data.tenantName} · ${data.userEmail}`,
+	].join("\n");
+
+	await sendHarkNotification({
+		title: "inbound",
+		body,
+		url: "https://inbound.new/admin/tenants",
+		idempotencyKey: [
+			"ses-reputation",
+			data.configurationSet,
+			data.alertType,
+			data.severity,
+			suspended ? "suspended" : "alert",
+			data.triggeredAt.toISOString(),
+		].join(":"),
+	});
+}
+
+/**
+ * Fan a reputation alert out to every admin channel.
+ *
+ * Channels are independent: a Slack outage must not suppress the phone push,
+ * and neither may throw into the SNS handler, which would make AWS retry the
+ * whole delivery.
+ */
+async function sendAdminAlert(data: ReputationAlertData) {
+	const results = await Promise.allSettled([
+		sendSlackAdminNotification(data),
+		sendHarkAdminNotification(data),
+	]);
+
+	for (const result of results) {
+		if (result.status === "rejected") {
+			console.error("❌ Admin alert channel failed:", result.reason);
+		}
+	}
+}
+
 /**
  * Map AWS SES bounce types to our schema values
  * AWS sends: 'Permanent' | 'Transient' | 'Undetermined'
@@ -687,7 +763,7 @@ async function handleRateAlert(alert: RateAlert, configSetName: string) {
 		const thresholdDisplay = `${(alert.threshold * 100).toFixed(2)}%`;
 
 		// Send Slack notification
-		await sendSlackAdminNotification({
+		await sendAdminAlert({
 			alertType: alert.alertType,
 			severity: alert.severity,
 			currentRate: rateDisplay,
@@ -717,7 +793,7 @@ async function handleRateAlert(alert: RateAlert, configSetName: string) {
 				);
 
 				// Send additional Slack notification about auto-suspend
-				await sendSlackAdminNotification({
+				await sendAdminAlert({
 					alertType: alert.alertType,
 					severity: "critical",
 					currentRate: rateDisplay,

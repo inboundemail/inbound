@@ -10,6 +10,7 @@ import {
 	sesTenants,
 } from "@/lib/db/schema";
 import { getRootDomain, isSubdomain } from "@/lib/domains-and-dns/domain-utils";
+import { sendHarkNotification } from "@/lib/notifications/hark";
 
 type GuardReasonCode =
 	| "user_not_found"
@@ -69,7 +70,7 @@ function trimHourlyLimitAlertCache(maxEntries = 2000): void {
 	}
 }
 
-async function sendHourlyLimitSlackAlert(params: {
+interface HourlyLimitAlertParams {
 	userId: string;
 	userEmail: string | null;
 	tenantId: string;
@@ -77,18 +78,41 @@ async function sendHourlyLimitSlackAlert(params: {
 	limit: number;
 	windowStart: Date;
 	windowEnd: Date;
-}): Promise<void> {
+}
+
+/**
+ * Push notify admins that a user hit the hourly send limit.
+ *
+ * The idempotency key uses the same user + hour bucket as the in-process cache,
+ * so Hark still collapses duplicates across serverless instances and cold
+ * starts, where that in-memory cache cannot.
+ */
+async function sendHourlyLimitHarkAlert(
+	params: HourlyLimitAlertParams,
+): Promise<void> {
+	const hourBucketId = Math.floor(params.windowEnd.getTime() / ONE_HOUR_IN_MS);
+
+	const body = [
+		"🛑 Hourly send limit reached",
+		`${params.sentLastHour} sent in the last hour (limit ${params.limit})`,
+		`User ${params.userEmail || params.userId}`,
+		"Tenant sending paused.",
+	].join("\n");
+
+	await sendHarkNotification({
+		title: "inbound",
+		body,
+		url: "https://inbound.new/guard",
+		idempotencyKey: `outbound-hourly-limit:${params.userId}:${hourBucketId}`,
+	});
+}
+
+async function sendHourlyLimitSlackAlert(
+	params: HourlyLimitAlertParams,
+): Promise<void> {
 	if (!SLACK_ADMIN_WEBHOOK_URL) {
 		return;
 	}
-
-	const cacheKey = buildHourlyLimitCacheKey(params.userId, params.windowEnd);
-	if (hourlyLimitAlertCache.has(cacheKey)) {
-		return;
-	}
-
-	hourlyLimitAlertCache.add(cacheKey);
-	trimHourlyLimitAlertCache();
 
 	const message = {
 		text: "Outbound hourly send limit reached",
@@ -150,6 +174,36 @@ async function sendHourlyLimitSlackAlert(params: {
 		}
 	} catch (error) {
 		console.error("❌ Failed to send hourly send limit Slack alert:", error);
+	}
+}
+
+/**
+ * Notify admins on every configured channel that the hourly limit was hit.
+ *
+ * The one-alert-per-user-per-hour cache is applied here rather than inside a
+ * single channel, so both channels stay in step and neither can throw into the
+ * send path.
+ */
+async function sendHourlyLimitAlert(
+	params: HourlyLimitAlertParams,
+): Promise<void> {
+	const cacheKey = buildHourlyLimitCacheKey(params.userId, params.windowEnd);
+	if (hourlyLimitAlertCache.has(cacheKey)) {
+		return;
+	}
+
+	hourlyLimitAlertCache.add(cacheKey);
+	trimHourlyLimitAlertCache();
+
+	const results = await Promise.allSettled([
+		sendHourlyLimitSlackAlert(params),
+		sendHourlyLimitHarkAlert(params),
+	]);
+
+	for (const result of results) {
+		if (result.status === "rejected") {
+			console.error("❌ Hourly limit alert channel failed:", result.reason);
+		}
 	}
 }
 
@@ -324,7 +378,7 @@ export async function enforceOutboundSendGuard(
 				configurationSetName: userTenant.configurationSetName,
 			});
 
-			await sendHourlyLimitSlackAlert({
+			await sendHourlyLimitAlert({
 				userId,
 				userEmail: userRecord.email,
 				tenantId: userTenant.id,

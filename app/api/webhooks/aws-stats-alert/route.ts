@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { type AwsStatsOutput, getAwsSesStats } from "@/lib/aws-ses/aws-stats-core";
+import { hourBucket, sendHarkNotification } from "@/lib/notifications/hark";
 
 const SLACK_ADMIN_WEBHOOK_URL = process.env.SLACK_ADMIN_WEBHOOK_URL;
 const CRON_SECRET = process.env.CRON_SECRET;
@@ -131,6 +132,71 @@ async function sendSlackWarning(
 	}
 }
 
+type Breach = { label: string; value: number; threshold: number };
+
+/**
+ * Push notify admins that SES warning thresholds were breached.
+ *
+ * This cron runs hourly, so the key is the hour bucket plus the breached metric
+ * names: a re-run or retry of the same hour is silent, while a newly breached
+ * metric still pages.
+ */
+async function sendHarkWarning(
+	stats: AwsStatsOutput,
+	breaches: Breach[],
+): Promise<void> {
+	const breachLines = breaches.map((breach) =>
+		breach.label === "Reject rate"
+			? `${breach.label} ${toPercent(breach.value)} (warn > 0%)`
+			: `${breach.label} ${toPercent(breach.value)} (warn ${toPercent(breach.threshold)})`,
+	);
+
+	const body = [
+		"⚠️ SES warning threshold breached",
+		...breachLines,
+		`Window ${stats.window.lookbackDays}d @ ${stats.window.periodSeconds}s`,
+	].join("\n");
+
+	const breachKey = breaches
+		.map((breach) => breach.label)
+		.sort()
+		.join(",");
+
+	await sendHarkNotification({
+		title: "inbound",
+		body,
+		url: "https://inbound.new/admin",
+		idempotencyKey: `ses-stats-warning:${hourBucket()}:${breachKey}`,
+	});
+}
+
+/**
+ * Fan the cron alert out to every channel.
+ *
+ * Hark is attempted even when Slack fails. A Slack failure is still rethrown
+ * afterwards so the cron run reports non-200 and stays visible in Vercel.
+ */
+async function sendWarningAlerts(
+	stats: AwsStatsOutput,
+	breaches: Breach[],
+): Promise<void> {
+	const [slackResult, harkResult] = await Promise.allSettled([
+		sendSlackWarning(stats, breaches),
+		sendHarkWarning(stats, breaches),
+	]);
+
+	if (harkResult.status === "rejected") {
+		console.error(
+			"aws-stats-alert Hark notification failed:",
+			harkResult.reason,
+		);
+	}
+
+	if (slackResult.status === "rejected") {
+		throw slackResult.reason;
+	}
+}
+
 export async function GET(request: Request) {
 	const unauthorizedResponse = assertCronAuthorized(request);
 	if (unauthorizedResponse) {
@@ -152,7 +218,7 @@ export async function GET(request: Request) {
 		console.log("aws-stats-alert breaches", breaches);
 
 		if (breaches.length > 0) {
-			await sendSlackWarning(stats, breaches);
+			await sendWarningAlerts(stats, breaches);
 		}
 
 		return NextResponse.json({ success: true });
