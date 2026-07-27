@@ -14,6 +14,14 @@ import { Redis } from "@upstash/redis";
 const NEW_ACCOUNT_WARMUP_DAYS = 7;
 const NEW_ACCOUNT_DAILY_LIMIT = 100;
 
+function maskApiKey(apiKey: string) {
+	if (apiKey.length <= 12) {
+		return "[redacted]";
+	}
+
+	return `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`;
+}
+
 // Initialize Upstash Redis client for rate limiting
 let redis: Redis | null = null;
 let ratelimit: Ratelimit | null = null;
@@ -94,7 +102,7 @@ export async function validateRequest(request: NextRequest) {
 				if (apiKeyUserId) {
 					userId = apiKeyUserId;
 					console.log("🔑 [V2] Auth Type: API_KEY");
-					console.log("🔑 [V2] API Key:", apiKey);
+					console.log("🔑 [V2] API Key:", maskApiKey(apiKey));
 					console.log("✅ Authenticated via API key:", userId);
 				}
 			}

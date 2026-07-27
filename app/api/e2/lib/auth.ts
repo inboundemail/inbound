@@ -67,6 +67,14 @@ export class AuthError extends Error {
 	}
 }
 
+function maskApiKey(apiKey: string) {
+	if (apiKey.length <= 12) {
+		return "[redacted]";
+	}
+
+	return `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`;
+}
+
 function getHeaderRecord(headers: unknown): Record<string, string> {
 	if (headers && typeof headers === "object" && !Array.isArray(headers)) {
 		return headers as Record<string, string>;
@@ -175,7 +183,7 @@ export async function validateAndRateLimit(
 		} else if (apiSession?.valid && !apiSession?.error && apiKeyUserId) {
 			userId = apiKeyUserId;
 			console.log("🔑 [E2] Auth Type: API_KEY");
-			console.log("🔑 [E2] API Key:", apiKey);
+			console.log("🔑 [E2] API Key:", maskApiKey(apiKey));
 			console.log("✅ API key authentication successful for userId:", userId);
 		} else {
 			console.log("❌ Authentication failed: No valid session or API key");
