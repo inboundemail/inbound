@@ -27,7 +27,7 @@ jobs:
 
       - name: Install CLI dependencies
         working-directory: packages/inboundctl
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Test CLI
         working-directory: packages/inboundctl

@@ -30,7 +30,6 @@
     "lint": "biome check src tests"
   },
   "devDependencies": {
-    "@types/node": "^20.19.0",
     "typescript": "^5.9.0"
   }
 }
