@@ -7,9 +7,10 @@ export type HomepageContent = {
 
 const DEFAULT_HOMEPAGE_CONTENT: HomepageContent = {
 	_title: "inbound",
-	heroPrimaryText: "Programmable email infrastructure.",
+	heroPrimaryText:
+		"email infrastructure built for agent inboxes, webhooks, and automated workflows.",
 	heroSublineText:
-		"Send, receive, and reply to email with one API designed for developers.",
+		"send, receive, and reply in thread through one simple api & cli.",
 	ctaButtonPrimaryText: "Get Started",
 };
 

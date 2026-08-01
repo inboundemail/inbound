@@ -463,6 +463,13 @@
       "when": 1785603702237,
       "tag": "0065_device_authorization",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1785625822247,
+      "tag": "0066_empty_jack_power",
+      "breakpoints": true
     }
   ]
 }

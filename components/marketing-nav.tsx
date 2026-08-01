@@ -80,7 +80,7 @@ export function MarketingFooter() {
 		<footer className="py-12 border-t border-[#e7e5e4] mt-8">
 			<div className="flex items-center justify-between text-sm text-[#52525b]">
 				<div className="flex items-center gap-4">
-					<span>© 2025 Inbound</span>
+					<span>© {new Date().getFullYear()} Inbound</span>
 					<Link href="/terms" className="hover:text-[#1c1917]">
 						Terms
 					</Link>

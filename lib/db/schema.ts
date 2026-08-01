@@ -969,6 +969,31 @@ export const guardRules = pgTable(
 	}),
 );
 
+// Campaign links - per-recipient tokenized redirect links for email campaigns
+export const campaignLinks = pgTable(
+	"campaign_links",
+	{
+		token: varchar("token", { length: 64 }).primaryKey(),
+		campaign: varchar("campaign", { length: 255 }).notNull(),
+		customerId: varchar("customer_id", { length: 255 }).notNull(), // Autumn customer id (= user id)
+		email: varchar("email", { length: 255 }).notNull(),
+		variant: varchar("variant", { length: 50 }).notNull(), // e.g. 'custom-domain' | 'generic'
+		homeClicks: integer("home_clicks").default(0).notNull(),
+		checkoutClicks: integer("checkout_clicks").default(0).notNull(),
+		firstClickedAt: timestamp("first_clicked_at"),
+		lastClickedAt: timestamp("last_clicked_at"),
+		sentAt: timestamp("sent_at"),
+		createdAt: timestamp("created_at").defaultNow(),
+	},
+	(table) => ({
+		campaignIdx: index("campaign_links_campaign_idx").on(table.campaign),
+		customerIdIdx: index("campaign_links_customer_id_idx").on(table.customerId),
+	}),
+);
+
+export type CampaignLink = typeof campaignLinks.$inferSelect;
+export type NewCampaignLink = typeof campaignLinks.$inferInsert;
+
 // Type definitions
 export type DomainStatus = (typeof DOMAIN_STATUS)[keyof typeof DOMAIN_STATUS];
 export type SesVerificationStatus =
