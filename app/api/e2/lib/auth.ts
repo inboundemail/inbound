@@ -118,13 +118,13 @@ export async function validateAndRateLimit(
 		// Get session from Better Auth using the request headers directly
 		// Using request.headers instead of Next.js headers() to avoid race conditions
 		// in the Elysia context where headers() might not always be properly populated
-		const session = await auth.api.getSession({
-			headers: request.headers,
-		});
+		const sessionHeaders = new Headers(request.headers);
+		sessionHeaders.delete("authorization");
+		const session = await auth.api.getSession({ headers: sessionHeaders });
 
 		// Get API key from Authorization header
-		const apiKey =
-			request.headers.get("Authorization")?.replace("Bearer ", "") || "";
+		const authorization = request.headers.get("authorization");
+		const apiKey = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || "";
 
 		// Verify API key if provided
 		const authApi = auth.api as {

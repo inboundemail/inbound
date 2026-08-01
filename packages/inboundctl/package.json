@@ -1,0 +1,36 @@
+{
+  "name": "inboundctl",
+  "version": "0.1.0",
+  "description": "Agent-first command line interface for Inbound",
+  "type": "module",
+  "bin": {
+    "inboundctl": "./dist/inboundctl.js"
+  },
+  "files": [
+    "dist",
+    "skills"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/r44vc0rp/inbound.git",
+    "directory": "packages/inboundctl"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "bun build ./src/inboundctl.ts --target=node --format=esm --outfile ./dist/inboundctl.js --banner '#!/usr/bin/env node'",
+    "prepublishOnly": "bun run build",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src tests"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "typescript": "^5.9.0"
+  }
+}

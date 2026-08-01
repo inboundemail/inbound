@@ -17,6 +17,12 @@ function LoginContentInner() {
 	const [passkeyError, setPasskeyError] = useState<string | null>(null);
 	const [magicLinkSent, setMagicLinkSent] = useState(false);
 	const [magicLinkEmail, setMagicLinkEmail] = useState("");
+	const requestedRedirect = searchParams.get("redirect");
+	const callbackURL =
+		requestedRedirect?.startsWith("/") && !requestedRedirect.startsWith("//")
+			? requestedRedirect
+			: "/logs";
+	const loginURL = `/login?redirect=${encodeURIComponent(callbackURL)}`;
 
 	useEffect(() => {
 		const success = searchParams.get("success");
@@ -145,7 +151,7 @@ function LoginContentInner() {
 									onClick={() => {
 										setMagicLinkError(null);
 										setErrorType(null);
-										router.replace("/login");
+										router.replace(loginURL);
 									}}
 									className="w-full"
 								>
@@ -163,7 +169,7 @@ function LoginContentInner() {
 								onClick={() => {
 									setMagicLinkError(null);
 									setErrorType(null);
-									router.replace("/login");
+									router.replace(loginURL);
 								}}
 								className="w-full"
 							>
@@ -243,6 +249,7 @@ function LoginContentInner() {
 				</Link>
 				<div className="w-full flex flex-col gap-6">
 					<LoginForm
+						callbackURL={callbackURL}
 						onMagicLinkSent={(email) => {
 							setMagicLinkSent(true);
 							setMagicLinkEmail(email);

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "inbound": "bun run packages/inbound-cli/src/bin/inbound.ts",
+    "inboundctl": "bun run packages/inboundctl/src/inboundctl.ts",
     "generate:openapi": "bun run scripts/generate-openapi.ts",
     "verify:openapi": "bun run scripts/verify-openapi.ts",
     "stainless:build": "stl builds create --openapi-spec public/openapi.json --stainless-config stainless.yml --branch main --wait",

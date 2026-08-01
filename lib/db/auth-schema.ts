@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, index } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
 	id: text('id').primaryKey(),
@@ -105,3 +105,27 @@ export const passkey = pgTable("passkey", {
 	index('passkey_user_id_idx').on(table.userId),
 	index('passkey_credential_id_idx').on(table.credentialID),
 ]);
+
+export const deviceCode = pgTable(
+	"device_code",
+	{
+		id: text("id").primaryKey(),
+		deviceCode: text("device_code").notNull(),
+		userCode: text("user_code").notNull(),
+		userId: text("user_id").references(() => user.id, {
+			onDelete: "cascade",
+		}),
+		expiresAt: timestamp("expires_at").notNull(),
+		status: text("status").notNull(),
+		lastPolledAt: timestamp("last_polled_at"),
+		pollingInterval: integer("polling_interval"),
+		clientId: text("client_id"),
+		scope: text("scope"),
+	},
+	(table) => [
+		uniqueIndex("device_code_device_code_idx").on(table.deviceCode),
+		uniqueIndex("device_code_user_code_idx").on(table.userCode),
+		index("device_code_user_id_idx").on(table.userId),
+		index("device_code_expires_at_idx").on(table.expiresAt),
+	],
+);

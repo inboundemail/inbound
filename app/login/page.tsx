@@ -3,7 +3,19 @@ import { redirect } from "next/navigation";
 import { LoginContent } from "@/components/marketing/login-content";
 import { auth } from "@/lib/auth/auth";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+	searchParams,
+}: {
+	searchParams: Promise<{ redirect?: string | string[] }>;
+}) {
+	const params = await searchParams;
+	const requestedRedirect = Array.isArray(params.redirect)
+		? params.redirect[0]
+		: params.redirect;
+	const callbackURL =
+		requestedRedirect?.startsWith("/") && !requestedRedirect.startsWith("//")
+			? requestedRedirect
+			: "/logs";
 	const session = await auth.api
 		.getSession({
 			headers: await headers(),
@@ -11,7 +23,7 @@ export default async function LoginPage() {
 		.catch(() => null);
 
 	if (session?.user) {
-		redirect("/logs");
+		redirect(callbackURL);
 	}
 
 	return (

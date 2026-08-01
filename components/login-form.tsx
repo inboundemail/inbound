@@ -13,12 +13,14 @@ import { cn } from "@/lib/utils";
 interface LoginFormProps extends React.ComponentPropsWithoutRef<"form"> {
 	onMagicLinkSent?: (email: string) => void;
 	onPasskeyError?: (error: string) => void;
+	callbackURL?: string;
 }
 
 export function LoginForm({
 	className,
 	onMagicLinkSent,
 	onPasskeyError,
+	callbackURL = "/logs",
 	...props
 }: LoginFormProps) {
 	const [isGoogleLoading, setIsGoogleLoading] = useState(false);
@@ -28,11 +30,15 @@ export function LoginForm({
 	const [email, setEmail] = useState("");
 	const [lastUsedMethod, setLastUsedMethod] = useState<string | null>(null);
 	const [passkeyAvailable, setPasskeyAvailable] = useState(false);
+	const errorCallbackURL = `/login?error=auth_failed&redirect=${encodeURIComponent(callbackURL)}`;
 
 	// Get the last used login method on component mount and check passkey support
 	useEffect(() => {
 		// Use type assertion since TypeScript might not recognize the method yet
-		const lastMethod = (authClient as any).getLastUsedLoginMethod?.();
+		const client = authClient as typeof authClient & {
+			getLastUsedLoginMethod?: () => string | null;
+		};
+		const lastMethod = client.getLastUsedLoginMethod?.();
 		setLastUsedMethod(lastMethod || null);
 
 		// Check if WebAuthn/Passkeys are available
@@ -48,8 +54,8 @@ export function LoginForm({
 		try {
 			await authClient.signIn.social({
 				provider: "github",
-				callbackURL: "/logs",
-				errorCallbackURL: "/login?error=auth_failed",
+				callbackURL,
+				errorCallbackURL,
 			});
 			// Don't reset loading state here as we'll be redirecting
 		} catch (error) {
@@ -63,8 +69,8 @@ export function LoginForm({
 		try {
 			await authClient.signIn.social({
 				provider: "google",
-				callbackURL: "/logs",
-				errorCallbackURL: "/login?error=auth_failed",
+				callbackURL,
+				errorCallbackURL,
 			});
 			// Don't reset loading state here as we'll be redirecting
 		} catch (error) {
@@ -88,9 +94,9 @@ export function LoginForm({
 
 		setIsMagicLinkLoading(true);
 		try {
-			const { data, error } = await (authClient.signIn as any).magicLink({
+			const { error } = await authClient.signIn.magicLink({
 				email: email.trim(),
-				callbackURL: "/login?success=magic_link", // Will show success state before redirect
+				callbackURL,
 			});
 
 			if (error) {
@@ -121,7 +127,7 @@ export function LoginForm({
 			}
 
 			toast.success("Signed in with passkey!");
-			window.location.href = "/logs";
+			window.location.href = callbackURL;
 		} catch (error) {
 			console.error("Passkey sign in error:", error);
 
@@ -294,7 +300,6 @@ export function LoginForm({
 					/>
 					<Input
 						className="pl-9"
-						id="email"
 						type="email"
 						placeholder="Enter your email…"
 						value={email}

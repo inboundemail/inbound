@@ -11,6 +11,7 @@ import {
 import {
 	account,
 	apikey,
+	deviceCode,
 	passkey,
 	session,
 	user,
@@ -693,7 +694,7 @@ export const SCHEDULED_EMAIL_STATUS = {
 } as const;
 
 // Export types for Better Auth tables (using the imported tables)
-export { user, session, account, verification, apikey, passkey };
+export { user, session, account, verification, apikey, passkey, deviceCode };
 
 export type User = typeof user.$inferSelect;
 export type NewUser = typeof user.$inferInsert;

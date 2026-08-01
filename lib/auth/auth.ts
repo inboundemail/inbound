@@ -4,7 +4,13 @@ import { render } from "@react-email/components";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
-import { admin, magicLink, oAuthProxy } from "better-auth/plugins";
+import {
+	admin,
+	bearer,
+	deviceAuthorization,
+	magicLink,
+	oAuthProxy,
+} from "better-auth/plugins";
 import { and, eq } from "drizzle-orm";
 import Inbound from "inboundemail";
 
@@ -159,6 +165,14 @@ export const auth = betterAuth({
 						? `https://${process.env.VERCEL_BRANCH_URL}`
 						: undefined,
 		}),
+		bearer(),
+		deviceAuthorization({
+			verificationUri: "/device",
+			expiresIn: "10m",
+			interval: "5s",
+			userCodeLength: 8,
+			validateClient: (clientId) => clientId === "inboundctl",
+		}),
 		apiKey({
 			// E2 endpoints already enforce account-level rate limits. Disabling
 			// Better Auth's per-key limiter avoids turning valid internal traffic
@@ -218,6 +232,8 @@ export const auth = betterAuth({
 			}
 		}),
 		after: createAuthMiddleware(async (ctx) => {
+			if (ctx.path === "/device/token") return;
+
 			// Check if this is actually a new user creation (not just a login)
 			if (ctx.context.newSession?.user) {
 				const user = ctx.context.newSession.user;
@@ -235,6 +251,17 @@ export const auth = betterAuth({
 					// Redirect to onboarding page
 					throw ctx.redirect("/onboarding-demo");
 				} else {
+					const location = ctx.context.responseHeaders?.get("location");
+					const responsePath = location
+						? new URL(location, ctx.context.baseURL).pathname
+						: null;
+					if (
+						ctx.path === "/passkey/verify-authentication" ||
+						responsePath === "/device"
+					) {
+						return;
+					}
+
 					console.log("Existing user logged in with email: ", user.email);
 					// need to redirect to dashboard
 					throw ctx.redirect("/logs");

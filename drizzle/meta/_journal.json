@@ -456,6 +456,13 @@
       "when": 1777051767161,
       "tag": "0064_api_key_reference_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1785603702237,
+      "tag": "0065_device_authorization",
+      "breakpoints": true
     }
   ]
 }
