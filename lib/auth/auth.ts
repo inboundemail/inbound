@@ -13,8 +13,10 @@ import {
 } from "better-auth/plugins";
 import { and, eq } from "drizzle-orm";
 import Inbound from "inboundemail";
+import { nanoid } from "nanoid";
 
 import MagicLinkEmail from "@/emails/magic-link-email";
+import WelcomeSignupEmail from "@/emails/welcome-signup";
 import { db } from "../db/index";
 import * as schema from "../db/schema";
 
@@ -218,6 +220,34 @@ export const auth = betterAuth({
 			},
 		}),
 	],
+	databaseHooks: {
+		user: {
+			create: {
+				after: async (user) => {
+					// Personal welcome email from Ryan on every new signup.
+					// Fire-and-forget: never block or fail the signup flow.
+					try {
+						const firstName = user.name?.trim().split(/\s+/)[0];
+						const html = await render(
+							WelcomeSignupEmail({ userFirstname: firstName }),
+						);
+						const response = await inbound.emails.send({
+							from: "Ryan Vogel <ryan@inbound.new>",
+							to: user.email,
+							reply_to: "ryan@inbound.new",
+							subject: "thanks for signing up for inbound",
+							html,
+							text: `hey${firstName ? ` ${firstName}` : ""} — my name is ryan. i built inbound.\n\nthanks for signing up. if you have any questions, hit a wall, or just want to tell me what you're building, reply to this email and i will most likely be the one who reads it and responds. this is my real email.\n\n— ryan`,
+							tags: [{ name: "type", value: "welcome-signup" }],
+						});
+						console.log("✅ Welcome email sent:", response.id, user.email);
+					} catch (error) {
+						console.error("❌ Error sending welcome email:", error);
+					}
+				},
+			},
+		},
+	},
 	hooks: {
 		before: createAuthMiddleware(async (ctx) => {
 			// Block signups from banned email domains
@@ -234,38 +264,51 @@ export const auth = betterAuth({
 		after: createAuthMiddleware(async (ctx) => {
 			if (ctx.path === "/device/token") return;
 
-			// Check if this is actually a new user creation (not just a login)
 			if (ctx.context.newSession?.user) {
 				const user = ctx.context.newSession.user;
-
-				// Check if user was created very recently (within last 10 seconds)
-				// This indicates actual signup vs existing user login
 				const userCreatedAt = new Date(user.createdAt);
 				const now = new Date();
 				const timeDiffSeconds =
 					(now.getTime() - userCreatedAt.getTime()) / 1000;
+				const [onboarding] = await db
+					.select({ isCompleted: schema.userOnboarding.isCompleted })
+					.from(schema.userOnboarding)
+					.where(eq(schema.userOnboarding.userId, user.id))
+					.limit(1);
+
+				if (onboarding && !onboarding.isCompleted) {
+					throw ctx.redirect("/onboarding");
+				}
 
 				if (timeDiffSeconds < 10) {
 					console.log("New user signed up with email: ", user.email);
-
-					// Redirect to onboarding page
-					throw ctx.redirect("/onboarding-demo");
-				} else {
-					const location = ctx.context.responseHeaders?.get("location");
-					const responsePath = location
-						? new URL(location, ctx.context.baseURL).pathname
-						: null;
-					if (
-						ctx.path === "/passkey/verify-authentication" ||
-						responsePath === "/device"
-					) {
-						return;
-					}
-
-					console.log("Existing user logged in with email: ", user.email);
-					// need to redirect to dashboard
-					throw ctx.redirect("/logs");
+					await db
+						.insert(schema.userOnboarding)
+						.values({
+							id: nanoid(),
+							userId: user.id,
+							isCompleted: false,
+							defaultEndpointCreated: false,
+							createdAt: now,
+							updatedAt: now,
+						})
+						.onConflictDoNothing();
+					throw ctx.redirect("/onboarding");
 				}
+
+				const location = ctx.context.responseHeaders?.get("location");
+				const responsePath = location
+					? new URL(location, ctx.context.baseURL).pathname
+					: null;
+				if (
+					ctx.path === "/passkey/verify-authentication" ||
+					responsePath === "/device"
+				) {
+					return;
+				}
+
+				console.log("Existing user logged in with email: ", user.email);
+				throw ctx.redirect("/logs");
 			}
 		}),
 	},
