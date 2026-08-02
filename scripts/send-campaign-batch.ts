@@ -1,3 +1,5 @@
+/// <reference types="bun-types" />
+
 /**
  * Send a batch of the agent-inbox outreach campaign via inboundctl.
  *
