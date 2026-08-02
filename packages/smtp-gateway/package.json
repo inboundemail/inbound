@@ -1,0 +1,22 @@
+{
+	"name": "@inboundemail/smtp-gateway",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Standalone SMTP submission gateway for smtp.inboundemail.com. Authenticates with Inbound API keys and relays messages through the Inbound send API.",
+	"type": "module",
+	"main": "src/index.ts",
+	"scripts": {
+		"start": "node src/index.ts",
+		"dev": "SMTP_ALLOW_INSECURE_AUTH=true SMTP_STARTTLS_PORT=2587 SMTP_IMPLICIT_TLS_PORT=0 bun run src/index.ts",
+		"deploy": "bash deploy/deploy.sh",
+		"typecheck": "bunx tsc --noEmit"
+	},
+	"dependencies": {
+		"mailparser": "^3.7.1",
+		"smtp-server": "^3.13.6"
+	},
+	"devDependencies": {
+		"@types/mailparser": "^3.4.5",
+		"@types/smtp-server": "^3.5.10"
+	}
+}
