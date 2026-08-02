@@ -20,6 +20,9 @@ ProtectHome=true
 ReadOnlyPaths=/etc/letsencrypt/live /etc/letsencrypt/archive
 PrivateTmp=true
 LimitNOFILE=65536
+MemoryHigh=600M
+MemoryMax=750M
+OOMPolicy=stop
 
 [Install]
 WantedBy=multi-user.target

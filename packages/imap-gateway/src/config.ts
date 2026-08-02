@@ -8,6 +8,11 @@ export interface ImapConfig {
 	databaseUrl: string;
 	apiBaseUrl: string;
 	maxConnections: number;
+	maxConnectionsPerIp: number;
+	authFailureLimit: number;
+	authFailureWindowMs: number;
+	appendMaxBytesPerUser: number;
+	appendMaxMessagesPerUser: number;
 }
 
 function envNumber(name: string, fallback: number): number {
@@ -32,6 +37,20 @@ export function loadConfig(): ImapConfig {
 		apiBaseUrl: (
 			process.env.INBOUND_API_BASE_URL ?? "https://inbound.new/api/e2"
 		).replace(/\/$/, ""),
-		maxConnections: envNumber("IMAP_MAX_CONNECTIONS", 500),
+		maxConnections: envNumber("IMAP_MAX_CONNECTIONS", 200),
+		maxConnectionsPerIp: envNumber("IMAP_MAX_CONNECTIONS_PER_IP", 20),
+		authFailureLimit: envNumber("IMAP_AUTH_FAILURE_LIMIT", 10),
+		authFailureWindowMs: envNumber(
+			"IMAP_AUTH_FAILURE_WINDOW_MS",
+			15 * 60_000,
+		),
+		appendMaxBytesPerUser: envNumber(
+			"IMAP_APPEND_MAX_BYTES_PER_USER",
+			250 * 1024 * 1024,
+		),
+		appendMaxMessagesPerUser: envNumber(
+			"IMAP_APPEND_MAX_MESSAGES_PER_USER",
+			5_000,
+		),
 	};
 }

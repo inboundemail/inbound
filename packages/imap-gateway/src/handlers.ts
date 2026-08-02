@@ -1,7 +1,8 @@
 import { createRequire } from "node:module";
 import type { ApiAuth } from "./auth.ts";
-import { SPECIAL_USE } from "./db.ts";
+import { AppendQuotaError, SPECIAL_USE } from "./db.ts";
 import type { FlagAction, MailStore } from "./db.ts";
+import type { ConnectionLimits } from "./limits.ts";
 
 const require = createRequire(import.meta.url);
 const { imapHandler } = require("../vendor/imap-core/index.js");
@@ -29,6 +30,7 @@ type Callback = (err: Error | null, ...rest: unknown[]) => void;
 
 interface ImapSession {
 	user?: { id: string; username: string; address: string };
+	remoteAddress?: string;
 	formatResponse: (command: string, uid: number, data: unknown) => unknown;
 	getQueryResponse: (
 		query: unknown,
@@ -68,7 +70,11 @@ const logger = {
 	error: (...args: unknown[]) => console.error("[imap]", ...args),
 };
 
-export function buildHandlers(auth: ApiAuth, store: MailStore) {
+export function buildHandlers(
+	auth: ApiAuth,
+	store: MailStore,
+	limits: ConnectionLimits,
+) {
 	async function openMailbox(session: ImapSession, path: string) {
 		const user = session.user;
 		if (!user?.address) throw new Error("Not authenticated");
@@ -89,14 +95,22 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 		logger,
 
 		onAuth(authData: AuthData, _session: ImapSession, callback: Callback) {
+			const ip = _session.remoteAddress ?? "unknown";
+			const limited = limits.assertAuthAllowed(ip);
+			if (limited) return callback(limited);
 			const address = authData.username.trim().toLowerCase();
 			if (!address.includes("@") || !authData.password) {
+				limits.recordAuthFailure(ip);
 				return callback(new Error("Invalid credentials"));
 			}
 			auth
 				.authenticate(address, authData.password)
 				.then((result) => {
-					if (!result) return callback(new Error("Invalid credentials"));
+					if (!result) {
+						limits.recordAuthFailure(ip);
+						return callback(new Error("Invalid credentials"));
+					}
+					limits.recordAuthSuccess(ip);
 					callback(null, {
 						user: { id: result.userId, username: address, address },
 					});
@@ -242,7 +256,12 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 				return { success: true as const, info };
 			})()
 				.then(({ success, info }) => callback(null, success, info))
-				.catch((err: Error) => callback(err));
+				.catch((err: Error) => {
+					if (err instanceof AppendQuotaError) {
+						return callback(null, "OVERQUOTA", null);
+					}
+					callback(err);
+				});
 		},
 
 		onCopy(
@@ -387,12 +406,12 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 
 		onExpunge(
 			mailboxId: string,
-			_update: unknown,
+			update: { isUid: boolean; messages?: number[] },
 			_session: ImapSession,
 			callback: Callback,
 		) {
 			store
-				.expunge(mailboxId)
+				.expunge(mailboxId, update.isUid ? (update.messages ?? []) : undefined)
 				.then(() => callback(null, true))
 				.catch((err: Error) => callback(err));
 		},

@@ -5,20 +5,36 @@ import { ApiAuth } from "./auth.ts";
 import { loadConfig } from "./config.ts";
 import { MailStore } from "./db.ts";
 import { buildHandlers } from "./handlers.ts";
+import { ConnectionLimits } from "./limits.ts";
 import { PgNotifier } from "./notifier.ts";
 
 const require = createRequire(import.meta.url);
 const { IMAPServer } = require("../vendor/imap-core/index.js");
 
 const config = loadConfig();
-const store = new MailStore(config.databaseUrl);
+const store = new MailStore(config.databaseUrl, {
+	appendMaxBytesPerUser: config.appendMaxBytesPerUser,
+	appendMaxMessagesPerUser: config.appendMaxMessagesPerUser,
+});
 const auth = new ApiAuth(config);
-const handlers = buildHandlers(auth, store);
+const limits = new ConnectionLimits(
+	config.maxConnectionsPerIp,
+	config.authFailureLimit,
+	config.authFailureWindowMs,
+);
+const handlers = buildHandlers(auth, store, limits);
 const notifier = new PgNotifier(
 	config.databaseUrl.replace("-pooler", ""),
 	store,
 );
 await notifier.start();
+const orphanCleanup = setInterval(() => {
+	store.cleanupOrphanedAppendedMessages().catch((err: Error) => {
+		console.error("[imap-gateway] orphan cleanup failed", err.message);
+	});
+}, 60 * 60_000);
+orphanCleanup.unref();
+await store.cleanupOrphanedAppendedMessages();
 
 const tls =
 	config.tlsKeyPath && config.tlsCertPath
@@ -56,6 +72,17 @@ function startServer(secure: boolean, port: number) {
 
 	server.logger = handlers.logger;
 	server.notifier = notifier;
+	server.onConnect = (
+		session: { remoteAddress?: string },
+		callback: (err?: Error | null) => void,
+	) => callback(limits.onConnect(session));
+	server.onClose = (
+		session: { remoteAddress?: string },
+		callback: () => void,
+	) => {
+		limits.onClose(session);
+		callback();
+	};
 	server.onAuth = handlers.onAuth;
 	server.onList = handlers.onList;
 	server.onLsub = handlers.onLsub;
@@ -79,6 +106,7 @@ function startServer(secure: boolean, port: number) {
 	});
 
 	server.listen(port, () => {
+		server.server.maxConnections = config.maxConnections;
 		console.log(
 			`[imap-gateway] ${config.hostname} listening on :${port} (${secure ? "TLS" : "plaintext dev"})`,
 		);

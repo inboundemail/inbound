@@ -44,6 +44,13 @@ export const SPECIAL_USE: Record<string, string> = {
 
 export type FlagAction = "set" | "add" | "remove";
 
+interface MailStoreOptions {
+	appendMaxBytesPerUser: number;
+	appendMaxMessagesPerUser: number;
+}
+
+export class AppendQuotaError extends Error {}
+
 function parseFlags(raw: string): string[] {
 	try {
 		const parsed = JSON.parse(raw) as unknown;
@@ -57,9 +64,11 @@ function parseFlags(raw: string): string[] {
 
 export class MailStore {
 	private sql: postgres.Sql;
+	private options: MailStoreOptions;
 
-	constructor(databaseUrl: string) {
+	constructor(databaseUrl: string, options: MailStoreOptions) {
 		this.sql = postgres(databaseUrl, { max: 10, idle_timeout: 30 });
+		this.options = options;
 	}
 
 	async ensureMailbox(
@@ -177,12 +186,28 @@ export class MailStore {
 	async deleteMailbox(address: string, path: string): Promise<boolean> {
 		return this.sql.begin(async (sql) => {
 			const rows = await sql<{ id: string }[]>`
-				DELETE FROM imap_mailboxes
+				SELECT id FROM imap_mailboxes
 				WHERE address = ${address.toLowerCase()} AND path = ${path}
-				RETURNING id`;
+				FOR UPDATE`;
 			const mailboxId = rows[0]?.id;
 			if (!mailboxId) return false;
-			await sql`DELETE FROM imap_mailbox_messages WHERE mailbox_id = ${mailboxId}`;
+			const deleted = await sql<{ structured_email_id: string; raw_source: string }[]>`
+				DELETE FROM imap_mailbox_messages
+				WHERE mailbox_id = ${mailboxId}
+				RETURNING structured_email_id, raw_source`;
+			await sql`DELETE FROM imap_mailboxes WHERE id = ${mailboxId}`;
+			const appendedIds = deleted
+				.filter((row) => row.raw_source === "appended")
+				.map((row) => row.structured_email_id);
+			if (appendedIds.length > 0) {
+				await sql`
+					DELETE FROM imap_appended_messages am
+					WHERE am.id = ANY(${appendedIds})
+					  AND NOT EXISTS (
+						SELECT 1 FROM imap_mailbox_messages mm
+						WHERE mm.raw_source = 'appended'
+						  AND mm.structured_email_id = am.id)`;
+			}
 			return true;
 		});
 	}
@@ -195,10 +220,29 @@ export class MailStore {
 		internalDate: Date,
 	): Promise<{ uidValidity: number; uid: number }> {
 		return this.sql.begin(async (sql) => {
+			await sql`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+			const usage = await sql<{ message_count: string; total_bytes: string }[]>`
+				SELECT count(*) AS message_count,
+				       coalesce(sum(am.size), 0)::bigint AS total_bytes
+				FROM imap_appended_messages am
+				WHERE am.user_id = ${userId}
+				  AND EXISTS (
+					SELECT 1 FROM imap_mailbox_messages mm
+					WHERE mm.raw_source = 'appended'
+					  AND mm.structured_email_id = am.id)`;
+			const incomingBytes = Buffer.byteLength(raw);
+			const messageCount = Number(usage[0]?.message_count ?? 0);
+			const totalBytes = Number(usage[0]?.total_bytes ?? 0);
+			if (
+				messageCount >= this.options.appendMaxMessagesPerUser ||
+				totalBytes + incomingBytes > this.options.appendMaxBytesPerUser
+			) {
+				throw new AppendQuotaError("APPEND quota exceeded");
+			}
 			const appendedId = randomUUID();
 			await sql`
 				INSERT INTO imap_appended_messages (id, user_id, raw_content, size)
-				VALUES (${appendedId}, ${userId}, ${raw}, ${Buffer.byteLength(raw)})`;
+				VALUES (${appendedId}, ${userId}, ${raw}, ${incomingBytes})`;
 			const locked = await sql<{ uid_next: number; modseq: number }[]>`
 				SELECT uid_next, modseq FROM imap_mailboxes WHERE id = ${mailbox.id} FOR UPDATE`;
 			const uid = locked[0]?.uid_next ?? 1;
@@ -208,7 +252,7 @@ export class MailStore {
 					(id, mailbox_id, structured_email_id, raw_source, uid, flags, internal_date, size, modseq)
 				VALUES (${`${mailbox.id}:${uid}`}, ${mailbox.id}, ${appendedId},
 					'appended', ${uid}, ${JSON.stringify(flags)}, ${internalDate},
-					${Buffer.byteLength(raw)}, ${modseq})`;
+					${incomingBytes}, ${modseq})`;
 			await sql`
 				UPDATE imap_mailboxes
 				SET uid_next = ${uid + 1}, modseq = ${modseq}, updated_at = now()
@@ -275,9 +319,24 @@ export class MailStore {
 	}
 
 	async deleteMessages(mailboxId: string, uids: number[]): Promise<void> {
-		await this.sql`
-			DELETE FROM imap_mailbox_messages
-			WHERE mailbox_id = ${mailboxId} AND uid = ANY(${uids})`;
+		await this.sql.begin(async (sql) => {
+			const deleted = await sql<{ structured_email_id: string; raw_source: string }[]>`
+				DELETE FROM imap_mailbox_messages
+				WHERE mailbox_id = ${mailboxId} AND uid = ANY(${uids})
+				RETURNING structured_email_id, raw_source`;
+			const appendedIds = deleted
+				.filter((row) => row.raw_source === "appended")
+				.map((row) => row.structured_email_id);
+			if (appendedIds.length > 0) {
+				await sql`
+					DELETE FROM imap_appended_messages am
+					WHERE am.id = ANY(${appendedIds})
+					  AND NOT EXISTS (
+						SELECT 1 FROM imap_mailbox_messages mm
+						WHERE mm.raw_source = 'appended'
+						  AND mm.structured_email_id = am.id)`;
+			}
+		});
 	}
 
 	async syncMailbox(mailbox: MailboxRow): Promise<number> {
@@ -460,17 +519,49 @@ export class MailStore {
 		await this.updateFlags(mailboxId, [uid], "add", [flag]);
 	}
 
-	async expunge(mailboxId: string): Promise<number[]> {
-		const rows = await this.listMessages(mailboxId);
-		const doomed = rows
-			.filter((row) => row.flags.includes("\\Deleted"))
-			.map((row) => row.uid);
-		if (doomed.length > 0) {
-			await this.sql`
-				DELETE FROM imap_mailbox_messages
-				WHERE mailbox_id = ${mailboxId} AND uid = ANY(${doomed})`;
-		}
-		return doomed;
+	async expunge(mailboxId: string, requestedUids?: number[]): Promise<number[]> {
+		return this.sql.begin(async (sql) => {
+			const deleted = requestedUids
+				? await sql<
+						{ uid: number; structured_email_id: string; raw_source: string }[]
+					>`
+					DELETE FROM imap_mailbox_messages
+					WHERE mailbox_id = ${mailboxId}
+					  AND flags::jsonb ? '\\Deleted'
+					  AND uid = ANY(${requestedUids})
+					RETURNING uid, structured_email_id, raw_source`
+				: await sql<
+						{ uid: number; structured_email_id: string; raw_source: string }[]
+					>`
+					DELETE FROM imap_mailbox_messages
+					WHERE mailbox_id = ${mailboxId}
+					  AND flags::jsonb ? '\\Deleted'
+					RETURNING uid, structured_email_id, raw_source`;
+			const appendedIds = deleted
+				.filter((row) => row.raw_source === "appended")
+				.map((row) => row.structured_email_id);
+			if (appendedIds.length > 0) {
+				await sql`
+					DELETE FROM imap_appended_messages am
+					WHERE am.id = ANY(${appendedIds})
+					  AND NOT EXISTS (
+						SELECT 1 FROM imap_mailbox_messages mm
+						WHERE mm.raw_source = 'appended'
+						  AND mm.structured_email_id = am.id)`;
+			}
+			return deleted.map((row) => row.uid);
+		});
+	}
+
+	async cleanupOrphanedAppendedMessages(): Promise<number> {
+		const rows = await this.sql<{ id: string }[]>`
+			DELETE FROM imap_appended_messages am
+			WHERE NOT EXISTS (
+				SELECT 1 FROM imap_mailbox_messages mm
+				WHERE mm.raw_source = 'appended'
+				  AND mm.structured_email_id = am.id)
+			RETURNING id`;
+		return rows.length;
 	}
 
 	async end(): Promise<void> {

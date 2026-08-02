@@ -1087,6 +1087,9 @@ export const imapMailboxMessages = pgTable(
 			table.mailboxId,
 			table.uid,
 		),
+		appendedReferenceIdx: index(
+			"imap_mailbox_messages_appended_reference_idx",
+		).on(table.rawSource, table.structuredEmailId),
 	}),
 );
 
@@ -1095,12 +1098,18 @@ export type NewImapMailbox = typeof imapMailboxes.$inferInsert;
 export type ImapMailboxMessage = typeof imapMailboxMessages.$inferSelect;
 export type NewImapMailboxMessage = typeof imapMailboxMessages.$inferInsert;
 
-export const imapAppendedMessages = pgTable("imap_appended_messages", {
-	id: varchar("id", { length: 255 }).primaryKey(),
-	userId: varchar("user_id", { length: 255 }).notNull(),
-	rawContent: text("raw_content").notNull(),
-	size: integer("size"),
-	createdAt: timestamp("created_at").defaultNow(),
-});
+export const imapAppendedMessages = pgTable(
+	"imap_appended_messages",
+	{
+		id: varchar("id", { length: 255 }).primaryKey(),
+		userId: varchar("user_id", { length: 255 }).notNull(),
+		rawContent: text("raw_content").notNull(),
+		size: integer("size"),
+		createdAt: timestamp("created_at").defaultNow(),
+	},
+	(table) => ({
+		userIdIdx: index("imap_appended_messages_user_id_idx").on(table.userId),
+	}),
+);
 
 export type ImapAppendedMessage = typeof imapAppendedMessages.$inferSelect;

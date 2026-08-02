@@ -13,6 +13,8 @@ export interface GatewayConfig {
 	authFailureLimit: number;
 	socketTimeoutMs: number;
 	maxConnections: number;
+	maxConcurrentData: number;
+	maxDataQueue: number;
 }
 
 function envString(name: string, fallback: string): string {
@@ -45,6 +47,8 @@ export function loadConfig(): GatewayConfig {
 		authFailureWindowMs: envNumber("SMTP_AUTH_FAILURE_WINDOW_MS", 15 * 60_000),
 		authFailureLimit: envNumber("SMTP_AUTH_FAILURE_LIMIT", 10),
 		socketTimeoutMs: envNumber("SMTP_SOCKET_TIMEOUT_MS", 60_000),
-		maxConnections: envNumber("SMTP_MAX_CONNECTIONS", 200),
+		maxConnections: envNumber("SMTP_MAX_CONNECTIONS", 50),
+		maxConcurrentData: envNumber("SMTP_MAX_CONCURRENT_DATA", 2),
+		maxDataQueue: envNumber("SMTP_MAX_DATA_QUEUE", 20),
 	};
 }

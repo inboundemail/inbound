@@ -484,6 +484,13 @@
       "when": 1785635078526,
       "tag": "0068_colorful_blob",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1785637406539,
+      "tag": "0069_rich_grim_reaper",
+      "breakpoints": true
     }
   ]
 }

@@ -28,6 +28,8 @@ export class SmtpGateway {
 	private client: InboundApiClient;
 	private authFailures = new Map<string, FailureRecord>();
 	private servers: SMTPServer[] = [];
+	private activeData = 0;
+	private dataQueue: Array<(release: () => void) => void> = [];
 
 	constructor(config: GatewayConfig) {
 		this.config = config;
@@ -164,31 +166,59 @@ export class SmtpGateway {
 			});
 		}
 
-		const raw = await collectStream(stream, this.config.maxMessageBytes);
-		if (stream.sizeExceeded) {
+		const release = await this.acquireDataSlot();
+		try {
+			const raw = await collectStream(stream, this.config.maxMessageBytes);
+			if (stream.sizeExceeded) {
+				throw new SmtpRelayError({
+					responseCode: 552,
+					message: "5.3.4 Message size exceeds fixed maximum message size",
+				});
+			}
+
+			const envelope = {
+				mailFrom: session.envelope.mailFrom
+					? session.envelope.mailFrom.address
+					: null,
+				rcptTo: session.envelope.rcptTo.map((recipient) => recipient.address),
+			};
+
+			const payload = await mapRawMessage(raw, envelope);
+			const result = await this.client.sendEmail(
+				user.apiKey,
+				payload,
+				idempotencyKeyFor(raw, user.apiKey),
+			);
+			console.log(
+				`[smtp-gateway] relayed message ${result.id} from=${payload.from} recipients=${envelope.rcptTo.length}`,
+			);
+			return `Queued as ${result.id}`;
+		} finally {
+			release();
+		}
+	}
+
+	private acquireDataSlot(): Promise<() => void> {
+		if (this.activeData < this.config.maxConcurrentData) {
+			this.activeData++;
+			return Promise.resolve(() => this.releaseDataSlot());
+		}
+		if (this.dataQueue.length >= this.config.maxDataQueue) {
 			throw new SmtpRelayError({
-				responseCode: 552,
-				message: "5.3.4 Message size exceeds fixed maximum message size",
+				responseCode: 451,
+				message: "4.3.2 Gateway busy, try again later",
 			});
 		}
+		return new Promise((resolve) => this.dataQueue.push(resolve));
+	}
 
-		const envelope = {
-			mailFrom: session.envelope.mailFrom
-				? session.envelope.mailFrom.address
-				: null,
-			rcptTo: session.envelope.rcptTo.map((recipient) => recipient.address),
-		};
-
-		const payload = await mapRawMessage(raw, envelope);
-		const result = await this.client.sendEmail(
-			user.apiKey,
-			payload,
-			idempotencyKeyFor(raw, user.apiKey),
-		);
-		console.log(
-			`[smtp-gateway] relayed message ${result.id} from=${payload.from} recipients=${envelope.rcptTo.length}`,
-		);
-		return `Queued as ${result.id}`;
+	private releaseDataSlot(): void {
+		const next = this.dataQueue.shift();
+		if (next) {
+			next(() => this.releaseDataSlot());
+			return;
+		}
+		this.activeData--;
 	}
 
 	private assertNotThrottled(ip: string): void {
