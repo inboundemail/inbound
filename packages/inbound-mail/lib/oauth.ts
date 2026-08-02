@@ -9,6 +9,14 @@ export function oauthIssuer(): string {
 	);
 }
 
+export function oauthResource(): string {
+	const apiBaseUrl = (process.env.INBOUND_API_BASE_URL || "https://inbound.new").replace(
+		/\/$/,
+		"",
+	);
+	return `${apiBaseUrl}/api`;
+}
+
 export function appBaseUrl(requestUrl?: string): string {
 	if (process.env.NEXT_PUBLIC_APP_URL) {
 		return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");

@@ -9,6 +9,7 @@ import {
 	appBaseUrl,
 	callbackUrl,
 	oauthIssuer,
+	oauthResource,
 	OAUTH_MOCK_SELECTION_COOKIE,
 	OAUTH_STATE_COOKIE,
 	OAUTH_VERIFIER_COOKIE,
@@ -125,6 +126,7 @@ export async function GET(request: NextRequest) {
 				code,
 				redirect_uri: callbackUrl(request.url),
 				code_verifier: verifier,
+				resource: oauthResource(),
 			}),
 			cache: "no-store",
 		});

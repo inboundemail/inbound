@@ -173,6 +173,9 @@ describe("Sign in with Inbound", () => {
 		});
 		expect(tokenBody).toBeInstanceOf(URLSearchParams);
 		expect((tokenBody as URLSearchParams).get("code_verifier")).toBe("verifier");
+		expect((tokenBody as URLSearchParams).get("resource")).toBe(
+			"https://inbound.new/api",
+		);
 		expect(session?.accessToken).toBe("access-token");
 		expect(session?.refreshToken).toBe("refresh-token");
 		expect(session?.domainScope.domains).toEqual([
