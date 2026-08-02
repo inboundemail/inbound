@@ -40,9 +40,11 @@ import {
 	useState,
 } from "react";
 import { BrandMark } from "@/components/brand-mark";
+import { EmailHtml } from "@/components/email-html";
 import { LoginScreen } from "@/components/login-screen";
 import { MailboxOnboarding } from "@/components/mailbox-onboarding";
 import { clearMailCache, readMailCache, writeMailCache } from "@/lib/local-cache";
+import { contactsForThread } from "@/lib/mail-format";
 import { inboundMailMode, usesMockMailData } from "@/lib/mail-mode";
 import {
 	configuredFromAddresses,
@@ -343,8 +345,8 @@ function ThreadList({ threads, selectedId, emptyTitle, emptyDescription, onOpen,
 								<div className="thread-avatar" data-category={thread.category}>{initials(sender.name)}</div>
 								<div className="thread-copy">
 								<div className="thread-line thread-line-top">
-									<strong title={thread.participants.map((person) => person.name).join(", ")}>
-										{thread.participants.map((person) => person.name).join(", ")}
+									<strong title={sender.name}>
+										{sender.name}
 									</strong>
 									{thread.messageCount > 1 ? <span className="message-count">{thread.messageCount}</span> : null}
 									<time>{formatMailboxDate(thread.lastMessageAt)}</time>
@@ -471,8 +473,10 @@ function ReadingPane({
 								<time>{formatMessageDate(message.sentAt)}</time>
 								<ChevronDown className="message-chevron" size={15} />
 							</summary>
-							<div className="message-content">
-								{message.bodyText.split("\n").map((line, lineIndex) =>
+							<div className={`message-content ${message.bodyHtml ? "message-content-html" : ""}`}>
+								{message.bodyHtml ? (
+									<EmailHtml html={message.bodyHtml} messageId={message.id} />
+								) : message.bodyText.split("\n").map((line, lineIndex) =>
 									line ? <p key={`${message.id}-${lineIndex}`}>{line}</p> : <br key={`${message.id}-${lineIndex}`} />,
 								)}
 								{message.attachments?.length ? (
@@ -547,13 +551,14 @@ function mapLiveThreads(payload: { threads?: Array<Record<string, unknown>> }): 
 		const latest = (raw.latest_message ?? {}) as Record<string, unknown>;
 		const names = Array.isArray(raw.participant_names) ? raw.participant_names.map(String) : [];
 		const emails = Array.isArray(raw.participant_emails) ? raw.participant_emails.map(String) : [];
+		const participants = contactsForThread(names, emails, latest.from_text);
 		const id = String(raw.id);
 		const body = String(latest.text_preview ?? "Open this conversation to load its messages.");
 		return {
 			id,
 			subject: String(raw.normalized_subject ?? "No subject"),
 			snippet: body,
-			participants: emails.map((email, index) => ({ name: names[index] || email.split("@")[0], email })),
+			participants,
 			lastMessageAt: String(raw.last_message_at ?? new Date().toISOString()),
 			messageCount: Number(raw.message_count ?? 1),
 			unread: Boolean(raw.has_unread),
@@ -566,7 +571,7 @@ function mapLiveThreads(payload: { threads?: Array<Record<string, unknown>> }): 
 				id: String(latest.id ?? `${id}-latest`),
 				threadId: id,
 				direction: latest.type === "outbound" ? "outbound" : "inbound",
-				from: { name: String(latest.from_text ?? names[0] ?? "Unknown sender"), email: emails[0] ?? "" },
+				from: participants[0],
 				to: [],
 				sentAt: String(latest.date ?? raw.last_message_at ?? new Date().toISOString()),
 				bodyText: body,
