@@ -47,7 +47,7 @@ journalctl -u imap-gateway --no-pager --since "-15s" | grep -i listening
 REMOTE
 
 echo "==> smoke test ($IMAP_HOSTNAME:993)"
-out=$(curl -s -m 20 --url "imaps://$IMAP_HOSTNAME:993/" --user 'smoke@example.com:bad-key' -o /dev/null -w '%{exitcode}' || true)
+out=$(curl -s -m 20 --resolve "$IMAP_HOSTNAME:993:$HOST" --url "imaps://$IMAP_HOSTNAME:993/" --user 'smoke@example.com:bad-key' -o /dev/null -w '%{exitcode}' || true)
 if [ "$out" = "67" ]; then
   echo "    imaps://$IMAP_HOSTNAME:993 OK (login denied for bad creds)"
 else

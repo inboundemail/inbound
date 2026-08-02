@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { createSecureContext } from "node:tls";
 import { ApiAuth } from "./auth.ts";
 import { loadConfig } from "./config.ts";
 import { MailStore } from "./db.ts";
@@ -37,6 +38,14 @@ function startServer(secure: boolean, port: number) {
 		useProxy: false,
 		maxConnections: config.maxConnections,
 		...(tls ?? {}),
+		...(tls
+			? {
+					SNICallback: (
+						_servername: string,
+						cb: (err: Error | null, ctx?: unknown) => void,
+					) => cb(null, createSecureContext(tls)),
+				}
+			: {}),
 	});
 
 	server.logger = handlers.logger;
