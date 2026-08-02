@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
+import { buildSearchWhere, type SearchNode } from "./search.ts";
 
 export interface MailboxRow {
 	id: string;
@@ -316,6 +317,21 @@ export class MailStore {
 			}
 			return inserted.length;
 		});
+	}
+
+	async searchMessages(
+		mailboxId: string,
+		query: SearchNode[],
+	): Promise<number[]> {
+		const where = buildSearchWhere(this.sql, query);
+		const rows = await this.sql<{ uid: number }[]>`
+			SELECT mm.uid
+			FROM imap_mailbox_messages mm
+			LEFT JOIN structured_emails se
+				ON mm.raw_source = 'structured' AND se.id = mm.structured_email_id
+			WHERE mm.mailbox_id = ${mailboxId} AND (${where})
+			ORDER BY mm.uid ASC`;
+		return rows.map((row) => row.uid);
 	}
 
 	async getUpdatesSince(

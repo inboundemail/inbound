@@ -358,12 +358,15 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 
 		onSearch(
 			mailboxId: string,
-			_options: unknown,
+			options: { query: unknown; terms: string[]; isUid: boolean },
 			_session: ImapSession,
 			callback: Callback,
 		) {
 			store
-				.listUids(mailboxId)
+				.searchMessages(
+					mailboxId,
+					(options.query ?? []) as import("./search.ts").SearchNode[],
+				)
 				.then((uidList) => {
 					callback(null, { uidList, highestModseq: 0 });
 				})
