@@ -126,13 +126,15 @@ export class SmtpGateway {
 
 		const username = (auth.username ?? "").trim().toLowerCase();
 		const password = (auth.password ?? "").trim();
+		const usernameOk =
+			username === SMTP_USERNAME || username.includes("@");
 
-		if (username !== SMTP_USERNAME || password.length === 0) {
+		if (!usernameOk || password.length === 0) {
 			this.recordFailure(ip);
 			throw new SmtpRelayError({
 				responseCode: 535,
 				message:
-					'5.7.8 Authentication failed: use username "inbound" and your API key as the password',
+					'5.7.8 Authentication failed: use username "inbound" (or your email address) and your API key as the password',
 			});
 		}
 
