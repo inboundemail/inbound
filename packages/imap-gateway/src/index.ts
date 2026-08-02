@@ -5,6 +5,7 @@ import { ApiAuth } from "./auth.ts";
 import { loadConfig } from "./config.ts";
 import { MailStore } from "./db.ts";
 import { buildHandlers } from "./handlers.ts";
+import { PgNotifier } from "./notifier.ts";
 
 const require = createRequire(import.meta.url);
 const { IMAPServer } = require("../vendor/imap-core/index.js");
@@ -13,6 +14,11 @@ const config = loadConfig();
 const store = new MailStore(config.databaseUrl);
 const auth = new ApiAuth(config);
 const handlers = buildHandlers(auth, store);
+const notifier = new PgNotifier(
+	config.databaseUrl.replace("-pooler", ""),
+	store,
+);
+await notifier.start();
 
 const tls =
 	config.tlsKeyPath && config.tlsCertPath
@@ -49,7 +55,7 @@ function startServer(secure: boolean, port: number) {
 	});
 
 	server.logger = handlers.logger;
-	server.notifier = handlers.notifier;
+	server.notifier = notifier;
 	server.onAuth = handlers.onAuth;
 	server.onList = handlers.onList;
 	server.onLsub = handlers.onLsub;

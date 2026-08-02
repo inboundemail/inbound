@@ -88,13 +88,6 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 	return {
 		logger,
 
-		notifier: {
-			addListener: () => undefined,
-			removeListener: () => undefined,
-			releaseConnection: (_data: unknown, done?: Callback) =>
-				done?.(null, true),
-		},
-
 		onAuth(authData: AuthData, _session: ImapSession, callback: Callback) {
 			const address = authData.username.trim().toLowerCase();
 			if (!address.includes("@") || !authData.password) {
@@ -160,7 +153,7 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 						path,
 						uidValidity: mailbox.uidValidity,
 						uidNext: fresh?.uidNext ?? mailbox.uidNext,
-						modifyIndex: 0,
+						modifyIndex: fresh?.modseq ?? mailbox.modseq,
 						uidList,
 						flags: [],
 					});
