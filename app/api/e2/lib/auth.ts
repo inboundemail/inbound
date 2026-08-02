@@ -1,9 +1,27 @@
+import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { eq } from "drizzle-orm";
-import { auth } from "@/lib/auth/auth";
+import { auth, authBaseURL } from "@/lib/auth/auth";
+import {
+	getInboundOAuthSession,
+	INBOUND_DOMAIN_SCOPE,
+	INBOUND_SESSION_CLAIM,
+} from "@/lib/auth/inbound-oauth";
+import {
+	type InboundOAuthSession,
+	inboundOAuthSessionAllowsDomain,
+	parseInboundOAuthSessionReference,
+} from "@/lib/auth/inbound-oauth-session";
 import { db } from "@/lib/db";
 import { apikey, user } from "@/lib/db/auth-schema";
+
+const verifyOAuthAccessToken =
+	oauthProviderResourceClient(auth).getActions().verifyAccessToken;
+const inboundOAuthSessionByRequest = new WeakMap<
+	Request,
+	InboundOAuthSession
+>();
 
 // Initialize Upstash Redis client for rate limiting
 // Only initialize if env vars are present
@@ -81,6 +99,35 @@ function getHeaderRecord(headers: unknown): Record<string, string> {
 	}
 
 	return {};
+}
+
+export function getInboundOAuthSessionForRequest(
+	request: Request,
+): InboundOAuthSession | null {
+	return inboundOAuthSessionByRequest.get(request) ?? null;
+}
+
+export function inboundOAuthRequestAllowsDomain(
+	request: Request,
+	identifier: string | null | undefined,
+): boolean {
+	const session = getInboundOAuthSessionForRequest(request);
+	return session ? inboundOAuthSessionAllowsDomain(session, identifier) : true;
+}
+
+function isInboundMailOAuthRoute(request: Request): boolean {
+	const pathname = new URL(request.url).pathname.replace(/\/$/u, "");
+	if (request.method === "GET") {
+		return (
+			pathname === "/api/e2/mail/threads" ||
+			pathname.startsWith("/api/e2/mail/threads/")
+		);
+	}
+	if (request.method !== "POST") return false;
+	return (
+		pathname === "/api/e2/emails" ||
+		/^\/api\/e2\/emails\/[^/]+\/reply$/u.test(pathname)
+	);
 }
 
 /**
@@ -173,7 +220,40 @@ export async function validateAndRateLimit(
 			}
 		}
 
-		// Determine userId from either session or API key
+		let oauthSession: InboundOAuthSession | null = null;
+		if (
+			apiKey &&
+			isInboundMailOAuthRoute(request) &&
+			(!apiSession?.valid || apiSession.error || !apiKeyUserId)
+		) {
+			try {
+				const payload = await verifyOAuthAccessToken(apiKey, {
+					verifyOptions: { audience: `${authBaseURL}/api` },
+					scopes: [INBOUND_DOMAIN_SCOPE],
+				});
+				const reference = parseInboundOAuthSessionReference(
+					payload[INBOUND_SESSION_CLAIM],
+				);
+
+				if (reference) {
+					oauthSession = await getInboundOAuthSession(
+						reference.grantId,
+						reference.userId,
+					);
+				}
+
+				if (oauthSession) {
+					inboundOAuthSessionByRequest.set(request, oauthSession);
+				}
+			} catch (error) {
+				console.warn(
+					"OAuth bearer token validation failed:",
+					error instanceof Error ? error.message : "Unknown validation error",
+				);
+			}
+		}
+
+		// Determine userId from a session, API key, or scoped OAuth token
 		let userId: string;
 
 		if (session?.user?.id) {
@@ -185,8 +265,14 @@ export async function validateAndRateLimit(
 			console.log("🔑 [E2] Auth Type: API_KEY");
 			console.log("🔑 [E2] API Key:", maskApiKey(apiKey));
 			console.log("✅ API key authentication successful for userId:", userId);
+		} else if (oauthSession) {
+			userId = oauthSession.userId;
+			console.log("🔑 [E2] Auth Type: OAUTH");
+			console.log("✅ OAuth authentication successful for userId:", userId);
 		} else {
-			console.log("❌ Authentication failed: No valid session or API key");
+			console.log(
+				"❌ Authentication failed: No valid session, API key, or OAuth token",
+			);
 			// RFC 7235: 401 responses MUST include WWW-Authenticate header
 			set.status = 401;
 			const unauthorizedHeaders = {

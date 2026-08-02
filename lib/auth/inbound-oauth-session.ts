@@ -18,11 +18,66 @@ export interface InboundOAuthSession {
 	};
 }
 
+export interface InboundOAuthSessionReference {
+	userId: string;
+	grantId: string;
+}
+
 interface InboundGrantShape {
 	id: string;
 	userId: string;
 	mode: string;
 	domainIds: string[];
+}
+
+export function parseInboundOAuthSessionReference(
+	value: unknown,
+): InboundOAuthSessionReference | null {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+	const claim = value as Record<string, unknown>;
+	if (
+		typeof claim.userId !== "string" ||
+		claim.userId.length === 0 ||
+		typeof claim.grantId !== "string" ||
+		claim.grantId.length === 0
+	) {
+		return null;
+	}
+
+	return { userId: claim.userId, grantId: claim.grantId };
+}
+
+export function inboundOAuthSessionAllowsDomain(
+	session: InboundOAuthSession,
+	identifier: string | null | undefined,
+): boolean {
+	if (!identifier) return false;
+
+	const normalizedIdentifier = identifier.trim().toLowerCase();
+	if (!normalizedIdentifier) return false;
+
+	const angleBracketAddress = normalizedIdentifier.match(/<([^<>]+)>/u)?.[1];
+	const addressOrDomain = angleBracketAddress ?? normalizedIdentifier;
+	const atIndex = addressOrDomain.lastIndexOf("@");
+	const domain = (
+		atIndex >= 0 ? addressOrDomain.slice(atIndex + 1) : addressOrDomain
+	)
+		.replace(/^@/u, "")
+		.replace(/[>\s]+$/u, "");
+
+	return session.domainScope.domains.some(
+		(allowedDomain) =>
+			allowedDomain.id.toLowerCase() === normalizedIdentifier ||
+			allowedDomain.domain.toLowerCase() === domain,
+	);
+}
+
+export function inboundOAuthNeedsDomainSelection(
+	scopes: readonly string[],
+	validGrantId: string | null,
+): boolean {
+	return scopes.includes(INBOUND_DOMAIN_SCOPE) && validGrantId === null;
 }
 
 export function buildInboundOAuthSession(
@@ -46,7 +101,7 @@ export function buildInboundOAuthSession(
 	const selectedDomains = sortedDomains.filter((domain) =>
 		selectedIds.has(domain.id),
 	);
-	if (selectedIds.size === 0 || selectedDomains.length !== selectedIds.size) {
+	if (selectedDomains.length !== selectedIds.size) {
 		return null;
 	}
 

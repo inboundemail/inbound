@@ -37,7 +37,10 @@ import {
 	processAttachments,
 } from "../helper/attachment-processor";
 import { buildRawEmailMessage } from "../helper/email-builder";
-import { validateAndRateLimit } from "../lib/auth";
+import {
+	inboundOAuthRequestAllowsDomain,
+	validateAndRateLimit,
+} from "../lib/auth";
 
 // Initialize SES client
 const awsRegion = process.env.AWS_REGION || "us-east-2";
@@ -245,6 +248,10 @@ export const sendEmail = new Elysia().post(
 		// Extract sender information
 		const fromAddress = extractEmailAddress(body.from);
 		const fromDomain = extractDomain(body.from);
+		if (!inboundOAuthRequestAllowsDomain(request, fromDomain)) {
+			set.status = 403;
+			return { error: "This OAuth session cannot send from that domain" };
+		}
 
 		console.log("📧 Sender details:", {
 			from: body.from,

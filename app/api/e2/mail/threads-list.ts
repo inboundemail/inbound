@@ -1,15 +1,19 @@
+import { and, desc, eq, like, or, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
-import { validateAndRateLimit } from "../lib/auth";
-import { getThreadParticipantNames } from "../lib/participants";
 import { db } from "@/lib/db";
 import {
-  emailThreads,
-  structuredEmails,
-  sentEmails,
-  emailDomains,
   emailAddresses,
+  emailDomains,
+  emailThreads,
+  sentEmails,
+  structuredEmails,
 } from "@/lib/db/schema";
-import { eq, and, desc, sql, or, like } from "drizzle-orm";
+import {
+  getInboundOAuthSessionForRequest,
+  inboundOAuthRequestAllowsDomain,
+  validateAndRateLimit,
+} from "../lib/auth";
+import { getThreadParticipantNames } from "../lib/participants";
 
 // Query parameters schema with full OpenAPI descriptions
 const ListThreadsQuerySchema = t.Object({
@@ -322,6 +326,15 @@ export const listThreads = new Elysia().get(
     const unreadOnly = query.unread === "true";
     const domainFilter = query.domain;
     const addressFilter = query.address;
+    const oauthSession = getInboundOAuthSessionForRequest(request);
+
+    if (oauthSession && !domainFilter && !addressFilter) {
+      set.status = 403;
+      return {
+        error:
+          "A domain or address filter is required for a domain-scoped OAuth session",
+      };
+    }
 
     console.log("📋 Query params:", {
       limit,
@@ -360,6 +373,10 @@ export const listThreads = new Elysia().get(
 
       // Use resolved domain or raw filter value
       resolvedDomain = domain.length > 0 ? domain[0].domain : domainFilter;
+      if (!inboundOAuthRequestAllowsDomain(request, resolvedDomain)) {
+        set.status = 403;
+        return { error: "This OAuth session cannot access that domain" };
+      }
       conditions.push(
         like(emailThreads.participantEmails, `%@${resolvedDomain}%`)
       );
@@ -384,6 +401,10 @@ export const listThreads = new Elysia().get(
 
       // Use resolved address or raw filter value
       resolvedAddress = address.length > 0 ? address[0].address : addressFilter;
+      if (!inboundOAuthRequestAllowsDomain(request, resolvedAddress)) {
+        set.status = 403;
+        return { error: "This OAuth session cannot access that address" };
+      }
       conditions.push(
         like(emailThreads.participantEmails, `%${resolvedAddress}%`)
       );
@@ -572,6 +593,7 @@ export const listThreads = new Elysia().get(
       200: ListThreadsResponse,
       400: ListThreadsErrorResponse,
       401: ListThreadsErrorResponse,
+      403: ListThreadsErrorResponse,
       500: ListThreadsErrorResponse,
     },
     detail: {

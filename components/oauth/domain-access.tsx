@@ -34,9 +34,7 @@ export function DomainAccess({
 	const idPrefix = useId();
 	const allDomainsId = `${idPrefix}-all`;
 	const selectedDomainsId = `${idPrefix}-selected`;
-	const [mode, setMode] = useState<InboundDomainScopeMode>(
-		domains.length > 0 ? "selected" : "all",
-	);
+	const [mode, setMode] = useState<InboundDomainScopeMode>("selected");
 	const [selectedIds, setSelectedIds] = useState(
 		() => new Set(domains.map((domain) => domain.id)),
 	);
@@ -55,11 +53,6 @@ export function DomainAccess({
 	}
 
 	async function allow() {
-		if (mode === "selected" && selectedIds.size === 0) {
-			setError("Choose at least one domain.");
-			return;
-		}
-
 		setPendingAction("allow");
 		setError(null);
 		const response = await fetch("/api/oauth/domain-grants", {
@@ -160,7 +153,6 @@ export function DomainAccess({
 									id={selectedDomainsId}
 									value="selected"
 									className="mt-0.5"
-									disabled={domains.length === 0}
 								/>
 								<span>
 									<span className="block text-sm font-medium">
@@ -175,6 +167,35 @@ export function DomainAccess({
 
 						{mode === "selected" && (
 							<div className="space-y-2 rounded-lg bg-muted p-4">
+								<div className="flex items-center justify-between gap-3 pb-1">
+									<span className="text-xs text-muted-foreground">
+										{selectedIds.size} of {domains.length} selected
+									</span>
+									<div className="flex items-center gap-1">
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											disabled={selectedIds.size === domains.length}
+											onClick={() =>
+												setSelectedIds(
+													new Set(domains.map((domain) => domain.id)),
+												)
+											}
+										>
+											Select all
+										</Button>
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											disabled={selectedIds.size === 0}
+											onClick={() => setSelectedIds(new Set())}
+										>
+											Clear all
+										</Button>
+									</div>
+								</div>
 								{domains.map((domain) => {
 									const checkboxId = `${idPrefix}-${domain.id}`;
 									return (
@@ -195,6 +216,12 @@ export function DomainAccess({
 										</label>
 									);
 								})}
+								{selectedIds.size === 0 && (
+									<p className="pt-1 text-xs leading-5 text-muted-foreground">
+										No domains selected. You can sign in, but this application
+										will not have access to any domain.
+									</p>
+								)}
 							</div>
 						)}
 
@@ -212,10 +239,7 @@ export function DomainAccess({
 								Deny
 							</Button>
 							<Button
-								disabled={
-									pendingAction !== null ||
-									(mode === "selected" && selectedIds.size === 0)
-								}
+								disabled={pendingAction !== null}
 								onClick={() => void allow()}
 							>
 								{pendingAction === "allow" && (

@@ -1,9 +1,13 @@
+import { and, asc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
-import { validateAndRateLimit } from "../lib/auth";
-import { getThreadParticipantNames } from "../lib/participants";
 import { db } from "@/lib/db";
-import { emailThreads, structuredEmails, sentEmails } from "@/lib/db/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { emailThreads, sentEmails, structuredEmails } from "@/lib/db/schema";
+import {
+  getInboundOAuthSessionForRequest,
+  inboundOAuthRequestAllowsDomain,
+  validateAndRateLimit,
+} from "../lib/auth";
+import { getThreadParticipantNames } from "../lib/participants";
 
 // Attachment schema
 const AttachmentSchema = t.Object({
@@ -254,6 +258,16 @@ export const getThread = new Elysia().get(
     const threadDetails = thread[0];
     console.log(`📊 Thread found: ${threadDetails.messageCount} messages`);
 
+    // Parse participant emails once for both authorization and the response.
+    let participantEmails: string[] = [];
+    try {
+      participantEmails = threadDetails.participantEmails
+        ? JSON.parse(threadDetails.participantEmails)
+        : [];
+    } catch (e) {
+      console.error("Failed to parse participant emails:", e);
+    }
+
     // Get all inbound messages in the thread
     console.log("📥 Fetching inbound messages");
     const inboundMessages = await db
@@ -280,6 +294,20 @@ export const getThread = new Elysia().get(
     console.log(
       `📊 Found ${inboundMessages.length} inbound and ${outboundMessages.length} outbound messages`
     );
+
+    const oauthSession = getInboundOAuthSessionForRequest(request);
+    const oauthCanAccessThread =
+      !oauthSession ||
+      inboundMessages.some((email) =>
+        inboundOAuthRequestAllowsDomain(request, email.recipient)
+      ) ||
+      outboundMessages.some((email) =>
+        inboundOAuthRequestAllowsDomain(request, email.fromAddress)
+      );
+    if (!oauthCanAccessThread) {
+      set.status = 403;
+      return { error: "This OAuth session cannot access that thread" };
+    }
 
     // Convert to unified message format
     const messages: any[] = [];
@@ -413,16 +441,6 @@ export const getThread = new Elysia().get(
     // Sort messages by thread position
     messages.sort((a, b) => a.thread_position - b.thread_position);
 
-    // Parse participant emails
-    let participantEmails: string[] = [];
-    try {
-      participantEmails = threadDetails.participantEmails
-        ? JSON.parse(threadDetails.participantEmails)
-        : [];
-    } catch (e) {
-      console.error("Failed to parse participant emails:", e);
-    }
-
     // Get formatted participant names (e.g., "First Last <email@domain.com>")
     const participantNames = await getThreadParticipantNames(threadId, userId);
 
@@ -460,6 +478,7 @@ export const getThread = new Elysia().get(
       200: GetThreadResponse,
       400: GetThreadErrorResponse,
       401: GetThreadErrorResponse,
+      403: GetThreadErrorResponse,
       404: GetThreadErrorResponse,
       500: GetThreadErrorResponse,
     },

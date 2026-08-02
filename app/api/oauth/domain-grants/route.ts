@@ -1,25 +1,12 @@
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
-import { z } from "zod";
 
 import { auth } from "@/lib/auth/auth";
 import { INBOUND_DOMAIN_SCOPE } from "@/lib/auth/inbound-oauth";
+import { parseInboundOAuthGrantSelection } from "@/lib/auth/inbound-oauth-grant";
 import { db } from "@/lib/db";
 import { emailDomains, inboundOAuthGrants, oauthClient } from "@/lib/db/schema";
-
-const grantSchema = z.discriminatedUnion("mode", [
-	z.object({
-		mode: z.literal("all"),
-		clientId: z.string().min(1).max(255),
-		domainIds: z.array(z.string()).max(250).optional(),
-	}),
-	z.object({
-		mode: z.literal("selected"),
-		clientId: z.string().min(1).max(255),
-		domainIds: z.array(z.string().min(1).max(255)).min(1).max(250),
-	}),
-]);
 
 export async function POST(request: Request) {
 	const session = await auth.api.getSession({ headers: request.headers });
@@ -27,12 +14,12 @@ export async function POST(request: Request) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
-	const parsedBody = grantSchema.safeParse(
+	const grantSelection = parseInboundOAuthGrantSelection(
 		await request.json().catch(() => null),
 	);
-	if (!parsedBody.success) {
+	if (!grantSelection) {
 		return NextResponse.json(
-			{ error: "Choose all domains or at least one specific domain." },
+			{ error: "Choose a valid domain access option." },
 			{ status: 400 },
 		);
 	}
@@ -44,7 +31,7 @@ export async function POST(request: Request) {
 			scopes: oauthClient.scopes,
 		})
 		.from(oauthClient)
-		.where(eq(oauthClient.clientId, parsedBody.data.clientId))
+		.where(eq(oauthClient.clientId, grantSelection.clientId))
 		.limit(1);
 	if (
 		!client ||
@@ -57,11 +44,8 @@ export async function POST(request: Request) {
 		);
 	}
 
-	const requestedDomainIds =
-		parsedBody.data.mode === "selected"
-			? [...new Set(parsedBody.data.domainIds)]
-			: [];
-	if (parsedBody.data.mode === "selected") {
+	const requestedDomainIds = grantSelection.domainIds;
+	if (grantSelection.mode === "selected") {
 		const ownedDomains = await db
 			.select({ id: emailDomains.id })
 			.from(emailDomains)
@@ -81,7 +65,7 @@ export async function POST(request: Request) {
 		userId: session.user.id,
 		sessionId: session.session.id,
 		clientId: client.clientId,
-		mode: parsedBody.data.mode,
+		mode: grantSelection.mode,
 		domainIds: requestedDomainIds,
 		createdAt: new Date(),
 	});

@@ -30,7 +30,10 @@ import {
 	attachmentsToStorageFormat,
 	processAttachments,
 } from "../helper/attachment-processor";
-import { validateAndRateLimit } from "../lib/auth";
+import {
+	inboundOAuthRequestAllowsDomain,
+	validateAndRateLimit,
+} from "../lib/auth";
 
 // Initialize SES client
 const awsRegion = process.env.AWS_REGION || "us-east-2";
@@ -274,6 +277,20 @@ export const replyToEmail = new Elysia().post(
 		}
 
 		const original = originalEmail[0];
+		const originalRecipients = [
+			original.recipient,
+			...extractEmailsFromParsedData(original.toData),
+			...extractEmailsFromParsedData(original.ccData),
+			...extractEmailsFromParsedData(original.bccData),
+		];
+		if (
+			!originalRecipients.some((recipient) =>
+				inboundOAuthRequestAllowsDomain(request, recipient),
+			)
+		) {
+			set.status = 403;
+			return { error: "This OAuth session cannot access that email" };
+		}
 
 		// Validate content
 		if (!body.html && !body.text) {
@@ -328,6 +345,10 @@ export const replyToEmail = new Elysia().post(
 		}
 
 		const formattedFromAddress = formatSenderAddress(fromAddress, senderName);
+		if (!inboundOAuthRequestAllowsDomain(request, fromDomain)) {
+			set.status = 403;
+			return { error: "This OAuth session cannot send from that domain" };
+		}
 		console.log(`📧 [${requestId}] From address components:`, {
 			rawFrom: body.from,
 			extractedAddress: fromAddress,

@@ -72,6 +72,25 @@ export async function getRecentInboundOAuthGrantId({
 	return grant?.id ?? null;
 }
 
+export async function getValidRecentInboundOAuthGrantId({
+	userId,
+	sessionId,
+	clientId,
+}: {
+	userId: string;
+	sessionId: string;
+	clientId: string;
+}): Promise<string | null> {
+	const grantId = await getRecentInboundOAuthGrantId({
+		userId,
+		sessionId,
+		clientId,
+	});
+	if (!grantId) return null;
+
+	return (await getInboundOAuthSession(grantId, userId)) ? grantId : null;
+}
+
 export async function getCurrentOAuthClientId(): Promise<string | null> {
 	const state = await getOAuthProviderState();
 	if (!state?.query) return null;

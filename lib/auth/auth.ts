@@ -22,10 +22,11 @@ import WelcomeSignupEmail from "@/emails/welcome-signup";
 import {
 	getCurrentOAuthClientId,
 	getInboundOAuthSession,
-	getRecentInboundOAuthGrantId,
+	getValidRecentInboundOAuthGrantId,
 	INBOUND_DOMAIN_SCOPE,
 	INBOUND_SESSION_CLAIM,
 } from "@/lib/auth/inbound-oauth";
+import { inboundOAuthNeedsDomainSelection } from "@/lib/auth/inbound-oauth-session";
 import { db } from "../db/index";
 import * as schema from "../db/schema";
 
@@ -87,7 +88,7 @@ const inbound = new Inbound({
 			: undefined,
 });
 
-const authBaseURL =
+export const authBaseURL =
 	process.env.NODE_ENV === "development"
 		? process.env.NEXT_PUBLIC_APP_URL
 		: process.env.VERCEL_ENV === "preview"
@@ -207,7 +208,18 @@ export const auth = betterAuth({
 			clientPrivileges: ({ user }) => user?.role === "admin",
 			postLogin: {
 				page: "/oauth/domain-access",
-				shouldRedirect: ({ scopes }) => scopes.includes(INBOUND_DOMAIN_SCOPE),
+				shouldRedirect: async ({ user, session, scopes }) => {
+					if (!scopes.includes(INBOUND_DOMAIN_SCOPE)) return false;
+					const clientId = await getCurrentOAuthClientId();
+					const grantId = clientId
+						? await getValidRecentInboundOAuthGrantId({
+								userId: user.id,
+								sessionId: session.id,
+								clientId,
+							})
+						: null;
+					return inboundOAuthNeedsDomainSelection(scopes, grantId);
+				},
 				consentReferenceId: async ({ user, session, scopes }) => {
 					if (!scopes.includes(INBOUND_DOMAIN_SCOPE)) return undefined;
 					const clientId = await getCurrentOAuthClientId();
@@ -217,7 +229,7 @@ export const auth = betterAuth({
 							error_description: "The OAuth client could not be resolved.",
 						});
 					}
-					const grantId = await getRecentInboundOAuthGrantId({
+					const grantId = await getValidRecentInboundOAuthGrantId({
 						userId: user.id,
 						sessionId: session.id,
 						clientId,
@@ -228,7 +240,6 @@ export const auth = betterAuth({
 							error_description: "Select Inbound domain access first.",
 						});
 					}
-					await requireInboundOAuthSession(grantId, user.id);
 					return grantId;
 				},
 			},
