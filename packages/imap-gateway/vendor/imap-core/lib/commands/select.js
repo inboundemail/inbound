@@ -94,7 +94,7 @@ module.exports = {
                 uidList: mailboxData.uidList,
                 notifications: [],
                 condstoreEnabled: this.condstoreEnabled,
-                readOnly: (command.command || '').toString().toUpperCase() === 'EXAMINE' ? true : false,
+                readOnly: mailboxData.readOnly || (command.command || '').toString().toUpperCase() === 'EXAMINE' ? true : false,
                 mailbox: mailboxData._id,
                 path
             };

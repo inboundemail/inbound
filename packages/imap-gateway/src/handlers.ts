@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
-import type { ApiAuth } from "./auth.ts";
-import { AppendQuotaError, SPECIAL_USE } from "./db.ts";
+import type { ApiAuth, AuthenticatedMailbox } from "./auth.ts";
 import type { FlagAction, MailStore } from "./db.ts";
+import { AppendQuotaError, SPECIAL_USE } from "./db.ts";
 import type { ConnectionLimits } from "./limits.ts";
 
 const require = createRequire(import.meta.url);
@@ -29,7 +29,11 @@ function needsContent(query: unknown): boolean {
 type Callback = (err: Error | null, ...rest: unknown[]) => void;
 
 interface ImapSession {
-	user?: { id: string; username: string; address: string };
+	user?: AuthenticatedMailbox & {
+		id: string;
+		username: string;
+		address: string;
+	};
 	remoteAddress?: string;
 	formatResponse: (command: string, uid: number, data: unknown) => unknown;
 	getQueryResponse: (
@@ -78,10 +82,11 @@ export function buildHandlers(
 	async function openMailbox(session: ImapSession, path: string) {
 		const user = session.user;
 		if (!user?.address) throw new Error("Not authenticated");
-		await store.ensureDefaultMailboxes(user.address, user.id);
-		const mailbox = await store.getMailboxByPath(user.address, path);
+		await store.ensureDefaultMailboxes(user);
+		await store.ensureScopeMailboxes(user);
+		const mailbox = await store.getMailboxByPath(user, path);
 		if (!mailbox) return null;
-		await store.syncMailbox(mailbox);
+		await store.syncMailbox(mailbox, user);
 		return mailbox;
 	}
 
@@ -112,7 +117,12 @@ export function buildHandlers(
 					}
 					limits.recordAuthSuccess(ip);
 					callback(null, {
-						user: { id: result.userId, username: address, address },
+						user: {
+							...result,
+							id: result.userId,
+							username: address,
+							address,
+						},
 					});
 				})
 				.catch(() => callback(new Error("Authentication unavailable")));
@@ -121,13 +131,26 @@ export function buildHandlers(
 		onList(_query: string, session: ImapSession, callback: Callback) {
 			(async () => {
 				const user = requireUser(session);
-				await store.ensureDefaultMailboxes(user.address, user.id);
-				const mailboxes = await store.listMailboxes(user.address);
-				return mailboxes.map((mailbox) => ({
+				await store.ensureDefaultMailboxes(user);
+				await store.ensureScopeMailboxes(user);
+				const mailboxes = await store.listMailboxes(user);
+				const folders: Array<{
+					path: string;
+					flags: string[];
+					specialUse: string | false;
+				}> = mailboxes.map((mailbox) => ({
 					path: mailbox.path,
-					flags: [],
+					flags: mailbox.scopeId ? ["\\NoInferiors"] : [],
 					specialUse: SPECIAL_USE[mailbox.path] ?? false,
 				}));
+				if (user.credentialId && user.scopes.length > 0) {
+					folders.push({
+						path: "Scopes",
+						flags: ["\\Noselect", "\\HasChildren"],
+						specialUse: false,
+					});
+				}
+				return folders;
 			})()
 				.then((folders) => callback(null, folders))
 				.catch((err: Error) => callback(err));
@@ -136,11 +159,17 @@ export function buildHandlers(
 		onLsub(_query: string, session: ImapSession, callback: Callback) {
 			(async () => {
 				const user = requireUser(session);
-				const mailboxes = await store.listMailboxes(user.address);
-				return mailboxes.map((mailbox) => ({
-					path: mailbox.path,
-					flags: [],
-				}));
+				const mailboxes = await store.listMailboxes(user);
+				const folders: Array<{ path: string; flags: string[] }> = mailboxes.map(
+					(mailbox) => ({
+						path: mailbox.path,
+						flags: [],
+					}),
+				);
+				if (user.credentialId && user.scopes.length > 0) {
+					folders.push({ path: "Scopes", flags: ["\\Noselect"] });
+				}
+				return folders;
 			})()
 				.then((folders) => callback(null, folders))
 				.catch((err: Error) => callback(err));
@@ -160,7 +189,7 @@ export function buildHandlers(
 					if (!mailbox) return callback(null, "NONEXISTENT");
 					const [uidList, fresh] = await Promise.all([
 						store.listUids(mailbox.id),
-						store.getMailboxByPath(mailbox.address, path),
+						store.getMailboxByPath(requireUser(session), path),
 					]);
 					callback(null, {
 						_id: mailbox.id,
@@ -170,6 +199,7 @@ export function buildHandlers(
 						modifyIndex: fresh?.modseq ?? mailbox.modseq,
 						uidList,
 						flags: [],
+						readOnly: Boolean(mailbox.scopeId),
 					});
 				})
 				.catch((err: Error) => callback(err));
@@ -182,7 +212,7 @@ export function buildHandlers(
 					const [messages, unseen, fresh] = await Promise.all([
 						store.countMessages(mailbox.id),
 						store.unseenCount(mailbox.id),
-						store.getMailboxByPath(mailbox.address, path),
+						store.getMailboxByPath(requireUser(session), path),
 					]);
 					callback(null, {
 						messages,
@@ -198,7 +228,10 @@ export function buildHandlers(
 		onCreate(path: string, session: ImapSession, callback: Callback) {
 			(async () => {
 				const user = requireUser(session);
-				await store.createMailbox(user.address, user.id, path);
+				if (user.accessMode !== "read_write" || path.startsWith("Scopes/")) {
+					return "CANNOT";
+				}
+				await store.createMailbox(user, path);
 				return true;
 			})()
 				.then((ok) => callback(null, ok))
@@ -213,8 +246,14 @@ export function buildHandlers(
 		) {
 			(async () => {
 				const user = requireUser(session);
-				if (path === "INBOX") return "CANNOT";
-				const ok = await store.renameMailbox(user.address, path, newPath);
+				if (
+					user.accessMode !== "read_write" ||
+					path === "INBOX" ||
+					path.startsWith("Scopes/") ||
+					newPath.startsWith("Scopes/")
+				)
+					return "CANNOT";
+				const ok = await store.renameMailbox(user, path, newPath);
 				return ok ? true : "NONEXISTENT";
 			})()
 				.then((result) => callback(null, result))
@@ -224,8 +263,14 @@ export function buildHandlers(
 		onDelete(path: string, session: ImapSession, callback: Callback) {
 			(async () => {
 				const user = requireUser(session);
-				if (path === "INBOX" || SPECIAL_USE[path]) return "CANNOT";
-				const ok = await store.deleteMailbox(user.address, path);
+				if (
+					user.accessMode !== "read_write" ||
+					path === "INBOX" ||
+					SPECIAL_USE[path] ||
+					path.startsWith("Scopes/")
+				)
+					return "CANNOT";
+				const ok = await store.deleteMailbox(user, path);
 				return ok ? true : "NONEXISTENT";
 			})()
 				.then((result) => callback(null, result))
@@ -242,8 +287,11 @@ export function buildHandlers(
 		) {
 			(async () => {
 				const user = requireUser(session);
-				await store.ensureDefaultMailboxes(user.address, user.id);
-				const mailbox = await store.getMailboxByPath(user.address, path);
+				if (user.accessMode !== "read_write" || path.startsWith("Scopes/")) {
+					return { success: "READ-ONLY" as const, info: null };
+				}
+				await store.ensureDefaultMailboxes(user);
+				const mailbox = await store.getMailboxByPath(user, path);
 				if (!mailbox) return { success: "TRYCREATE" as const, info: null };
 				const date = internaldate ? new Date(internaldate) : new Date();
 				const info = await store.appendMessage(
@@ -273,8 +321,13 @@ export function buildHandlers(
 		) {
 			(async () => {
 				const user = requireUser(session);
+				if (
+					user.accessMode !== "read_write" ||
+					update.destination.startsWith("Scopes/")
+				)
+					return { success: "READ-ONLY" as const, info: null };
 				const destination = await store.getMailboxByPath(
-					user.address,
+					user,
 					update.destination,
 				);
 				if (!destination) return { success: "TRYCREATE" as const, info: null };
@@ -297,8 +350,13 @@ export function buildHandlers(
 		) {
 			(async () => {
 				const user = requireUser(session);
+				if (
+					user.accessMode !== "read_write" ||
+					update.destination.startsWith("Scopes/")
+				)
+					return { success: "READ-ONLY" as const, info: null };
 				const destination = await store.getMailboxByPath(
-					user.address,
+					user,
 					update.destination,
 				);
 				if (!destination) return { success: "TRYCREATE" as const, info: null };
@@ -331,13 +389,13 @@ export function buildHandlers(
 						raw = await store.getRawContent(
 							row.structuredEmailId,
 							row.rawSource,
+							requireUser(session).userId,
 						);
 						if (!raw) continue;
 					}
 
 					const flags = [...row.flags];
-					const markAsSeen =
-						options.markAsSeen && !flags.includes("\\Seen");
+					const markAsSeen = options.markAsSeen && !flags.includes("\\Seen");
 					if (markAsSeen) flags.unshift("\\Seen");
 
 					const messageData = {
@@ -398,6 +456,9 @@ export function buildHandlers(
 			_session: ImapSession,
 			callback: Callback,
 		) {
+			if (requireUser(_session).accessMode !== "read_write") {
+				return callback(null, "READ-ONLY", []);
+			}
 			store
 				.updateFlags(mailboxId, update.messages, update.action, update.value)
 				.then(() => callback(null, true, []))
@@ -410,6 +471,9 @@ export function buildHandlers(
 			_session: ImapSession,
 			callback: Callback,
 		) {
+			if (requireUser(_session).accessMode !== "read_write") {
+				return callback(null, "READ-ONLY");
+			}
 			store
 				.expunge(mailboxId, update.isUid ? (update.messages ?? []) : undefined)
 				.then(() => callback(null, true))

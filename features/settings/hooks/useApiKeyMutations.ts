@@ -10,7 +10,10 @@ export const useCreateApiKeyMutation = () => {
 
 	return useMutation({
 		mutationFn: async (data: CreateApiKeyData) => {
-			const { data: result, error } = await authClient.apiKey.create(data);
+			const { data: result, error } = await authClient.apiKey.create({
+				...data,
+				configId: "default",
+			});
 			if (error) {
 				throw new Error(error.message);
 			}
@@ -27,7 +30,11 @@ export const useUpdateApiKeyMutation = () => {
 
 	return useMutation({
 		mutationFn: async ({ keyId, ...updates }: UpdateApiKeyData) => {
-			const { error } = await authClient.apiKey.update({ keyId, ...updates });
+			const { error } = await authClient.apiKey.update({
+				keyId,
+				...updates,
+				configId: "default",
+			});
 			if (error) {
 				throw new Error(error.message);
 			}
@@ -62,7 +69,10 @@ export const useDeleteApiKeyMutation = () => {
 
 	return useMutation({
 		mutationFn: async (keyId: string) => {
-			const { error } = await authClient.apiKey.delete({ keyId });
+			const { error } = await authClient.apiKey.delete({
+				keyId,
+				configId: "default",
+			});
 			if (error) {
 				throw new Error(error.message);
 			}
@@ -95,7 +105,9 @@ export const useRevokeAllApiKeysMutation = () => {
 
 	return useMutation({
 		mutationFn: async () => {
-			const { data, error: listError } = await authClient.apiKey.list();
+			const { data, error: listError } = await authClient.apiKey.list({
+				query: { configId: "default" },
+			});
 			if (listError) {
 				throw new Error(listError.message);
 			}
@@ -117,7 +129,11 @@ export const useRevokeAllApiKeysMutation = () => {
 
 			const results = await Promise.allSettled(
 				enabledKeys.map((key) =>
-					authClient.apiKey.update({ keyId: key.id, enabled: false }),
+					authClient.apiKey.update({
+						keyId: key.id,
+						enabled: false,
+						configId: "default",
+					}),
 				),
 			);
 

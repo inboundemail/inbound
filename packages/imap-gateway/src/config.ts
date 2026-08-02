@@ -40,10 +40,7 @@ export function loadConfig(): ImapConfig {
 		maxConnections: envNumber("IMAP_MAX_CONNECTIONS", 200),
 		maxConnectionsPerIp: envNumber("IMAP_MAX_CONNECTIONS_PER_IP", 20),
 		authFailureLimit: envNumber("IMAP_AUTH_FAILURE_LIMIT", 10),
-		authFailureWindowMs: envNumber(
-			"IMAP_AUTH_FAILURE_WINDOW_MS",
-			15 * 60_000,
-		),
+		authFailureWindowMs: envNumber("IMAP_AUTH_FAILURE_WINDOW_MS", 15 * 60_000),
 		appendMaxBytesPerUser: envNumber(
 			"IMAP_APPEND_MAX_BYTES_PER_USER",
 			250 * 1024 * 1024,

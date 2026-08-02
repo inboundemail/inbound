@@ -49,6 +49,12 @@ import { AuthError } from "../lib/auth";
 import { getThread } from "../mail/threads-get";
 // Inbox routes (threaded conversations)
 import { listThreads } from "../mail/threads-list";
+import { authenticateMailbox } from "../mailboxes/authenticate";
+import { createMailbox } from "../mailboxes/create";
+import { deleteMailbox } from "../mailboxes/delete";
+import { listMailboxes } from "../mailboxes/list";
+import { rotateMailboxPassword } from "../mailboxes/rotate-password";
+import { updateMailbox } from "../mailboxes/update";
 import { checkOnboardingReply } from "../onboarding/check-reply";
 // Onboarding routes
 import { sendOnboardingDemo } from "../onboarding/demo";
@@ -483,6 +489,12 @@ https://inbound.new/api/e2
 	// Inbox routes (threaded conversations)
 	.use(listThreads)
 	.use(getThread)
+	.use(listMailboxes)
+	.use(createMailbox)
+	.use(updateMailbox)
+	.use(deleteMailbox)
+	.use(rotateMailboxPassword)
+	.use(authenticateMailbox)
 	// Onboarding routes
 	.use(sendOnboardingDemo)
 	.use(checkOnboardingReply)

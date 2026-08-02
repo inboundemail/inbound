@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
+import type { AuthenticatedMailbox, MailboxScope } from "./auth.ts";
 import { buildSearchWhere, type SearchNode } from "./search.ts";
 
 export interface MailboxRow {
@@ -9,6 +10,8 @@ export interface MailboxRow {
 	uidValidity: number;
 	uidNext: number;
 	modseq: number;
+	credentialId: string | null;
+	scopeId: string | null;
 }
 
 export interface JournalEntry {
@@ -42,6 +45,10 @@ export const SPECIAL_USE: Record<string, string> = {
 	Junk: "\\Junk",
 };
 
+export function scopeMailboxPath(scope: MailboxScope): string {
+	return `Scopes/${scope.type === "domain" ? `*@${scope.domain}` : scope.address}`;
+}
+
 export type FlagAction = "set" | "add" | "remove";
 
 interface MailStoreOptions {
@@ -72,18 +79,40 @@ export class MailStore {
 	}
 
 	async ensureMailbox(
-		address: string,
-		userId: string,
+		principal: AuthenticatedMailbox,
 		path = "INBOX",
+		scopeId: string | null = null,
 	): Promise<MailboxRow> {
-		const lower = address.toLowerCase();
+		const lower = principal.loginAddress.toLowerCase();
+		await this.sql`
+			UPDATE imap_mailboxes
+			SET credential_id = ${principal.credentialId},
+			    scope_id = ${scopeId},
+			    updated_at = now()
+			WHERE user_id = ${principal.userId}
+			  AND address = ${lower}
+			  AND path = ${path}
+			  AND credential_id IS NULL
+			  AND NOT EXISTS (
+				SELECT 1 FROM imap_mailboxes managed
+				WHERE managed.credential_id = ${principal.credentialId}
+				  AND managed.path = ${path})`;
 		const rows = await this.sql<
-			{ id: string; uid_validity: number; uid_next: number; modseq: number }[]
+			{
+				id: string;
+				uid_validity: number;
+				uid_next: number;
+				modseq: number;
+				scope_id: string | null;
+			}[]
 		>`
-			INSERT INTO imap_mailboxes (id, user_id, address, path, uid_validity)
-			VALUES (${randomUUID()}, ${userId}, ${lower}, ${path}, ${Math.floor(Date.now() / 1000)})
-			ON CONFLICT (address, path) DO UPDATE SET updated_at = now()
-			RETURNING id, uid_validity, uid_next, modseq`;
+			INSERT INTO imap_mailboxes
+				(id, user_id, address, path, uid_validity, credential_id, scope_id)
+			VALUES (${randomUUID()}, ${principal.userId}, ${lower}, ${path},
+				${Math.floor(Date.now() / 1000)}, ${principal.credentialId}, ${scopeId})
+			ON CONFLICT (credential_id, path) DO UPDATE
+			SET updated_at = now(), scope_id = excluded.scope_id
+			RETURNING id, uid_validity, uid_next, modseq, scope_id`;
 		const row = rows[0];
 		if (!row) throw new Error("Failed to ensure mailbox");
 		return {
@@ -93,105 +122,161 @@ export class MailStore {
 			uidValidity: row.uid_validity,
 			uidNext: row.uid_next,
 			modseq: row.modseq,
+			credentialId: principal.credentialId,
+			scopeId: row.scope_id,
 		};
 	}
 
 	async ensureDefaultMailboxes(
-		address: string,
-		userId: string,
+		principal: AuthenticatedMailbox,
 	): Promise<MailboxRow[]> {
 		const result: MailboxRow[] = [];
 		for (const path of DEFAULT_FOLDERS) {
-			result.push(await this.ensureMailbox(address, userId, path));
+			result.push(await this.ensureMailbox(principal, path));
 		}
 		return result;
 	}
 
-	async listMailboxes(address: string): Promise<MailboxRow[]> {
-		const rows = await this.sql<
-			{
-				id: string;
-				path: string;
-				uid_validity: number;
-				uid_next: number;
-				modseq: number;
-			}[]
-		>`
-			SELECT id, path, uid_validity, uid_next, modseq FROM imap_mailboxes
-			WHERE address = ${address.toLowerCase()}
-			ORDER BY path ASC`;
+	async ensureScopeMailboxes(
+		principal: AuthenticatedMailbox,
+	): Promise<MailboxRow[]> {
+		const scopeIds = principal.scopes.map((scope) => scope.id);
+		await this.sql.begin(async (sql) => {
+			const stale = await sql<{ id: string }[]>`
+				SELECT id FROM imap_mailboxes
+				WHERE credential_id = ${principal.credentialId}
+				  AND scope_id IS NOT NULL
+				  AND NOT (scope_id = ANY(${scopeIds}))
+				FOR UPDATE`;
+			const staleIds = stale.map((row) => row.id);
+			if (staleIds.length === 0) return;
+			await sql`
+				DELETE FROM imap_mailbox_messages
+				WHERE mailbox_id = ANY(${staleIds})`;
+			await sql`
+				DELETE FROM imap_mailboxes
+				WHERE id = ANY(${staleIds})`;
+		});
+		const result: MailboxRow[] = [];
+		for (const scope of principal.scopes) {
+			result.push(
+				await this.ensureMailbox(principal, scopeMailboxPath(scope), scope.id),
+			);
+		}
+		return result;
+	}
+
+	async listMailboxes(principal: AuthenticatedMailbox): Promise<MailboxRow[]> {
+		type Row = {
+			id: string;
+			address: string;
+			path: string;
+			uid_validity: number;
+			uid_next: number;
+			modseq: number;
+			credential_id: string | null;
+			scope_id: string | null;
+		};
+		const rows = await this.sql<Row[]>`
+				SELECT id, address, path, uid_validity, uid_next, modseq,
+				       credential_id, scope_id
+				FROM imap_mailboxes
+				WHERE user_id = ${principal.userId}
+				  AND credential_id = ${principal.credentialId}
+				ORDER BY path ASC`;
 		return rows.map((row) => ({
 			id: row.id,
-			address: address.toLowerCase(),
+			address: row.address,
 			path: row.path,
 			uidValidity: row.uid_validity,
 			uidNext: row.uid_next,
 			modseq: row.modseq,
+			credentialId: row.credential_id,
+			scopeId: row.scope_id,
 		}));
 	}
 
 	async getMailboxByPath(
-		address: string,
+		principal: AuthenticatedMailbox,
 		path: string,
 	): Promise<MailboxRow | null> {
-		const rows = await this.sql<
-			{
-				id: string;
-				path: string;
-				uid_validity: number;
-				uid_next: number;
-				modseq: number;
-			}[]
-		>`
-			SELECT id, path, uid_validity, uid_next, modseq FROM imap_mailboxes
-			WHERE address = ${address.toLowerCase()} AND path = ${path}
-			LIMIT 1`;
+		type Row = {
+			id: string;
+			address: string;
+			path: string;
+			uid_validity: number;
+			uid_next: number;
+			modseq: number;
+			credential_id: string | null;
+			scope_id: string | null;
+		};
+		const rows = await this.sql<Row[]>`
+				SELECT id, address, path, uid_validity, uid_next, modseq,
+				       credential_id, scope_id
+				FROM imap_mailboxes
+				WHERE user_id = ${principal.userId}
+				  AND credential_id = ${principal.credentialId}
+				  AND path = ${path}
+				LIMIT 1`;
 		const row = rows[0];
 		if (!row) return null;
 		return {
 			id: row.id,
-			address: address.toLowerCase(),
+			address: row.address,
 			path: row.path,
 			uidValidity: row.uid_validity,
 			uidNext: row.uid_next,
 			modseq: row.modseq,
+			credentialId: row.credential_id,
+			scopeId: row.scope_id,
 		};
 	}
 
 	async createMailbox(
-		address: string,
-		userId: string,
+		principal: AuthenticatedMailbox,
 		path: string,
 	): Promise<boolean> {
 		const rows = await this.sql<{ id: string }[]>`
-			INSERT INTO imap_mailboxes (id, user_id, address, path, uid_validity)
-			VALUES (${randomUUID()}, ${userId}, ${address.toLowerCase()}, ${path}, ${Math.floor(Date.now() / 1000)})
-			ON CONFLICT (address, path) DO NOTHING
-			RETURNING id`;
+				INSERT INTO imap_mailboxes
+					(id, user_id, address, path, uid_validity, credential_id)
+				VALUES (${randomUUID()}, ${principal.userId},
+					${principal.loginAddress.toLowerCase()}, ${path},
+					${Math.floor(Date.now() / 1000)}, ${principal.credentialId})
+				ON CONFLICT (credential_id, path) DO NOTHING
+				RETURNING id`;
 		return rows.length > 0;
 	}
 
 	async renameMailbox(
-		address: string,
+		principal: AuthenticatedMailbox,
 		path: string,
 		newPath: string,
 	): Promise<boolean> {
 		const rows = await this.sql<{ id: string }[]>`
-			UPDATE imap_mailboxes SET path = ${newPath}, updated_at = now()
-			WHERE address = ${address.toLowerCase()} AND path = ${path}
-			RETURNING id`;
+				UPDATE imap_mailboxes SET path = ${newPath}, updated_at = now()
+				WHERE user_id = ${principal.userId}
+				  AND credential_id = ${principal.credentialId}
+				  AND path = ${path}
+				RETURNING id`;
 		return rows.length > 0;
 	}
 
-	async deleteMailbox(address: string, path: string): Promise<boolean> {
+	async deleteMailbox(
+		principal: AuthenticatedMailbox,
+		path: string,
+	): Promise<boolean> {
 		return this.sql.begin(async (sql) => {
 			const rows = await sql<{ id: string }[]>`
-				SELECT id FROM imap_mailboxes
-				WHERE address = ${address.toLowerCase()} AND path = ${path}
-				FOR UPDATE`;
+					SELECT id FROM imap_mailboxes
+					WHERE user_id = ${principal.userId}
+					  AND credential_id = ${principal.credentialId}
+					  AND path = ${path}
+					FOR UPDATE`;
 			const mailboxId = rows[0]?.id;
 			if (!mailboxId) return false;
-			const deleted = await sql<{ structured_email_id: string; raw_source: string }[]>`
+			const deleted = await sql<
+				{ structured_email_id: string; raw_source: string }[]
+			>`
 				DELETE FROM imap_mailbox_messages
 				WHERE mailbox_id = ${mailboxId}
 				RETURNING structured_email_id, raw_source`;
@@ -320,7 +405,9 @@ export class MailStore {
 
 	async deleteMessages(mailboxId: string, uids: number[]): Promise<void> {
 		await this.sql.begin(async (sql) => {
-			const deleted = await sql<{ structured_email_id: string; raw_source: string }[]>`
+			const deleted = await sql<
+				{ structured_email_id: string; raw_source: string }[]
+			>`
 				DELETE FROM imap_mailbox_messages
 				WHERE mailbox_id = ${mailboxId} AND uid = ANY(${uids})
 				RETURNING structured_email_id, raw_source`;
@@ -339,20 +426,62 @@ export class MailStore {
 		});
 	}
 
-	async syncMailbox(mailbox: MailboxRow): Promise<number> {
-		if (mailbox.path !== "INBOX") return 0;
+	async syncMailbox(
+		mailbox: MailboxRow,
+		principal: AuthenticatedMailbox,
+	): Promise<number> {
+		const scope = mailbox.scopeId
+			? principal.scopes.find((item) => item.id === mailbox.scopeId)
+			: null;
+		if (mailbox.path !== "INBOX" && !scope) return 0;
+
+		const scopes = scope ? [scope] : principal.scopes;
+		const addresses = scopes
+			.filter((item) => item.type === "address" && item.address)
+			.map((item) => item.address as string);
+		const domains = scopes
+			.filter((item) => item.type === "domain")
+			.map((item) => item.domain);
+		if (addresses.length === 0 && domains.length === 0) return 0;
+
 		return this.sql.begin(async (sql) => {
 			const locked = await sql<{ uid_next: number; modseq: number }[]>`
 				SELECT uid_next, modseq FROM imap_mailboxes WHERE id = ${mailbox.id} FOR UPDATE`;
 			const uidNext = locked[0]?.uid_next ?? 1;
 			const modseq = locked[0]?.modseq ?? 0;
-			const inserted = await sql<{ uid: number }[]>`
+			const inserted = principal.credentialId
+				? await sql<{ uid: number }[]>`
+					WITH new_msgs AS (
+						SELECT se.id AS seid, se.created_at,
+						       octet_length(se.raw_content) AS size,
+						       row_number() OVER (ORDER BY se.created_at ASC, se.id ASC) AS rn
+						FROM structured_emails se
+						WHERE se.user_id = ${principal.userId}
+						  AND se.raw_content IS NOT NULL
+						  AND (
+							lower(se.recipient) = ANY(${addresses})
+							OR split_part(lower(se.recipient), '@', 2) = ANY(${domains})
+						  )
+						  AND NOT EXISTS (
+							SELECT 1 FROM imap_mailbox_messages mm
+							WHERE mm.mailbox_id = ${mailbox.id}
+							  AND mm.structured_email_id = se.id)
+					)
+					INSERT INTO imap_mailbox_messages
+						(id, mailbox_id, structured_email_id, uid, internal_date, size, modseq)
+					SELECT ${mailbox.id} || ':' || (${uidNext} + rn - 1),
+					       ${mailbox.id}, seid, ${uidNext} + rn - 1, created_at, size,
+					       ${modseq} + rn
+					FROM new_msgs
+					RETURNING uid`
+				: await sql<{ uid: number }[]>`
 				WITH new_msgs AS (
 					SELECT se.id AS seid, se.created_at,
 					       octet_length(se.raw_content) AS size,
 					       row_number() OVER (ORDER BY se.created_at ASC, se.id ASC) AS rn
 					FROM structured_emails se
-					WHERE lower(se.recipient) = ${mailbox.address}
+					WHERE se.user_id = ${principal.userId}
+					  AND lower(se.recipient) = ${principal.loginAddress.toLowerCase()}
 					  AND se.raw_content IS NOT NULL
 					  AND NOT EXISTS (
 						SELECT 1 FROM imap_mailbox_messages mm
@@ -373,6 +502,19 @@ export class MailStore {
 					    modseq = ${modseq + inserted.length},
 					    updated_at = now()
 					WHERE id = ${mailbox.id}`;
+				if (mailbox.scopeId && mailbox.credentialId) {
+					await sql`
+						UPDATE imap_mailbox_messages scoped
+						SET flags = canonical.flags
+						FROM imap_mailboxes inbox,
+						     imap_mailbox_messages canonical
+						WHERE scoped.mailbox_id = ${mailbox.id}
+						  AND inbox.credential_id = ${mailbox.credentialId}
+						  AND inbox.path = 'INBOX'
+						  AND canonical.mailbox_id = inbox.id
+						  AND canonical.raw_source = scoped.raw_source
+						  AND canonical.structured_email_id = scoped.structured_email_id`;
+				}
 			}
 			return inserted.length;
 		});
@@ -479,15 +621,16 @@ export class MailStore {
 	async getRawContent(
 		messageId: string,
 		rawSource: string,
+		userId: string,
 	): Promise<string | null> {
 		const rows =
 			rawSource === "appended"
 				? await this.sql<{ raw_content: string | null }[]>`
 					SELECT raw_content FROM imap_appended_messages
-					WHERE id = ${messageId} LIMIT 1`
+					WHERE id = ${messageId} AND user_id = ${userId} LIMIT 1`
 				: await this.sql<{ raw_content: string | null }[]>`
 					SELECT raw_content FROM structured_emails
-					WHERE id = ${messageId} LIMIT 1`;
+					WHERE id = ${messageId} AND user_id = ${userId} LIMIT 1`;
 		return rows[0]?.raw_content ?? null;
 	}
 
@@ -498,18 +641,31 @@ export class MailStore {
 		flags: string[],
 	): Promise<number[]> {
 		const rows = await this.listMessages(mailboxId, uids);
+		const mailbox = await this.sql<
+			{ credential_id: string | null }[]
+		>`SELECT credential_id FROM imap_mailboxes WHERE id = ${mailboxId}`;
 		const modified: number[] = [];
 		for (const row of rows) {
 			let next: string[];
 			if (action === "set") next = [...flags];
-			else if (action === "add")
-				next = [...new Set([...row.flags, ...flags])];
+			else if (action === "add") next = [...new Set([...row.flags, ...flags])];
 			else next = row.flags.filter((flag) => !flags.includes(flag));
 			if (JSON.stringify(next) === JSON.stringify(row.flags)) continue;
-			await this.sql`
-				UPDATE imap_mailbox_messages
-				SET flags = ${JSON.stringify(next)}
-				WHERE mailbox_id = ${mailboxId} AND uid = ${row.uid}`;
+			if (mailbox[0]?.credential_id && row.rawSource === "structured") {
+				await this.sql`
+					UPDATE imap_mailbox_messages mm
+					SET flags = ${JSON.stringify(next)}
+					FROM imap_mailboxes mb
+					WHERE mm.mailbox_id = mb.id
+					  AND mb.credential_id = ${mailbox[0].credential_id}
+					  AND mm.raw_source = ${row.rawSource}
+					  AND mm.structured_email_id = ${row.structuredEmailId}`;
+			} else {
+				await this.sql`
+					UPDATE imap_mailbox_messages
+					SET flags = ${JSON.stringify(next)}
+					WHERE mailbox_id = ${mailboxId} AND uid = ${row.uid}`;
+			}
 			modified.push(row.uid);
 		}
 		return modified;
@@ -519,7 +675,10 @@ export class MailStore {
 		await this.updateFlags(mailboxId, [uid], "add", [flag]);
 	}
 
-	async expunge(mailboxId: string, requestedUids?: number[]): Promise<number[]> {
+	async expunge(
+		mailboxId: string,
+		requestedUids?: number[],
+	): Promise<number[]> {
 		return this.sql.begin(async (sql) => {
 			const deleted = requestedUids
 				? await sql<

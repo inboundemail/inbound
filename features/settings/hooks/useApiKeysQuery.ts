@@ -5,7 +5,9 @@ export const useApiKeysQuery = () => {
 	return useQuery({
 		queryKey: ["apiKeys"],
 		queryFn: async () => {
-			const { data, error } = await authClient.apiKey.list();
+			const { data, error } = await authClient.apiKey.list({
+				query: { configId: "default" },
+			});
 			if (error) {
 				throw new Error(error.message);
 			}

@@ -15,11 +15,7 @@ export class ConnectionLimits {
 	private failureLimit: number;
 	private failureWindowMs: number;
 
-	constructor(
-		maxPerIp: number,
-		failureLimit: number,
-		failureWindowMs: number,
-	) {
+	constructor(maxPerIp: number, failureLimit: number, failureWindowMs: number) {
 		this.maxPerIp = maxPerIp;
 		this.failureLimit = failureLimit;
 		this.failureWindowMs = failureWindowMs;

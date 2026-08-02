@@ -491,6 +491,13 @@
       "when": 1785637406539,
       "tag": "0069_rich_grim_reaper",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1785713389598,
+      "tag": "0070_silky_black_bolt",
+      "breakpoints": true
     }
   ]
 }

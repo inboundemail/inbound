@@ -128,7 +128,9 @@ export async function validateAndRateLimit(
 
 		// Verify API key if provided
 		const authApi = auth.api as {
-			verifyApiKey?: (input: { body: { key: string } }) => Promise<{
+			verifyApiKey?: (input: {
+				body: { key: string; configId: string };
+			}) => Promise<{
 				valid: boolean;
 				error?: { message?: string } | null;
 				key?: {
@@ -144,6 +146,7 @@ export async function validateAndRateLimit(
 				? await authApi.verifyApiKey({
 						body: {
 							key: apiKey,
+							configId: "default",
 						},
 					})
 				: null;

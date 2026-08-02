@@ -1,8 +1,10 @@
 import postgres from "postgres";
+import type { AuthenticatedMailbox } from "./auth.ts";
 import type { MailStore } from "./db.ts";
+import { scopeMailboxPath } from "./db.ts";
 
 interface SessionLike {
-	user?: { address?: string };
+	user?: AuthenticatedMailbox & { address?: string };
 }
 
 type ListenerCallback = (message?: unknown) => void;
@@ -27,12 +29,24 @@ export class PgNotifier {
 				console.error("[notifier] change handling failed", err.message);
 			});
 		});
+		await this.sql.listen("imap_credential_changed", (credentialId) => {
+			for (const [session, callback] of this.listeners) {
+				if (session.user?.credentialId === credentialId) {
+					callback({
+						command: "LOGOUT",
+						reason: "Mailbox credentials or scopes changed",
+					});
+				}
+			}
+		});
 		this.pollTimer = setInterval(() => {
 			this.pollAll().catch((err: Error) => {
 				console.error("[notifier] poll failed", err.message);
 			});
 		}, POLL_INTERVAL_MS);
-		console.log("[notifier] LISTEN imap_changed active (direct connection)");
+		console.log(
+			"[notifier] LISTEN imap_changed + imap_credential_changed active",
+		);
 	}
 
 	async stop(): Promise<void> {
@@ -40,10 +54,19 @@ export class PgNotifier {
 		await this.sql.end({ timeout: 2 }).catch(() => undefined);
 	}
 
-	private sessionsFor(address: string): ListenerCallback[] {
-		const callbacks: ListenerCallback[] = [];
+	private sessionsFor(address: string): Array<[SessionLike, ListenerCallback]> {
+		const callbacks: Array<[SessionLike, ListenerCallback]> = [];
 		for (const [session, callback] of this.listeners) {
-			if (session.user?.address === address) callbacks.push(callback);
+			const user = session.user;
+			if (!user) continue;
+			const matches =
+				user.loginAddress === address ||
+				user.scopes.some((scope) =>
+					scope.type === "domain"
+						? address.split("@")[1] === scope.domain
+						: address === scope.address,
+				);
+			if (matches) callbacks.push([session, callback]);
 		}
 		return callbacks;
 	}
@@ -54,20 +77,47 @@ export class PgNotifier {
 			`[notifier] change for ${address}: ${callbacks.length} session(s)`,
 		);
 		if (callbacks.length === 0) return;
-		const mailbox = await this.store.getMailboxByPath(address, "INBOX");
-		if (mailbox) {
-			await this.store.syncMailbox(mailbox).catch(() => undefined);
+		for (const [session] of callbacks) {
+			if (!session.user) continue;
+			const inbox = await this.store.getMailboxByPath(session.user, "INBOX");
+			if (inbox) {
+				await this.store
+					.syncMailbox(inbox, session.user)
+					.catch(() => undefined);
+			}
+			for (const scope of session.user.scopes) {
+				const scopeMatches =
+					scope.type === "domain"
+						? address.split("@")[1] === scope.domain
+						: address === scope.address;
+				if (!scopeMatches) continue;
+				const mailbox = await this.store.getMailboxByPath(
+					session.user,
+					scopeMailboxPath(scope),
+				);
+				if (mailbox) {
+					await this.store
+						.syncMailbox(mailbox, session.user)
+						.catch(() => undefined);
+				}
+			}
 		}
-		for (const callback of callbacks) callback();
+		for (const [, callback] of callbacks) callback();
 	}
 
 	private async pollAll(): Promise<void> {
-		const addresses = new Set<string>();
-		for (const [session] of this.listeners) {
-			if (session.user?.address) addresses.add(session.user.address);
-		}
-		for (const address of addresses) {
-			await this.handleChange(address);
+		for (const [session, callback] of this.listeners) {
+			if (!session.user) continue;
+			const inbox = await this.store.getMailboxByPath(session.user, "INBOX");
+			if (inbox) await this.store.syncMailbox(inbox, session.user);
+			for (const scope of session.user.scopes) {
+				const mailbox = await this.store.getMailboxByPath(
+					session.user,
+					scopeMailboxPath(scope),
+				);
+				if (mailbox) await this.store.syncMailbox(mailbox, session.user);
+			}
+			callback();
 		}
 	}
 
@@ -86,11 +136,7 @@ export class PgNotifier {
 		done?.(null, true);
 	}
 
-	getUpdates(
-		mailbox: unknown,
-		modifyIndex: number,
-		callback: Callback,
-	): void {
+	getUpdates(mailbox: unknown, modifyIndex: number, callback: Callback): void {
 		const mailboxId =
 			typeof mailbox === "string"
 				? mailbox

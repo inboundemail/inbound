@@ -175,14 +175,24 @@ export const auth = betterAuth({
 			userCodeLength: 8,
 			validateClient: (clientId) => clientId === "inboundctl",
 		}),
-		apiKey({
-			// E2 endpoints already enforce account-level rate limits. Disabling
-			// Better Auth's per-key limiter avoids turning valid internal traffic
-			// into 401s before the API's own rate-limit handling runs.
-			rateLimit: {
-				enabled: false,
+		apiKey([
+			{
+				configId: "default",
+				rateLimit: {
+					enabled: false,
+				},
 			},
-		}),
+			{
+				configId: "imap",
+				defaultPrefix: "imap_",
+				maximumNameLength: 255,
+				rateLimit: {
+					enabled: true,
+					maxRequests: 120,
+					timeWindow: 60 * 60 * 1000,
+				},
+			},
+		]),
 		admin(),
 		passkey({
 			rpID:

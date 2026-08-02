@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { auth } from "@/lib/auth/auth";
 import { db } from "@/lib/db";
@@ -23,20 +23,26 @@ export const revokeCurrentApiKey = new Elysia().post(
 		}
 
 		const authApi = auth.api as {
-			verifyApiKey?: (input: { body: { key: string } }) => Promise<{
+			verifyApiKey?: (input: {
+				body: { key: string; configId: string };
+			}) => Promise<{
 				valid: boolean;
 				error?: unknown;
 				key?: { id?: string | null } | null;
 			}>;
 		};
-		const verified = await authApi.verifyApiKey?.({ body: { key } });
+		const verified = await authApi.verifyApiKey?.({
+			body: { key, configId: "default" },
+		});
 		const keyId = verified?.valid && !verified.error ? verified.key?.id : null;
 		if (!keyId) {
 			set.status = 401;
 			return { error: "A valid API key is required" };
 		}
 
-		await db.delete(apikey).where(eq(apikey.id, keyId));
+		await db
+			.delete(apikey)
+			.where(and(eq(apikey.id, keyId), eq(apikey.configId, "default")));
 		return { success: true as const };
 	},
 	{

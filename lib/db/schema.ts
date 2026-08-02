@@ -1034,11 +1034,76 @@ export type DeliveryEventAction =
 	(typeof DELIVERY_EVENT_ACTIONS)[keyof typeof DELIVERY_EVENT_ACTIONS];
 
 // IMAP gateway tables
+export const imapCredentials = pgTable(
+	"imap_credentials",
+	{
+		id: varchar("id", { length: 255 }).primaryKey(),
+		userId: varchar("user_id", { length: 255 })
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		apiKeyId: text("api_key_id")
+			.notNull()
+			.unique()
+			.references(() => apikey.id, { onDelete: "cascade" }),
+		name: varchar("name", { length: 255 }).notNull(),
+		loginAddress: varchar("login_address", { length: 255 }).notNull(),
+		accessMode: varchar("access_mode", { length: 20 }).notNull(),
+		enabled: boolean("enabled").notNull().default(true),
+		lastUsedAt: timestamp("last_used_at"),
+		createdAt: timestamp("created_at").notNull().defaultNow(),
+		updatedAt: timestamp("updated_at").notNull().defaultNow(),
+	},
+	(table) => ({
+		uniqueUserLoginAddress: unique(
+			"imap_credentials_user_login_address_unique",
+		).on(table.userId, table.loginAddress),
+		userIdIdx: index("imap_credentials_user_id_idx").on(table.userId),
+	}),
+);
+
+export const imapCredentialScopes = pgTable(
+	"imap_credential_scopes",
+	{
+		id: varchar("id", { length: 255 }).primaryKey(),
+		credentialId: varchar("credential_id", { length: 255 })
+			.notNull()
+			.references(() => imapCredentials.id, { onDelete: "cascade" }),
+		type: varchar("type", { length: 20 }).notNull(),
+		domainId: varchar("domain_id", { length: 255 })
+			.notNull()
+			.references(() => emailDomains.id, { onDelete: "cascade" }),
+		address: varchar("address", { length: 255 }),
+		scopeKey: varchar("scope_key", { length: 512 }).notNull(),
+		createdAt: timestamp("created_at").notNull().defaultNow(),
+	},
+	(table) => ({
+		uniqueCredentialScope: unique(
+			"imap_credential_scopes_credential_scope_key_unique",
+		).on(table.credentialId, table.scopeKey),
+		credentialIdIdx: index("imap_credential_scopes_credential_id_idx").on(
+			table.credentialId,
+		),
+		domainIdIdx: index("imap_credential_scopes_domain_id_idx").on(
+			table.domainId,
+		),
+	}),
+);
+
 export const imapMailboxes = pgTable(
 	"imap_mailboxes",
 	{
 		id: varchar("id", { length: 255 }).primaryKey(),
-		userId: varchar("user_id", { length: 255 }).notNull(),
+		userId: varchar("user_id", { length: 255 })
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		credentialId: varchar("credential_id", { length: 255 }).references(
+			() => imapCredentials.id,
+			{ onDelete: "cascade" },
+		),
+		scopeId: varchar("scope_id", { length: 255 }).references(
+			() => imapCredentialScopes.id,
+			{ onDelete: "cascade" },
+		),
 		address: varchar("address", { length: 255 }).notNull(),
 		path: varchar("path", { length: 255 }).notNull().default("INBOX"),
 		uidValidity: integer("uid_validity").notNull(),
@@ -1049,11 +1114,19 @@ export const imapMailboxes = pgTable(
 		updatedAt: timestamp("updated_at").defaultNow(),
 	},
 	(table) => ({
-		uniqueAddressPath: unique("imap_mailboxes_address_path_unique").on(
+		uniqueUserAddressPath: unique("imap_mailboxes_user_address_path_unique").on(
+			table.userId,
 			table.address,
 			table.path,
 		),
+		uniqueCredentialPath: unique("imap_mailboxes_credential_path_unique").on(
+			table.credentialId,
+			table.path,
+		),
 		userIdIdx: index("imap_mailboxes_user_id_idx").on(table.userId),
+		credentialIdIdx: index("imap_mailboxes_credential_id_idx").on(
+			table.credentialId,
+		),
 	}),
 );
 
@@ -1061,7 +1134,9 @@ export const imapMailboxMessages = pgTable(
 	"imap_mailbox_messages",
 	{
 		id: varchar("id", { length: 255 }).primaryKey(),
-		mailboxId: varchar("mailbox_id", { length: 255 }).notNull(),
+		mailboxId: varchar("mailbox_id", { length: 255 })
+			.notNull()
+			.references(() => imapMailboxes.id, { onDelete: "cascade" }),
 		structuredEmailId: varchar("structured_email_id", {
 			length: 255,
 		}).notNull(),
@@ -1080,9 +1155,10 @@ export const imapMailboxMessages = pgTable(
 			table.mailboxId,
 			table.uid,
 		),
-		uniqueMailboxEmail: unique(
-			"imap_mailbox_messages_mailbox_email_unique",
-		).on(table.mailboxId, table.structuredEmailId),
+		uniqueMailboxEmail: unique("imap_mailbox_messages_mailbox_email_unique").on(
+			table.mailboxId,
+			table.structuredEmailId,
+		),
 		mailboxUidIdx: index("imap_mailbox_messages_mailbox_uid_idx").on(
 			table.mailboxId,
 			table.uid,
@@ -1095,6 +1171,10 @@ export const imapMailboxMessages = pgTable(
 
 export type ImapMailbox = typeof imapMailboxes.$inferSelect;
 export type NewImapMailbox = typeof imapMailboxes.$inferInsert;
+export type ImapCredential = typeof imapCredentials.$inferSelect;
+export type NewImapCredential = typeof imapCredentials.$inferInsert;
+export type ImapCredentialScope = typeof imapCredentialScopes.$inferSelect;
+export type NewImapCredentialScope = typeof imapCredentialScopes.$inferInsert;
 export type ImapMailboxMessage = typeof imapMailboxMessages.$inferSelect;
 export type NewImapMailboxMessage = typeof imapMailboxMessages.$inferInsert;
 
@@ -1102,7 +1182,9 @@ export const imapAppendedMessages = pgTable(
 	"imap_appended_messages",
 	{
 		id: varchar("id", { length: 255 }).primaryKey(),
-		userId: varchar("user_id", { length: 255 }).notNull(),
+		userId: varchar("user_id", { length: 255 })
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
 		rawContent: text("raw_content").notNull(),
 		size: integer("size"),
 		createdAt: timestamp("created_at").defaultNow(),
