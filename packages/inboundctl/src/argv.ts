@@ -10,6 +10,22 @@ const SHORT_OPTIONS: Record<string, string> = {
 	m: "mailbox",
 };
 
+const BOOLEAN_OPTIONS = new Set([
+	"all",
+	"archived",
+	"debug",
+	"dry-run",
+	"force",
+	"help",
+	"json",
+	"no-browser",
+	"read",
+	"reply-all",
+	"strict",
+	"unarchived",
+	"unread",
+]);
+
 function addOption(
 	options: ParsedArgv["options"],
 	key: string,
@@ -48,7 +64,11 @@ export function parseArgv(argv: string[]): ParsedArgv {
 			}
 
 			const next = argv[index + 1];
-			if (next !== undefined && !next.startsWith("-")) {
+			if (
+				!BOOLEAN_OPTIONS.has(option) &&
+				next !== undefined &&
+				!next.startsWith("-")
+			) {
 				addOption(parsed.options, option, next);
 				index += 1;
 			} else {
