@@ -129,6 +129,21 @@ export class MailStore {
 		}));
 	}
 
+	async listUids(mailboxId: string): Promise<number[]> {
+		const rows = await this.sql<{ uid: number }[]>`
+			SELECT uid FROM imap_mailbox_messages
+			WHERE mailbox_id = ${mailboxId}
+			ORDER BY uid ASC`;
+		return rows.map((row) => row.uid);
+	}
+
+	async countMessages(mailboxId: string): Promise<number> {
+		const rows = await this.sql<{ count: string }[]>`
+			SELECT count(*) AS count FROM imap_mailbox_messages
+			WHERE mailbox_id = ${mailboxId}`;
+		return Number(rows[0]?.count ?? 0);
+	}
+
 	async unseenCount(mailboxId: string): Promise<number> {
 		const rows = await this.sql<{ count: string }[]>`
 			SELECT count(*) AS count FROM imap_mailbox_messages

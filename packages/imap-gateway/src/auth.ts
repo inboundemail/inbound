@@ -44,7 +44,12 @@ export class ApiAuth {
 				headers: { Authorization: `Bearer ${apiKey}` },
 			},
 		);
-		if (!response.ok) return null;
+		if (!response.ok) {
+			console.log(
+				`[imap-auth] api rejected key for ${address}: HTTP ${response.status} (key ${apiKey.length} chars, starts ${apiKey.slice(0, 4)}...)`,
+			);
+			return null;
+		}
 
 		const body = (await response.json()) as { data?: DomainRow[] };
 		const match = (body.data ?? []).find(
@@ -52,7 +57,12 @@ export class ApiAuth {
 				row.status === "verified" &&
 				(domain === row.domain || domain.endsWith(`.${row.domain}`)),
 		);
-		if (!match) return null;
+		if (!match) {
+			console.log(
+				`[imap-auth] key valid but domain ${domain} not among ${body.data?.length ?? 0} account domains for ${address}`,
+			);
+			return null;
+		}
 
 		this.cache.set(cacheKey, {
 			expires: Date.now() + CACHE_TTL_MS,

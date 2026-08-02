@@ -4,7 +4,25 @@ import type { FlagAction, MailStore } from "./db.ts";
 
 const require = createRequire(import.meta.url);
 const { imapHandler } = require("../vendor/imap-core/index.js");
-const Indexer = require("../vendor/imap-core/lib/indexer/indexer.js");
+
+const METADATA_ITEMS = new Set([
+	"uid",
+	"flags",
+	"modseq",
+	"internaldate",
+	"rfc822.size",
+]);
+
+interface QueryItem {
+	item: string;
+}
+
+function needsContent(query: unknown): boolean {
+	if (!Array.isArray(query)) return true;
+	return (query as QueryItem[]).some(
+		(entry) => !METADATA_ITEMS.has(entry.item),
+	);
+}
 
 type Callback = (err: Error | null, ...rest: unknown[]) => void;
 
@@ -50,8 +68,6 @@ const logger = {
 };
 
 export function buildHandlers(auth: ApiAuth, store: MailStore) {
-	const indexer = new Indexer({ logger });
-
 	async function openMailbox(session: ImapSession) {
 		const user = session.user;
 		if (!user?.address) throw new Error("Not authenticated");
@@ -106,7 +122,7 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 			if (path !== "INBOX") return callback(null, "NONEXISTENT");
 			openMailbox(session)
 				.then(async (mailbox) => {
-					const messages = await store.listMessages(mailbox.id);
+					const uidList = await store.listUids(mailbox.id);
 					const fresh = await store.ensureMailbox(
 						mailbox.address,
 						session.user?.id ?? "",
@@ -117,7 +133,7 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 						uidValidity: mailbox.uidValidity,
 						uidNext: fresh.uidNext,
 						modifyIndex: 0,
-						uidList: messages.map((message) => message.uid),
+						uidList,
 						flags: [],
 					});
 				})
@@ -128,14 +144,13 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 			if (path !== "INBOX") return callback(null, "NONEXISTENT");
 			openMailbox(session)
 				.then(async (mailbox) => {
-					const messages = await store.listMessages(mailbox.id);
-					const unseen = await store.unseenCount(mailbox.id);
-					const fresh = await store.ensureMailbox(
-						mailbox.address,
-						session.user?.id ?? "",
-					);
+					const [messages, unseen, fresh] = await Promise.all([
+						store.countMessages(mailbox.id),
+						store.unseenCount(mailbox.id),
+						store.ensureMailbox(mailbox.address, session.user?.id ?? ""),
+					]);
 					callback(null, {
-						messages: messages.length,
+						messages,
 						uidNext: fresh.uidNext,
 						uidValidity: mailbox.uidValidity,
 						unseen,
@@ -153,11 +168,15 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 		) {
 			(async () => {
 				const rows = await store.listMessages(mailboxId, options.messages);
+				const wantsContent = needsContent(options.query);
 				let rowCount = 0;
 
 				for (const row of rows) {
-					const raw = await store.getRawContent(row.structuredEmailId);
-					if (!raw) continue;
+					let raw: string | null = null;
+					if (wantsContent) {
+						raw = await store.getRawContent(row.structuredEmailId);
+						if (!raw) continue;
+					}
 
 					const flags = [...row.flags];
 					const markAsSeen =
@@ -170,7 +189,8 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 						flags,
 						modseq: 0,
 						idate: row.internalDate,
-						mimeTree: indexer.parseMimeTree(raw),
+						...(row.size ? { size: row.size } : {}),
+						...(raw ? { raw } : {}),
 					};
 
 					const response = session.formatResponse("FETCH", row.uid, {
@@ -205,12 +225,9 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 			callback: Callback,
 		) {
 			store
-				.listMessages(mailboxId)
-				.then((rows) => {
-					callback(null, {
-						uidList: rows.map((row) => row.uid),
-						highestModseq: 0,
-					});
+				.listUids(mailboxId)
+				.then((uidList) => {
+					callback(null, { uidList, highestModseq: 0 });
 				})
 				.catch((err: Error) => callback(err));
 		},
