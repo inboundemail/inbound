@@ -4,7 +4,7 @@
  * Send a batch of the agent-inbox outreach campaign via inboundctl.
  *
  * Usage:
- *   bun run scripts/send-campaign-batch.ts <batch.json> [--limit n] [--dry-run]
+ *   bun run scripts/send-campaign-batch.ts <batch.json> [--limit n] [--delay ms] [--dry-run]
  *
  * Expects batch.json entries: { id, email, variant, token, home_url,
  * checkout_url, subject_domain? }.

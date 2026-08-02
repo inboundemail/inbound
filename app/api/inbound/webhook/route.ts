@@ -222,6 +222,20 @@ function isDuplicateKeyError(error: unknown): boolean {
 	);
 }
 
+function shouldSuppressNoReplyNoise(recipient: string, subject?: string | null) {
+	if (recipient.toLowerCase() !== "noreply@inbound.new") {
+		return false;
+	}
+
+	const normalizedSubject = (subject || "").toLowerCase();
+	return (
+		normalizedSubject === "unsubscribe" ||
+		normalizedSubject.startsWith("auto reply:") ||
+		normalizedSubject.includes("désabonner") ||
+		normalizedSubject.includes("adhésion")
+	);
+}
+
 /**
  * Create a structured email record from ParsedEmailData that matches the type exactly
  */
@@ -979,6 +993,11 @@ export async function POST(request: NextRequest) {
 					// Skip routing for:
 					// 1. Blocked emails (sender is on blocklist)
 					// 2. DSN emails (bounce notifications should be recorded but not delivered to users)
+					const suppressNoReplyNoise = shouldSuppressNoReplyNoise(
+						recipient,
+						mail.commonHeaders.subject,
+					);
+
 					if (isDsnEmail) {
 						console.log(
 							`📬 Webhook - Skipping routing for DSN email ${structuredEmailId} - bounce already recorded`,
@@ -999,6 +1018,15 @@ export async function POST(request: NextRequest) {
 						emailProcessingRecord.webhookDelivery = {
 							success: false,
 							error: "Email blocked - sender is on the blocklist",
+						};
+					} else if (suppressNoReplyNoise) {
+						console.log(
+							`📭 Webhook - Skipping routing for noreply noise ${structuredEmailId} subject=${mail.commonHeaders.subject || "No Subject"}`,
+						);
+
+						emailProcessingRecord.webhookDelivery = {
+							success: true,
+							error: "Suppressed noreply auto-reply/unsubscribe noise",
 						};
 					} else {
 						try {

@@ -110,6 +110,12 @@ const ListDomainsResponse = t.Object({
   pagination: PaginationSchema,
 });
 
+const ErrorResponse = t.Object({
+  error: t.String(),
+  message: t.Optional(t.String()),
+  statusCode: t.Optional(t.Number()),
+});
+
 export const listDomains = new Elysia().get(
   "/domains",
   async ({ request, query, set }) => {
@@ -430,7 +436,11 @@ export const listDomains = new Elysia().get(
   },
   {
     query: ListDomainsQuery,
-    response: ListDomainsResponse,
+    response: {
+      200: ListDomainsResponse,
+      401: ErrorResponse,
+      500: ErrorResponse,
+    },
     detail: {
       tags: ["Domains"],
       summary: "List all domains",

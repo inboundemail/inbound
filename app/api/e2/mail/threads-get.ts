@@ -123,8 +123,7 @@ const ThreadMessageSchema = t.Object({
   }),
 
   // Headers and tags
-  headers: t.Any({
-    "x-stainless-any": true,
+  headers: t.Unknown({
     description: "Raw email headers as key-value pairs",
   }),
   tags: t.Array(TagSchema, {

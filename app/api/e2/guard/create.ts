@@ -47,6 +47,7 @@ const ExplicitRuleConfigOpenApiSchema = {
 	title: "Explicit rule configuration",
 	type: "object",
 	properties: {
+		prompt: false,
 		mode: {
 			type: "string",
 			enum: ["simple", "advanced"],

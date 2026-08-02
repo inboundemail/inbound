@@ -1,0 +1,99 @@
+name: API Artifacts
+
+on:
+  pull_request:
+    paths:
+      - "app/api/e2/**"
+      - "scripts/generate-api.ts"
+      - "scripts/generate-openapi.ts"
+      - "scripts/generate-sdk.ts"
+      - "scripts/sdk-operations.ts"
+      - "packages/inbound-sdk/**"
+      - "apps/fumadocs/**"
+      - "package.json"
+      - "bun.lockb"
+  push:
+    branches: [main]
+    paths:
+      - "app/api/e2/**"
+      - "scripts/generate-api.ts"
+      - "scripts/generate-openapi.ts"
+      - "scripts/generate-sdk.ts"
+      - "scripts/sdk-operations.ts"
+      - "packages/inbound-sdk/**"
+      - "apps/fumadocs/**"
+      - "package.json"
+      - "bun.lockb"
+  workflow_dispatch:
+
+concurrency:
+  group: api-artifacts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  breaking-changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find base contract
+        id: base
+        run: |
+          git fetch --depth=1 origin "${{ github.base_ref }}"
+          if git cat-file -e "origin/${{ github.base_ref }}:public/openapi.json" 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Reject breaking API changes
+        if: steps.base.outputs.exists == 'true'
+        uses: oasdiff/oasdiff-action/breaking@v0
+        with:
+          base: origin/${{ github.base_ref }}:public/openapi.json
+          revision: HEAD:public/openapi.json
+          review: false
+
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install application dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install SDK dependencies
+        working-directory: packages/inbound-sdk
+        run: bun install --frozen-lockfile
+
+      - name: Install documentation dependencies
+        working-directory: apps/fumadocs
+        run: bun install --frozen-lockfile
+
+      - name: Generate API artifacts
+        run: bun run generate:api
+
+      - name: Check generated artifacts
+        run: git diff --exit-code -- public/openapi.json apps/fumadocs/openapi.json apps/fumadocs/sdk-operations.json packages/inbound-sdk/src/generated
+
+      - name: Test SDK
+        run: bun run test-sdk
+
+      - name: Typecheck SDK
+        working-directory: packages/inbound-sdk
+        run: bun run typecheck
+
+      - name: Build SDK
+        working-directory: packages/inbound-sdk
+        run: bun run build
+
+      - name: Verify generated documentation
+        working-directory: apps/fumadocs
+        run: bun run verify:openapi

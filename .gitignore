@@ -75,8 +75,6 @@ tmp-files/
 
 temps/
 
-# Generated OpenAPI spec
-public/openapi.json
 # audit reports
 reports/
 /support_desk
@@ -92,3 +90,4 @@ scripts/webhook-test-verification-report.md
 .reference/
 scripts/dual-daily-review.ts
 .overseer/
+.sdk-base-openapi.json

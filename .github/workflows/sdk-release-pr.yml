@@ -1,0 +1,115 @@
+name: SDK Release PR
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/api/e2/**"
+      - "packages/inbound-sdk/src/**"
+      - "scripts/generate-api.ts"
+      - "scripts/generate-openapi.ts"
+      - "scripts/generate-sdk.ts"
+      - "scripts/sdk-operations.ts"
+      - "public/openapi.json"
+  workflow_dispatch:
+
+concurrency:
+  group: inbound-sdk-release-pr
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Find published SDK baseline
+        id: baseline
+        run: |
+          tag=$(git tag --list 'sdk-v*' --sort=-v:refname | head -n 1)
+          if [ -z "$tag" ]; then
+            echo "No sdk-v* tag exists yet. Publish 1.0.0 before enabling automatic releases."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git show "$tag:public/openapi.json" > .sdk-base-openapi.json
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$(jq -r .version packages/inbound-sdk/package.json)" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Generate current API artifacts
+        if: steps.baseline.outputs.skip != 'true'
+        run: bun run generate:api
+
+      - name: Reject breaking API changes
+        if: steps.baseline.outputs.skip != 'true'
+        uses: oasdiff/oasdiff-action/breaking@v0
+        with:
+          base: .sdk-base-openapi.json
+          revision: public/openapi.json
+          review: false
+
+      - name: Classify SDK change
+        if: steps.baseline.outputs.skip != 'true'
+        id: classify
+        run: bun run scripts/classify-sdk-change.ts .sdk-base-openapi.json public/openapi.json
+
+      - name: Include SDK runtime changes
+        if: steps.baseline.outputs.skip != 'true'
+        id: release
+        env:
+          CLASSIFIED_BUMP: ${{ steps.classify.outputs.bump }}
+          SDK_TAG: ${{ steps.baseline.outputs.tag }}
+        run: |
+          bump="$CLASSIFIED_BUMP"
+          if [ "$bump" = "none" ]; then
+            if git diff --quiet "$SDK_TAG"..HEAD -- packages/inbound-sdk/src; then
+              echo "No SDK release is required."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            bump=patch
+          fi
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Bump SDK version
+        if: steps.baseline.outputs.skip != 'true' && steps.release.outputs.skip != 'true'
+        id: version
+        run: bun run scripts/bump-sdk-version.ts "${{ steps.release.outputs.bump }}" "${{ steps.baseline.outputs.version }}"
+
+      - name: Open release pull request
+        if: steps.baseline.outputs.skip != 'true' && steps.release.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_BUMP: ${{ steps.release.outputs.bump }}
+        run: |
+          branch=automation/inbound-sdk-release
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add packages/inbound-sdk/package.json packages/inbound-sdk/CHANGELOG.md
+          git commit -m "release: inboundemail v$NEXT_VERSION"
+          git push --force origin "HEAD:$branch"
+
+          body="Automated $RELEASE_BUMP release generated from the E2 OpenAPI contract. Merging this PR publishes inboundemail@$NEXT_VERSION after all SDK gates pass."
+          existing=$(gh pr list --head "$branch" --base main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --title "release: inboundemail v$NEXT_VERSION" --body "$body"
+          else
+            gh pr create --base main --head "$branch" --title "release: inboundemail v$NEXT_VERSION" --body "$body"
+          fi

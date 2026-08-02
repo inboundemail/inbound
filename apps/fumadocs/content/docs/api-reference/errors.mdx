@@ -1,0 +1,96 @@
+---
+title: "Error Codes"
+description: "Comprehensive list of API error codes and their meanings"
+---
+
+# Error Codes
+
+The Inbound API returns standard HTTP status codes to indicate success or failure. Error responses include a JSON object with an `error` field describing the issue.
+
+## HTTP Status Codes
+
+| Status Code | Meaning | Description |
+|-------------|---------|-------------|
+| `200` | Success | Request completed successfully |
+| `400` | Bad Request | Invalid request parameters or missing required fields |
+| `401` | Unauthorized | Invalid or missing API key |
+| `404` | Not Found | Requested resource does not exist |
+| `429` | Too Many Requests | Rate limit exceeded (2 requests/second) |
+| `500` | Internal Server Error | Server error occurred |
+
+## Common Error Types
+
+### Authentication Errors (401)
+
+- **`Unauthorized`** - Missing or invalid API key
+- **`Invalid API key`** - API key format is incorrect or expired
+
+### Validation Errors (400)
+
+#### Missing Required Fields
+- **`Missing required fields: from, to, and subject are required`** - Email sending
+- **`Missing required fields: apiKey and to are required`** - Demo requests
+- **`Missing required fields`** - General validation failure
+
+#### Invalid Formats
+- **`Invalid email format`** - Email address doesn't match expected pattern
+- **`Invalid email format: [email]`** - Specific email address validation
+- **`Invalid webhook URL format`** - Webhook URL validation failure
+- **`Invalid scheduled_at`** - Date/time format is incorrect
+- **`Invalid schedule time`** - Scheduled time is in the past or too far in future
+
+#### Configuration Errors
+- **`Invalid endpoint type`** - Unsupported endpoint type specified
+- **`Invalid configuration`** - Endpoint configuration validation failed
+- **`Webhook URL is required`** - Missing webhook URL for webhook endpoints
+- **`Forward-to email address is required`** - Missing email for forwarding endpoints
+- **`Invalid forward-to email address format`** - Invalid forwarding email format
+
+#### Parameter Errors
+- **`Invalid limit parameter`** - List limit must be 1-100
+- **`Invalid offset parameter`** - Offset must be non-negative
+- **`Invalid email ID provided`** - Email ID format is incorrect
+- **`Invalid webhook format`** - Unsupported webhook payload format
+
+### Resource Errors (404)
+
+- **`Email not found`** - Email doesn't exist or user lacks access
+- **`Endpoint not found`** - Endpoint doesn't exist or access denied
+- **`Scheduled email not found`** - Scheduled email not found or unauthorized
+- **`Original email not found`** - Cannot reply to non-existent email
+
+### Rate Limiting (429)
+
+- **`Rate limit exceeded`** - Too many requests (limit: 2 per second)
+- **`Maximum 2 requests per second allowed. Upgrade or contact support for higher limits.`** - Rate limit details
+
+### Server Errors (500)
+
+- **`Failed to send email`** - Email sending operation failed
+- **`Failed to schedule email`** - Email scheduling failed  
+- **`Failed to cancel scheduled email`** - Cancellation operation failed
+- **`Failed to test endpoint`** - Endpoint testing failed
+- **`Email sending limit reached. Please upgrade your plan to send more emails.`** - Account limits
+
+## Error Response Format
+
+All error responses follow this structure:
+
+```json
+{
+  "error": "Error description",
+  "message": "Additional context (optional)",
+  "details": "Technical details (optional)"
+}
+```
+
+## Rate Limit Headers
+
+When approaching or exceeding rate limits, responses include headers:
+
+| Header | Description |
+|--------|-------------|
+| `ratelimit-limit` | Maximum requests per window |
+| `ratelimit-remaining` | Requests remaining in current window |
+| `ratelimit-reset` | Seconds until limit resets |
+| `retry-after` | Seconds to wait before retry (429 only) |

@@ -1,0 +1,40 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+@import "fumadocs-openapi/css/preset.css";
+
+:root {
+  --color-fd-primary: oklch(0.55 0.21 288);
+  --color-fd-primary-foreground: oklch(0.985 0 0);
+  --color-fd-ring: oklch(0.55 0.21 288);
+}
+
+.dark {
+  color-scheme: dark;
+  --color-fd-primary: oklch(0.74 0.15 288);
+  --color-fd-primary-foreground: oklch(0.17 0.03 288);
+  --color-fd-ring: oklch(0.74 0.15 288);
+}
+
+html {
+  scrollbar-gutter: stable;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0;
+  --removed-body-scroll-bar-size: 0px;
+}
+
+.prose h1,
+.prose h2,
+.prose h3 {
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.prose p {
+  text-wrap: pretty;
+}

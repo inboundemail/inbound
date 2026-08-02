@@ -1,0 +1,11 @@
+{
+  "title": "Inbound",
+  "pages": [
+    "index",
+    "---Get started---",
+    "quickstart",
+    "integrations",
+    "---Reference---",
+    "api-reference"
+  ]
+}

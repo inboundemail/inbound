@@ -1,6 +1,10 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte } from "drizzle-orm";
 import { Elysia, t } from "elysia";
-import { auth } from "@/lib/auth/auth";
+import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
+import {
+	getOnboardingSender,
+	isOnboardingReply,
+} from "@/app/api/e2/onboarding/reply-matching";
 import { db } from "@/lib/db";
 import { onboardingDemoEmails, structuredEmails } from "@/lib/db/schema";
 
@@ -13,29 +17,28 @@ const ReplyDataSchema = t.Object({
 });
 
 const CheckReplySuccessResponse = t.Object({
+	hasDemoEmail: t.Boolean(),
 	hasReply: t.Boolean(),
+	demo: t.Optional(
+		t.Object({
+			emailId: t.String(),
+			recipientEmail: t.String(),
+			sentAt: t.String(),
+		}),
+	),
 	reply: t.Optional(ReplyDataSchema),
 });
 
 const CheckReplyErrorResponse = t.Object({
 	error: t.String(),
+	message: t.Optional(t.String()),
+	statusCode: t.Optional(t.Number()),
 });
 
 export const checkOnboardingReply = new Elysia().get(
 	"/onboarding/check-reply",
 	async ({ request, set }) => {
-		console.log("🔍 GET /api/e2/onboarding/check-reply - Starting request");
-
-		// Get session - onboarding requires session auth (not API key)
-		const session = await auth.api.getSession({ headers: request.headers });
-		if (!session?.user?.id) {
-			console.log("❌ No session found");
-			set.status = 401;
-			return { error: "Authentication required" };
-		}
-
-		const userId = session.user.id;
-		console.log("✅ Session authenticated for userId:", userId);
+		const userId = await validateAndRateLimit(request, set);
 
 		try {
 			// Get the most recent demo email for this user
@@ -47,24 +50,24 @@ export const checkOnboardingReply = new Elysia().get(
 				.limit(1);
 
 			if (!demoEmail) {
-				console.log("❌ No demo email found for user");
 				return {
+					hasDemoEmail: false,
 					hasReply: false,
 				};
 			}
 
-			console.log(
-				"📧 Found demo email:",
-				demoEmail.id,
-				"sent to:",
-				demoEmail.recipientEmail,
-			);
+			const demo = {
+				emailId: demoEmail.emailId,
+				recipientEmail: demoEmail.recipientEmail,
+				sentAt: (demoEmail.sentAt ?? new Date()).toISOString(),
+			};
 
 			// If we already recorded a reply, return it
 			if (demoEmail.replyReceived && demoEmail.replyFrom) {
-				console.log("✅ Reply already recorded");
 				return {
+					hasDemoEmail: true,
 					hasReply: true,
+					demo,
 					reply: {
 						from: demoEmail.replyFrom,
 						subject: demoEmail.replySubject || "Re: Welcome to Inbound!",
@@ -76,59 +79,33 @@ export const checkOnboardingReply = new Elysia().get(
 				};
 			}
 
-			// Check for new replies in structuredEmails
-			// Look for emails FROM the recipient that might be a reply
 			const recentEmails = await db
 				.select({
 					id: structuredEmails.id,
 					fromData: structuredEmails.fromData,
 					subject: structuredEmails.subject,
 					textBody: structuredEmails.textBody,
-					date: structuredEmails.date,
+					receivedAt: structuredEmails.createdAt,
+					inReplyTo: structuredEmails.inReplyTo,
+					references: structuredEmails.references,
 				})
 				.from(structuredEmails)
-				.where(eq(structuredEmails.userId, userId))
-				.orderBy(desc(structuredEmails.date))
+				.where(
+					and(
+						eq(structuredEmails.userId, userId),
+						gte(structuredEmails.createdAt, demoEmail.sentAt ?? new Date(0)),
+					),
+				)
+				.orderBy(desc(structuredEmails.createdAt))
 				.limit(10);
 
-			// Find a reply from the demo recipient
-			const reply = recentEmails.find((email) => {
-				// Parse fromData JSON to get the email address
-				let fromEmail = "";
-				if (email.fromData) {
-					try {
-						const fromParsed = JSON.parse(email.fromData);
-						fromEmail =
-							fromParsed.addresses?.[0]?.address?.toLowerCase() ||
-							fromParsed.text?.toLowerCase() ||
-							"";
-					} catch {
-						fromEmail = "";
-					}
-				}
-				const demoRecipient = demoEmail.recipientEmail.toLowerCase();
-				return (
-					fromEmail.includes(demoRecipient) ||
-					demoRecipient.includes(fromEmail.split("@")[0])
-				);
-			});
+			const reply = recentEmails.find((email) =>
+				isOnboardingReply(email, demoEmail),
+			);
 
 			if (reply) {
-				console.log("✅ Found reply email:", reply.id);
+				const fromAddress = getOnboardingSender(reply.fromData) ?? "";
 
-				// Parse from address for storage
-				let fromAddress = "";
-				if (reply.fromData) {
-					try {
-						const fromParsed = JSON.parse(reply.fromData);
-						fromAddress =
-							fromParsed.addresses?.[0]?.address || fromParsed.text || "";
-					} catch {
-						fromAddress = "";
-					}
-				}
-
-				// Update the demo email record
 				await db
 					.update(onboardingDemoEmails)
 					.set({
@@ -136,25 +113,29 @@ export const checkOnboardingReply = new Elysia().get(
 						replyFrom: fromAddress,
 						replySubject: reply.subject,
 						replyBody: reply.textBody?.substring(0, 1000) || "", // Limit body length
-						replyReceivedAt: reply.date,
+						replyReceivedAt: reply.receivedAt,
 						updatedAt: new Date(),
 					})
 					.where(eq(onboardingDemoEmails.id, demoEmail.id));
 
 				return {
+					hasDemoEmail: true,
 					hasReply: true,
+					demo,
 					reply: {
 						from: fromAddress,
 						subject: reply.subject || "",
 						body: reply.textBody?.substring(0, 500) || "",
-						receivedAt: reply.date?.toISOString() || new Date().toISOString(),
+						receivedAt:
+							reply.receivedAt?.toISOString() || new Date().toISOString(),
 					},
 				};
 			}
 
-			console.log("📭 No reply found yet");
 			return {
+				hasDemoEmail: true,
 				hasReply: false,
+				demo,
 			};
 		} catch (error) {
 			console.error("❌ Error checking for reply:", error);
@@ -169,6 +150,8 @@ export const checkOnboardingReply = new Elysia().get(
 		response: {
 			200: CheckReplySuccessResponse,
 			401: CheckReplyErrorResponse,
+			403: CheckReplyErrorResponse,
+			429: CheckReplyErrorResponse,
 			500: CheckReplyErrorResponse,
 		},
 		detail: {

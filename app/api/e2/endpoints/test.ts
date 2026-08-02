@@ -33,7 +33,7 @@ const TestEndpointResponse = t.Object({
 	statusCode: t.Optional(t.Number()),
 	responseBody: t.Optional(t.String()),
 	error: t.Optional(t.String()),
-	testPayload: t.Optional(t.Any({ "x-stainless-any": true })),
+	testPayload: t.Optional(t.Unknown()),
 	webhookFormat: t.Optional(
 		t.Union([t.Literal("inbound"), t.Literal("discord"), t.Literal("slack")]),
 	),

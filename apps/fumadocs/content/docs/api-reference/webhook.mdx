@@ -1,0 +1,251 @@
+---
+title: "Webhook Structure"
+description: "Webhook payload structure"
+---
+
+## Overview
+
+When emails arrive at your configured addresses, Inbound sends a webhook to your endpoint with the complete email data.
+
+```typescript
+import type { InboundWebhookPayload } from 'inboundemail'
+```
+
+## Webhook Payload Structure
+
+We have fully a complete typed webhook payload for you to use in your endpoints.
+
+```typescript
+const payload: InboundWebhookPayload = {
+  event: 'email.received',
+  timestamp: '2024-01-15T10:30:00Z',
+  email: {
+    id: 'inbnd_abc123def456ghi',
+    messageId: '<unique@example.com>',
+    from: {
+      text: 'John Doe <john@example.com>',
+      addresses: [{
+        name: 'John Doe',
+        address: 'john@example.com'
+      }]
+    },
+    to: {
+      text: 'support@yourdomain.com',
+      addresses: [{
+        name: null,
+        address: 'support@yourdomain.com'
+      }]
+    },
+    recipient: 'support@yourdomain.com',
+    subject: 'Help with my order',
+    receivedAt: '2024-01-15T10:30:00Z',
+    parsedData: {
+      messageId: '<unique@example.com>',
+      date: new Date('2024-01-15T10:30:00Z'),
+      subject: 'Help with my order',
+      from: {
+        text: 'John Doe <john@example.com>',
+        addresses: [{
+          name: 'John Doe',
+          address: 'john@example.com'
+        }]
+      },
+      to: {
+        text: 'support@yourdomain.com',
+        addresses: [{
+          name: null,
+          address: 'support@yourdomain.com'
+        }]
+      },
+      cc: null,
+      bcc: null,
+      replyTo: null,
+      inReplyTo: undefined,
+      references: undefined,
+      textBody: 'Hello, I need help with my recent order...',
+      htmlBody: '<p>Hello, I need help with my recent order...</p>',
+      raw: 'From: john@example.com\r\nTo: support@yourdomain.com\r\n...',
+      attachments: [
+        {
+          filename: 'order-receipt.pdf',
+          contentType: 'application/pdf',
+          size: 45678,
+          contentId: '<att_abc123>',
+          contentDisposition: 'attachment',
+          downloadUrl: 'https://inbound.new/api/e2/attachments/inbnd_abc123def456ghi/order-receipt.pdf'
+        }
+      ],
+      headers: {},
+      priority: undefined
+    },
+    cleanedContent: {
+      html: '<p>Hello, I need help with my recent order...</p>',
+      text: 'Hello, I need help with my recent order...',
+      hasHtml: true,
+      hasText: true,
+      attachments: [
+        {
+          filename: 'order-receipt.pdf',
+          contentType: 'application/pdf',
+          size: 45678,
+          contentId: '<att_abc123>',
+          contentDisposition: 'attachment',
+          downloadUrl: 'https://inbound.new/api/e2/attachments/inbnd_abc123def456ghi/order-receipt.pdf'
+        }
+      ],
+      headers: {}
+    }
+  },
+  endpoint: {
+    id: 'endp_xyz789',
+    name: 'Support Webhook',
+    type: 'webhook'
+  }
+}
+```
+
+## Webhook Security
+
+<Warning>
+Always verify webhook requests before processing them to prevent unauthorized access to your endpoints.
+</Warning>
+
+### Verification Headers
+
+Every webhook request includes security headers that you should verify:
+
+| Header | Description |
+|--------|-------------|
+| `X-Webhook-Verification-Token` | Unique verification token for your endpoint |
+| `X-Endpoint-ID` | ID of the endpoint that triggered this webhook |
+| `X-Webhook-Event` | Event type (e.g., `email.received`) |
+| `X-Webhook-Timestamp` | ISO 8601 timestamp of when the webhook was sent |
+
+### Verifying Webhooks with the SDK
+
+The SDK provides a simple helper function to verify webhook requests:
+
+```typescript
+import { Inbound, verifyWebhookFromHeaders } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+export async function POST(request: Request) {
+  // Verify webhook authenticity before processing
+  const isValid = await verifyWebhookFromHeaders(request.headers, inbound)
+  
+  if (!isValid) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+  
+  // Process the verified webhook payload
+  const payload: InboundWebhookPayload = await request.json()
+  const { email } = payload
+  
+  // Your webhook handling logic here
+  console.log('Received verified email:', email.subject)
+  
+  return new Response('OK', { status: 200 })
+}
+```
+
+### Complete Example with Verification
+
+Here's a complete example that combines webhook verification with payload processing:
+
+```typescript
+import { Inbound, verifyWebhookFromHeaders, type InboundWebhookPayload } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+export async function POST(request: Request) {
+  // Step 1: Verify webhook authenticity
+  const isValid = await verifyWebhookFromHeaders(request.headers, inbound)
+  
+  if (!isValid) {
+    console.warn('Webhook verification failed', {
+      endpointId: request.headers.get('X-Endpoint-ID'),
+      timestamp: new Date().toISOString()
+    })
+    return new Response('Unauthorized', { status: 401 })
+  }
+  
+  // Step 2: Parse verified payload
+  const payload: InboundWebhookPayload = await request.json()
+  const { email, endpoint } = payload
+  
+  // Step 3: Process the email
+  console.log(`Received email from ${email.from.addresses[0].address}`)
+  console.log(`Subject: ${email.subject}`)
+  console.log(`Endpoint: ${endpoint.name}`)
+  
+  // Step 4: Handle attachments if present
+  if (email.parsedData.attachments?.length > 0) {
+    for (const attachment of email.parsedData.attachments) {
+      // Download attachment using the provided downloadUrl
+      const response = await fetch(attachment.downloadUrl, {
+        headers: {
+          'Authorization': `Bearer ${process.env.INBOUND_API_KEY}`
+        }
+      })
+      
+      if (response.ok) {
+        const fileBuffer = await response.arrayBuffer()
+        // Process attachment...
+      }
+    }
+  }
+  
+  return new Response('OK', { status: 200 })
+}
+```
+
+<Tip>
+The `verifyWebhookFromHeaders` function automatically fetches your endpoint configuration from the API and compares the verification token. For more details, see the [Security guide](/docs/api-reference/security).
+</Tip>
+
+## Attachment Downloads
+
+<Info>
+Attachments include a `downloadUrl` field that provides direct access to download the file using your API key for authentication.
+</Info>
+
+### Downloading Attachments
+
+Each attachment in the webhook payload includes a `downloadUrl` that you can use to download the file:
+
+```typescript
+// Process attachments from webhook
+export async function POST(request: NextRequest) {
+  const payload: InboundWebhookPayload = await request.json()
+  const { email } = payload
+  
+  // Check for attachments
+  if (email.parsedData.attachments.length > 0) {
+    for (const attachment of email.parsedData.attachments) {
+      console.log(`Attachment: ${attachment.filename}`)
+      console.log(`Download URL: ${attachment.downloadUrl}`)
+      
+      // Download the attachment
+      const response = await fetch(attachment.downloadUrl, {
+        headers: {
+          'Authorization': `Bearer ${process.env.INBOUND_API_KEY}`
+        }
+      })
+      
+      if (response.ok) {
+        const fileBuffer = await response.arrayBuffer()
+        // Process the file...
+      }
+    }
+  }
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+<Note>
+The download URL follows the format: `https://inbound.new/api/e2/attachments/{emailId}/{filename}`
+
+Authentication via API key in the Authorization header is required to download attachments.
+</Note>

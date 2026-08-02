@@ -1,0 +1,61 @@
+---
+title: "Getting Started"
+description: "Set up Inbound and send your first email in minutes"
+---
+
+## 1. Get Your API Key
+
+Sign up at [inbound.new](https://inbound.new) and generate an API key from your dashboard.
+
+<Card title="Dashboard" icon="key" href="https://inbound.new/settings">
+  Access your API keys from the dashboard
+</Card>
+
+## 2. Install the SDK
+
+Install the Inbound SDK using your preferred package manager:
+
+```bash tab="Bun"
+bun add inboundemail
+```
+
+```bash tab="npm"
+npm install inboundemail
+```
+
+```bash tab="Yarn"
+yarn add inboundemail
+```
+
+```bash tab="pnpm"
+pnpm add inboundemail
+```
+
+## 3. Send Your First Email
+
+```typescript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+const email = await inbound.emails.send({
+  from: 'Your Name <you@yourdomain.com>',
+  to: 'recipient@example.com',
+  subject: 'Hello from Inbound!',
+  html: '<p>This is my first email with Inbound.</p>'
+})
+
+console.log('Email sent:', email.id)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Reference" icon="book" href="/docs/api-reference/introduction">
+    Explore the full API documentation
+  </Card>
+  
+  <Card title="Receive Emails" icon="inbox" href="/docs/api-reference/webhook">
+    Set up webhooks to receive incoming emails
+  </Card>
+</CardGroup>

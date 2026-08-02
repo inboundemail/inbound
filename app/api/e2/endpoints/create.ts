@@ -78,7 +78,7 @@ const EndpointResponse = t.Object({
 		t.Literal("email"),
 		t.Literal("email_group"),
 	]),
-	config: t.Any({ "x-stainless-any": true }),
+	config: t.Unknown(),
 	isActive: t.Boolean(),
 	description: t.Nullable(t.String()),
 	userId: t.String(),

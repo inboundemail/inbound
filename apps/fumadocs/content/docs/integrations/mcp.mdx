@@ -1,0 +1,192 @@
+---
+title: "MCP Server"
+description: "Connect AI assistants like Claude, Cursor, and OpenCode to your Inbound account"
+---
+
+The Inbound MCP (Model Context Protocol) server allows AI assistants to interact with your Inbound account to manage domains, endpoints, and emails.
+
+## Quick Start
+
+The fastest way to get started is using Inbound's hosted MCP server at `mcp.inbound.new/mcp`.
+
+### Cursor
+
+Add to your Cursor MCP config (`.cursor/mcp.json` in your project or global config):
+
+```json
+{
+  "mcpServers": {
+    "inbound": {
+      "type": "http",
+      "url": "https://mcp.inbound.new/mcp",
+      "headers": {
+        "x-inbound-api-key": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+### OpenCode
+
+Add to your `opencode.json` config:
+
+```json
+{
+  "mcp": {
+    "inbound": {
+      "type": "remote",
+      "url": "https://mcp.inbound.new/mcp",
+      "headers": {
+        "x-inbound-api-key": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+```json
+{
+  "mcpServers": {
+    "inbound": {
+      "command": "npx",
+      "args": ["-y", "@inbound/mcp"],
+      "env": {
+        "INBOUND_API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+<Note>
+Claude Desktop uses STDIO transport and runs the MCP server locally via npx.
+</Note>
+
+## Authentication
+
+The MCP server authenticates using your Inbound API key. Get your API key from the [dashboard](https://inbound.new/settings).
+
+### Domain Restriction (Optional)
+
+To restrict all operations to a single domain (and its subdomains), add the `x-inbound-domain` header:
+
+```json
+{
+  "mcpServers": {
+    "inbound": {
+      "type": "http",
+      "url": "https://mcp.inbound.new/mcp",
+      "headers": {
+        "x-inbound-api-key": "your-api-key",
+        "x-inbound-domain": "example.com"
+      }
+    }
+  }
+}
+```
+
+This will filter results to show only `example.com` and subdomains like `mail.example.com`, `support.example.com`, etc.
+
+## Available Tools
+
+### Domains
+
+| Tool | Description |
+|------|-------------|
+| `list_domains` | List all domains in your account (respects domain restriction) |
+
+### Endpoints
+
+| Tool | Description |
+|------|-------------|
+| `list_endpoints` | List webhook and email forwarding endpoints |
+| `create_endpoint` | Create a webhook, email forward, or email group endpoint |
+
+### Emails
+
+| Tool | Description |
+|------|-------------|
+| `list_emails` | List sent, received, and scheduled emails with filtering |
+| `get_email` | Get detailed information about a specific email including full content |
+| `send_email` | Send or schedule an email |
+
+### Threads
+
+| Tool | Description |
+|------|-------------|
+| `list_threads` | List email conversations with previews |
+| `get_thread` | Get all messages in a thread |
+
+## Example Usage
+
+Once configured, you can ask your AI assistant to:
+
+- "List all my domains"
+- "Show me the last 10 received emails"
+- "Send an email to support@example.com with subject 'Hello'"
+- "Create a webhook endpoint for notifications@mydomain.com"
+- "Show me the conversation thread with john@example.com"
+- "Get the full content of email ID abc123"
+
+## Available Prompts
+
+The MCP server includes a `getting-started` prompt that teaches the AI assistant how to use Inbound effectively. Most AI assistants will automatically discover and use this prompt.
+
+## Self-Hosting
+
+You can also run the MCP server locally:
+
+### Installation
+
+```bash
+npm install @inbound/mcp
+# or
+pnpm add @inbound/mcp
+# or
+bun add @inbound/mcp
+```
+
+### Running
+
+```bash
+# HTTP server (for Cursor, OpenCode, etc.)
+INBOUND_API_KEY=your-api-key npx @inbound/mcp start:http
+
+# STDIO server (for Claude Desktop)
+npx @inbound/mcp
+```
+
+The HTTP server runs on port 3002 by default. Configure your client to use `http://localhost:3002/mcp`.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Tools not appearing">
+    Make sure your API key is valid and has the necessary permissions. Check the MCP server logs for authentication errors.
+  </Accordion>
+  
+  <Accordion title="Domain filtering not working">
+    Ensure the `x-inbound-domain` header value matches exactly with your domain name in Inbound (case-sensitive).
+  </Accordion>
+  
+  <Accordion title="Connection refused">
+    If self-hosting, verify the server is running and the port is accessible. For the hosted version, check your network connectivity.
+  </Accordion>
+</AccordionGroup>
+
+## Security
+
+<Warning>
+Never commit your API key to version control. Use environment variables or a secrets manager.
+</Warning>
+
+Best practices:
+- Use environment variables for API keys: `"x-inbound-api-key": "$INBOUND_API_KEY"`
+- Restrict operations to specific domains using `x-inbound-domain`
+- Regularly rotate your API keys
+- Use separate API keys for different environments (dev, staging, production)

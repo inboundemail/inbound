@@ -27,6 +27,7 @@ import {
 	ListTenantsCommand,
 	PutConfigurationSetSendingOptionsCommand,
 	SESv2Client,
+	type TenantResource,
 	UpdateReputationEntityPolicyCommand,
 } from "@aws-sdk/client-sesv2";
 import {
@@ -1002,7 +1003,11 @@ export class SESTenantManager {
 	 */
 	async listTenantResources(
 		tenantId: string,
-	): Promise<{ resources: any[]; success: boolean; error?: string }> {
+	): Promise<{
+		resources: TenantResource[];
+		success: boolean;
+		error?: string;
+	}> {
 		try {
 			const tenant = await db
 				.select()
@@ -1018,16 +1023,22 @@ export class SESTenantManager {
 				};
 			}
 
-			const listResourcesCommand = new ListTenantResourcesCommand({
-				TenantName: tenant[0].tenantName, // AWS requires the TenantName (human-readable), not TenantId
-			});
+			const resources: TenantResource[] = [];
+			let nextToken: string | undefined;
 
-			const result = await this.sesv2Client.send(listResourcesCommand);
+			do {
+				const result = await this.sesv2Client.send(
+					new ListTenantResourcesCommand({
+						TenantName: tenant[0].tenantName,
+						NextToken: nextToken,
+					}),
+				);
+				resources.push(...(result.TenantResources || []));
+				nextToken = result.NextToken;
+			} while (nextToken);
 
-			// Note: Property structure needs verification - temporarily return empty for MVP
-			console.log("📋 Tenant resources response:", result);
 			return {
-				resources: [], // TODO: Fix property name when AWS SDK types are clarified
+				resources,
 				success: true,
 			};
 		} catch (error) {

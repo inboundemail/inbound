@@ -53,7 +53,7 @@ export async function unblockEmailAction(
       }
     }
 
-    const result = await unblockEmail(emailAddress)
+    const result = await unblockEmail(emailAddress, session.user.id)
     return result
 
   } catch (error) {
@@ -135,4 +135,4 @@ export async function checkEmailBlockedAction(
       error: 'An unexpected error occurred'
     }
   }
-} 
+}

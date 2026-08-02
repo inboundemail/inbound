@@ -59,8 +59,9 @@ if (awsAccessKeyId && awsSecretAccessKey) {
 // Request schema
 const AttachmentSchema = t.Object({
 	filename: t.String(),
-	content: t.String(),
+	content: t.Optional(t.String()),
 	content_type: t.Optional(t.String()),
+	content_id: t.Optional(t.String()),
 	path: t.Optional(t.String()),
 });
 

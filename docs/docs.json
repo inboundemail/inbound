@@ -63,7 +63,7 @@
             ]
           }
         ],
-        "openapi": "https://app.stainless.com/api/spec/documented/inbound/openapi.documented.yml"
+        "openapi": "https://inbound.new/openapi.json"
       }
     ]
   },

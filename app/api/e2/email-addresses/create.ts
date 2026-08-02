@@ -30,7 +30,7 @@ const RoutingSchema = t.Object({
   ]),
   id: t.Nullable(t.String()),
   name: t.Nullable(t.String()),
-  config: t.Optional(t.Any({ "x-stainless-any": true })),
+  config: t.Optional(t.Unknown()),
   isActive: t.Boolean(),
 });
 

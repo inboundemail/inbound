@@ -1,0 +1,218 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/e2/attachments/{id}/{filename}",
+    "resource": "attachments",
+    "sdkMethod": "retrieve"
+  },
+  {
+    "method": "POST",
+    "path": "/api/e2/blocklist/unblock",
+    "resource": "blocklist",
+    "sdkMethod": "unblock"
+  },
+  {
+    "method": "GET",
+    "path": "/api/e2/domains",
+    "resource": "domains",
+    "sdkMethod": "list"
+  },
+  {
+    "method": "POST",
+    "path": "/api/e2/domains",
+    "resource": "domains",
+    "sdkMethod": "create"
+  },
+  {
+    "method": "GET",
+    "path": "/api/e2/domains/{id}",
+    "resource": "domains",
+    "sdkMethod": "retrieve"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/e2/domains/{id}",
+    "resource": "domains",
+    "sdkMethod": "update"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/e2/domains/{id}",
+    "resource": "domains",
+    "sdkMethod": "delete"
+  },
+  {
+    "method": "GET",
+    "path": "/api/e2/endpoints",
+    "resource": "endpoints",
+    "sdkMethod": "list"
+  },
+  {
+    "method": "POST",
+    "path": "/api/e2/endpoints",
+    "resource": "endpoints",
+    "sdkMethod": "create"
+  },
+  {
+    "method": "GET",
+    "path": "/api/e2/endpoints/{id}",
+    "resource": "endpoints",
+    "sdkMethod": "retrieve"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/e2/endpoints/{id}",
+    "resource": "endpoints",
+    "sdkMethod": "update"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/e2/endpoints/{id}",
+    "resource": "endpoints",
+    "sdkMethod": "delete"
+  },
+  {
+    "method": "POST",
+    "path": "/api/e2/endpoints/{id}/test",
+    "resource": "endpoints",
+    "sdkMethod": "test"
+  },
+  {
+    "method": "GET",
+    "path": "/api/e2/email-addresses",
+    "resource": "emailAddresses",
+    "sdkMethod": "list"
+  },
+  {
+    "method": "POST",
+    "path": "/api/e2/email-addresses",
+    "resource": "emailAddresses",
+    "sdkMethod": "create"
+  },
+  {
+    "method": "GET",
+    "path": "/api/e2/email-addresses/{id}",
+    "resource": "emailAddresses",
+    "sdkMethod": "retrieve"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/e2/email-addresses/{id}",
+    "resource": "emailAddresses",
+    "sdkMethod": "update"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/e2/email-addresses/{id}",
+    "resource": "emailAddresses",
+    "sdkMethod": "delete"
+  },
+  {
+    "method": "POST",
+    "path": "/api/e2/emails",
+    "resource": "emails",
+    "sdkMethod": "send"
+  },
+  {
+    "method": "GET",
+    "path": "/api/e2/emails",
+    "resource": "emails",
+    "sdkMethod": "list"
+  },
+  {
+    "method": "GET",
+    "path": "/api/e2/emails/{id}",
+    "resource": "emails",
+    "sdkMethod": "retrieve"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/e2/emails/{id}",
+    "resource": "emails",
+    "sdkMethod": "update"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/e2/emails/{id}",
+    "resource": "emails",
+    "sdkMethod": "cancel"
+  },
+  {
+    "method": "POST",
+    "path": "/api/e2/emails/{id}/reply",
+    "resource": "emails",
+    "sdkMethod": "reply"
+  },
+  {
+    "method": "POST",
+    "path": "/api/e2/emails/{id}/retry",
+    "resource": "emails",
+    "sdkMethod": "retry"
+  },
+  {
+    "method": "GET",
+    "path": "/api/e2/mail/threads",
+    "resource": "mail",
+    "sdkMethod": "list"
+  },
+  {
+    "method": "GET",
+    "path": "/api/e2/mail/threads/{id}",
+    "resource": "mail",
+    "sdkMethod": "retrieve"
+  },
+  {
+    "method": "POST",
+    "path": "/api/e2/onboarding/demo",
+    "resource": "onboarding",
+    "sdkMethod": "sendDemo"
+  },
+  {
+    "method": "GET",
+    "path": "/api/e2/onboarding/check-reply",
+    "resource": "onboarding",
+    "sdkMethod": "checkReply"
+  },
+  {
+    "method": "GET",
+    "path": "/api/e2/guard",
+    "resource": "guard",
+    "sdkMethod": "list"
+  },
+  {
+    "method": "POST",
+    "path": "/api/e2/guard",
+    "resource": "guard",
+    "sdkMethod": "create"
+  },
+  {
+    "method": "GET",
+    "path": "/api/e2/guard/{id}",
+    "resource": "guard",
+    "sdkMethod": "retrieve"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/e2/guard/{id}",
+    "resource": "guard",
+    "sdkMethod": "update"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/e2/guard/{id}",
+    "resource": "guard",
+    "sdkMethod": "delete"
+  },
+  {
+    "method": "POST",
+    "path": "/api/e2/guard/{id}/check",
+    "resource": "guard",
+    "sdkMethod": "check"
+  },
+  {
+    "method": "POST",
+    "path": "/api/e2/guard/generate",
+    "resource": "guard",
+    "sdkMethod": "generate"
+  }
+]

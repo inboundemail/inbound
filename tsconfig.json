@@ -42,6 +42,15 @@
     ".next/**/*",
     "inbound-whop-app/**/*",
     "@inboundemail/**/*",
-    "packages/**/*"
+    "packages/**/*",
+    "apps/**/*",
+    "autumn.config.ts",
+    "scripts/bump-sdk-version.ts",
+    "scripts/classify-sdk-change.ts",
+    "scripts/generate-api.ts",
+    "scripts/generate-openapi.ts",
+    "scripts/generate-sdk.ts",
+    "scripts/sdk-operations.ts",
+    "scripts/sdk-release.test.ts"
   ]
 }

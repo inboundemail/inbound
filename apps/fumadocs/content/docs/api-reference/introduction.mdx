@@ -1,0 +1,206 @@
+---
+title: "Introduction"
+description: "Simple email processing API for receiving and managing emails programmatically"
+---
+
+Welcome to Inbound! Get started with sending emails, receiving emails, and building complete email workflows in minutes.
+
+## Quick Start
+
+<Steps>
+  <Step title="Get Your API Key">
+    Sign up at [inbound.new](https://inbound.new) and generate an API key from your dashboard.
+  </Step>
+  
+  <Step title="Install the SDK (Recommended)">
+    Install our SDK for the best developer experience:
+    
+    ```bash
+    npm install inboundemail
+    ```
+  </Step>
+  
+  <Step title="Send Your First Email">
+    Start sending emails immediately:
+    
+    
+    ```typescript SDK (typescript)
+    import { Inbound } from 'inboundemail'
+    
+    const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+    
+    const email = await inbound.emails.send({
+      from: 'Inbound User <agent@inbnd.dev>',
+      to: 'youremail@inbound.new',
+      subject: 'Welcome!',
+      html: '<p>Thanks for signing up!</p>',
+      tags: [{ name: 'campaign', value: 'welcome' }]
+    })
+    
+    console.log(`Email sent: ${email.id}`)
+    ```
+  </Step>
+</Steps>
+
+## Authentication
+
+All API requests to Inbound v2 require authentication using an API key. This guide explains how to obtain and use your API key securely.
+
+### Base URL
+
+All authenticated requests are made to:
+
+```bash
+https://inbound.new/api/e2
+```
+
+### Getting Your API Key
+
+<Steps>
+  <Step title="Access Your Dashboard">
+    Log in to your Inbound dashboard and navigate to the Settings page.
+    
+    <Card title="Dashboard" icon="external-link" href="https://inbound.new/settings">
+      Access your API keys from the dashboard
+    </Card>
+  </Step>
+  
+  <Step title="Generate API Key">
+    Click "Create API Key" and give it a descriptive name for easy identification.
+  </Step>
+  
+  <Step title="Copy and Store Securely">
+    Copy your API key immediately and store it securely. You won't be able to see it again.
+    
+    <Warning>
+    API keys are sensitive credentials. Never expose them in client-side code or commit them to version control.
+    </Warning>
+  </Step>
+</Steps>
+
+### Using Your API Key
+
+Include your API key in the `Authorization` header of all API requests:
+
+```bash
+Authorization: Bearer your_api_key_here
+```
+
+### Security Best Practices
+
+- **Environment Variables**: Always store API keys in environment variables
+- **Key Rotation**: Regularly rotate your API keys for enhanced security
+- **Environment Separation**: Use separate API keys for different environments
+- **Monitoring**: Monitor your API key usage in the dashboard
+
+<Tip>
+Learn about [rate limits](/docs/api-reference/rate-limits) to optimize your API usage and avoid hitting limits.
+</Tip>
+
+## How Inbound Works
+
+Inbound enables you to be able to send & receive emails programmatically.
+
+#### Sending Emails
+
+You can send emails using the SDK or the API. Our SDK is *very* similar to the [Resend SDK](https://resend.com/docs/api-reference). So if you are
+migrating from Resend, you shouldn't have any trouble.
+
+Example:
+
+```typescript title="Node.js"
+const email = await inbound.emails.send({
+  from: 'Inbound User <agent@inbnd.dev>',
+  to: 'youremail@inbound.new',
+  subject: 'Welcome!',
+  html: '<p>Thanks for signing up!</p>',
+  tags: [{ name: 'campaign', value: 'welcome' }]
+})
+
+console.log(`Email sent: ${email.id}`)
+```
+
+#### Receiving Emails
+
+In inbound you can receive emails using endpoints. You can attach endpoints to individual email 
+addresses or you can setup catch-all for a domain, where all any incoming email that doesn't match
+any of the specific email addresses will be routed to the catch-all endpoint.
+
+Example:
+
+```typescript
+switch (email) {
+  case 'support@yourdomain.com':
+    endpoint1  // Specific endpoint for support
+  case 'sales@yourdomain.com':
+    endpoint2  // Specific endpoint for sales
+  default:    // catch-all
+    endpoint3  // Fallback endpoint for all other emails
+}
+```
+
+
+## API Features
+
+<CardGroup cols={2}>
+  <Card title="Send Emails" icon="paper-plane" href="/docs/api-reference/emails/send-an-email">
+    Send transactional emails with Resend-compatible API
+  </Card>
+  
+  <Card title="Receive Emails" icon="inbox" href="/docs/api-reference/webhook">
+    Process incoming emails via webhooks with TypeScript types
+  </Card>
+  
+  <Card title="Reply to Emails" icon="reply" href="/docs/api-reference/emails/reply-to-an-email">
+    Send replies to received emails with full threading support
+  </Card>
+  
+  <Card title="Manage Domains" icon="globe" href="/docs/api-reference/domains/create-new-domain">
+    Add and verify domains for email receiving
+  </Card>
+</CardGroup>
+
+
+## Error Handling
+
+API errors are returned with appropriate HTTP status codes:
+
+```json
+{
+  "error": "Invalid or missing API key"
+}
+```
+
+Common status codes:
+- `200` - Success
+- `400` - Bad Request (invalid parameters)
+- `401` - Unauthorized (invalid API key)
+- `404` - Not Found (resource not found)
+- `429` - Too Many Requests (rate limit exceeded)
+- `500` - Internal Server Error
+
+## Next Steps
+
+Ready to start building with Inbound? Here are the essential resources to get you started:
+
+<CardGroup cols={2}>
+  <Card title="Authentication Guide" icon="key" href="/docs/api-reference/introduction#authentication">
+    Complete guide to API authentication and security
+  </Card>
+  
+  <Card title="Rate Limits" icon="clock" href="/docs/api-reference/rate-limits">
+    Understand API limits and optimization strategies
+  </Card>
+  
+  <Card title="Send Your First Email" icon="paper-plane" href="/docs/quickstart/getting-started#3-send-your-first-email">
+    Start sending emails with the API
+  </Card>
+  
+  <Card title="SDK Installation" icon="code" href="/docs/quickstart/getting-started#2-install-the-sdk">
+    Install and configure the TypeScript SDK
+  </Card>
+  
+  <Card title="Error Codes" icon="exclamation-triangle" href="/docs/api-reference/errors">
+    Reference for all API error codes and responses
+  </Card>
+</CardGroup>

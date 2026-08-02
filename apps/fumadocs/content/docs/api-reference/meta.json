@@ -1,0 +1,12 @@
+{
+  "title": "API Reference",
+  "icon": "SquareTerminal",
+  "pages": [
+    "introduction",
+    "rate-limits",
+    "webhook",
+    "security",
+    "errors",
+    "..."
+  ]
+}

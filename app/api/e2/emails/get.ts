@@ -26,12 +26,12 @@ const EmailDetailSchema = t.Object({
   sent_at: t.Optional(t.Nullable(t.String())),
   scheduled_at: t.Optional(t.Nullable(t.String())),
   has_attachments: t.Boolean(),
-  attachments: t.Optional(t.Array(t.Any({ "x-stainless-any": true }))),
+  attachments: t.Optional(t.Array(t.Unknown())),
   is_read: t.Optional(t.Boolean()),
   thread_id: t.Optional(t.Nullable(t.String())),
   thread_position: t.Optional(t.Nullable(t.Number())),
-  headers: t.Optional(t.Any({ "x-stainless-any": true })),
-  tags: t.Optional(t.Array(t.Any({ "x-stainless-any": true }))),
+  headers: t.Optional(t.Unknown()),
+  tags: t.Optional(t.Array(t.Unknown())),
 });
 
 const GetEmailErrorResponse = t.Object({

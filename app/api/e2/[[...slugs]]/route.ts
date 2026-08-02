@@ -13,6 +13,7 @@ import { banUser } from "../admin/users/ban";
 import { unbanUser } from "../admin/users/unban";
 import { getAttachment } from "../attachments/get";
 import { revokeCurrentApiKey } from "../auth/revoke-key";
+import { unblockBlocklistedEmail } from "../blocklist/unblock";
 import { createDomain } from "../domains/create";
 import { deleteDomain } from "../domains/delete";
 import { getDomain } from "../domains/get";
@@ -386,6 +387,11 @@ https://inbound.new/api/e2
 						description:
 							"Download email attachments using authenticated requests.",
 					},
+					{
+						name: "Blocklist",
+						description:
+							"Manage recipient and sender addresses blocked after delivery failures.",
+					},
 				],
 				components: {
 					securitySchemes: {
@@ -472,6 +478,8 @@ https://inbound.new/api/e2
 	// Attachment routes
 	.use(getAttachment)
 	.use(revokeCurrentApiKey)
+	// Blocklist routes
+	.use(unblockBlocklistedEmail)
 	// Email routes (sending, listing, managing)
 	.use(sendEmail)
 	.use(listEmails)

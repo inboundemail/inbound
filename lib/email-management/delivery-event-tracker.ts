@@ -59,6 +59,23 @@ export interface RecordDeliveryEventResult {
 	svixDispatchTriggered?: boolean;
 }
 
+const AUTO_BLOCK_BOUNCE_SUB_TYPES = new Set<BounceSubType>([
+	BOUNCE_SUB_TYPES.USER_UNKNOWN,
+	BOUNCE_SUB_TYPES.BAD_DESTINATION,
+	BOUNCE_SUB_TYPES.MAILBOX_DISABLED,
+	BOUNCE_SUB_TYPES.INVALID_DOMAIN,
+]);
+
+export function shouldAutoBlockRecipient(
+	bounceType: BounceType,
+	bounceSubType: BounceSubType,
+): boolean {
+	return (
+		bounceType === BOUNCE_TYPES.HARD &&
+		AUTO_BLOCK_BOUNCE_SUB_TYPES.has(bounceSubType)
+	);
+}
+
 /**
  * Determine the bounce sub-type from status code
  */
@@ -241,7 +258,7 @@ export async function recordDeliveryEventFromDsn(
 		// Auto-add hard bounces to blocklist if enabled
 		if (
 			autoBlocklist &&
-			bounceType === BOUNCE_TYPES.HARD &&
+			shouldAutoBlockRecipient(bounceType, bounceSubType) &&
 			source?.userId &&
 			source?.domainId
 		) {

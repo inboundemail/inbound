@@ -1,17 +1,13 @@
 import { Elysia, t } from "elysia";
-import Inbound from "inboundemail";
 import { nanoid } from "nanoid";
-import { auth } from "@/lib/auth/auth";
+import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
 import { db } from "@/lib/db";
 import { onboardingDemoEmails } from "@/lib/db/schema";
 
-// Request schema
 const SendDemoEmailBody = t.Object({
-	apiKey: t.String({ description: "User's API key for sending" }),
 	to: t.String({ description: "Recipient email address" }),
 });
 
-// Response schemas
 const SendDemoSuccessResponse = t.Object({
 	id: t.String(),
 	messageId: t.Optional(t.String()),
@@ -19,54 +15,48 @@ const SendDemoSuccessResponse = t.Object({
 
 const SendDemoErrorResponse = t.Object({
 	error: t.String(),
+	message: t.Optional(t.String()),
+	statusCode: t.Optional(t.Number()),
 });
 
 export const sendOnboardingDemo = new Elysia().post(
 	"/onboarding/demo",
 	async ({ request, body, set }) => {
-		console.log("📧 POST /api/e2/onboarding/demo - Starting request");
+		const userId = await validateAndRateLimit(request, set);
+		const { to } = body;
 
-		// Get session - onboarding requires session auth (not API key)
-		const session = await auth.api.getSession({ headers: request.headers });
-		if (!session?.user?.id) {
-			console.log("❌ No session found");
-			set.status = 401;
-			return { error: "Authentication required" };
-		}
-
-		const userId = session.user.id;
-		console.log("✅ Session authenticated for userId:", userId);
-
-		const { apiKey, to } = body;
-
-		// Validate email format
 		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 		if (!emailRegex.test(to)) {
-			console.log("❌ Invalid email format:", to);
 			set.status = 400;
 			return { error: "Invalid email address format" };
 		}
 
 		try {
-			// Use the Inbound SDK to send the demo email
-			// Use localhost in development, production URL otherwise
-			const inbound = new Inbound({
-				apiKey,
-				baseURL:
-					process.env.NODE_ENV === "development"
-						? "http://localhost:3000"
-						: undefined,
+			const demoEmailId = nanoid();
+			const messageId = `onboarding-${demoEmailId}@inbnd.dev`;
+			const sendHeaders = new Headers({
+				"Content-Type": "application/json",
+				"Idempotency-Key": demoEmailId,
 			});
+			for (const header of [
+				"cookie",
+				"authorization",
+				"x-forwarded-for",
+				"x-real-ip",
+				"cf-connecting-ip",
+			]) {
+				const value = request.headers.get(header);
+				if (value) sendHeaders.set(header, value);
+			}
 
-			console.log("📤 Sending demo email to:", to);
-
-			// The SDK throws on error, returns response directly on success
-			// Use agent@inbnd.dev which is allowed for all users (no domain ownership required)
-			const result = await inbound.emails.send({
-				from: "Inbound Demo <agent@inbnd.dev>",
-				to: to,
-				subject: "Welcome to Inbound! Reply to complete setup",
-				html: `
+			const sendResponse = await fetch(new URL("/api/e2/emails", request.url), {
+				method: "POST",
+				headers: sendHeaders,
+				body: JSON.stringify({
+					from: "Inbound Demo <agent@inbnd.dev>",
+					to,
+					subject: "Welcome to Inbound! Reply to complete setup",
+					html: `
           <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <h1 style="color: #1a1a1a; font-size: 24px; margin-bottom: 16px;">Welcome to Inbound!</h1>
             <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
@@ -81,30 +71,47 @@ export const sendOnboardingDemo = new Elysia().post(
             </p>
           </div>
         `,
-				text: `Welcome to Inbound!\n\nThis is a test email from your Inbound setup. Reply to this email to complete your onboarding.\n\nOnce you reply, we'll detect it automatically and you'll be ready to start receiving emails!`,
+					text: `Welcome to Inbound!\n\nThis is a test email from your Inbound setup. Reply to this email to complete your onboarding.\n\nOnce you reply, we'll detect it automatically and you'll be ready to start receiving emails!`,
+					headers: {
+						"Message-ID": `<${messageId}>`,
+					},
+				}),
 			});
 
-			const emailId = result.id;
-			console.log("✅ Demo email sent, ID:", emailId);
+			const payload: unknown = await sendResponse.json();
+			const sendResult =
+				payload && typeof payload === "object"
+					? (payload as { id?: unknown; error?: unknown })
+					: null;
+			if (!sendResponse.ok || typeof sendResult?.id !== "string") {
+				set.status =
+					sendResponse.status === 429
+						? 429
+						: sendResponse.status < 500
+							? 400
+							: 500;
+				return {
+					error:
+						typeof sendResult?.error === "string"
+							? sendResult.error
+							: "Failed to send demo email",
+				};
+			}
 
-			// Store the demo email record for reply tracking
-			const demoEmailId = nanoid();
 			await db.insert(onboardingDemoEmails).values({
 				id: demoEmailId,
 				userId,
-				emailId: emailId,
-				messageId: emailId, // Use the email ID as message reference
+				emailId: sendResult.id,
+				messageId,
 				recipientEmail: to,
 				sentAt: new Date(),
 				replyReceived: false,
 			});
 
-			console.log("✅ Demo email record created:", demoEmailId);
-
 			set.status = 201;
 			return {
-				id: emailId,
-				messageId: emailId,
+				id: sendResult.id,
+				messageId,
 			};
 		} catch (error) {
 			console.error("❌ Failed to send demo email:", error);
@@ -121,6 +128,8 @@ export const sendOnboardingDemo = new Elysia().post(
 			201: SendDemoSuccessResponse,
 			400: SendDemoErrorResponse,
 			401: SendDemoErrorResponse,
+			403: SendDemoErrorResponse,
+			429: SendDemoErrorResponse,
 			500: SendDemoErrorResponse,
 		},
 		detail: {

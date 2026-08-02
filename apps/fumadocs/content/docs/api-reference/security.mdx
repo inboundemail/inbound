@@ -1,0 +1,220 @@
+---
+title: "Security"
+description: "How to securely verify webhook requests from Inbound"
+---
+
+## Overview
+
+When receiving webhooks from Inbound, it's important to verify that requests are legitimate. Inbound includes a verification token in the `X-Webhook-Verification-Token` header for each webhook request.
+
+## Webhook Verification
+
+Every webhook request includes security headers that allow you to verify the request authenticity:
+
+| Header | Description |
+|--------|-------------|
+| `X-Webhook-Verification-Token` | Unique verification token for your endpoint |
+| `X-Endpoint-ID` | ID of the endpoint that triggered this webhook |
+| `X-Webhook-Event` | Event type (e.g., `email.received`) |
+| `X-Webhook-Timestamp` | ISO 8601 timestamp of when the webhook was sent |
+
+## Using the SDK Verification Helper
+
+The SDK provides a `verifyWebhook` helper function that automatically fetches your endpoint configuration and compares the verification token:
+
+<Tabs items={['Next.js', 'Express.js', 'Manual verification']}>
+  <Tab>
+```typescript title="app/api/webhook/route.ts"
+import { Inbound, verifyWebhookFromHeaders } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+export async function POST(request: Request) {
+  // Verify webhook authenticity
+  const isValid = await verifyWebhookFromHeaders(request.headers, inbound)
+  
+  if (!isValid) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+  
+  // Process webhook payload
+  const payload = await request.json()
+  const email = payload.email
+  
+  // Your webhook handling logic here
+  console.log('Received email:', email.subject)
+  
+  return new Response('OK', { status: 200 })
+}
+```
+  </Tab>
+  
+  <Tab>
+```typescript title="server.ts"
+import express from 'express'
+import { Inbound, verifyWebhookFromHeaders } from 'inboundemail'
+
+const app = express()
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+app.post('/webhook', async (req, res) => {
+  // Verify webhook authenticity
+  const isValid = await verifyWebhookFromHeaders(req.headers, inbound)
+  
+  if (!isValid) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  // Process webhook payload
+  const email = req.body.email
+  
+  // Your webhook handling logic here
+  console.log('Received email:', email.subject)
+  
+  res.status(200).json({ success: true })
+})
+```
+  </Tab>
+  
+  <Tab>
+```typescript
+import { Inbound, verifyWebhook } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+export async function POST(request: Request) {
+  const endpointId = request.headers.get('X-Endpoint-ID')
+  const verificationToken = request.headers.get('X-Webhook-Verification-Token')
+  
+  // Manually verify with extracted headers
+  const isValid = await verifyWebhook(endpointId, verificationToken, inbound)
+  
+  if (!isValid) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+  
+  // Process webhook...
+}
+```
+  </Tab>
+</Tabs>
+
+## How Verification Works
+
+1. **Verification Token**: Each endpoint has a unique verification token stored in its configuration
+2. **Header Transmission**: Inbound sends this token in the `X-Webhook-Verification-Token` header with every webhook request
+3. **SDK Verification**: The `verifyWebhook` function fetches your endpoint config via the API and compares tokens
+4. **Security**: If tokens don't match, the request should be rejected
+
+<Warning>
+Always verify webhook requests in production to prevent unauthorized access to your endpoints.
+</Warning>
+
+<Tip>
+The verification token is automatically generated when you create an endpoint. You can view it in your endpoint configuration via the API.
+</Tip>
+
+## Manual Verification (Without SDK)
+
+If you're not using the SDK, you can manually verify webhooks by fetching the endpoint configuration:
+
+```typescript
+async function verifyWebhookManually(
+  endpointId: string,
+  verificationToken: string,
+  apiKey: string
+): Promise<boolean> {
+  // Fetch endpoint from API
+  const response = await fetch(`https://inbound.new/api/e2/endpoints/${endpointId}`, {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`
+    }
+  })
+  
+  if (!response.ok) {
+    return false
+  }
+  
+  const endpoint = await response.json()
+  const config = typeof endpoint.config === 'string' 
+    ? JSON.parse(endpoint.config) 
+    : endpoint.config
+  
+  // Compare tokens
+  return config.verificationToken === verificationToken
+}
+```
+
+## Getting Your Verification Token
+
+You can retrieve the verification token for your endpoint via the API:
+
+```typescript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+// Get endpoint configuration
+const { data: endpoint } = await inbound.endpoint.get('your-endpoint-id')
+
+if (endpoint) {
+  const config = typeof endpoint.config === 'string' 
+    ? JSON.parse(endpoint.config) 
+    : endpoint.config
+  
+  console.log('Verification token:', config.verificationToken)
+}
+```
+
+## Best Practices
+
+### Always Verify in Production
+
+<Warning>
+Never skip webhook verification in production environments. Unverified webhooks can expose your application to security risks.
+</Warning>
+
+### Handle Verification Failures
+
+Always return appropriate error responses when verification fails:
+
+```typescript
+if (!isValid) {
+  // Log the failed attempt for monitoring
+  console.warn('Webhook verification failed', {
+    endpointId: request.headers.get('X-Endpoint-ID'),
+    timestamp: new Date().toISOString()
+  })
+  
+  // Return 401 Unauthorized
+  return new Response('Unauthorized', { status: 401 })
+}
+```
+
+### Store API Keys Securely
+
+Never hardcode API keys or commit them to version control:
+
+- Use environment variables
+- Use secrets management services in production
+- Rotate API keys regularly
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Webhook Structure" icon="webhook" href="/docs/api-reference/webhook">
+    Learn about webhook payload structure and types
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/docs/api-reference/endpoints/get-endpoint-details">
+    View endpoint API documentation
+  </Card>
+  
+  <Card title="Error Codes" icon="exclamation-triangle" href="/docs/api-reference/errors">
+    Understand authentication and verification errors
+  </Card>
+  
+  <Card title="SDK Documentation" icon="book" href="/docs/api-reference/webhook">
+    Learn more about webhook handling in the SDK
+  </Card>
+</CardGroup>

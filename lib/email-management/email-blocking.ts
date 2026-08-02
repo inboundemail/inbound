@@ -188,35 +188,51 @@ export async function blockEmail(
  * Unblock an email address
  */
 export async function unblockEmail(
-  emailAddress: string
-): Promise<{ success: boolean; error?: string; message?: string }> {
+  emailAddress: string,
+  userId: string
+): Promise<{
+  success: boolean
+  error?: string
+  notFound?: boolean
+  message?: string
+  emailAddress?: string
+  domain?: string
+}> {
   try {
-    const normalizedEmail = emailAddress.toLowerCase()
+    const normalizedEmail = emailAddress.toLowerCase().trim()
 
-    // Check if email is blocked
     const blockedRecord = await db
-      .select({ id: blockedEmails.id })
+      .select({
+        id: blockedEmails.id,
+        domain: emailDomains.domain
+      })
       .from(blockedEmails)
-      .where(eq(blockedEmails.emailAddress, normalizedEmail))
+      .innerJoin(emailDomains, eq(blockedEmails.domainId, emailDomains.id))
+      .where(and(
+        eq(blockedEmails.emailAddress, normalizedEmail),
+        eq(emailDomains.userId, userId)
+      ))
       .limit(1)
 
     if (!blockedRecord[0]) {
       return {
         success: false,
-        error: 'Email address is not blocked'
+        error: 'Email address is not blocked for any of your domains',
+        notFound: true
       }
     }
 
-    // Remove from blocked list
     await db
       .delete(blockedEmails)
-      .where(eq(blockedEmails.emailAddress, normalizedEmail))
+      .where(eq(blockedEmails.id, blockedRecord[0].id))
 
     console.log(`✅ Email blocking - Successfully unblocked ${normalizedEmail}`)
 
     return {
       success: true,
-      message: `Successfully unblocked ${normalizedEmail}`
+      message: `Successfully unblocked ${normalizedEmail}`,
+      emailAddress: normalizedEmail,
+      domain: blockedRecord[0].domain
     }
 
   } catch (error) {
@@ -309,4 +325,4 @@ export async function getBlockedEmailsForUser(userId: string): Promise<{
       error: error instanceof Error ? error.message : 'Unknown error occurred'
     }
   }
-} 
+}

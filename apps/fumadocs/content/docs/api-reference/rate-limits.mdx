@@ -1,0 +1,78 @@
+---
+title: "Rate Limits"
+description: "Understand rate limits and how to increase them for the Inbound API"
+---
+
+The response headers describe your current rate limit following every request in conformance with the [sixth IETF standard draft](https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-06):
+
+| Header name           | Description                                                         |
+| --------------------- | ------------------------------------------------------------------- |
+| `ratelimit-limit`     | Maximum number of requests allowed within a window.                 |
+| `ratelimit-remaining` | How many requests you have left within the current window.          |
+| `ratelimit-reset`     | How many seconds until the limits are reset.                        |
+| `retry-after`         | How many seconds you should wait before making a follow-up request. |
+
+## Default Rate Limits
+
+The default maximum rate limit is **10 requests per second** across all API endpoints. This applies uniformly to:
+
+- **Email sending endpoints**: 10 requests per second
+- **Email management endpoints**: 10 requests per second 
+- **Domain/configuration endpoints**: 10 requests per second
+- **All other API endpoints**: 10 requests per second
+
+This number can be increased for trusted senders upon request.
+
+## Rate Limit Response
+
+After exceeding the rate limit, you'll receive a `429 Too Many Requests` response error code:
+
+```json
+{
+  "error": "Rate limit exceeded",
+  "message": "Maximum 10 requests per second allowed. Upgrade or contact support for higher limits."
+}
+```
+
+## Increasing Rate Limits
+
+If you have specific requirements that exceed the default limits, you can request a rate increase:
+
+<Steps>
+  <Step title="Contact Support">
+    Reach out to our support team at [support@inbound.new](mailto:support@inbound.new) with your requirements.
+  </Step>
+  
+  <Step title="Provide Use Case Details">
+    Include details about your use case, expected volume, and business requirements.
+  </Step>
+  
+  <Step title="Review and Approval">
+    Our team will review your request and work with you to find an appropriate solution.
+  </Step>
+</Steps>
+
+## Rate Limit by Endpoint
+
+
+<Warning>
+Rate limits are applied per account. If you're using multiple accounts, each account has its own rate limit bucket.
+</Warning>
+
+**Important**: The SDK will return rate limit errors directly - you must handle them in your application code.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/docs/api-reference/introduction#authentication">
+    Learn how to authenticate your API requests
+  </Card>
+  
+  <Card title="Send Your First Email" icon="paper-plane" href="/docs/api-reference/emails/send-an-email">
+    Start sending emails with proper rate limiting
+  </Card>
+  
+  <Card title="Error Codes" icon="exclamation-triangle" href="/docs/api-reference/errors">
+    See all API error codes including rate limit responses
+  </Card>
+</CardGroup>

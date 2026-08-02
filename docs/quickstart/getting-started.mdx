@@ -37,18 +37,14 @@ import { Inbound } from 'inboundemail'
 
 const inbound = new Inbound(process.env.INBOUND_API_KEY!)
 
-const { data, error } = await inbound.emails.send({
+const email = await inbound.emails.send({
   from: 'Your Name <you@yourdomain.com>',
   to: 'recipient@example.com',
   subject: 'Hello from Inbound!',
   html: '<p>This is my first email with Inbound.</p>'
 })
 
-if (error) {
-  console.error('Error:', error)
-} else {
-  console.log('Email sent:', data?.id)
-}
+console.log('Email sent:', email.id)
 ```
 
 ## Next Steps

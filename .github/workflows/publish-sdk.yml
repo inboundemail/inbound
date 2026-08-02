@@ -1,0 +1,85 @@
+name: Publish SDK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/inbound-sdk/package.json"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-inbound-sdk
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install application dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install SDK dependencies
+        working-directory: packages/inbound-sdk
+        run: bun install --frozen-lockfile
+
+      - name: Generate SDK
+        run: bun run generate:api
+
+      - name: Read SDK version
+        id: version
+        working-directory: packages/inbound-sdk
+        run: echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Check published version
+        id: published
+        env:
+          SDK_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if bun info "inboundemail@$SDK_VERSION" version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify generated SDK
+        run: git diff --exit-code -- public/openapi.json apps/fumadocs/openapi.json apps/fumadocs/sdk-operations.json packages/inbound-sdk/src/generated
+
+      - name: Test SDK
+        run: bun run test-sdk
+
+      - name: Typecheck SDK
+        working-directory: packages/inbound-sdk
+        run: bun run typecheck
+
+      - name: Build SDK
+        working-directory: packages/inbound-sdk
+        run: bun run build
+
+      - name: Publish SDK
+        if: steps.published.outputs.exists != 'true'
+        working-directory: packages/inbound-sdk
+        run: bun publish --access public
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.INBOUND_NPM_TOKEN || secrets.NPM_TOKEN }}
+
+      - name: Tag SDK release
+        env:
+          SDK_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if git rev-parse "sdk-v$SDK_VERSION" >/dev/null 2>&1; then
+            echo "sdk-v$SDK_VERSION already exists"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "sdk-v$SDK_VERSION"
+          git push origin "sdk-v$SDK_VERSION"

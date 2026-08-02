@@ -1,7 +1,7 @@
+import { and, eq, like, lt, sql } from 'drizzle-orm'
+import { nanoid } from 'nanoid'
 import { db } from '@/lib/db'
 import { sesReceiptRules } from '@/lib/db/schema'
-import { eq, and, lt, sql } from 'drizzle-orm'
-import { nanoid } from 'nanoid'
 
 export class BatchRuleManager {
   private ruleSetName: string
@@ -27,6 +27,7 @@ export class BatchRuleManager {
       .where(and(
         eq(sesReceiptRules.ruleSetName, this.ruleSetName),
         eq(sesReceiptRules.isActive, true),
+        like(sesReceiptRules.ruleName, 'batch-rule-%'),
         lt(sesReceiptRules.domainCount, sesReceiptRules.maxCapacity)
       ))
       .orderBy(sesReceiptRules.ruleName)  // Sequential fill
@@ -47,8 +48,7 @@ export class BatchRuleManager {
     }
     
     // No rule with enough capacity, create new one
-    const ruleCount = await this.getRuleCount()
-    const newRuleNumber = ruleCount + 1
+    const newRuleNumber = await this.getNextRuleNumber()
     const newRuleName = `batch-rule-${String(newRuleNumber).padStart(3, '0')}`
     
     const [newRule] = await db
@@ -137,15 +137,23 @@ export class BatchRuleManager {
   }
   
   /**
-   * Get total rule count for this rule set
+   * Get the next compatible batch rule number for this rule set
    */
-  async getRuleCount(): Promise<number> {
+  async getNextRuleNumber(): Promise<number> {
     const result = await db
-      .select({ count: sql<number>`cast(count(*) as int)` })
+      .select({ ruleName: sesReceiptRules.ruleName })
       .from(sesReceiptRules)
-      .where(eq(sesReceiptRules.ruleSetName, this.ruleSetName))
-    
-    return result[0]?.count || 0
+      .where(and(
+        eq(sesReceiptRules.ruleSetName, this.ruleSetName),
+        like(sesReceiptRules.ruleName, 'batch-rule-%')
+      ))
+
+    return result.reduce((highestRuleNumber, rule) => {
+      const ruleNumber = Number(rule.ruleName.slice('batch-rule-'.length))
+      return Number.isSafeInteger(ruleNumber) && ruleNumber > highestRuleNumber
+        ? ruleNumber
+        : highestRuleNumber
+    }, 0) + 1
   }
   
   /**
