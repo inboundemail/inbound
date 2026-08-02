@@ -131,8 +131,7 @@ export function MailboxOnboarding({
 					{mailboxes.length ? mailboxes.map((mailbox) => (
 						<section className={`mailbox-domain-card ${mailbox.enabled ? "mailbox-domain-enabled" : ""}`} key={mailbox.domainId}>
 							<header>
-								<div className="mailbox-domain-icon"><AtSign size={16} /></div>
-								<div><strong>{mailbox.domain}</strong><span>{mailbox.enabled ? "Included in your inbox" : "Not included"}</span></div>
+								<div className="mailbox-domain-name"><strong>{mailbox.domain}</strong><span>{mailbox.enabled ? "Included in your inbox" : "Not included"}</span></div>
 								<label className="mailbox-toggle">
 									<input
 										aria-label={`Include ${mailbox.domain}`}
