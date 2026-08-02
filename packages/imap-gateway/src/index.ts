@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { ApiAuth } from "./auth.ts";
 import { loadConfig } from "./config.ts";
 import { MailStore } from "./db.ts";
 import { buildHandlers } from "./handlers.ts";
@@ -9,7 +10,8 @@ const { IMAPServer } = require("../vendor/imap-core/index.js");
 
 const config = loadConfig();
 const store = new MailStore(config.databaseUrl);
-const handlers = buildHandlers(config, store);
+const auth = new ApiAuth(config);
+const handlers = buildHandlers(auth, store);
 
 const tls =
 	config.tlsKeyPath && config.tlsCertPath

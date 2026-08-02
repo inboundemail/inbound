@@ -470,6 +470,13 @@
       "when": 1785625822247,
       "tag": "0066_empty_jack_power",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1785632898589,
+      "tag": "0067_heavy_shriek",
+      "breakpoints": true
     }
   ]
 }

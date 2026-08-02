@@ -1032,3 +1032,62 @@ export type BounceSubType =
 	(typeof BOUNCE_SUB_TYPES)[keyof typeof BOUNCE_SUB_TYPES];
 export type DeliveryEventAction =
 	(typeof DELIVERY_EVENT_ACTIONS)[keyof typeof DELIVERY_EVENT_ACTIONS];
+
+// IMAP gateway tables
+export const imapMailboxes = pgTable(
+	"imap_mailboxes",
+	{
+		id: varchar("id", { length: 255 }).primaryKey(),
+		userId: varchar("user_id", { length: 255 }).notNull(),
+		address: varchar("address", { length: 255 }).notNull(),
+		path: varchar("path", { length: 255 }).notNull().default("INBOX"),
+		uidValidity: integer("uid_validity").notNull(),
+		uidNext: integer("uid_next").notNull().default(1),
+		modseq: integer("modseq").notNull().default(0),
+		subscribed: boolean("subscribed").notNull().default(true),
+		createdAt: timestamp("created_at").defaultNow(),
+		updatedAt: timestamp("updated_at").defaultNow(),
+	},
+	(table) => ({
+		uniqueAddressPath: unique("imap_mailboxes_address_path_unique").on(
+			table.address,
+			table.path,
+		),
+		userIdIdx: index("imap_mailboxes_user_id_idx").on(table.userId),
+	}),
+);
+
+export const imapMailboxMessages = pgTable(
+	"imap_mailbox_messages",
+	{
+		id: varchar("id", { length: 255 }).primaryKey(),
+		mailboxId: varchar("mailbox_id", { length: 255 }).notNull(),
+		structuredEmailId: varchar("structured_email_id", {
+			length: 255,
+		}).notNull(),
+		uid: integer("uid").notNull(),
+		flags: text("flags").notNull().default("[]"),
+		internalDate: timestamp("internal_date").notNull(),
+		size: integer("size"),
+		modseq: integer("modseq").notNull().default(0),
+		createdAt: timestamp("created_at").defaultNow(),
+	},
+	(table) => ({
+		uniqueMailboxUid: unique("imap_mailbox_messages_mailbox_uid_unique").on(
+			table.mailboxId,
+			table.uid,
+		),
+		uniqueMailboxEmail: unique(
+			"imap_mailbox_messages_mailbox_email_unique",
+		).on(table.mailboxId, table.structuredEmailId),
+		mailboxUidIdx: index("imap_mailbox_messages_mailbox_uid_idx").on(
+			table.mailboxId,
+			table.uid,
+		),
+	}),
+);
+
+export type ImapMailbox = typeof imapMailboxes.$inferSelect;
+export type NewImapMailbox = typeof imapMailboxes.$inferInsert;
+export type ImapMailboxMessage = typeof imapMailboxMessages.$inferSelect;
+export type NewImapMailboxMessage = typeof imapMailboxMessages.$inferInsert;

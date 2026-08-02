@@ -16,3 +16,13 @@ module.exports.notifyConnection = (connection, err) => {
 
 module.exports.intercept = () => false;
 module.exports.gelf = {};
+
+module.exports.applyErrorLogMeta = (logEntry, err) => {
+	if (err instanceof Error) {
+		return Object.assign({}, logEntry, {
+			_error: err.message,
+			_stack: err.stack,
+		});
+	}
+	return logEntry;
+};

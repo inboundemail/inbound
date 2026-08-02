@@ -6,7 +6,7 @@ export interface ImapConfig {
 	tlsCertPath: string | null;
 	allowPlaintext: boolean;
 	databaseUrl: string;
-	devCredentials: Map<string, string>;
+	apiBaseUrl: string;
 	maxConnections: number;
 }
 
@@ -21,13 +21,6 @@ export function loadConfig(): ImapConfig {
 	const databaseUrl = process.env.DATABASE_URL;
 	if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
-	const devCredentials = new Map<string, string>();
-	for (const pair of (process.env.IMAP_CREDENTIALS ?? "").split(",")) {
-		const [address, password] = pair.split(":");
-		if (address && password)
-			devCredentials.set(address.trim().toLowerCase(), password.trim());
-	}
-
 	return {
 		hostname: process.env.IMAP_HOSTNAME ?? "imap.inboundemail.com",
 		port: envNumber("IMAP_PORT", 143),
@@ -36,7 +29,9 @@ export function loadConfig(): ImapConfig {
 		tlsCertPath: process.env.IMAP_TLS_CERT_PATH ?? null,
 		allowPlaintext: process.env.IMAP_ALLOW_PLAINTEXT === "true",
 		databaseUrl,
-		devCredentials,
+		apiBaseUrl: (
+			process.env.INBOUND_API_BASE_URL ?? "https://inbound.new/api/e2"
+		).replace(/\/$/, ""),
 		maxConnections: envNumber("IMAP_MAX_CONNECTIONS", 500),
 	};
 }

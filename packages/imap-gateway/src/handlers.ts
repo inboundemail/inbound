@@ -1,12 +1,10 @@
 import { createRequire } from "node:module";
-import type { ImapConfig } from "./config.ts";
-import type { MailStore } from "./db.ts";
+import type { ApiAuth } from "./auth.ts";
+import type { FlagAction, MailStore } from "./db.ts";
 
 const require = createRequire(import.meta.url);
 const { imapHandler } = require("../vendor/imap-core/index.js");
 const Indexer = require("../vendor/imap-core/lib/indexer/indexer.js");
-
-const UIDVALIDITY = 1;
 
 type Callback = (err: Error | null, ...rest: unknown[]) => void;
 
@@ -37,14 +35,30 @@ interface FetchOptions {
 	isUid: boolean;
 }
 
+interface StoreUpdate {
+	value: string[];
+	action: FlagAction;
+	silent: boolean;
+	messages: number[];
+	unchangedSince: number;
+}
+
 const logger = {
 	debug: () => undefined,
 	info: (...args: unknown[]) => console.log("[imap]", ...args),
 	error: (...args: unknown[]) => console.error("[imap]", ...args),
 };
 
-export function buildHandlers(config: ImapConfig, store: MailStore) {
+export function buildHandlers(auth: ApiAuth, store: MailStore) {
 	const indexer = new Indexer({ logger });
+
+	async function openMailbox(session: ImapSession) {
+		const user = session.user;
+		if (!user?.address) throw new Error("Not authenticated");
+		const mailbox = await store.ensureMailbox(user.address, user.id);
+		await store.syncMailbox(mailbox);
+		return mailbox;
+	}
 
 	return {
 		logger,
@@ -56,15 +70,20 @@ export function buildHandlers(config: ImapConfig, store: MailStore) {
 				done?.(null, true),
 		},
 
-		onAuth(auth: AuthData, _session: ImapSession, callback: Callback) {
-			const address = auth.username.trim().toLowerCase();
-			const expected = config.devCredentials.get(address);
-			if (!expected || expected !== auth.password) {
+		onAuth(authData: AuthData, _session: ImapSession, callback: Callback) {
+			const address = authData.username.trim().toLowerCase();
+			if (!address.includes("@") || !authData.password) {
 				return callback(new Error("Invalid credentials"));
 			}
-			callback(null, {
-				user: { id: address, username: address, address },
-			});
+			auth
+				.authenticate(address, authData.password)
+				.then((result) => {
+					if (!result) return callback(new Error("Invalid credentials"));
+					callback(null, {
+						user: { id: result.userId, username: address, address },
+					});
+				})
+				.catch(() => callback(new Error("Authentication unavailable")));
 		},
 
 		onList(_query: string, _session: ImapSession, callback: Callback) {
@@ -85,18 +104,20 @@ export function buildHandlers(config: ImapConfig, store: MailStore) {
 
 		onOpen(path: string, session: ImapSession, callback: Callback) {
 			if (path !== "INBOX") return callback(null, "NONEXISTENT");
-			const address = session.user?.address;
-			if (!address) return callback(new Error("Not authenticated"));
-			store
-				.listMessages(address)
-				.then((rows) => {
+			openMailbox(session)
+				.then(async (mailbox) => {
+					const messages = await store.listMessages(mailbox.id);
+					const fresh = await store.ensureMailbox(
+						mailbox.address,
+						session.user?.id ?? "",
+					);
 					callback(null, {
-						_id: address,
+						_id: mailbox.id,
 						path,
-						uidValidity: UIDVALIDITY,
-						uidNext: rows.length + 1,
+						uidValidity: mailbox.uidValidity,
+						uidNext: fresh.uidNext,
 						modifyIndex: 0,
-						uidList: rows.map((_, index) => index + 1),
+						uidList: messages.map((message) => message.uid),
 						flags: [],
 					});
 				})
@@ -105,16 +126,19 @@ export function buildHandlers(config: ImapConfig, store: MailStore) {
 
 		onStatus(path: string, session: ImapSession, callback: Callback) {
 			if (path !== "INBOX") return callback(null, "NONEXISTENT");
-			const address = session.user?.address;
-			if (!address) return callback(new Error("Not authenticated"));
-			store
-				.listMessages(address)
-				.then((rows) => {
+			openMailbox(session)
+				.then(async (mailbox) => {
+					const messages = await store.listMessages(mailbox.id);
+					const unseen = await store.unseenCount(mailbox.id);
+					const fresh = await store.ensureMailbox(
+						mailbox.address,
+						session.user?.id ?? "",
+					);
 					callback(null, {
-						messages: rows.length,
-						uidNext: rows.length + 1,
-						uidValidity: UIDVALIDITY,
-						unseen: 0,
+						messages: messages.length,
+						uidNext: fresh.uidNext,
+						uidValidity: mailbox.uidValidity,
+						unseen,
 						highestModseq: 0,
 					});
 				})
@@ -122,34 +146,34 @@ export function buildHandlers(config: ImapConfig, store: MailStore) {
 		},
 
 		onFetch(
-			mailbox: string,
+			mailboxId: string,
 			options: FetchOptions,
 			session: ImapSession,
 			callback: Callback,
 		) {
 			(async () => {
-				const rows = await store.listMessages(mailbox);
-				const wanted = new Set(options.messages);
+				const rows = await store.listMessages(mailboxId, options.messages);
 				let rowCount = 0;
 
-				for (let index = 0; index < rows.length; index++) {
-					const uid = index + 1;
-					if (!wanted.has(uid)) continue;
-					const row = rows[index];
-					if (!row) continue;
-					const raw = await store.getRawContent(row.id);
+				for (const row of rows) {
+					const raw = await store.getRawContent(row.structuredEmailId);
 					if (!raw) continue;
 
+					const flags = [...row.flags];
+					const markAsSeen =
+						options.markAsSeen && !flags.includes("\\Seen");
+					if (markAsSeen) flags.unshift("\\Seen");
+
 					const messageData = {
-						_id: row.id,
-						uid,
-						flags: [],
+						_id: row.structuredEmailId,
+						uid: row.uid,
+						flags,
 						modseq: 0,
-						idate: row.createdAt,
+						idate: row.internalDate,
 						mimeTree: indexer.parseMimeTree(raw),
 					};
 
-					const response = session.formatResponse("FETCH", uid, {
+					const response = session.formatResponse("FETCH", row.uid, {
 						query: options.query,
 						values: session.getQueryResponse(options.query, messageData, {
 							logger,
@@ -164,6 +188,10 @@ export function buildHandlers(config: ImapConfig, store: MailStore) {
 						session.writeStream.write(stream, () => resolve());
 					});
 					rowCount++;
+
+					if (markAsSeen) {
+						await store.addFlag(mailboxId, row.uid, "\\Seen");
+					}
 				}
 
 				callback(null, true, { rowCount });
@@ -171,16 +199,16 @@ export function buildHandlers(config: ImapConfig, store: MailStore) {
 		},
 
 		onSearch(
-			mailbox: string,
+			mailboxId: string,
 			_options: unknown,
 			_session: ImapSession,
 			callback: Callback,
 		) {
 			store
-				.listMessages(mailbox)
+				.listMessages(mailboxId)
 				.then((rows) => {
 					callback(null, {
-						uidList: rows.map((_, index) => index + 1),
+						uidList: rows.map((row) => row.uid),
 						highestModseq: 0,
 					});
 				})
@@ -188,21 +216,27 @@ export function buildHandlers(config: ImapConfig, store: MailStore) {
 		},
 
 		onStore(
-			_mailbox: string,
-			_update: unknown,
+			mailboxId: string,
+			update: StoreUpdate,
 			_session: ImapSession,
 			callback: Callback,
 		) {
-			callback(null, true, []);
+			store
+				.updateFlags(mailboxId, update.messages, update.action, update.value)
+				.then(() => callback(null, true, []))
+				.catch((err: Error) => callback(err));
 		},
 
 		onExpunge(
-			_mailbox: string,
+			mailboxId: string,
 			_update: unknown,
 			_session: ImapSession,
 			callback: Callback,
 		) {
-			callback(null, true);
+			store
+				.expunge(mailboxId)
+				.then(() => callback(null, true))
+				.catch((err: Error) => callback(err));
 		},
 	};
 }
