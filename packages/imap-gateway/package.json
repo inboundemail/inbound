@@ -1,0 +1,28 @@
+{
+	"name": "@inboundemail/imap-gateway",
+	"version": "0.1.0",
+	"private": true,
+	"description": "IMAP server for imap.inboundemail.com serving inbound mail from Postgres (structuredEmails.rawContent). Built on vendored WildDuck imap-core (EUPL-1.2, see vendor/WILDDUCK_COMMIT).",
+	"type": "module",
+	"main": "src/index.ts",
+	"scripts": {
+		"start": "node src/index.ts",
+		"dev": "IMAP_PORT=1143 IMAP_ALLOW_PLAINTEXT=true node src/index.ts",
+		"typecheck": "bunx tsc --noEmit"
+	},
+	"dependencies": {
+		"base32.js": "^0.1.0",
+		"he": "^1.2.0",
+		"html-to-text": "^9.0.5",
+		"iconv-lite": "^0.6.3",
+		"libbase64": "^1.3.0",
+		"libmime": "^5.3.6",
+		"libqp": "^2.1.1",
+		"nodemailer": "^7.0.3",
+		"postgres": "^3.4.5",
+		"punycode.js": "^2.3.1"
+	},
+	"devDependencies": {
+		"@types/node": "^24.0.0"
+	}
+}

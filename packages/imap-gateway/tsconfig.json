@@ -1,0 +1,17 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"lib": ["ES2022"],
+		"types": ["node"],
+		"strict": true,
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"verbatimModuleSyntax": true
+	},
+	"include": ["src/**/*.ts"],
+	"exclude": ["vendor"]
+}
