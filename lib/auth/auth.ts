@@ -1,13 +1,15 @@
 import { apiKey } from "@better-auth/api-key";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { passkey } from "@better-auth/passkey";
 import { render } from "@react-email/components";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import {
 	admin,
 	bearer,
 	deviceAuthorization,
+	jwt,
 	magicLink,
 	oAuthProxy,
 } from "better-auth/plugins";
@@ -17,6 +19,13 @@ import { nanoid } from "nanoid";
 
 import MagicLinkEmail from "@/emails/magic-link-email";
 import WelcomeSignupEmail from "@/emails/welcome-signup";
+import {
+	getCurrentOAuthClientId,
+	getInboundOAuthSession,
+	getRecentInboundOAuthGrantId,
+	INBOUND_DOMAIN_SCOPE,
+	INBOUND_SESSION_CLAIM,
+} from "@/lib/auth/inbound-oauth";
 import { db } from "../db/index";
 import * as schema from "../db/schema";
 
@@ -78,6 +87,24 @@ const inbound = new Inbound({
 			: undefined,
 });
 
+const authBaseURL =
+	process.env.NODE_ENV === "development"
+		? process.env.NEXT_PUBLIC_APP_URL
+		: process.env.VERCEL_ENV === "preview"
+			? `https://${process.env.VERCEL_BRANCH_URL}`
+			: "https://inbound.new";
+
+async function requireInboundOAuthSession(referenceId: string, userId: string) {
+	const inboundSession = await getInboundOAuthSession(referenceId, userId);
+	if (!inboundSession) {
+		throw new APIError("UNAUTHORIZED", {
+			error: "invalid_grant",
+			error_description: "The Inbound domain grant is no longer valid.",
+		});
+	}
+	return inboundSession;
+}
+
 /**
  * Check if an email domain is blocked from signing up
  */
@@ -109,12 +136,7 @@ async function isBlockedEmailDomain(email: string): Promise<boolean> {
 }
 
 export const auth = betterAuth({
-	baseURL:
-		process.env.NODE_ENV === "development"
-			? process.env.NEXT_PUBLIC_APP_URL
-			: process.env.VERCEL_ENV === "preview"
-				? `https://${process.env.VERCEL_BRANCH_URL}`
-				: "https://inbound.new",
+	baseURL: authBaseURL,
 	trustedOrigins:
 		process.env.NODE_ENV === "development"
 			? [process.env.NEXT_PUBLIC_APP_URL as string, "http://localhost:3000"]
@@ -166,6 +188,80 @@ export const auth = betterAuth({
 					: process.env.VERCEL_ENV === "preview"
 						? `https://${process.env.VERCEL_BRANCH_URL}`
 						: undefined,
+		}),
+		jwt(),
+		oauthProvider({
+			loginPage: "/login",
+			consentPage: "/oauth/consent",
+			scopes: [
+				"openid",
+				"profile",
+				"email",
+				"offline_access",
+				INBOUND_DOMAIN_SCOPE,
+			],
+			grantTypes: ["authorization_code", "refresh_token"],
+			validAudiences: [`${authBaseURL}/api`],
+			allowDynamicClientRegistration: false,
+			allowUnauthenticatedClientRegistration: false,
+			clientPrivileges: ({ user }) => user?.role === "admin",
+			postLogin: {
+				page: "/oauth/domain-access",
+				shouldRedirect: ({ scopes }) => scopes.includes(INBOUND_DOMAIN_SCOPE),
+				consentReferenceId: async ({ user, session, scopes }) => {
+					if (!scopes.includes(INBOUND_DOMAIN_SCOPE)) return undefined;
+					const clientId = await getCurrentOAuthClientId();
+					if (!clientId) {
+						throw new APIError("BAD_REQUEST", {
+							error: "invalid_request",
+							error_description: "The OAuth client could not be resolved.",
+						});
+					}
+					const grantId = await getRecentInboundOAuthGrantId({
+						userId: user.id,
+						sessionId: session.id,
+						clientId,
+					});
+					if (!grantId) {
+						throw new APIError("BAD_REQUEST", {
+							error: "invalid_request",
+							error_description: "Select Inbound domain access first.",
+						});
+					}
+					await requireInboundOAuthSession(grantId, user.id);
+					return grantId;
+				},
+			},
+			customAccessTokenClaims: async ({ user, scopes, referenceId }) => {
+				if (!scopes.includes(INBOUND_DOMAIN_SCOPE)) return {};
+				if (!user?.id || !referenceId) {
+					throw new APIError("UNAUTHORIZED", {
+						error: "invalid_grant",
+						error_description: "The Inbound domain grant is missing.",
+					});
+				}
+				return {
+					[INBOUND_SESSION_CLAIM]: await requireInboundOAuthSession(
+						referenceId,
+						user.id,
+					),
+				};
+			},
+			customTokenResponseFields: async ({
+				user,
+				scopes,
+				verificationValue,
+			}) => {
+				if (!scopes.includes(INBOUND_DOMAIN_SCOPE)) return {};
+				const referenceId = verificationValue?.referenceId;
+				if (!user?.id || !referenceId) return {};
+				return {
+					inbound_session: await requireInboundOAuthSession(
+						referenceId,
+						user.id,
+					),
+				};
+			},
 		}),
 		bearer(),
 		deviceAuthorization({
@@ -306,6 +402,8 @@ export const auth = betterAuth({
 				) {
 					return;
 				}
+
+				if ((await getCurrentOAuthClientId()) !== null) return;
 
 				console.log("Existing user logged in with email: ", user.email);
 				throw ctx.redirect("/logs");
