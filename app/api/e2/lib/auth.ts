@@ -13,6 +13,7 @@ import {
 	inboundOAuthSessionAllowsDomain,
 	parseInboundOAuthSessionReference,
 } from "@/lib/auth/inbound-oauth-session";
+import { oauthJwksUrl } from "@/lib/auth/oauth-resource";
 import { db } from "@/lib/db";
 import { apikey, user } from "@/lib/db/auth-schema";
 
@@ -228,6 +229,7 @@ export async function validateAndRateLimit(
 		) {
 			try {
 				const payload = await verifyOAuthAccessToken(apiKey, {
+					jwksUrl: oauthJwksUrl(authBaseURL),
 					verifyOptions: { audience: `${authBaseURL}/api` },
 					scopes: [INBOUND_DOMAIN_SCOPE],
 				});

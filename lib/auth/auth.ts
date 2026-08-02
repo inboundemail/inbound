@@ -27,6 +27,7 @@ import {
 	INBOUND_SESSION_CLAIM,
 } from "@/lib/auth/inbound-oauth";
 import { inboundOAuthNeedsDomainSelection } from "@/lib/auth/inbound-oauth-session";
+import { AUTH_BASE_PATH } from "@/lib/auth/oauth-resource";
 import { db } from "../db/index";
 import * as schema from "../db/schema";
 
@@ -138,6 +139,7 @@ async function isBlockedEmailDomain(email: string): Promise<boolean> {
 
 export const auth = betterAuth({
 	baseURL: authBaseURL,
+	basePath: AUTH_BASE_PATH,
 	trustedOrigins:
 		process.env.NODE_ENV === "development"
 			? [process.env.NEXT_PUBLIC_APP_URL as string, "http://localhost:3000"]
