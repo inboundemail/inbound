@@ -477,6 +477,13 @@
       "when": 1785632898589,
       "tag": "0067_heavy_shriek",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1785635078526,
+      "tag": "0068_colorful_blob",
+      "breakpoints": true
     }
   ]
 }

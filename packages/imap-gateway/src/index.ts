@@ -57,6 +57,12 @@ function startServer(secure: boolean, port: number) {
 	server.onUnsubscribe = handlers.onUnsubscribe;
 	server.onOpen = handlers.onOpen;
 	server.onStatus = handlers.onStatus;
+	server.onCreate = handlers.onCreate;
+	server.onRename = handlers.onRename;
+	server.onDelete = handlers.onDelete;
+	server.onAppend = handlers.onAppend;
+	server.onCopy = handlers.onCopy;
+	server.onMove = handlers.onMove;
 	server.onFetch = handlers.onFetch;
 	server.onSearch = handlers.onSearch;
 	server.onStore = handlers.onStore;

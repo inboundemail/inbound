@@ -4,6 +4,7 @@ import postgres from "postgres";
 export interface MailboxRow {
 	id: string;
 	address: string;
+	path: string;
 	uidValidity: number;
 	uidNext: number;
 }
@@ -11,10 +12,26 @@ export interface MailboxRow {
 export interface MessageMeta {
 	uid: number;
 	structuredEmailId: string;
+	rawSource: string;
 	flags: string[];
 	internalDate: Date;
 	size: number | null;
 }
+
+export const DEFAULT_FOLDERS = [
+	"INBOX",
+	"Sent",
+	"Drafts",
+	"Trash",
+	"Junk",
+] as const;
+
+export const SPECIAL_USE: Record<string, string> = {
+	Sent: "\\Sent",
+	Drafts: "\\Drafts",
+	Trash: "\\Trash",
+	Junk: "\\Junk",
+};
 
 export type FlagAction = "set" | "add" | "remove";
 
@@ -36,13 +53,17 @@ export class MailStore {
 		this.sql = postgres(databaseUrl, { max: 10, idle_timeout: 30 });
 	}
 
-	async ensureMailbox(address: string, userId: string): Promise<MailboxRow> {
+	async ensureMailbox(
+		address: string,
+		userId: string,
+		path = "INBOX",
+	): Promise<MailboxRow> {
 		const lower = address.toLowerCase();
 		const rows = await this.sql<
 			{ id: string; uid_validity: number; uid_next: number }[]
 		>`
 			INSERT INTO imap_mailboxes (id, user_id, address, path, uid_validity)
-			VALUES (${randomUUID()}, ${userId}, ${lower}, 'INBOX', ${Math.floor(Date.now() / 1000)})
+			VALUES (${randomUUID()}, ${userId}, ${lower}, ${path}, ${Math.floor(Date.now() / 1000)})
 			ON CONFLICT (address, path) DO UPDATE SET updated_at = now()
 			RETURNING id, uid_validity, uid_next`;
 		const row = rows[0];
@@ -50,12 +71,188 @@ export class MailStore {
 		return {
 			id: row.id,
 			address: lower,
+			path,
 			uidValidity: row.uid_validity,
 			uidNext: row.uid_next,
 		};
 	}
 
+	async ensureDefaultMailboxes(
+		address: string,
+		userId: string,
+	): Promise<MailboxRow[]> {
+		const result: MailboxRow[] = [];
+		for (const path of DEFAULT_FOLDERS) {
+			result.push(await this.ensureMailbox(address, userId, path));
+		}
+		return result;
+	}
+
+	async listMailboxes(address: string): Promise<MailboxRow[]> {
+		const rows = await this.sql<
+			{ id: string; path: string; uid_validity: number; uid_next: number }[]
+		>`
+			SELECT id, path, uid_validity, uid_next FROM imap_mailboxes
+			WHERE address = ${address.toLowerCase()}
+			ORDER BY path ASC`;
+		return rows.map((row) => ({
+			id: row.id,
+			address: address.toLowerCase(),
+			path: row.path,
+			uidValidity: row.uid_validity,
+			uidNext: row.uid_next,
+		}));
+	}
+
+	async getMailboxByPath(
+		address: string,
+		path: string,
+	): Promise<MailboxRow | null> {
+		const rows = await this.sql<
+			{ id: string; path: string; uid_validity: number; uid_next: number }[]
+		>`
+			SELECT id, path, uid_validity, uid_next FROM imap_mailboxes
+			WHERE address = ${address.toLowerCase()} AND path = ${path}
+			LIMIT 1`;
+		const row = rows[0];
+		if (!row) return null;
+		return {
+			id: row.id,
+			address: address.toLowerCase(),
+			path: row.path,
+			uidValidity: row.uid_validity,
+			uidNext: row.uid_next,
+		};
+	}
+
+	async createMailbox(
+		address: string,
+		userId: string,
+		path: string,
+	): Promise<boolean> {
+		const rows = await this.sql<{ id: string }[]>`
+			INSERT INTO imap_mailboxes (id, user_id, address, path, uid_validity)
+			VALUES (${randomUUID()}, ${userId}, ${address.toLowerCase()}, ${path}, ${Math.floor(Date.now() / 1000)})
+			ON CONFLICT (address, path) DO NOTHING
+			RETURNING id`;
+		return rows.length > 0;
+	}
+
+	async renameMailbox(
+		address: string,
+		path: string,
+		newPath: string,
+	): Promise<boolean> {
+		const rows = await this.sql<{ id: string }[]>`
+			UPDATE imap_mailboxes SET path = ${newPath}, updated_at = now()
+			WHERE address = ${address.toLowerCase()} AND path = ${path}
+			RETURNING id`;
+		return rows.length > 0;
+	}
+
+	async deleteMailbox(address: string, path: string): Promise<boolean> {
+		return this.sql.begin(async (sql) => {
+			const rows = await sql<{ id: string }[]>`
+				DELETE FROM imap_mailboxes
+				WHERE address = ${address.toLowerCase()} AND path = ${path}
+				RETURNING id`;
+			const mailboxId = rows[0]?.id;
+			if (!mailboxId) return false;
+			await sql`DELETE FROM imap_mailbox_messages WHERE mailbox_id = ${mailboxId}`;
+			return true;
+		});
+	}
+
+	async appendMessage(
+		mailbox: MailboxRow,
+		userId: string,
+		raw: string,
+		flags: string[],
+		internalDate: Date,
+	): Promise<{ uidValidity: number; uid: number }> {
+		return this.sql.begin(async (sql) => {
+			const appendedId = randomUUID();
+			await sql`
+				INSERT INTO imap_appended_messages (id, user_id, raw_content, size)
+				VALUES (${appendedId}, ${userId}, ${raw}, ${Buffer.byteLength(raw)})`;
+			const locked = await sql<{ uid_next: number }[]>`
+				SELECT uid_next FROM imap_mailboxes WHERE id = ${mailbox.id} FOR UPDATE`;
+			const uid = locked[0]?.uid_next ?? 1;
+			await sql`
+				INSERT INTO imap_mailbox_messages
+					(id, mailbox_id, structured_email_id, raw_source, uid, flags, internal_date, size)
+				VALUES (${`${mailbox.id}:${uid}`}, ${mailbox.id}, ${appendedId},
+					'appended', ${uid}, ${JSON.stringify(flags)}, ${internalDate},
+					${Buffer.byteLength(raw)})`;
+			await sql`
+				UPDATE imap_mailboxes SET uid_next = ${uid + 1}, updated_at = now()
+				WHERE id = ${mailbox.id}`;
+			return { uidValidity: mailbox.uidValidity, uid };
+		});
+	}
+
+	async copyMessages(
+		sourceMailboxId: string,
+		destination: MailboxRow,
+		uids: number[],
+	): Promise<{
+		uidValidity: number;
+		sourceUid: number[];
+		destinationUid: number[];
+	}> {
+		return this.sql.begin(async (sql) => {
+			const source = await sql<
+				{
+					structured_email_id: string;
+					raw_source: string;
+					uid: number;
+					flags: string;
+					internal_date: Date;
+					size: number | null;
+				}[]
+			>`
+				SELECT structured_email_id, raw_source, uid, flags, internal_date, size
+				FROM imap_mailbox_messages
+				WHERE mailbox_id = ${sourceMailboxId} AND uid = ANY(${uids})
+				ORDER BY uid ASC`;
+			const locked = await sql<{ uid_next: number }[]>`
+				SELECT uid_next FROM imap_mailboxes WHERE id = ${destination.id} FOR UPDATE`;
+			let nextUid = locked[0]?.uid_next ?? 1;
+			const sourceUid: number[] = [];
+			const destinationUid: number[] = [];
+			for (const row of source) {
+				const inserted = await sql<{ uid: number }[]>`
+					INSERT INTO imap_mailbox_messages
+						(id, mailbox_id, structured_email_id, raw_source, uid, flags, internal_date, size)
+					VALUES (${`${destination.id}:${nextUid}`}, ${destination.id},
+						${row.structured_email_id}, ${row.raw_source}, ${nextUid},
+						${row.flags}, ${row.internal_date}, ${row.size})
+					ON CONFLICT (mailbox_id, structured_email_id) DO NOTHING
+					RETURNING uid`;
+				if (inserted.length === 0) continue;
+				sourceUid.push(row.uid);
+				destinationUid.push(nextUid);
+				nextUid++;
+			}
+			await sql`
+				UPDATE imap_mailboxes SET uid_next = ${nextUid}, updated_at = now()
+				WHERE id = ${destination.id}`;
+			return {
+				uidValidity: destination.uidValidity,
+				sourceUid,
+				destinationUid,
+			};
+		});
+	}
+
+	async deleteMessages(mailboxId: string, uids: number[]): Promise<void> {
+		await this.sql`
+			DELETE FROM imap_mailbox_messages
+			WHERE mailbox_id = ${mailboxId} AND uid = ANY(${uids})`;
+	}
+
 	async syncMailbox(mailbox: MailboxRow): Promise<number> {
+		if (mailbox.path !== "INBOX") return 0;
 		return this.sql.begin(async (sql) => {
 			const locked = await sql<{ uid_next: number }[]>`
 				SELECT uid_next FROM imap_mailboxes WHERE id = ${mailbox.id} FOR UPDATE`;
@@ -98,12 +295,13 @@ export class MailStore {
 					{
 						uid: number;
 						structured_email_id: string;
+						raw_source: string;
 						flags: string;
 						internal_date: Date;
 						size: number | null;
 					}[]
 				>`
-				SELECT uid, structured_email_id, flags, internal_date, size
+				SELECT uid, structured_email_id, raw_source, flags, internal_date, size
 				FROM imap_mailbox_messages
 				WHERE mailbox_id = ${mailboxId} AND uid = ANY(${uids})
 				ORDER BY uid ASC`
@@ -111,18 +309,20 @@ export class MailStore {
 					{
 						uid: number;
 						structured_email_id: string;
+						raw_source: string;
 						flags: string;
 						internal_date: Date;
 						size: number | null;
 					}[]
 				>`
-				SELECT uid, structured_email_id, flags, internal_date, size
+				SELECT uid, structured_email_id, raw_source, flags, internal_date, size
 				FROM imap_mailbox_messages
 				WHERE mailbox_id = ${mailboxId}
 				ORDER BY uid ASC`;
 		return rows.map((row) => ({
 			uid: row.uid,
 			structuredEmailId: row.structured_email_id,
+			rawSource: row.raw_source,
 			flags: parseFlags(row.flags),
 			internalDate: row.internal_date,
 			size: row.size,
@@ -152,10 +352,18 @@ export class MailStore {
 		return Number(rows[0]?.count ?? 0);
 	}
 
-	async getRawContent(structuredEmailId: string): Promise<string | null> {
-		const rows = await this.sql<{ raw_content: string | null }[]>`
-			SELECT raw_content FROM structured_emails
-			WHERE id = ${structuredEmailId} LIMIT 1`;
+	async getRawContent(
+		messageId: string,
+		rawSource: string,
+	): Promise<string | null> {
+		const rows =
+			rawSource === "appended"
+				? await this.sql<{ raw_content: string | null }[]>`
+					SELECT raw_content FROM imap_appended_messages
+					WHERE id = ${messageId} LIMIT 1`
+				: await this.sql<{ raw_content: string | null }[]>`
+					SELECT raw_content FROM structured_emails
+					WHERE id = ${messageId} LIMIT 1`;
 		return rows[0]?.raw_content ?? null;
 	}
 

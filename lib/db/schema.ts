@@ -1066,6 +1066,9 @@ export const imapMailboxMessages = pgTable(
 			length: 255,
 		}).notNull(),
 		uid: integer("uid").notNull(),
+		rawSource: varchar("raw_source", { length: 20 })
+			.notNull()
+			.default("structured"),
 		flags: text("flags").notNull().default("[]"),
 		internalDate: timestamp("internal_date").notNull(),
 		size: integer("size"),
@@ -1091,3 +1094,13 @@ export type ImapMailbox = typeof imapMailboxes.$inferSelect;
 export type NewImapMailbox = typeof imapMailboxes.$inferInsert;
 export type ImapMailboxMessage = typeof imapMailboxMessages.$inferSelect;
 export type NewImapMailboxMessage = typeof imapMailboxMessages.$inferInsert;
+
+export const imapAppendedMessages = pgTable("imap_appended_messages", {
+	id: varchar("id", { length: 255 }).primaryKey(),
+	userId: varchar("user_id", { length: 255 }).notNull(),
+	rawContent: text("raw_content").notNull(),
+	size: integer("size"),
+	createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type ImapAppendedMessage = typeof imapAppendedMessages.$inferSelect;

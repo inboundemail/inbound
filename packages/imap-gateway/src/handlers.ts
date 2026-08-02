@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import type { ApiAuth } from "./auth.ts";
+import { SPECIAL_USE } from "./db.ts";
 import type { FlagAction, MailStore } from "./db.ts";
 
 const require = createRequire(import.meta.url);
@@ -68,12 +69,20 @@ const logger = {
 };
 
 export function buildHandlers(auth: ApiAuth, store: MailStore) {
-	async function openMailbox(session: ImapSession) {
+	async function openMailbox(session: ImapSession, path: string) {
 		const user = session.user;
 		if (!user?.address) throw new Error("Not authenticated");
-		const mailbox = await store.ensureMailbox(user.address, user.id);
+		await store.ensureDefaultMailboxes(user.address, user.id);
+		const mailbox = await store.getMailboxByPath(user.address, path);
+		if (!mailbox) return null;
 		await store.syncMailbox(mailbox);
 		return mailbox;
+	}
+
+	function requireUser(session: ImapSession) {
+		const user = session.user;
+		if (!user?.address) throw new Error("Not authenticated");
+		return user;
 	}
 
 	return {
@@ -102,12 +111,32 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 				.catch(() => callback(new Error("Authentication unavailable")));
 		},
 
-		onList(_query: string, _session: ImapSession, callback: Callback) {
-			callback(null, [{ path: "INBOX", flags: [], specialUse: false }]);
+		onList(_query: string, session: ImapSession, callback: Callback) {
+			(async () => {
+				const user = requireUser(session);
+				await store.ensureDefaultMailboxes(user.address, user.id);
+				const mailboxes = await store.listMailboxes(user.address);
+				return mailboxes.map((mailbox) => ({
+					path: mailbox.path,
+					flags: [],
+					specialUse: SPECIAL_USE[mailbox.path] ?? false,
+				}));
+			})()
+				.then((folders) => callback(null, folders))
+				.catch((err: Error) => callback(err));
 		},
 
-		onLsub(_query: string, _session: ImapSession, callback: Callback) {
-			callback(null, [{ path: "INBOX", flags: [] }]);
+		onLsub(_query: string, session: ImapSession, callback: Callback) {
+			(async () => {
+				const user = requireUser(session);
+				const mailboxes = await store.listMailboxes(user.address);
+				return mailboxes.map((mailbox) => ({
+					path: mailbox.path,
+					flags: [],
+				}));
+			})()
+				.then((folders) => callback(null, folders))
+				.catch((err: Error) => callback(err));
 		},
 
 		onSubscribe(_path: string, _session: ImapSession, callback: Callback) {
@@ -119,19 +148,18 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 		},
 
 		onOpen(path: string, session: ImapSession, callback: Callback) {
-			if (path !== "INBOX") return callback(null, "NONEXISTENT");
-			openMailbox(session)
+			openMailbox(session, path)
 				.then(async (mailbox) => {
-					const uidList = await store.listUids(mailbox.id);
-					const fresh = await store.ensureMailbox(
-						mailbox.address,
-						session.user?.id ?? "",
-					);
+					if (!mailbox) return callback(null, "NONEXISTENT");
+					const [uidList, fresh] = await Promise.all([
+						store.listUids(mailbox.id),
+						store.getMailboxByPath(mailbox.address, path),
+					]);
 					callback(null, {
 						_id: mailbox.id,
 						path,
 						uidValidity: mailbox.uidValidity,
-						uidNext: fresh.uidNext,
+						uidNext: fresh?.uidNext ?? mailbox.uidNext,
 						modifyIndex: 0,
 						uidList,
 						flags: [],
@@ -141,22 +169,136 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 		},
 
 		onStatus(path: string, session: ImapSession, callback: Callback) {
-			if (path !== "INBOX") return callback(null, "NONEXISTENT");
-			openMailbox(session)
+			openMailbox(session, path)
 				.then(async (mailbox) => {
+					if (!mailbox) return callback(null, "NONEXISTENT");
 					const [messages, unseen, fresh] = await Promise.all([
 						store.countMessages(mailbox.id),
 						store.unseenCount(mailbox.id),
-						store.ensureMailbox(mailbox.address, session.user?.id ?? ""),
+						store.getMailboxByPath(mailbox.address, path),
 					]);
 					callback(null, {
 						messages,
-						uidNext: fresh.uidNext,
+						uidNext: fresh?.uidNext ?? mailbox.uidNext,
 						uidValidity: mailbox.uidValidity,
 						unseen,
 						highestModseq: 0,
 					});
 				})
+				.catch((err: Error) => callback(err));
+		},
+
+		onCreate(path: string, session: ImapSession, callback: Callback) {
+			(async () => {
+				const user = requireUser(session);
+				await store.createMailbox(user.address, user.id, path);
+				return true;
+			})()
+				.then((ok) => callback(null, ok))
+				.catch((err: Error) => callback(err));
+		},
+
+		onRename(
+			path: string,
+			newPath: string,
+			session: ImapSession,
+			callback: Callback,
+		) {
+			(async () => {
+				const user = requireUser(session);
+				if (path === "INBOX") return "CANNOT";
+				const ok = await store.renameMailbox(user.address, path, newPath);
+				return ok ? true : "NONEXISTENT";
+			})()
+				.then((result) => callback(null, result))
+				.catch((err: Error) => callback(err));
+		},
+
+		onDelete(path: string, session: ImapSession, callback: Callback) {
+			(async () => {
+				const user = requireUser(session);
+				if (path === "INBOX" || SPECIAL_USE[path]) return "CANNOT";
+				const ok = await store.deleteMailbox(user.address, path);
+				return ok ? true : "NONEXISTENT";
+			})()
+				.then((result) => callback(null, result))
+				.catch((err: Error) => callback(err));
+		},
+
+		onAppend(
+			path: string,
+			flags: string[],
+			internaldate: string | Date | undefined,
+			raw: Buffer,
+			session: ImapSession,
+			callback: Callback,
+		) {
+			(async () => {
+				const user = requireUser(session);
+				await store.ensureDefaultMailboxes(user.address, user.id);
+				const mailbox = await store.getMailboxByPath(user.address, path);
+				if (!mailbox) return { success: "TRYCREATE" as const, info: null };
+				const date = internaldate ? new Date(internaldate) : new Date();
+				const info = await store.appendMessage(
+					mailbox,
+					user.id,
+					raw.toString(),
+					flags ?? [],
+					Number.isNaN(date.getTime()) ? new Date() : date,
+				);
+				return { success: true as const, info };
+			})()
+				.then(({ success, info }) => callback(null, success, info))
+				.catch((err: Error) => callback(err));
+		},
+
+		onCopy(
+			_connection: unknown,
+			mailboxId: string,
+			update: { destination: string; messages: number[] },
+			session: ImapSession,
+			callback: Callback,
+		) {
+			(async () => {
+				const user = requireUser(session);
+				const destination = await store.getMailboxByPath(
+					user.address,
+					update.destination,
+				);
+				if (!destination) return { success: "TRYCREATE" as const, info: null };
+				const info = await store.copyMessages(
+					mailboxId,
+					destination,
+					update.messages,
+				);
+				return { success: true as const, info };
+			})()
+				.then(({ success, info }) => callback(null, success, info))
+				.catch((err: Error) => callback(err));
+		},
+
+		onMove(
+			mailboxId: string,
+			update: { destination: string; messages: number[] },
+			session: ImapSession,
+			callback: Callback,
+		) {
+			(async () => {
+				const user = requireUser(session);
+				const destination = await store.getMailboxByPath(
+					user.address,
+					update.destination,
+				);
+				if (!destination) return { success: "TRYCREATE" as const, info: null };
+				const info = await store.copyMessages(
+					mailboxId,
+					destination,
+					update.messages,
+				);
+				await store.deleteMessages(mailboxId, info.sourceUid);
+				return { success: true as const, info };
+			})()
+				.then(({ success, info }) => callback(null, success, info))
 				.catch((err: Error) => callback(err));
 		},
 
@@ -174,7 +316,10 @@ export function buildHandlers(auth: ApiAuth, store: MailStore) {
 				for (const row of rows) {
 					let raw: string | null = null;
 					if (wantsContent) {
-						raw = await store.getRawContent(row.structuredEmailId);
+						raw = await store.getRawContent(
+							row.structuredEmailId,
+							row.rawSource,
+						);
 						if (!raw) continue;
 					}
 
