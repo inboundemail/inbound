@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
 	Select,
 	SelectContent,
@@ -31,6 +32,8 @@ import type {
 	Mailbox,
 	MailboxAccessMode,
 	MailboxScopeInput,
+	MailboxSendingMode,
+	MailboxType,
 } from "@/features/mailboxes/types";
 
 interface SelectableDomain {
@@ -44,15 +47,23 @@ interface MailboxDialogProps {
 	mailbox: Mailbox | null;
 	domains: SelectableDomain[];
 	isLoadingDomains: boolean;
-	onPasswordCreated: (password: string, loginAddress: string) => void;
+	onPasswordCreated: (
+		password: string,
+		loginAddress: string,
+		type: MailboxType,
+	) => void;
 }
 
 type ScopeDraftType = "domain" | "address";
 
 const initialForm = {
+	type: "mailbox" as MailboxType,
 	name: "",
 	loginAddress: "",
 	accessMode: "read" as MailboxAccessMode,
+	sendingMode: "identity" as MailboxSendingMode,
+	sendingName: "",
+	sendingAddress: "",
 	scopes: [] as MailboxScopeInput[],
 };
 
@@ -67,6 +78,12 @@ export function MailboxDialog({
 	const nameId = useId();
 	const loginId = useId();
 	const accessId = useId();
+	const sendingNameId = useId();
+	const sendingAddressId = useId();
+	const mailboxTypeId = useId();
+	const smtpTypeId = useId();
+	const identityModeId = useId();
+	const scopedDomainsModeId = useId();
 	const [form, setForm] = useState(initialForm);
 	const [scopeType, setScopeType] = useState<ScopeDraftType>("domain");
 	const [scopeDomainId, setScopeDomainId] = useState("");
@@ -82,9 +99,13 @@ export function MailboxDialog({
 		setForm(
 			mailbox
 				? {
+						type: mailbox.type,
 						name: mailbox.name,
 						loginAddress: mailbox.loginAddress,
 						accessMode: mailbox.accessMode,
+						sendingMode: mailbox.sendingMode,
+						sendingName: mailbox.sendingName ?? "",
+						sendingAddress: mailbox.sendingAddress ?? "",
 						scopes: mailbox.scopes.map(({ type, domainId, address }) => ({
 							type,
 							domainId,
@@ -161,6 +182,23 @@ export function MailboxDialog({
 			nextErrors.loginAddress = "Enter a valid login email";
 		}
 		if (form.scopes.length === 0) nextErrors.scopes = "Add at least one scope";
+		if (form.sendingMode === "identity") {
+			const sendingAddress = form.sendingAddress.trim().toLowerCase();
+			if (!/^\S+@\S+\.\S+$/.test(sendingAddress)) {
+				nextErrors.sendingAddress = "Enter a valid From address";
+			} else {
+				const isCovered = form.scopes.some((scope) => {
+					const scopeDomain = domainName(scope.domainId).toLowerCase();
+					return scope.type === "domain"
+						? sendingAddress.endsWith(`@${scopeDomain}`)
+						: scope.address?.toLowerCase() === sendingAddress;
+				});
+				if (!isCovered) {
+					nextErrors.sendingAddress =
+						"This address must be covered by a configured scope";
+				}
+			}
+		}
 		setErrors(nextErrors);
 		return Object.keys(nextErrors).length === 0;
 	};
@@ -170,26 +208,40 @@ export function MailboxDialog({
 		if (!validate()) return;
 
 		const input = {
+			type: form.type,
 			name: form.name.trim(),
 			loginAddress: form.loginAddress.trim().toLowerCase(),
 			accessMode: form.accessMode,
+			sendingMode: form.sendingMode,
+			sendingName:
+				form.sendingMode === "identity"
+					? form.sendingName.trim() || null
+					: null,
+			sendingAddress:
+				form.sendingMode === "identity"
+					? form.sendingAddress.trim().toLowerCase()
+					: null,
 			scopes: form.scopes,
 		};
 
 		try {
 			if (mailbox) {
 				await updateMailbox.mutateAsync({ id: mailbox.id, input });
-				toast.success("Mailbox updated");
+				toast.success("Credential updated");
 				onOpenChange(false);
 			} else {
 				const result = await createMailbox.mutateAsync(input);
 				onOpenChange(false);
-				onPasswordCreated(result.password, result.data.loginAddress);
-				toast.success("Mailbox created");
+				onPasswordCreated(
+					result.password,
+					result.data.loginAddress,
+					result.data.type,
+				);
+				toast.success("Credential created");
 			}
 		} catch (error) {
 			toast.error(
-				error instanceof Error ? error.message : "Mailbox request failed",
+				error instanceof Error ? error.message : "Credential request failed",
 			);
 		}
 	};
@@ -199,15 +251,62 @@ export function MailboxDialog({
 			<DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
 				<DialogHeader>
 					<DialogTitle>
-						{mailbox ? "Edit mailbox" : "Create mailbox"}
+						{mailbox ? "Edit credential" : "Create credential"}
 					</DialogTitle>
 					<DialogDescription>
-						Configure IMAP credentials and limit which inbound messages this
-						mailbox can access.
+						Configure mailbox and SMTP access with explicit sender and scope
+						policies.
 					</DialogDescription>
 				</DialogHeader>
 
 				<form onSubmit={handleSubmit} className="space-y-5">
+					<div className="space-y-3">
+						<Label>Credential type</Label>
+						<RadioGroup
+							value={form.type}
+							onValueChange={(value) =>
+								setForm((current) => ({
+									...current,
+									type: value === "smtp" ? "smtp" : "mailbox",
+								}))
+							}
+							className="grid gap-2 sm:grid-cols-2"
+						>
+							<Label
+								htmlFor={mailboxTypeId}
+								className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 font-normal has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+							>
+								<RadioGroupItem
+									id={mailboxTypeId}
+									value="mailbox"
+									className="mt-0.5"
+								/>
+								<span>
+									<span className="block font-medium">Mailbox + SMTP</span>
+									<span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+										Receive with IMAP and send with SMTP.
+									</span>
+								</span>
+							</Label>
+							<Label
+								htmlFor={smtpTypeId}
+								className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 font-normal has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+							>
+								<RadioGroupItem
+									id={smtpTypeId}
+									value="smtp"
+									className="mt-0.5"
+								/>
+								<span>
+									<span className="block font-medium">SMTP only</span>
+									<span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+										Send-only credentials without IMAP access.
+									</span>
+								</span>
+							</Label>
+						</RadioGroup>
+					</div>
+
 					<div className="grid gap-4 sm:grid-cols-2">
 						<div className="space-y-2">
 							<Label htmlFor={nameId}>Name</Label>
@@ -251,30 +350,122 @@ export function MailboxDialog({
 						</div>
 					</div>
 
-					<div className="space-y-2">
-						<Label htmlFor={accessId}>Access</Label>
-						<Select
-							value={form.accessMode}
+					{form.type === "mailbox" && (
+						<div className="space-y-2">
+							<Label htmlFor={accessId}>IMAP access</Label>
+							<Select
+								value={form.accessMode}
+								onValueChange={(value) =>
+									setForm((current) => ({
+										...current,
+										accessMode: value === "read_write" ? "read_write" : "read",
+									}))
+								}
+							>
+								<SelectTrigger id={accessId}>
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="read">Read only</SelectItem>
+									<SelectItem value="read_write">Read and write</SelectItem>
+								</SelectContent>
+							</Select>
+							<p className="text-xs leading-relaxed text-muted-foreground">
+								IMAP presents one combined INBOX plus read-only folders for each
+								configured scope.
+							</p>
+						</div>
+					)}
+
+					<div className="space-y-3">
+						<Label>Sender policy</Label>
+						<RadioGroup
+							value={form.sendingMode}
 							onValueChange={(value) =>
 								setForm((current) => ({
 									...current,
-									accessMode: value === "read_write" ? "read_write" : "read",
+									sendingMode:
+										value === "scoped_domains" ? "scoped_domains" : "identity",
 								}))
 							}
+							className="grid gap-2 sm:grid-cols-2"
 						>
-							<SelectTrigger id={accessId}>
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="read">Read only</SelectItem>
-								<SelectItem value="read_write">Read and write</SelectItem>
-							</SelectContent>
-						</Select>
+							<Label
+								htmlFor={identityModeId}
+								className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 font-normal has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+							>
+								<RadioGroupItem id={identityModeId} value="identity" />
+								<span className="font-medium">Exact identity</span>
+							</Label>
+							<Label
+								htmlFor={scopedDomainsModeId}
+								className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 font-normal has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+							>
+								<RadioGroupItem
+									id={scopedDomainsModeId}
+									value="scoped_domains"
+								/>
+								<span className="font-medium">Any scoped domain</span>
+							</Label>
+						</RadioGroup>
+
+						{form.sendingMode === "identity" ? (
+							<div className="grid gap-4 rounded-lg bg-muted/30 p-3 sm:grid-cols-2">
+								<div className="space-y-2">
+									<Label htmlFor={sendingNameId}>Display name (optional)</Label>
+									<Input
+										id={sendingNameId}
+										value={form.sendingName}
+										onChange={(event) =>
+											setForm((current) => ({
+												...current,
+												sendingName: event.target.value,
+											}))
+										}
+										placeholder="Support"
+									/>
+								</div>
+								<div className="space-y-2">
+									<Label htmlFor={sendingAddressId}>Exact From address</Label>
+									<Input
+										id={sendingAddressId}
+										type="email"
+										value={form.sendingAddress}
+										onChange={(event) =>
+											setForm((current) => ({
+												...current,
+												sendingAddress: event.target.value,
+											}))
+										}
+										placeholder="support@example.com"
+										aria-invalid={Boolean(errors.sendingAddress)}
+									/>
+									{errors.sendingAddress && (
+										<p className="text-xs text-destructive">
+											{errors.sendingAddress}
+										</p>
+									)}
+								</div>
+								<p className="text-xs leading-relaxed text-muted-foreground sm:col-span-2">
+									SMTP can only send from this address. It must be covered by
+									one of the configured scopes below.
+								</p>
+							</div>
+						) : (
+							<p className="rounded-lg bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
+								SMTP can use any From address on the exact domains represented
+								by the configured scopes. Subdomains are never included.
+							</p>
+						)}
 					</div>
 
 					<div className="space-y-3">
 						<div>
-							<Label>Scopes</Label>
+							<Label>
+								{form.type === "smtp"
+									? "Sending scopes"
+									: "Mail access & sending scopes"}
+							</Label>
 							<p className="mt-1 text-xs text-muted-foreground">
 								Grant a whole verified domain or one exact address.
 							</p>
@@ -384,7 +575,7 @@ export function MailboxDialog({
 							</div>
 							{!isLoadingDomains && domains.length === 0 && (
 								<p className="mt-2 text-xs text-muted-foreground">
-									Add and verify a domain before creating a mailbox.
+									Add and verify a domain before creating a credential.
 								</p>
 							)}
 							{errors.scopeDraft && (
@@ -414,7 +605,7 @@ export function MailboxDialog({
 									: "Creating..."
 								: mailbox
 									? "Save changes"
-									: "Create mailbox"}
+									: "Create credential"}
 						</Button>
 					</DialogFooter>
 				</form>

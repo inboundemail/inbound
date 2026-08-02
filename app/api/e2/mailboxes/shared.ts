@@ -3,7 +3,7 @@ import { t } from "elysia";
 import { nanoid } from "nanoid";
 import { auth } from "@/lib/auth/auth";
 import { db } from "@/lib/db";
-import { apikey } from "@/lib/db/auth-schema";
+import { apikey, user } from "@/lib/db/auth-schema";
 import {
 	emailDomains,
 	imapCredentialScopes,
@@ -19,7 +19,11 @@ export const MailboxScopeInputSchema = t.Object({
 export const MailboxInputSchema = t.Object({
 	name: t.String({ minLength: 1, maxLength: 255 }),
 	loginAddress: t.String({ minLength: 3, maxLength: 255 }),
+	type: t.Union([t.Literal("mailbox"), t.Literal("smtp")]),
 	accessMode: t.Union([t.Literal("read"), t.Literal("read_write")]),
+	sendingMode: t.Union([t.Literal("identity"), t.Literal("scoped_domains")]),
+	sendingName: t.Nullable(t.String({ maxLength: 255 })),
+	sendingAddress: t.Nullable(t.String({ maxLength: 255 })),
 	scopes: t.Array(MailboxScopeInputSchema, { minItems: 1, maxItems: 100 }),
 });
 
@@ -27,9 +31,15 @@ export const MailboxUpdateInputSchema = t.Object(
 	{
 		name: t.Optional(t.String({ minLength: 1, maxLength: 255 })),
 		loginAddress: t.Optional(t.String({ minLength: 3, maxLength: 255 })),
+		type: t.Optional(t.Union([t.Literal("mailbox"), t.Literal("smtp")])),
 		accessMode: t.Optional(
 			t.Union([t.Literal("read"), t.Literal("read_write")]),
 		),
+		sendingMode: t.Optional(
+			t.Union([t.Literal("identity"), t.Literal("scoped_domains")]),
+		),
+		sendingName: t.Optional(t.Nullable(t.String({ maxLength: 255 }))),
+		sendingAddress: t.Optional(t.Nullable(t.String({ maxLength: 255 }))),
 		enabled: t.Optional(t.Boolean()),
 		scopes: t.Optional(
 			t.Array(MailboxScopeInputSchema, { minItems: 1, maxItems: 100 }),
@@ -50,7 +60,11 @@ export const MailboxSchema = t.Object({
 	id: t.String(),
 	name: t.String(),
 	loginAddress: t.String(),
+	type: t.Union([t.Literal("mailbox"), t.Literal("smtp")]),
 	accessMode: t.Union([t.Literal("read"), t.Literal("read_write")]),
+	sendingMode: t.Union([t.Literal("identity"), t.Literal("scoped_domains")]),
+	sendingName: t.Nullable(t.String()),
+	sendingAddress: t.Nullable(t.String()),
 	enabled: t.Boolean(),
 	scopes: t.Array(MailboxScopeSchema),
 	createdAt: t.String({ format: "date-time" }),
@@ -68,17 +82,25 @@ export interface MailboxScopeInput {
 	address?: string;
 }
 
-interface MailboxInput {
+export interface MailboxInput {
 	name: string;
 	loginAddress: string;
+	type: "mailbox" | "smtp";
 	accessMode: "read" | "read_write";
+	sendingMode: "identity" | "scoped_domains";
+	sendingName: string | null;
+	sendingAddress: string | null;
 	scopes: MailboxScopeInput[];
 }
 
 export interface ValidatedMailboxInput {
 	name: string;
 	loginAddress: string;
+	type: "mailbox" | "smtp";
 	accessMode: "read" | "read_write";
+	sendingMode: "identity" | "scoped_domains";
+	sendingName: string | null;
+	sendingAddress: string | null;
 	scopes: Array<{
 		id: string;
 		type: "domain" | "address";
@@ -93,7 +115,11 @@ interface CredentialRecord {
 	id: string;
 	name: string;
 	loginAddress: string;
+	type: string;
 	accessMode: string;
+	sendingMode: string;
+	sendingName: string | null;
+	sendingAddress: string | null;
 	enabled: boolean;
 	createdAt: Date;
 	updatedAt: Date;
@@ -120,12 +146,14 @@ export function normalizeEmailAddress(value: string): string | null {
 	const domain = address.slice(at + 1);
 	if (
 		local.length > 64 ||
+		domain.length > 253 ||
 		address.length > 255 ||
-		/\s/.test(local) ||
+		!/^[-a-z0-9.!#$%&'*+/=?^_`{|}~]+$/.test(local) ||
 		local.includes("*") ||
 		local.startsWith(".") ||
 		local.endsWith(".") ||
 		local.includes("..") ||
+		domain.split(".").some((label) => label.length > 63) ||
 		!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/.test(
 			domain,
 		)
@@ -142,6 +170,9 @@ export async function validateMailboxInput(
 ): Promise<{ data: ValidatedMailboxInput } | { error: string }> {
 	const name = input.name.trim();
 	if (!name) return { error: "Name is required" };
+	if (input.scopes.length === 0)
+		return { error: "At least one scope is required" };
+	const sendingName = input.sendingName?.trim() || null;
 
 	const loginAddress = normalizeEmailAddress(input.loginAddress);
 	if (!loginAddress) return { error: "Login address must be a valid email" };
@@ -216,11 +247,43 @@ export async function validateMailboxInput(
 		});
 	}
 
+	let sendingAddress: string | null = null;
+	if (input.sendingMode === "identity") {
+		sendingAddress = input.sendingAddress
+			? normalizeEmailAddress(input.sendingAddress)
+			: null;
+		if (!sendingAddress) {
+			return { error: "Identity sending requires a valid sending address" };
+		}
+
+		const sendingDomain = sendingAddress.slice(
+			sendingAddress.lastIndexOf("@") + 1,
+		);
+		if (!domains.some((domain) => domain.domain === sendingDomain)) {
+			return {
+				error: "Sending address must use an exact owned, verified domain",
+			};
+		}
+
+		const covered = scopes.some(
+			(scope) =>
+				(scope.type === "domain" && scope.domain === sendingDomain) ||
+				(scope.type === "address" && scope.address === sendingAddress),
+		);
+		if (!covered) {
+			return { error: "Sending address must be covered by a configured scope" };
+		}
+	}
+
 	return {
 		data: {
 			name,
 			loginAddress,
-			accessMode: input.accessMode,
+			type: input.type,
+			accessMode: input.type === "smtp" ? "read_write" : input.accessMode,
+			sendingMode: input.sendingMode,
+			sendingName,
+			sendingAddress,
 			scopes,
 		},
 	};
@@ -257,6 +320,175 @@ export async function loadCredentialScopes(
 		.where(and(...conditions));
 }
 
+export interface ManagedMailCredential {
+	credentialId: string;
+	userId: string;
+	loginAddress: string;
+	type: "mailbox" | "smtp";
+	sendingMode: "identity" | "scoped_domains";
+	sendingName: string | null;
+	sendingAddress: string | null;
+	allowedDomains: string[];
+	accessMode: "read" | "read_write";
+	scopes: Array<{
+		id: string;
+		type: "domain" | "address";
+		domainId: string;
+		domain: string;
+		address: string | null;
+	}>;
+}
+
+export async function authenticateManagedMailCredential(
+	password: string,
+	options: {
+		loginAddress?: string;
+		requireType?: "mailbox";
+	} = {},
+): Promise<ManagedMailCredential | null> {
+	let verification: Awaited<ReturnType<typeof auth.api.verifyApiKey>> | null =
+		null;
+	const configIds = password.startsWith("imap_")
+		? (["imap", "mail"] as const)
+		: (["mail", "imap"] as const);
+	for (const configId of configIds) {
+		try {
+			const candidate = await auth.api.verifyApiKey({
+				body: { key: password, configId },
+			});
+			if (candidate.valid) {
+				verification = candidate;
+				break;
+			}
+		} catch {
+			continue;
+		}
+	}
+	if (!verification) return null;
+
+	const apiKeyId = verification.valid ? verification.key?.id : null;
+	const apiKeyOwnerId = verification.valid
+		? verification.key?.referenceId
+		: null;
+	if (!apiKeyId || !apiKeyOwnerId) return null;
+
+	const conditions = [
+		eq(imapCredentials.apiKeyId, apiKeyId),
+		eq(imapCredentials.userId, apiKeyOwnerId),
+	];
+	if (options.loginAddress) {
+		conditions.push(eq(imapCredentials.loginAddress, options.loginAddress));
+	}
+
+	const [credential] = await db
+		.select({
+			id: imapCredentials.id,
+			userId: imapCredentials.userId,
+			loginAddress: imapCredentials.loginAddress,
+			type: imapCredentials.type,
+			accessMode: imapCredentials.accessMode,
+			sendingMode: imapCredentials.sendingMode,
+			sendingName: imapCredentials.sendingName,
+			sendingAddress: imapCredentials.sendingAddress,
+			enabled: imapCredentials.enabled,
+			banned: user.banned,
+			banExpires: user.banExpires,
+		})
+		.from(imapCredentials)
+		.innerJoin(user, eq(imapCredentials.userId, user.id))
+		.where(and(...conditions))
+		.limit(1);
+	if (!credential?.enabled) return null;
+	if (credential.type !== "mailbox" && credential.type !== "smtp") return null;
+	if (options.requireType && credential.type !== options.requireType)
+		return null;
+	if (
+		credential.type === "mailbox" &&
+		credential.accessMode !== "read" &&
+		credential.accessMode !== "read_write"
+	) {
+		return null;
+	}
+	if (
+		credential.sendingMode !== "identity" &&
+		credential.sendingMode !== "scoped_domains"
+	) {
+		return null;
+	}
+
+	const banExpires = credential.banExpires
+		? new Date(credential.banExpires)
+		: null;
+	if (
+		credential.banned &&
+		(!banExpires || banExpires.getTime() >= Date.now())
+	) {
+		return null;
+	}
+
+	const verifiedScopes = (
+		await loadCredentialScopes(credential.userId, [credential.id], true)
+	).filter((scope) => scope.credentialId === credential.id);
+	if (verifiedScopes.length === 0) return null;
+
+	let sendingAddress: string | null = null;
+	let allowedDomains: string[] = [];
+	if (credential.sendingMode === "identity") {
+		sendingAddress = credential.sendingAddress
+			? normalizeEmailAddress(credential.sendingAddress)
+			: null;
+		if (!sendingAddress) return null;
+		const sendingDomain = sendingAddress.slice(
+			sendingAddress.lastIndexOf("@") + 1,
+		);
+		if (
+			!verifiedScopes.some(
+				(scope) =>
+					(scope.type === "domain" && scope.domain === sendingDomain) ||
+					(scope.type === "address" && scope.address === sendingAddress),
+			)
+		) {
+			return null;
+		}
+	} else {
+		allowedDomains = [
+			...new Set(verifiedScopes.map((scope) => scope.domain.toLowerCase())),
+		];
+	}
+
+	await db
+		.update(imapCredentials)
+		.set({ lastUsedAt: new Date() })
+		.where(
+			and(
+				eq(imapCredentials.id, credential.id),
+				eq(imapCredentials.userId, credential.userId),
+			),
+		);
+
+	return {
+		credentialId: credential.id,
+		userId: credential.userId,
+		loginAddress: credential.loginAddress,
+		type: credential.type,
+		sendingMode: credential.sendingMode,
+		sendingName: credential.sendingName,
+		sendingAddress,
+		allowedDomains,
+		accessMode:
+			credential.type === "smtp"
+				? "read_write"
+				: (credential.accessMode as "read" | "read_write"),
+		scopes: verifiedScopes.map((scope) => ({
+			id: scope.id,
+			type: scope.type as "domain" | "address",
+			domainId: scope.domainId,
+			domain: scope.domain,
+			address: scope.address,
+		})),
+	};
+}
+
 export function serializeMailbox(
 	credential: CredentialRecord,
 	scopes: ScopeRecord[],
@@ -265,7 +497,14 @@ export function serializeMailbox(
 		id: credential.id,
 		name: credential.name,
 		loginAddress: credential.loginAddress,
-		accessMode: credential.accessMode as "read" | "read_write",
+		type: credential.type as "mailbox" | "smtp",
+		accessMode:
+			credential.type === "smtp"
+				? ("read_write" as const)
+				: (credential.accessMode as "read" | "read_write"),
+		sendingMode: credential.sendingMode as "identity" | "scoped_domains",
+		sendingName: credential.sendingName,
+		sendingAddress: credential.sendingAddress,
 		enabled: credential.enabled,
 		scopes: scopes
 			.filter((scope) => scope.credentialId === credential.id)
@@ -297,13 +536,27 @@ export function isUniqueViolation(error: unknown): boolean {
 	return "cause" in error && isUniqueViolation(error.cause);
 }
 
-export async function deleteImapApiKey(
+export async function deleteMailApiKey(
 	keyId: string,
 	userId: string,
 ): Promise<void> {
+	const [record] = await db
+		.select({ configId: apikey.configId })
+		.from(apikey)
+		.where(
+			and(
+				eq(apikey.id, keyId),
+				eq(apikey.referenceId, userId),
+				inArray(apikey.configId, ["mail", "imap"]),
+			),
+		)
+		.limit(1);
+	if (!record || (record.configId !== "mail" && record.configId !== "imap")) {
+		return;
+	}
 	try {
 		await auth.api.deleteApiKey({
-			body: { keyId, configId: "imap" },
+			body: { keyId, configId: record.configId },
 		});
 	} catch {
 		await db
@@ -311,7 +564,7 @@ export async function deleteImapApiKey(
 			.where(
 				and(
 					eq(apikey.id, keyId),
-					eq(apikey.configId, "imap"),
+					eq(apikey.configId, record.configId),
 					eq(apikey.referenceId, userId),
 				),
 			);

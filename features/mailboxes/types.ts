@@ -1,5 +1,9 @@
 export type MailboxAccessMode = "read" | "read_write";
 
+export type MailboxType = "mailbox" | "smtp";
+
+export type MailboxSendingMode = "identity" | "scoped_domains";
+
 export type MailboxScopeType = "domain" | "address";
 
 export interface MailboxScopeInput {
@@ -15,9 +19,13 @@ export interface MailboxScope extends MailboxScopeInput {
 
 export interface Mailbox {
 	id: string;
+	type: MailboxType;
 	name: string;
 	loginAddress: string;
 	accessMode: MailboxAccessMode;
+	sendingMode: MailboxSendingMode;
+	sendingName: string | null;
+	sendingAddress: string | null;
 	enabled: boolean;
 	scopes: MailboxScope[];
 	createdAt: string;
@@ -36,16 +44,24 @@ export interface MailboxesResponse {
 }
 
 export interface CreateMailboxInput {
+	type: MailboxType;
 	name: string;
 	loginAddress: string;
 	accessMode: MailboxAccessMode;
+	sendingMode: MailboxSendingMode;
+	sendingName: string | null;
+	sendingAddress: string | null;
 	scopes: MailboxScopeInput[];
 }
 
 export interface UpdateMailboxInput {
+	type?: MailboxType;
 	name?: string;
 	loginAddress?: string;
 	accessMode?: MailboxAccessMode;
+	sendingMode?: MailboxSendingMode;
+	sendingName?: string | null;
+	sendingAddress?: string | null;
 	enabled?: boolean;
 	scopes?: MailboxScopeInput[];
 }

@@ -29,15 +29,20 @@ import { enforceOutboundSendGuard } from "@/lib/email-management/outbound-send-g
 import { checkSendingSpike } from "@/lib/email-management/sending-spike-detector";
 import {
 	formatScheduledDate,
+	type ParsedScheduleDate,
 	parseScheduledAt,
 	validateScheduledDate,
 } from "@/lib/utils/date-parser";
 import {
 	attachmentsToStorageFormat,
+	type ProcessedAttachment,
 	processAttachments,
 } from "../helper/attachment-processor";
 import { buildRawEmailMessage } from "../helper/email-builder";
-import { validateAndRateLimit } from "../lib/auth";
+import {
+	authenticateEmailSend,
+	senderPolicyAllowsAddress,
+} from "../lib/send-auth";
 
 // Initialize SES client
 const awsRegion = process.env.AWS_REGION || "us-east-2";
@@ -145,7 +150,7 @@ function formatEmailWithName(email: string, name?: string): string {
 }
 
 // Check warmup limits for new accounts
-async function checkNewAccountWarmupLimits(userId: string): Promise<{
+async function checkNewAccountWarmupLimits(_userId: string): Promise<{
 	allowed: boolean;
 	error?: string;
 	emailsSentToday?: number;
@@ -163,7 +168,7 @@ export const sendEmail = new Elysia().post(
 		console.log("📧 POST /api/e2/emails - Starting request");
 
 		// Auth & rate limit validation
-		const userId = await validateAndRateLimit(request, set);
+		const { userId, senderPolicy } = await authenticateEmailSend(request, set);
 		console.log("✅ Authentication successful for userId:", userId);
 
 		// Check new account warmup limits
@@ -218,7 +223,7 @@ export const sendEmail = new Elysia().post(
 		}
 
 		// Handle scheduled_at if provided
-		let parsedDate: any = null;
+		let parsedDate: ParsedScheduleDate | null = null;
 		if (body.scheduled_at) {
 			console.log("⏰ Scheduled email detected");
 
@@ -245,6 +250,10 @@ export const sendEmail = new Elysia().post(
 		// Extract sender information
 		const fromAddress = extractEmailAddress(body.from);
 		const fromDomain = extractDomain(body.from);
+		if (senderPolicy && !senderPolicyAllowsAddress(senderPolicy, fromAddress)) {
+			set.status = 403;
+			return { error: "This credential cannot send from that address" };
+		}
 
 		console.log("📧 Sender details:", {
 			from: body.from,
@@ -313,7 +322,7 @@ export const sendEmail = new Elysia().post(
 
 		// Process attachments
 		console.log("📎 Processing attachments");
-		let processedAttachments: any[] = [];
+		let processedAttachments: ProcessedAttachment[] = [];
 		if (body.attachments && body.attachments.length > 0) {
 			try {
 				processedAttachments = await processAttachments(body.attachments);

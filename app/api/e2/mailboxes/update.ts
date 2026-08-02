@@ -31,12 +31,20 @@ export const updateMailbox = new Elysia().put(
 		const changesDefinition =
 			body.name !== undefined ||
 			body.loginAddress !== undefined ||
+			body.type !== undefined ||
 			body.accessMode !== undefined ||
+			body.sendingMode !== undefined ||
+			body.sendingName !== undefined ||
+			body.sendingAddress !== undefined ||
 			body.scopes !== undefined;
 		let validatedData: ValidatedMailboxInput = {
 			name: existing.name,
 			loginAddress: existing.loginAddress,
+			type: existing.type as "mailbox" | "smtp",
 			accessMode: existing.accessMode as "read" | "read_write",
+			sendingMode: existing.sendingMode as "identity" | "scoped_domains",
+			sendingName: existing.sendingName,
+			sendingAddress: existing.sendingAddress,
 			scopes: existingScopes.map((scope) => ({
 				...scope,
 				scopeKey:
@@ -51,8 +59,20 @@ export const updateMailbox = new Elysia().put(
 			const validated = await validateMailboxInput(userId, {
 				name: body.name ?? existing.name,
 				loginAddress: body.loginAddress ?? existing.loginAddress,
+				type: body.type ?? (existing.type as "mailbox" | "smtp"),
 				accessMode:
 					body.accessMode ?? (existing.accessMode as "read" | "read_write"),
+				sendingMode:
+					body.sendingMode ??
+					(existing.sendingMode as "identity" | "scoped_domains"),
+				sendingName:
+					body.sendingName === undefined
+						? existing.sendingName
+						: body.sendingName,
+				sendingAddress:
+					body.sendingAddress === undefined
+						? existing.sendingAddress
+						: body.sendingAddress,
 				scopes:
 					body.scopes ??
 					existingScopes.map((scope) => ({
@@ -75,7 +95,11 @@ export const updateMailbox = new Elysia().put(
 				.set({
 					name: validatedData.name,
 					loginAddress: validatedData.loginAddress,
+					type: validatedData.type,
 					accessMode: validatedData.accessMode,
+					sendingMode: validatedData.sendingMode,
+					sendingName: validatedData.sendingName,
+					sendingAddress: validatedData.sendingAddress,
 					enabled: body.enabled ?? existing.enabled,
 					updatedAt: now,
 				})
@@ -133,7 +157,11 @@ export const updateMailbox = new Elysia().put(
 					...existing,
 					name: validatedData.name,
 					loginAddress: validatedData.loginAddress,
+					type: validatedData.type,
 					accessMode: validatedData.accessMode,
+					sendingMode: validatedData.sendingMode,
+					sendingName: validatedData.sendingName,
+					sendingAddress: validatedData.sendingAddress,
 					enabled: body.enabled ?? existing.enabled,
 					updatedAt: now,
 				},

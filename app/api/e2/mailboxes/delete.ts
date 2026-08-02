@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
 import {
-	deleteImapApiKey,
+	deleteMailApiKey,
 	getOwnedCredential,
 	MailboxErrorSchema,
 } from "@/app/api/e2/mailboxes/shared";
@@ -36,9 +36,9 @@ export const deleteMailbox = new Elysia().delete(
 		}
 
 		try {
-			await deleteImapApiKey(existing.apiKeyId, userId);
+			await deleteMailApiKey(existing.apiKeyId, userId);
 		} catch (error) {
-			console.error("Failed to delete IMAP API key:", error);
+			console.error("Failed to delete mail API key:", error);
 		}
 
 		return { success: true as const };

@@ -1,7 +1,16 @@
-import { createHash } from "node:crypto";
 import type { GatewayConfig } from "./config.ts";
 
-const VERIFY_CACHE_TTL_MS = 5 * 60_000;
+export interface SmtpIdentity {
+	credentialId: string;
+	userId: string;
+	loginAddress: string;
+	type: "mailbox" | "smtp";
+	accessMode: "read" | "read_write";
+	sendingMode: "identity" | "scoped_domains";
+	sendingName: string | null;
+	sendingAddress: string | null;
+	allowedDomains: string[];
+}
 
 export interface SendEmailPayload {
 	from: string;
@@ -89,30 +98,25 @@ async function readErrorMessage(response: Response): Promise<string | null> {
 
 export class InboundApiClient {
 	private config: GatewayConfig;
-	private verifiedKeys = new Map<string, number>();
 
 	constructor(config: GatewayConfig) {
 		this.config = config;
 	}
 
-	async verifyApiKey(apiKey: string): Promise<boolean> {
-		const cacheKey = createHash("sha256").update(apiKey).digest("hex");
-		const cachedUntil = this.verifiedKeys.get(cacheKey);
-		if (cachedUntil && cachedUntil > Date.now()) return true;
-		this.verifiedKeys.delete(cacheKey);
-
+	async authenticateSmtp(
+		loginAddress: string,
+		password: string,
+	): Promise<SmtpIdentity | null> {
 		const response = await fetch(
-			`${this.config.apiBaseUrl}${this.config.authCheckPath}`,
+			`${this.config.apiBaseUrl}/mailboxes/authenticate-smtp`,
 			{
-				method: "GET",
-				headers: { Authorization: `Bearer ${apiKey}` },
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ loginAddress, password }),
 			},
 		);
-		if (response.ok) {
-			this.verifiedKeys.set(cacheKey, Date.now() + VERIFY_CACHE_TTL_MS);
-			return true;
-		}
-		if (response.status === 401 || response.status === 403) return false;
+		if (response.ok) return (await response.json()) as SmtpIdentity;
+		if (response.status === 401 || response.status === 403) return null;
 		throw new SmtpRelayError({
 			responseCode: 451,
 			message: "4.3.0 Authentication backend unavailable, try again later",

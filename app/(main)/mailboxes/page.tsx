@@ -48,12 +48,13 @@ import {
 	useRotateMailboxPasswordMutation,
 	useUpdateMailboxMutation,
 } from "@/features/mailboxes/hooks";
-import type { Mailbox } from "@/features/mailboxes/types";
+import type { Mailbox, MailboxType } from "@/features/mailboxes/types";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 interface PasswordState {
 	password: string;
 	loginAddress: string;
+	type: MailboxType;
 	wasRotated: boolean;
 }
 
@@ -96,6 +97,8 @@ export default function MailboxesPage() {
 			!search ||
 			mailbox.name.toLowerCase().includes(search) ||
 			mailbox.loginAddress.toLowerCase().includes(search) ||
+			mailbox.sendingName?.toLowerCase().includes(search) ||
+			mailbox.sendingAddress?.toLowerCase().includes(search) ||
 			mailbox.scopes.some((scope) =>
 				(scope.address ?? `*@${scope.domain}`).toLowerCase().includes(search),
 			);
@@ -118,10 +121,12 @@ export default function MailboxesPage() {
 				id: mailbox.id,
 				input: { enabled: !mailbox.enabled },
 			});
-			toast.success(mailbox.enabled ? "Mailbox disabled" : "Mailbox enabled");
+			toast.success(
+				mailbox.enabled ? "Credential disabled" : "Credential enabled",
+			);
 		} catch (error) {
 			toast.error(
-				error instanceof Error ? error.message : "Failed to update mailbox",
+				error instanceof Error ? error.message : "Failed to update credential",
 			);
 		}
 	};
@@ -130,11 +135,11 @@ export default function MailboxesPage() {
 		if (!deleteMailbox) return;
 		try {
 			await deleteMutation.mutateAsync(deleteMailbox.id);
-			toast.success("Mailbox deleted");
+			toast.success("Credential deleted");
 			setDeleteMailbox(null);
 		} catch (error) {
 			toast.error(
-				error instanceof Error ? error.message : "Failed to delete mailbox",
+				error instanceof Error ? error.message : "Failed to delete credential",
 			);
 		}
 	};
@@ -148,9 +153,10 @@ export default function MailboxesPage() {
 			setPasswordState({
 				password: result.password,
 				loginAddress: mailbox.loginAddress,
+				type: mailbox.type,
 				wasRotated: true,
 			});
-			toast.success("Mailbox password rotated");
+			toast.success("Credential password rotated");
 		} catch (error) {
 			toast.error(
 				error instanceof Error ? error.message : "Failed to rotate password",
@@ -188,17 +194,17 @@ export default function MailboxesPage() {
 								<SidebarToggleButton />
 								<div>
 									<h2 className="mb-1 text-2xl font-semibold tracking-tight text-foreground">
-										Mailboxes
+										Mailboxes & SMTP
 									</h2>
 									<p className="text-sm font-medium text-muted-foreground">
-										{mailboxesQuery.data?.pagination.total ?? 0} mailboxes
+										{mailboxesQuery.data?.pagination.total ?? 0} credentials
 									</p>
 								</div>
 							</div>
 							<div className="flex items-center gap-2">
 								<Button onClick={openCreate}>
 									<CirclePlus width="12" height="12" className="mr-1" />
-									<span className="hidden sm:inline">Create mailbox</span>
+									<span className="hidden sm:inline">Create credential</span>
 									<span className="sm:hidden">Create</span>
 								</Button>
 								<Button
@@ -230,7 +236,7 @@ export default function MailboxesPage() {
 									className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
 								/>
 								<Input
-									placeholder="Search mailboxes..."
+									placeholder="Search credentials..."
 									value={filters.search}
 									onChange={(event) =>
 										setFilters({ search: event.target.value || null })
@@ -271,7 +277,7 @@ export default function MailboxesPage() {
 				<div className="mx-auto max-w-5xl p-2 py-4">
 					{mailboxesQuery.isLoading ? (
 						<div className="flex items-center justify-center py-20 text-muted-foreground">
-							Loading mailboxes...
+							Loading credentials...
 						</div>
 					) : filteredMailboxes.length === 0 ? (
 						<div className="rounded-xl bg-card p-8">
@@ -282,16 +288,16 @@ export default function MailboxesPage() {
 									className="mx-auto mb-4 text-muted-foreground"
 								/>
 								<h3 className="mb-2 text-lg font-semibold text-foreground">
-									No mailboxes found
+									No credentials found
 								</h3>
 								<p className="mb-4 text-sm text-muted-foreground">
 									{filters.search || filters.status !== "all"
 										? "Try adjusting your filters or search query."
-										: "Create a mailbox to access inbound messages over IMAP."}
+										: "Create credentials to receive with IMAP, send with SMTP, or both."}
 								</p>
 								<Button variant="secondary" onClick={openCreate}>
 									<CirclePlus width="16" height="16" className="mr-2" />
-									Create your first mailbox
+									Create your first credential
 								</Button>
 							</div>
 						</div>
@@ -299,6 +305,11 @@ export default function MailboxesPage() {
 						<div className="overflow-hidden rounded-[13px] border border-border bg-card">
 							{filteredMailboxes.map((mailbox) => {
 								const visibleScopes = mailbox.scopes.slice(0, 3);
+								const senderIdentity = mailbox.sendingAddress
+									? mailbox.sendingName
+										? `${mailbox.sendingName} <${mailbox.sendingAddress}>`
+										: mailbox.sendingAddress
+									: null;
 								const lastUsed = mailbox.lastUsedAt
 									? `Last used ${formatDistanceToNow(new Date(mailbox.lastUsedAt), { addSuffix: true })}`
 									: "Never used";
@@ -329,14 +340,34 @@ export default function MailboxesPage() {
 													{mailbox.enabled ? "Active" : "Disabled"}
 												</Badge>
 												<Badge variant="outline">
-													{mailbox.accessMode === "read"
-														? "Read only"
-														: "Read / write"}
+													{mailbox.type === "mailbox"
+														? "Mailbox + SMTP"
+														: "SMTP only"}
+												</Badge>
+												<Badge variant="outline">
+													{mailbox.sendingMode === "identity"
+														? "Exact identity"
+														: "Any scoped domain"}
 												</Badge>
 											</div>
-											<p className="mt-1 truncate text-xs text-muted-foreground">
-												{mailbox.loginAddress}
-											</p>
+											<div className="mt-1 flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+												<span className="truncate">
+													Login: {mailbox.loginAddress}
+												</span>
+												{mailbox.type === "mailbox" && (
+													<span>
+														IMAP:{" "}
+														{mailbox.accessMode === "read"
+															? "read only"
+															: "read / write"}
+													</span>
+												)}
+											</div>
+											{senderIdentity && (
+												<p className="mt-1 truncate text-xs text-muted-foreground">
+													From: {senderIdentity}
+												</p>
+											)}
 											<p className="mt-1 text-xs text-muted-foreground md:hidden">
 												{lastUsed}
 											</p>
@@ -412,8 +443,8 @@ export default function MailboxesPage() {
 				mailbox={selectedMailbox}
 				domains={domains}
 				isLoadingDomains={domainsQuery.isLoading}
-				onPasswordCreated={(password, loginAddress) =>
-					setPasswordState({ password, loginAddress, wasRotated: false })
+				onPasswordCreated={(password, loginAddress, type) =>
+					setPasswordState({ password, loginAddress, type, wasRotated: false })
 				}
 			/>
 
@@ -422,6 +453,7 @@ export default function MailboxesPage() {
 				onOpenChange={(open) => !open && setPasswordState(null)}
 				password={passwordState?.password ?? ""}
 				loginAddress={passwordState?.loginAddress ?? ""}
+				type={passwordState?.type ?? "mailbox"}
 				wasRotated={passwordState?.wasRotated ?? false}
 			/>
 
@@ -430,9 +462,9 @@ export default function MailboxesPage() {
 				onOpenChange={(open) => !open && setDeleteMailbox(null)}
 				onConfirm={confirmDelete}
 				itemName={deleteMailbox?.name}
-				itemType="mailbox"
+				itemType="credential"
 				isLoading={deleteMutation.isPending}
-				description={`Delete ${deleteMailbox?.name ?? "this mailbox"}? Any client using its credentials will lose access immediately. This cannot be undone.`}
+				description={`Delete ${deleteMailbox?.name ?? "this credential"}? Any client using it will lose access immediately. This cannot be undone.`}
 			/>
 
 			<Dialog
@@ -441,7 +473,7 @@ export default function MailboxesPage() {
 			>
 				<DialogContent className="sm:max-w-md">
 					<DialogHeader>
-						<DialogTitle>Rotate mailbox password</DialogTitle>
+						<DialogTitle>Rotate credential password</DialogTitle>
 						<DialogDescription>
 							The current password for {rotateMailbox?.name} will stop working
 							immediately. The new password will only be shown once.

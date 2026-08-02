@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
 import {
-	deleteImapApiKey,
+	deleteMailApiKey,
 	getOwnedCredential,
 	MailboxErrorSchema,
 } from "@/app/api/e2/mailboxes/shared";
@@ -24,7 +24,7 @@ export const rotateMailboxPassword = new Elysia().post(
 
 		const replacement = await auth.api.createApiKey({
 			body: {
-				configId: "imap",
+				configId: "mail",
 				name: existing.name,
 				userId,
 			},
@@ -43,22 +43,22 @@ export const rotateMailboxPassword = new Elysia().post(
 				)
 				.returning({ id: imapCredentials.id });
 		} catch (error) {
-			await deleteImapApiKey(replacement.id, userId);
-			console.error("Failed to update rotated IMAP API key:", error);
+			await deleteMailApiKey(replacement.id, userId);
+			console.error("Failed to update rotated mail API key:", error);
 			set.status = 500;
 			return { error: "Failed to rotate mailbox password" };
 		}
 
 		if (!updated) {
-			await deleteImapApiKey(replacement.id, userId);
+			await deleteMailApiKey(replacement.id, userId);
 			set.status = 404;
 			return { error: "Mailbox not found" };
 		}
 
 		try {
-			await deleteImapApiKey(existing.apiKeyId, userId);
+			await deleteMailApiKey(existing.apiKeyId, userId);
 		} catch (error) {
-			console.error("Failed to delete rotated IMAP API key:", error);
+			console.error("Failed to delete rotated mail API key:", error);
 		}
 
 		return { password: replacement.key };

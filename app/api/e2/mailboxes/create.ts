@@ -2,7 +2,7 @@ import { Elysia, t } from "elysia";
 import { nanoid } from "nanoid";
 import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
 import {
-	deleteImapApiKey,
+	deleteMailApiKey,
 	isUniqueViolation,
 	MailboxErrorSchema,
 	MailboxInputSchema,
@@ -31,7 +31,7 @@ export const createMailbox = new Elysia().post(
 
 		const apiKey = await auth.api.createApiKey({
 			body: {
-				configId: "imap",
+				configId: "mail",
 				name: validated.data.name,
 				userId,
 			},
@@ -44,7 +44,11 @@ export const createMailbox = new Elysia().post(
 			apiKeyId: apiKey.id,
 			name: validated.data.name,
 			loginAddress: validated.data.loginAddress,
+			type: validated.data.type,
 			accessMode: validated.data.accessMode,
+			sendingMode: validated.data.sendingMode,
+			sendingName: validated.data.sendingName,
+			sendingAddress: validated.data.sendingAddress,
 			enabled: true,
 			lastUsedAt: null,
 			createdAt: now,
@@ -68,9 +72,9 @@ export const createMailbox = new Elysia().post(
 			]);
 		} catch (error) {
 			try {
-				await deleteImapApiKey(apiKey.id, userId);
+				await deleteMailApiKey(apiKey.id, userId);
 			} catch (cleanupError) {
-				console.error("Failed to clean up IMAP API key:", cleanupError);
+				console.error("Failed to clean up mail API key:", cleanupError);
 			}
 
 			set.status = isUniqueViolation(error) ? 409 : 500;

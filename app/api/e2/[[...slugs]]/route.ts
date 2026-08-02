@@ -50,6 +50,7 @@ import { getThread } from "../mail/threads-get";
 // Inbox routes (threaded conversations)
 import { listThreads } from "../mail/threads-list";
 import { authenticateMailbox } from "../mailboxes/authenticate";
+import { authenticateSmtp } from "../mailboxes/authenticate-smtp";
 import { createMailbox } from "../mailboxes/create";
 import { deleteMailbox } from "../mailboxes/delete";
 import { listMailboxes } from "../mailboxes/list";
@@ -495,6 +496,7 @@ https://inbound.new/api/e2
 	.use(deleteMailbox)
 	.use(rotateMailboxPassword)
 	.use(authenticateMailbox)
+	.use(authenticateSmtp)
 	// Onboarding routes
 	.use(sendOnboardingDemo)
 	.use(checkOnboardingReply)

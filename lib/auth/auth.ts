@@ -187,9 +187,15 @@ export const auth = betterAuth({
 				defaultPrefix: "imap_",
 				maximumNameLength: 255,
 				rateLimit: {
-					enabled: true,
-					maxRequests: 120,
-					timeWindow: 60 * 60 * 1000,
+					enabled: false,
+				},
+			},
+			{
+				configId: "mail",
+				defaultPrefix: "mail_",
+				maximumNameLength: 255,
+				rateLimit: {
+					enabled: false,
 				},
 			},
 		]),

@@ -6,60 +6,50 @@ import {
 	normalizeEmailAddress,
 } from "@/app/api/e2/mailboxes/shared";
 
-const AuthenticateBody = t.Object({
+const AuthenticateSmtpBody = t.Object({
 	loginAddress: t.String({ minLength: 3, maxLength: 255 }),
 	password: t.String({ minLength: 1 }),
 });
 
-const AuthenticateResponse = t.Object({
+const AuthenticateSmtpResponse = t.Object({
 	credentialId: t.String(),
 	userId: t.String(),
 	loginAddress: t.String(),
-	type: t.Literal("mailbox"),
+	type: t.Union([t.Literal("mailbox"), t.Literal("smtp")]),
 	sendingMode: t.Union([t.Literal("identity"), t.Literal("scoped_domains")]),
 	sendingName: t.Nullable(t.String()),
 	sendingAddress: t.Nullable(t.String()),
+	allowedDomains: t.Array(t.String()),
 	accessMode: t.Union([t.Literal("read"), t.Literal("read_write")]),
 	scopes: t.Array(MailboxScopeSchema),
 });
 
 function unauthorized(set: { status?: number | string }) {
 	set.status = 401;
-	return { error: "Invalid mailbox credentials" };
+	return { error: "Invalid mail credentials" };
 }
 
-export const authenticateMailbox = new Elysia().post(
-	"/mailboxes/authenticate",
+export const authenticateSmtp = new Elysia().post(
+	"/mailboxes/authenticate-smtp",
 	async ({ body, set }) => {
 		const loginAddress = normalizeEmailAddress(body.loginAddress);
 		if (!loginAddress) return unauthorized(set);
 
 		const credential = await authenticateManagedMailCredential(body.password, {
 			loginAddress,
-			requireType: "mailbox",
 		});
 		if (!credential) return unauthorized(set);
 
-		return {
-			credentialId: credential.credentialId,
-			userId: credential.userId,
-			loginAddress: credential.loginAddress,
-			type: "mailbox" as const,
-			sendingMode: credential.sendingMode,
-			sendingName: credential.sendingName,
-			sendingAddress: credential.sendingAddress,
-			accessMode: credential.accessMode,
-			scopes: credential.scopes,
-		};
+		return credential;
 	},
 	{
-		body: AuthenticateBody,
+		body: AuthenticateSmtpBody,
 		response: {
-			200: AuthenticateResponse,
+			200: AuthenticateSmtpResponse,
 			400: MailboxErrorSchema,
 			401: MailboxErrorSchema,
 			500: MailboxErrorSchema,
 		},
-		detail: { tags: ["Mailboxes"], summary: "Authenticate a mailbox" },
+		detail: { tags: ["Mailboxes"], summary: "Authenticate for SMTP" },
 	},
 );

@@ -8,6 +8,11 @@ export interface RelayEnvelope {
 	rcptTo: string[];
 }
 
+export interface MappedRawMessage {
+	payload: SendEmailPayload;
+	fromAddress: string;
+}
+
 const FORWARDED_HEADERS = ["in-reply-to", "references"];
 
 function addressList(value: AddressObject | AddressObject[] | undefined): {
@@ -54,7 +59,7 @@ export function idempotencyKeyFor(raw: Buffer, apiKey: string): string {
 export async function mapRawMessage(
 	raw: Buffer,
 	envelope: RelayEnvelope,
-): Promise<SendEmailPayload> {
+): Promise<MappedRawMessage> {
 	const parsed = await simpleParser(raw);
 
 	const fromEntry = parsed.from?.value?.[0];
@@ -98,15 +103,18 @@ export async function mapRawMessage(
 	}));
 
 	return {
-		from,
-		to: to.formatted.length > 0 ? to.formatted : bcc,
-		subject: parsed.subject ?? "",
-		...(html !== undefined ? { html } : {}),
-		...(text !== undefined ? { text } : {}),
-		...(cc.formatted.length > 0 ? { cc: cc.formatted } : {}),
-		...(to.formatted.length > 0 && bcc.length > 0 ? { bcc } : {}),
-		...(replyTo.formatted.length > 0 ? { reply_to: replyTo.formatted } : {}),
-		...(customHeaders(parsed) ? { headers: customHeaders(parsed) } : {}),
-		...(attachments.length > 0 ? { attachments } : {}),
+		fromAddress: fromAddress.toLowerCase(),
+		payload: {
+			from,
+			to: to.formatted.length > 0 ? to.formatted : bcc,
+			subject: parsed.subject ?? "",
+			...(html !== undefined ? { html } : {}),
+			...(text !== undefined ? { text } : {}),
+			...(cc.formatted.length > 0 ? { cc: cc.formatted } : {}),
+			...(to.formatted.length > 0 && bcc.length > 0 ? { bcc } : {}),
+			...(replyTo.formatted.length > 0 ? { reply_to: replyTo.formatted } : {}),
+			...(customHeaders(parsed) ? { headers: customHeaders(parsed) } : {}),
+			...(attachments.length > 0 ? { attachments } : {}),
+		},
 	};
 }

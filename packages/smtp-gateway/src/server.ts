@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import type { Server } from "node:net";
 import {
 	SMTPServer,
 	type SMTPServerAuthentication,
@@ -8,14 +7,17 @@ import {
 	type SMTPServerOptions,
 	type SMTPServerSession,
 } from "smtp-server";
-import { InboundApiClient, SmtpRelayError } from "./api-client.ts";
+import {
+	InboundApiClient,
+	type SmtpIdentity,
+	SmtpRelayError,
+} from "./api-client.ts";
 import type { GatewayConfig } from "./config.ts";
 import { idempotencyKeyFor, mapRawMessage } from "./mapper.ts";
 
-const SMTP_USERNAME = "inbound";
-
 interface AuthenticatedUser {
 	apiKey: string;
+	identity: SmtpIdentity;
 }
 
 interface FailureRecord {
@@ -128,29 +130,26 @@ export class SmtpGateway {
 
 		const username = (auth.username ?? "").trim().toLowerCase();
 		const password = (auth.password ?? "").trim();
-		const usernameOk =
-			username === SMTP_USERNAME || username.includes("@");
 
-		if (!usernameOk || password.length === 0) {
+		if (!username.includes("@") || password.length === 0) {
 			this.recordFailure(ip);
 			throw new SmtpRelayError({
 				responseCode: 535,
-				message:
-					'5.7.8 Authentication failed: use username "inbound" (or your email address) and your API key as the password',
+				message: "5.7.8 Authentication failed: invalid mailbox credentials",
 			});
 		}
 
-		const valid = await this.client.verifyApiKey(password);
-		if (!valid) {
+		const identity = await this.client.authenticateSmtp(username, password);
+		if (!identity) {
 			this.recordFailure(ip);
 			throw new SmtpRelayError({
 				responseCode: 535,
-				message: "5.7.8 Authentication failed: invalid API key",
+				message: "5.7.8 Authentication failed: invalid mailbox credentials",
 			});
 		}
 
 		this.authFailures.delete(ip);
-		const user: AuthenticatedUser = { apiKey: password };
+		const user: AuthenticatedUser = { apiKey: password, identity };
 		return { user };
 	}
 
@@ -183,18 +182,40 @@ export class SmtpGateway {
 				rcptTo: session.envelope.rcptTo.map((recipient) => recipient.address),
 			};
 
-			const payload = await mapRawMessage(raw, envelope);
+			const mapped = await mapRawMessage(raw, envelope);
+			this.assertSenderAllowed(user.identity, mapped.fromAddress);
+			if (envelope.mailFrom) {
+				this.assertSenderAllowed(
+					user.identity,
+					envelope.mailFrom.toLowerCase(),
+				);
+			}
 			const result = await this.client.sendEmail(
 				user.apiKey,
-				payload,
+				mapped.payload,
 				idempotencyKeyFor(raw, user.apiKey),
 			);
 			console.log(
-				`[smtp-gateway] relayed message ${result.id} from=${payload.from} recipients=${envelope.rcptTo.length}`,
+				`[smtp-gateway] relayed message ${result.id} from=${mapped.payload.from} recipients=${envelope.rcptTo.length}`,
 			);
 			return `Queued as ${result.id}`;
 		} finally {
 			release();
+		}
+	}
+
+	private assertSenderAllowed(identity: SmtpIdentity, address: string): void {
+		const normalized = address.toLowerCase();
+		const domain = normalized.split("@")[1] ?? "";
+		const allowed =
+			identity.sendingMode === "identity"
+				? normalized === identity.sendingAddress?.toLowerCase()
+				: identity.allowedDomains.includes(domain);
+		if (!allowed) {
+			throw new SmtpRelayError({
+				responseCode: 553,
+				message: "5.7.1 Sender address is not allowed for this credential",
+			});
 		}
 	}
 

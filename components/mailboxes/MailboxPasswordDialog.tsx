@@ -16,12 +16,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { MailboxType } from "@/features/mailboxes/types";
 
 interface MailboxPasswordDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	password: string;
 	loginAddress: string;
+	type: MailboxType;
 	wasRotated: boolean;
 }
 
@@ -30,6 +32,7 @@ export function MailboxPasswordDialog({
 	onOpenChange,
 	password,
 	loginAddress,
+	type,
 	wasRotated,
 }: MailboxPasswordDialogProps) {
 	const [copied, setCopied] = useState(false);
@@ -54,10 +57,14 @@ export function MailboxPasswordDialog({
 			<DialogContent className="sm:max-w-lg">
 				<DialogHeader>
 					<DialogTitle>
-						{wasRotated ? "Mailbox password rotated" : "Mailbox created"}
+						{wasRotated
+							? "Credential password rotated"
+							: type === "mailbox"
+								? "Mailbox + SMTP credential created"
+								: "SMTP credential created"}
 					</DialogTitle>
 					<DialogDescription>
-						Use these credentials to connect an IMAP client.
+						Use these credentials to connect your email client.
 					</DialogDescription>
 				</DialogHeader>
 
@@ -91,21 +98,37 @@ export function MailboxPasswordDialog({
 						</div>
 					</div>
 
-					<div className="rounded-md border bg-muted/30 p-4">
-						<p className="mb-3 text-sm font-medium">IMAP settings</p>
-						<dl className="grid grid-cols-[80px_1fr] gap-x-4 gap-y-2 text-sm">
-							<dt className="text-muted-foreground">Host</dt>
-							<dd className="break-all font-mono">imap.inboundemail.com</dd>
-							<dt className="text-muted-foreground">Port</dt>
-							<dd className="font-mono">993</dd>
-							<dt className="text-muted-foreground">Security</dt>
-							<dd>TLS</dd>
-						</dl>
-					</div>
+					<div className="grid gap-3 sm:grid-cols-2">
+						{type === "mailbox" && (
+							<div className="rounded-md border bg-muted/30 p-4">
+								<p className="mb-3 text-sm font-medium">IMAP settings</p>
+								<dl className="grid grid-cols-[70px_1fr] gap-x-3 gap-y-2 text-sm">
+									<dt className="text-muted-foreground">Host</dt>
+									<dd className="break-all font-mono">imap.inboundemail.com</dd>
+									<dt className="text-muted-foreground">Port</dt>
+									<dd className="font-mono">993</dd>
+									<dt className="text-muted-foreground">Security</dt>
+									<dd>TLS</dd>
+								</dl>
+							</div>
+						)}
 
-					<p className="text-xs text-muted-foreground">
-						SMTP authentication with mailbox passwords is not yet available.
-					</p>
+						<div className="rounded-md border bg-muted/30 p-4">
+							<p className="mb-3 text-sm font-medium">SMTP settings</p>
+							<dl className="grid grid-cols-[70px_1fr] gap-x-3 gap-y-2 text-sm">
+								<dt className="text-muted-foreground">Host</dt>
+								<dd className="break-all font-mono">smtp.inboundemail.com</dd>
+								<dt className="text-muted-foreground">Port</dt>
+								<dd>
+									<span className="font-mono">465</span> (TLS)
+								</dd>
+								<dt className="text-muted-foreground">Alternate</dt>
+								<dd>
+									<span className="font-mono">587</span> (STARTTLS)
+								</dd>
+							</dl>
+						</div>
+					</div>
 					<Button className="w-full" onClick={() => handleOpenChange(false)}>
 						I saved the password
 					</Button>

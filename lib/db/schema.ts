@@ -1047,7 +1047,13 @@ export const imapCredentials = pgTable(
 			.references(() => apikey.id, { onDelete: "cascade" }),
 		name: varchar("name", { length: 255 }).notNull(),
 		loginAddress: varchar("login_address", { length: 255 }).notNull(),
+		type: varchar("type", { length: 20 }).notNull().default("mailbox"),
 		accessMode: varchar("access_mode", { length: 20 }).notNull(),
+		sendingMode: varchar("sending_mode", { length: 20 })
+			.notNull()
+			.default("scoped_domains"),
+		sendingName: varchar("sending_name", { length: 255 }),
+		sendingAddress: varchar("sending_address", { length: 255 }),
 		enabled: boolean("enabled").notNull().default(true),
 		lastUsedAt: timestamp("last_used_at"),
 		createdAt: timestamp("created_at").notNull().defaultNow(),

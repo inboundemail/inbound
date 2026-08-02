@@ -53,10 +53,10 @@ export const navigationConfig: NavigationConfig = {
 			description: "Manage your email domains and addresses",
 		},
 		{
-			title: "Mailboxes",
+			title: "Mailboxes & SMTP",
 			url: "/mailboxes",
 			icon: EnvelopeOpen,
-			description: "Manage IMAP mailboxes and access",
+			description: "Manage mailbox and SMTP credentials",
 		},
 		{
 			title: "Endpoints",
