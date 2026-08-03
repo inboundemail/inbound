@@ -1,2 +1,0 @@
-CREATE INDEX "imap_appended_messages_user_id_idx" ON "imap_appended_messages" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "imap_mailbox_messages_appended_reference_idx" ON "imap_mailbox_messages" USING btree ("raw_source","structured_email_id");

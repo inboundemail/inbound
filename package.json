@@ -59,6 +59,7 @@
     "@aws-sdk/client-sns": "^3.940.0",
     "@better-auth/api-key": "1.6.25",
     "@better-auth/core": "1.6.25",
+    "@better-auth/oauth-provider": "1.6.25",
     "@better-auth/passkey": "1.6.25",
     "@better-auth/utils": "0.4.2",
     "@dnd-kit/core": "^6.3.1",

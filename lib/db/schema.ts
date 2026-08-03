@@ -12,6 +12,11 @@ import {
 	account,
 	apikey,
 	deviceCode,
+	jwks,
+	oauthAccessToken,
+	oauthClient,
+	oauthConsent,
+	oauthRefreshToken,
 	passkey,
 	session,
 	user,
@@ -134,6 +139,33 @@ export const emailDomains = pgTable("email_domains", {
 	updatedAt: timestamp("updated_at").defaultNow(),
 	userId: varchar("user_id", { length: 255 }).notNull(),
 });
+
+export const inboundOAuthGrants = pgTable(
+	"inbound_oauth_grants",
+	{
+		id: varchar("id", { length: 255 }).primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		sessionId: text("session_id").references(() => session.id, {
+			onDelete: "set null",
+		}),
+		clientId: text("client_id")
+			.notNull()
+			.references(() => oauthClient.clientId, { onDelete: "cascade" }),
+		mode: varchar("mode", { length: 20 }).notNull(),
+		domainIds: text("domain_ids").array().notNull(),
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+		revokedAt: timestamp("revoked_at"),
+	},
+	(table) => [
+		index("inbound_oauth_grants_user_id_idx").on(table.userId),
+		index("inbound_oauth_grants_session_client_idx").on(
+			table.sessionId,
+			table.clientId,
+		),
+	],
+);
 
 // SES Receipt Rules table - tracks batch catch-all rules for load balancing domains
 export const sesReceiptRules = pgTable("ses_receipt_rules", {
@@ -694,7 +726,20 @@ export const SCHEDULED_EMAIL_STATUS = {
 } as const;
 
 // Export types for Better Auth tables (using the imported tables)
-export { user, session, account, verification, apikey, passkey, deviceCode };
+export {
+	user,
+	session,
+	account,
+	verification,
+	apikey,
+	passkey,
+	deviceCode,
+	jwks,
+	oauthClient,
+	oauthRefreshToken,
+	oauthAccessToken,
+	oauthConsent,
+};
 
 export type User = typeof user.$inferSelect;
 export type NewUser = typeof user.$inferInsert;
@@ -714,6 +759,8 @@ export type UserOnboarding = typeof userOnboarding.$inferSelect;
 export type NewUserOnboarding = typeof userOnboarding.$inferInsert;
 export type EmailDomain = typeof emailDomains.$inferSelect;
 export type NewEmailDomain = typeof emailDomains.$inferInsert;
+export type InboundOAuthGrant = typeof inboundOAuthGrants.$inferSelect;
+export type NewInboundOAuthGrant = typeof inboundOAuthGrants.$inferInsert;
 export type SesReceiptRule = typeof sesReceiptRules.$inferSelect;
 export type NewSesReceiptRule = typeof sesReceiptRules.$inferInsert;
 export type EmailAddress = typeof emailAddresses.$inferSelect;
