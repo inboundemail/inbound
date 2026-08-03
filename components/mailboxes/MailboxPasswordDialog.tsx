@@ -98,7 +98,11 @@ export function MailboxPasswordDialog({
 						</div>
 					</div>
 
-					<div className="grid gap-3 sm:grid-cols-2">
+					<div
+						className={
+							type === "mailbox" ? "grid gap-3 sm:grid-cols-2" : "grid gap-3"
+						}
+					>
 						{type === "mailbox" && (
 							<div className="rounded-md border bg-muted/30 p-4">
 								<p className="mb-3 text-sm font-medium">IMAP settings</p>
