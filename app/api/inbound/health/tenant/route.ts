@@ -6,8 +6,11 @@ import { sendHarkNotification } from "@/lib/notifications/hark";
 import { getSesConfigurationSetName } from "@/lib/ses-monitoring/configuration-set";
 import { shouldTrackSesReputationEvent } from "@/lib/ses-monitoring/event-filter";
 import {
+	AUTO_SUSPEND_MIN_SENDS,
+	getTenantRates,
 	processSESEvent,
 	type RateAlert,
+	RATE_THRESHOLDS,
 } from "@/lib/ses-monitoring/rate-tracker";
 
 // Slack webhook for admin notifications
@@ -398,16 +401,26 @@ async function handleCloudWatchAlarm(alarm: CloudWatchAlarmMessage) {
 			triggeredAt: new Date(alarm.StateChangeTime),
 		});
 
-		// Auto-suspend sending on CRITICAL alerts
+		// Auto-suspend sending on CRITICAL alerts, only when the 24h database
+		// window confirms the rate with sufficient send volume
 		let sendingSuspended = false;
-		if (alertInfo.severity === "critical") {
+		const dbConfirmation =
+			alertInfo.severity === "critical"
+				? await confirmSuspendWithDbRates(configurationSet, alertInfo.alertType)
+				: null;
+		if (dbConfirmation && !dbConfirmation.shouldSuspend) {
 			console.log(
-				`🚨 CRITICAL alert - Auto-suspending sending for: ${configurationSet}`,
+				`⏭️ CRITICAL alarm but suspend skipped for ${configurationSet}: ${dbConfirmation.reason}`,
+			);
+		}
+		if (dbConfirmation?.shouldSuspend) {
+			console.log(
+				`🚨 CRITICAL alert - Auto-suspending sending for: ${configurationSet} (${dbConfirmation.reason})`,
 			);
 
 			const suspendResult = await suspendTenantSending(
 				configurationSet,
-				`Auto-suspended due to critical ${alertInfo.alertType} rate: ${rateDisplay}`,
+				`Auto-suspended due to critical ${alertInfo.alertType} rate: ${rateDisplay} (24h confirmed: ${dbConfirmation.reason})`,
 			);
 
 			if (suspendResult.success) {
@@ -739,6 +752,55 @@ async function handleSESBounceOrComplaint(event: SESEvent) {
 			error,
 		);
 	}
+}
+
+/**
+ * Confirm a CloudWatch critical alarm against the 24h database window before
+ * auto-suspending. CloudWatch computes rates over short windows, so a single
+ * bounce on a low-volume tenant can look critical; this applies the same
+ * volume floors and thresholds the DB rate tracker uses.
+ */
+async function confirmSuspendWithDbRates(
+	configurationSet: string,
+	alertType: "bounce" | "complaint" | "delivery_delay",
+): Promise<{ shouldSuspend: boolean; reason: string }> {
+	if (alertType === "delivery_delay") {
+		return {
+			shouldSuspend: true,
+			reason: "delivery_delay alerts are not volume-gated",
+		};
+	}
+
+	const rates = await getTenantRates(configurationSet);
+	if (!rates) {
+		return {
+			shouldSuspend: true,
+			reason: "could not compute 24h rates, deferring to CloudWatch",
+		};
+	}
+
+	const minSends = AUTO_SUSPEND_MIN_SENDS[alertType];
+	const threshold = RATE_THRESHOLDS[alertType].critical;
+	const rate = alertType === "bounce" ? rates.bounceRate : rates.complaintRate;
+	const events =
+		alertType === "bounce" ? rates.totalBounces : rates.totalComplaints;
+
+	if (rates.totalSends < minSends) {
+		return {
+			shouldSuspend: false,
+			reason: `low volume: ${rates.totalSends} sends in 24h (< ${minSends} minimum), ${events} ${alertType}s`,
+		};
+	}
+	if (rate < threshold) {
+		return {
+			shouldSuspend: false,
+			reason: `24h ${alertType} rate ${(rate * 100).toFixed(2)}% below critical threshold ${(threshold * 100).toFixed(2)}% (${events}/${rates.totalSends})`,
+		};
+	}
+	return {
+		shouldSuspend: true,
+		reason: `24h ${alertType} rate ${(rate * 100).toFixed(2)}% >= ${(threshold * 100).toFixed(2)}% over ${rates.totalSends} sends`,
+	};
 }
 
 /**
