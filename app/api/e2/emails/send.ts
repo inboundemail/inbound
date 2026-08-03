@@ -231,14 +231,14 @@ export const sendEmail = new Elysia().post(
 			if (!parsedDate.isValid) {
 				console.log("❌ Invalid scheduled_at:", parsedDate.error);
 				set.status = 400;
-				return { error: parsedDate.error };
+				return { error: parsedDate.error || "Invalid scheduled date" };
 			}
 
 			const dateValidation = validateScheduledDate(parsedDate.date);
 			if (!dateValidation.isValid) {
 				console.log("❌ Invalid schedule time:", dateValidation.error);
 				set.status = 400;
-				return { error: dateValidation.error };
+				return { error: dateValidation.error || "Invalid scheduled date" };
 			}
 
 			console.log(
