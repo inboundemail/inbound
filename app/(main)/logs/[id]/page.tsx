@@ -136,6 +136,8 @@ export default async function LogDetailPage({
 				status?: string;
 				failureReason?: string | null;
 				providerResponse?: any;
+				firstOpenedAt?: string | null;
+				lastOpenedAt?: string | null;
 		  })
 		| null = null;
 
@@ -360,6 +362,8 @@ export default async function LogDetailPage({
 				providerResponse: sentEmails.providerResponse,
 				failureReason: sentEmails.failureReason,
 				sentAt: sentEmails.sentAt,
+				firstOpenedAt: sentEmails.firstOpenedAt,
+				lastOpenedAt: sentEmails.lastOpenedAt,
 				threadId: sentEmails.threadId,
 			})
 			.from(sentEmails)
@@ -410,11 +414,17 @@ export default async function LogDetailPage({
 			bcc: bcc.length ? bcc : [null],
 			cc: cc.length ? cc : [null],
 			reply_to: reply_to.length ? reply_to : [null],
-			last_event: row.status === "sent" ? "delivered" : row.status || "created",
+			last_event: row.firstOpenedAt
+				? "opened"
+				: row.status === "sent"
+					? "delivered"
+					: row.status || "created",
 			provider: row.provider || undefined,
 			status: row.status || undefined,
 			failureReason: row.failureReason || null,
 			providerResponse,
+			firstOpenedAt: row.firstOpenedAt?.toISOString() || null,
+			lastOpenedAt: row.lastOpenedAt?.toISOString() || null,
 		};
 	}
 
@@ -983,6 +993,44 @@ export default async function LogDetailPage({
 														{outboundDetails?.provider}
 													</p>
 												</div>
+												<div>
+													<span className="text-muted-foreground">
+														Engagement:
+													</span>
+													<p className="font-medium">
+														{outboundDetails?.firstOpenedAt
+															? "Opened"
+															: "No open detected"}
+													</p>
+												</div>
+												{outboundDetails?.firstOpenedAt && (
+													<div>
+														<span className="text-muted-foreground">
+															First opened:
+														</span>
+														<p className="font-medium tabular-nums">
+															{format(
+																new Date(outboundDetails.firstOpenedAt),
+																"PPpp",
+															)}
+														</p>
+													</div>
+												)}
+												{outboundDetails?.lastOpenedAt &&
+													outboundDetails.lastOpenedAt !==
+														outboundDetails.firstOpenedAt && (
+														<div>
+															<span className="text-muted-foreground">
+																Last opened:
+															</span>
+															<p className="font-medium tabular-nums">
+																{format(
+																	new Date(outboundDetails.lastOpenedAt),
+																	"PPpp",
+																)}
+															</p>
+														</div>
+													)}
 											</div>
 											{outboundDetails?.failureReason && (
 												<div className="p-3 bg-destructive/10 rounded-lg text-destructive">
@@ -1068,7 +1116,9 @@ export default async function LogDetailPage({
 										)}
 										{isInbound && inboundDetails?.fromName && (
 											<div>
-												<span className="text-muted-foreground">From Name:</span>
+												<span className="text-muted-foreground">
+													From Name:
+												</span>
 												<div className="mt-1">
 													<ClickableId id={inboundDetails.fromName} />
 												</div>
@@ -1077,9 +1127,13 @@ export default async function LogDetailPage({
 										<div>
 											<span className="text-muted-foreground">From:</span>
 											<div className="mt-1">
-												<ClickableId id={isInbound
-													? inboundDetails?.from || "unknown"
-													: outboundDetails?.from || "unknown"} />
+												<ClickableId
+													id={
+														isInbound
+															? inboundDetails?.from || "unknown"
+															: outboundDetails?.from || "unknown"
+													}
+												/>
 											</div>
 										</div>
 										{isInbound && inboundDetails?.recipientName && (
@@ -1094,7 +1148,9 @@ export default async function LogDetailPage({
 											<span className="text-muted-foreground">To:</span>
 											<div className="mt-1">
 												{isInbound ? (
-													<ClickableId id={inboundDetails?.recipient || "unknown"} />
+													<ClickableId
+														id={inboundDetails?.recipient || "unknown"}
+													/>
 												) : (
 													outboundDetails?.to?.map((r, i) => (
 														<div key={i}>

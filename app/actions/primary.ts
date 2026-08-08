@@ -2921,6 +2921,8 @@ export async function getUnifiedEmailLogs(options?: {
 				);
 			} else if (statusFilter === "parse_failed") {
 				inboundWhereConditions.push(eq(structuredEmails.parseSuccess, false));
+			} else if (statusFilter === "opened") {
+				inboundWhereConditions.push(sql`false`);
 			}
 		}
 
@@ -2972,6 +2974,10 @@ export async function getUnifiedEmailLogs(options?: {
 		// Add status filter for outbound emails at SQL level
 		if (statusFilter === "delivered") {
 			outboundWhereConditions.push(eq(sentEmails.status, "sent"));
+		} else if (statusFilter === "opened") {
+			outboundWhereConditions.push(
+				sql`${sentEmails.firstOpenedAt} IS NOT NULL`,
+			);
 		} else if (statusFilter === "failed") {
 			outboundWhereConditions.push(eq(sentEmails.status, "failed"));
 		} else if (statusFilter === "pending") {
@@ -3135,6 +3141,8 @@ export async function getUnifiedEmailLogs(options?: {
 					messageId: sentEmails.messageId,
 					provider: sentEmails.provider,
 					sentAt: sentEmails.sentAt,
+					firstOpenedAt: sentEmails.firstOpenedAt,
+					lastOpenedAt: sentEmails.lastOpenedAt,
 					createdAt: sentEmails.createdAt,
 				})
 				.from(sentEmails)
@@ -3167,6 +3175,8 @@ export async function getUnifiedEmailLogs(options?: {
 					status: email.status,
 					provider: email.provider || "ses",
 					sentAt: email.sentAt?.toISOString() || null,
+					firstOpenedAt: email.firstOpenedAt?.toISOString() || null,
+					lastOpenedAt: email.lastOpenedAt?.toISOString() || null,
 					createdAt: email.createdAt?.toISOString(),
 				});
 			}
@@ -3226,6 +3236,10 @@ export async function getUnifiedEmailLogs(options?: {
 				pending:
 					sql<number>`COUNT(CASE WHEN ${sentEmails.status} = 'pending' THEN 1 END)`.as(
 						"pending",
+					),
+				opened:
+					sql<number>`COUNT(CASE WHEN ${sentEmails.firstOpenedAt} IS NOT NULL THEN 1 END)`.as(
+						"opened",
 					),
 			})
 			.from(sentEmails)
@@ -3297,6 +3311,7 @@ export async function getUnifiedEmailLogs(options?: {
 			sent: 0,
 			failed: 0,
 			pending: 0,
+			opened: 0,
 		};
 
 		// Parse counts as numbers to avoid string concatenation
@@ -3313,6 +3328,7 @@ export async function getUnifiedEmailLogs(options?: {
 				Number(outboundStatsRow.totalOutbound),
 			inbound: Number(inboundStatsRow.totalInbound),
 			outbound: Number(outboundStatsRow.totalOutbound),
+			opened: Number(outboundStatsRow.opened),
 			delivered: successfulDeliveriesCount + Number(outboundStatsRow.sent),
 			failed:
 				failedDeliveriesCount +

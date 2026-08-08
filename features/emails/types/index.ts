@@ -42,6 +42,8 @@ export interface OutboundEmailLogEntry extends BaseEmailLogEntry {
   status: 'pending' | 'sent' | 'failed'
   provider: string
   sentAt: string | null
+  firstOpenedAt: string | null
+  lastOpenedAt: string | null
 }
 
 // Union type for all email log entries
@@ -51,6 +53,7 @@ export interface EmailLogStats {
   totalEmails: number
   inbound: number
   outbound: number
+  opened: number
   delivered: number
   failed: number
   pending: number
@@ -76,9 +79,9 @@ export interface EmailLogsOptions {
   limit?: number
   offset?: number
   searchQuery?: string
-  statusFilter?: 'all' | 'delivered' | 'failed' | 'pending' | 'no_delivery' | 'parse_failed'
+  statusFilter?: 'all' | 'opened' | 'delivered' | 'failed' | 'pending' | 'no_delivery' | 'parse_failed'
   typeFilter?: 'all' | 'inbound' | 'outbound' // New filter for email type
   domainFilter?: string
   guardFilter?: 'all' | 'blocked' | 'allowed' | 'flagged' // New filter for Guard status
   timeRange?: '24h' | '7d' | '30d' | '90d'
-} 
+}
