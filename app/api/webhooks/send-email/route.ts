@@ -4,6 +4,7 @@ import { waitUntil } from "@vercel/functions";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { type NextRequest, NextResponse } from "next/server";
+import { buildSentEmailTags } from "@/app/api/e2/helper/ses-email-tags";
 import type { PostEmailsRequest } from "@/lib/api-types";
 import {
 	getAgentIdentityArn,
@@ -454,6 +455,7 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			...(tenantSendingInfo.tenantName && {
 				TenantName: tenantSendingInfo.tenantName,
 			}),
+			EmailTags: buildSentEmailTags(createdSentEmail.id),
 		});
 
 		const sesResponse = await sesClient.send(rawCommand);
@@ -833,6 +835,7 @@ async function handleBatchEmail(
 			...(batchTenantInfo.tenantName && {
 				TenantName: batchTenantInfo.tenantName,
 			}),
+			EmailTags: buildSentEmailTags(emailId),
 		});
 
 		const sesResponse = await sesClient.send(rawCommand);

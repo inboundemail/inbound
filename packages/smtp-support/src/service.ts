@@ -4,6 +4,7 @@ import { and, eq, isNotNull, or } from "drizzle-orm";
 import type { HeaderLines, ParsedMail } from "mailparser";
 import { simpleParser } from "mailparser";
 import { nanoid } from "nanoid";
+import { buildSentEmailTags } from "@/app/api/e2/helper/ses-email-tags";
 import { auth } from "@/lib/auth/auth";
 import {
 	getAgentIdentityArn,
@@ -739,6 +740,7 @@ export async function relaySmtpMessage(params: {
 				...(tenantSendingInfo.tenantName && {
 					TenantName: tenantSendingInfo.tenantName,
 				}),
+				EmailTags: buildSentEmailTags(sentEmailId),
 			}),
 		);
 

@@ -32,6 +32,7 @@
     "ses-playground": "bun run scripts/aws-ses-playground.ts",
     "ses-depth-test": "bun run scripts/aws-ses-playground.ts --depth-only",
     "ses:status": "bun run scripts/aws-ses-status-helper.ts",
+    "ses:enable-open-tracking": "bun run scripts/enable-ses-open-tracking.ts",
     "aws:stats": "bun run scripts/aws-stats.ts",
     "admin:abuse-block": "bun run scripts/admin-abuse-block.ts",
     "test-qstash-webhook": "curl -X POST \"http://localhost:3000/api/webhooks/send-email\" -H \"Content-Type: application/json\" -d '{\"type\":\"scheduled\",\"scheduledEmailId\":\"test-id\"}' || echo 'Make sure your dev server is running'",

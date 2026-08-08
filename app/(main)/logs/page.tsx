@@ -477,6 +477,7 @@ export default function LogsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="opened">Opened</SelectItem>
                 <SelectItem value="delivered">Delivered</SelectItem>
                 <SelectItem value="failed">Failed</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
@@ -684,6 +685,11 @@ export default function LogsPage() {
                   <span className="font-semibold text-foreground tabular-nums">{stats.outbound}</span>
               </div>
               <div className="flex items-center gap-2">
+                  <Eye2 width="16" height="16" className="text-muted-foreground" />
+                  <span className="text-muted-foreground whitespace-nowrap">Opened:</span>
+                  <span className="font-semibold text-foreground tabular-nums">{stats.opened}</span>
+              </div>
+              <div className="flex items-center gap-2">
                   <CircleCheck width="16" height="16" className="text-green-600" />
                   <span className="text-muted-foreground whitespace-nowrap">Delivered:</span>
                   <span className="font-semibold text-foreground tabular-nums">{stats.delivered}</span>
@@ -875,7 +881,9 @@ export default function LogsPage() {
                   }
                   return { label: 'Pending', variant: 'secondary' as const, customClass: 'bg-purple-50 text-purple-700 border-purple-200' }
                 } else if (outboundLog) {
-                  if (outboundLog.status === 'sent') {
+                  if (outboundLog.firstOpenedAt) {
+                    return { label: 'Opened', variant: 'secondary' as const, customClass: '' }
+                  } else if (outboundLog.status === 'sent') {
                     return { label: 'Sent', variant: 'default' as const, customClass: 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200' }
                   } else if (outboundLog.status === 'failed') {
                     return { label: 'Failed', variant: 'destructive' as const, customClass: '' }
