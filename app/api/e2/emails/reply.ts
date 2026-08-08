@@ -4,6 +4,7 @@ import { Autumn as autumn } from "autumn-js";
 import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { nanoid } from "nanoid";
+import { buildSentEmailTags } from "@/app/api/e2/helper/ses-email-tags";
 import {
 	getTenantSendingInfoForDomainOrParent,
 	type TenantSendingInfo,
@@ -737,6 +738,7 @@ export const replyToEmail = new Elysia().post(
 				...(tenantSendingInfo.tenantName && {
 					TenantName: tenantSendingInfo.tenantName,
 				}),
+				EmailTags: buildSentEmailTags(replyEmailId),
 			});
 
 			const sesResponse = await sesClient.send(sesCommand);

@@ -27,6 +27,7 @@ import {
 	ListTenantsCommand,
 	PutConfigurationSetSendingOptionsCommand,
 	SESv2Client,
+	UpdateConfigurationSetEventDestinationCommand,
 	UpdateReputationEntityPolicyCommand,
 } from "@aws-sdk/client-sesv2";
 import {
@@ -45,6 +46,14 @@ const WEBHOOK_URL =
 	process.env.SES_WEBHOOK_URL ||
 	"https://inbound.new/api/inbound/health/tenant";
 const AWS_ACCOUNT_ID = process.env.AWS_ACCOUNT_ID;
+const TENANT_SNS_EVENT_TYPES = [
+	EventType.BOUNCE,
+	EventType.COMPLAINT,
+	EventType.DELIVERY,
+	EventType.SEND,
+	EventType.REJECT,
+	EventType.OPEN,
+];
 
 // Types
 export interface CreateTenantParams {
@@ -234,13 +243,7 @@ export class SESTenantManager {
 							EventDestinationName: `${configSetName}-sns-events`,
 							EventDestination: {
 								Enabled: true,
-								MatchingEventTypes: [
-									EventType.BOUNCE,
-									EventType.COMPLAINT,
-									EventType.DELIVERY,
-									EventType.SEND,
-									EventType.REJECT,
-								],
+								MatchingEventTypes: TENANT_SNS_EVENT_TYPES,
 								SnsDestination: {
 									TopicArn: eventsTopicArn,
 								},
@@ -248,12 +251,27 @@ export class SESTenantManager {
 						});
 					await this.sesv2Client.send(snsEventDestinationCommand);
 					console.log(`✅ SES → SNS event destination created`);
-				} catch (snsDestError: any) {
+				} catch (snsDestError) {
 					if (
-						snsDestError?.name === "AlreadyExistsException" ||
-						snsDestError?.message?.includes("already exists")
+						(snsDestError instanceof Error &&
+							snsDestError.name === "AlreadyExistsException") ||
+						(snsDestError instanceof Error &&
+							snsDestError.message.includes("already exists"))
 					) {
-						console.log(`📋 SES → SNS event destination already exists`);
+						await this.sesv2Client.send(
+							new UpdateConfigurationSetEventDestinationCommand({
+								ConfigurationSetName: configSetName,
+								EventDestinationName: `${configSetName}-sns-events`,
+								EventDestination: {
+									Enabled: true,
+									MatchingEventTypes: TENANT_SNS_EVENT_TYPES,
+									SnsDestination: {
+										TopicArn: eventsTopicArn,
+									},
+								},
+							}),
+						);
+						console.log(`✅ SES → SNS event destination updated`);
 					} else {
 						console.warn(
 							`⚠️ Failed to create SES → SNS event destination:`,
