@@ -5,15 +5,12 @@ import { parseOpenEvent } from "@/app/api/inbound/health/tenant/open-event";
 describe("parseOpenEvent", () => {
 	it("extracts an open event with its sent email id", () => {
 		const parsed = parseOpenEvent({
-			eventType: "open",
+			eventType: "Open",
 			mail: {
 				messageId: "ses-message-id",
 				tags: { [SENT_EMAIL_ID_TAG]: ["email_123"] },
 			},
-			open: {
-				timestamp: "2026-08-08T19:20:00.000Z",
-				isBotEvent: "Unlikely",
-			},
+			open: { timestamp: "2026-08-08T19:20:00.000Z" },
 		});
 
 		expect(parsed).toEqual({
@@ -32,19 +29,6 @@ describe("parseOpenEvent", () => {
 
 		expect(parsed?.sentEmailId).toBeNull();
 		expect(parsed?.sesMessageId).toBe("ses-message-id");
-	});
-
-	it("ignores likely bot events", () => {
-		expect(
-			parseOpenEvent({
-				eventType: "open",
-				mail: { messageId: "ses-message-id" },
-				open: {
-					timestamp: "2026-08-08T19:20:00.000Z",
-					isBotEvent: "Likely",
-				},
-			}),
-		).toBeNull();
 	});
 
 	it("rejects invalid timestamps and non-open events", () => {

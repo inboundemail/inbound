@@ -498,6 +498,13 @@
       "when": 1785764102127,
       "tag": "0070_same_paper_doll",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1786220537623,
+      "tag": "0071_add_sent_email_open_tracking",
+      "breakpoints": true
     }
   ]
 }

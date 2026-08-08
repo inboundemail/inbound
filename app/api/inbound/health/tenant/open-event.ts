@@ -8,7 +8,6 @@ export interface SesOpenEvent {
 	};
 	open?: {
 		timestamp: string;
-		isBotEvent?: "Likely" | "Unlikely";
 	};
 }
 
@@ -20,9 +19,8 @@ export interface ParsedOpenEvent {
 
 export function parseOpenEvent(event: SesOpenEvent): ParsedOpenEvent | null {
 	if (
-		event.eventType !== "open" ||
-		!event.open?.timestamp ||
-		event.open.isBotEvent === "Likely"
+		event.eventType.toLowerCase() !== "open" ||
+		!event.open?.timestamp
 	) {
 		return null;
 	}

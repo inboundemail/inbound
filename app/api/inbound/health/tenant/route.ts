@@ -112,7 +112,6 @@ interface SESEvent {
 		timestamp: string;
 		ipAddress?: string;
 		userAgent?: string;
-		isBotEvent?: "Likely" | "Unlikely";
 	};
 }
 
@@ -380,7 +379,7 @@ async function handleSESOpen(event: SESEvent): Promise<void> {
 		eq(sentEmails.messageId, openEvent.sesMessageId),
 	);
 	const lookupCondition = openEvent.sentEmailId
-		? or(eq(sentEmails.id, openEvent.sentEmailId), messageIdMatch)
+		? eq(sentEmails.id, openEvent.sentEmailId)
 		: messageIdMatch;
 
 	const [sentEmail] = await db
