@@ -576,8 +576,6 @@ export const sentEmails = pgTable(
 		providerResponse: text("provider_response"), // Full response from provider
 		sentAt: timestamp("sent_at"), // When the email was actually sent
 		failureReason: text("failure_reason"), // If failed, why
-		firstOpenedAt: timestamp("first_opened_at"),
-		lastOpenedAt: timestamp("last_opened_at"),
 
 		// Idempotency
 		idempotencyKey: varchar("idempotency_key", { length: 256 }), // For preventing duplicates
@@ -605,10 +603,6 @@ export const sentEmails = pgTable(
 			table.userId,
 			table.status,
 			table.createdAt,
-		),
-		userFirstOpenedIdx: index("sent_emails_user_first_opened_idx").on(
-			table.userId,
-			table.firstOpenedAt,
 		),
 	}),
 );

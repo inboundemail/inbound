@@ -1,14 +1,5 @@
-import { eq, or, sql } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-import { parseOpenEvent } from "@/app/api/inbound/health/tenant/open-event";
-import {
-	isTrustedSnsUrl,
-	type SnsNotification,
-	verifySnsNotification,
-} from "@/app/api/inbound/health/tenant/sns-verification";
 import { suspendTenantSending } from "@/lib/aws-ses/aws-ses-tenants";
-import { db } from "@/lib/db";
-import { sentEmails } from "@/lib/db/schema";
 import { getTenantOwnerByConfigurationSet } from "@/lib/db/tenants";
 import { sendReputationAlertNotification } from "@/lib/email-management/email-notifications";
 import { sendHarkNotification } from "@/lib/notifications/hark";
@@ -24,8 +15,21 @@ import {
 
 // Slack webhook for admin notifications
 const SLACK_ADMIN_WEBHOOK_URL = process.env.SLACK_ADMIN_WEBHOOK_URL;
-const AWS_REGION = process.env.AWS_REGION || "us-east-2";
-const AWS_ACCOUNT_ID = process.env.AWS_ACCOUNT_ID;
+
+// Types for AWS SNS notifications
+interface SNSNotification {
+	Type: "Notification" | "SubscriptionConfirmation" | "UnsubscribeConfirmation";
+	MessageId: string;
+	TopicArn: string;
+	Message: string;
+	Timestamp: string;
+	SignatureVersion: string;
+	Signature: string;
+	SigningCertURL: string;
+	UnsubscribeURL?: string;
+	SubscribeURL?: string;
+	Token?: string;
+}
 
 // CloudWatch Alarm notification format
 interface CloudWatchAlarmMessage {
@@ -57,7 +61,7 @@ interface CloudWatchAlarmMessage {
 
 // SES Event notification format
 interface SESEvent {
-	eventType: "send" | "reject" | "bounce" | "complaint" | "delivery" | "open";
+	eventType: "send" | "reject" | "bounce" | "complaint" | "delivery";
 	mail: {
 		timestamp: string;
 		messageId: string;
@@ -102,12 +106,6 @@ interface SESEvent {
 		complaintFeedbackType: string;
 		arrivalDate: string;
 	};
-	open?: {
-		timestamp: string;
-		ipAddress?: string;
-		userAgent?: string;
-		isBotEvent?: "Likely" | "Unlikely";
-	};
 }
 
 interface SESEventMessage {
@@ -121,26 +119,7 @@ export async function POST(request: NextRequest) {
 		);
 
 		// Get the request body
-		const body = (await request.json()) as SnsNotification;
-
-		if (!AWS_ACCOUNT_ID) {
-			console.error("AWS_ACCOUNT_ID is required for SNS verification");
-			return NextResponse.json(
-				{ status: "error", message: "SNS verification is not configured" },
-				{ status: 500 },
-			);
-		}
-
-		const verified = await verifySnsNotification(body, {
-			region: AWS_REGION,
-			accountId: AWS_ACCOUNT_ID,
-		});
-		if (!verified) {
-			return NextResponse.json(
-				{ status: "error", message: "Invalid SNS notification" },
-				{ status: 401 },
-			);
-		}
+		const body = (await request.json()) as SNSNotification;
 
 		// Parse the SNS notification
 		const parsedNotification = parseSNSNotification(body);
@@ -153,7 +132,7 @@ export async function POST(request: NextRequest) {
 			console.log("   Subscribe URL:", body.SubscribeURL);
 
 			// Automatically confirm the subscription by making a GET request to the SubscribeURL
-			if (body.SubscribeURL && isTrustedSnsUrl(body.SubscribeURL, AWS_REGION)) {
+			if (body.SubscribeURL) {
 				try {
 					console.log("🔄 Auto-confirming SNS subscription...");
 					const confirmResponse = await fetch(body.SubscribeURL);
@@ -245,11 +224,6 @@ export async function POST(request: NextRequest) {
 				);
 				console.log(`Message ID: ${event.mail.messageId}`);
 
-				if (event.eventType === "open") {
-					await handleSESOpen(event);
-					continue;
-				}
-
 				if (!shouldTrackSesReputationEvent(event)) {
 					console.log(
 						"Skipping suppression-list complaint for reputation tracking",
@@ -303,7 +277,7 @@ export async function POST(request: NextRequest) {
 	}
 }
 
-function parseSNSNotification(snsData: SnsNotification) {
+function parseSNSNotification(snsData: SNSNotification) {
 	const result = {
 		messageType: snsData.Type,
 		messageId: snsData.MessageId,
@@ -361,43 +335,6 @@ function parseSNSNotification(snsData: SnsNotification) {
 	}
 
 	return result;
-}
-
-async function handleSESOpen(event: SESEvent): Promise<void> {
-	const openEvent = parseOpenEvent(event);
-	if (!openEvent) {
-		return;
-	}
-
-	const messageIdMatch = or(
-		eq(sentEmails.sesMessageId, openEvent.sesMessageId),
-		eq(sentEmails.messageId, openEvent.sesMessageId),
-	);
-	const lookupCondition = openEvent.sentEmailId
-		? or(eq(sentEmails.id, openEvent.sentEmailId), messageIdMatch)
-		: messageIdMatch;
-
-	const [sentEmail] = await db
-		.select({ id: sentEmails.id })
-		.from(sentEmails)
-		.where(lookupCondition)
-		.limit(1);
-
-	if (!sentEmail) {
-		console.warn(
-			`No sent email found for SES open event ${openEvent.sesMessageId}`,
-		);
-		return;
-	}
-
-	await db
-		.update(sentEmails)
-		.set({
-			firstOpenedAt: sql`LEAST(COALESCE(${sentEmails.firstOpenedAt}, ${openEvent.openedAt}), ${openEvent.openedAt})`,
-			lastOpenedAt: sql`GREATEST(COALESCE(${sentEmails.lastOpenedAt}, ${openEvent.openedAt}), ${openEvent.openedAt})`,
-			updatedAt: new Date(),
-		})
-		.where(eq(sentEmails.id, sentEmail.id));
 }
 
 async function handleCloudWatchAlarm(alarm: CloudWatchAlarmMessage) {

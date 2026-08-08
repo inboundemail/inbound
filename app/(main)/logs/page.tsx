@@ -1,4 +1,4 @@
-'use client'
+"use client"
 
 import { useEffect, useState, useMemo, Suspense } from 'react'
 import { Badge } from '@/components/ui/badge'
@@ -43,18 +43,10 @@ import Envelope2 from '@/components/icons/envelope-2'
 
 import { useInfiniteUnifiedEmailLogsQuery } from '@/features/emails/hooks'
 import { useDomainsListV2Query } from '@/features/domains/hooks/useDomainV2Hooks'
-import {
-  useScheduledEmailsQuery,
-  useCancelScheduledEmailMutation,
-} from '@/features/emails/hooks/useScheduledEmailsHooks'
+import { useScheduledEmailsQuery, useCancelScheduledEmailMutation } from '@/features/emails/hooks/useScheduledEmailsHooks'
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
-import type {
-  EmailLogsOptions,
-  EmailLogEntry,
-  InboundEmailLogEntry,
-  OutboundEmailLogEntry,
-} from '@/features/emails/types'
+import type { EmailLogsOptions, EmailLogEntry, InboundEmailLogEntry, OutboundEmailLogEntry } from '@/features/emails/types'
 import SidebarToggleButton from '@/components/sidebar-toggle-button'
 import { Card } from '@/components/ui/card'
 import Paperclip2 from '@/components/icons/paperclip-2'
@@ -67,15 +59,15 @@ import CircleOpenArrowUpRight from '@/components/icons/circle-open-arrow-up-righ
 
 // Configuration constants
 const DOMAINS_FETCH_LIMIT = 100 // Maximum allowed by e2 API - if users have more domains,
-// consider implementing search/autocomplete or pagination
+                                 // consider implementing search/autocomplete or pagination
 
 function getStatusColor(email: EmailLogEntry): string {
   if (email.type === 'inbound') {
     const inboundEmail = email as InboundEmailLogEntry
     const hasDeliveries = inboundEmail.deliveries.length > 0
-    const hasSuccessfulDelivery = inboundEmail.deliveries.some((d) => d.status === 'success')
-    const hasFailedDelivery = inboundEmail.deliveries.some((d) => d.status === 'failed')
-    const hasPendingDelivery = inboundEmail.deliveries.some((d) => d.status === 'pending')
+    const hasSuccessfulDelivery = inboundEmail.deliveries.some(d => d.status === 'success')
+    const hasFailedDelivery = inboundEmail.deliveries.some(d => d.status === 'failed')
+    const hasPendingDelivery = inboundEmail.deliveries.some(d => d.status === 'pending')
 
     if (!inboundEmail.parseSuccess) {
       return '#ef4444' // red-500
@@ -171,17 +163,14 @@ function LogsPageSkeleton() {
 
 export default function LogsPage() {
   // Search and filter state with URL persistence
-  const [filters, setFilters] = useQueryStates(
-    {
-      search: parseAsString.withDefault(''),
-      status: parseAsString.withDefault('all'),
-      type: parseAsString.withDefault('all'),
-      domain: parseAsString.withDefault('all'),
-      guard: parseAsString.withDefault('all'),
-      time: parseAsString.withDefault('24h'),
-    },
-    { history: 'push' },
-  )
+  const [filters, setFilters] = useQueryStates({
+    search: parseAsString.withDefault(''),
+    status: parseAsString.withDefault('all'),
+    type: parseAsString.withDefault('all'),
+    domain: parseAsString.withDefault('all'),
+    guard: parseAsString.withDefault('all'),
+    time: parseAsString.withDefault('24h'),
+  }, { history: 'push' })
 
   const searchQuery = filters.search
   const statusFilter = filters.status
@@ -234,30 +223,35 @@ export default function LogsPage() {
   const debouncedGuard = useDebouncedValue(guardFilter, 150)
   const debouncedTime = useDebouncedValue(timeRange, 150)
 
-  const infiniteOptions: Omit<EmailLogsOptions, 'offset'> = useMemo(
-    () => ({
-      searchQuery: debouncedSearch,
-      statusFilter: debouncedStatus as any,
-      typeFilter: debouncedType as any,
-      domainFilter: debouncedDomain,
-      guardFilter: debouncedGuard as any,
-      timeRange: debouncedTime as any,
-      limit: 50,
-    }),
-    [debouncedSearch, debouncedStatus, debouncedType, debouncedDomain, debouncedGuard, debouncedTime],
-  )
+  const infiniteOptions: Omit<EmailLogsOptions, 'offset'> = useMemo(() => ({
+    searchQuery: debouncedSearch,
+    statusFilter: debouncedStatus as any,
+    typeFilter: debouncedType as any,
+    domainFilter: debouncedDomain,
+    guardFilter: debouncedGuard as any,
+    timeRange: debouncedTime as any,
+    limit: 50,
+  }), [debouncedSearch, debouncedStatus, debouncedType, debouncedDomain, debouncedGuard, debouncedTime])
 
-  const { data, isLoading, error, refetch, hasNextPage, isFetchingNextPage, fetchNextPage, isFetching } =
-    useInfiniteUnifiedEmailLogsQuery(infiniteOptions)
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    isFetching,
+  } = useInfiniteUnifiedEmailLogsQuery(infiniteOptions)
 
   // Fetch scheduled emails
   const {
     data: scheduledEmailsData,
     isLoading: isScheduledLoading,
-    refetch: refetchScheduled,
-  } = useScheduledEmailsQuery({
-    limit: 100,
-    status: 'scheduled', // Only show emails that haven't been sent yet
+    refetch: refetchScheduled
+  } = useScheduledEmailsQuery({ 
+    limit: 100, 
+    status: 'scheduled' // Only show emails that haven't been sent yet
   })
 
   const cancelScheduledMutation = useCancelScheduledEmailMutation()
@@ -283,13 +277,13 @@ export default function LogsPage() {
   })
 
   // Fetch all available domains for the filter dropdown
-  const {
-    data: domainsResponse,
-    isLoading: domainsLoading,
-    error: domainsError,
+  const { 
+    data: domainsResponse, 
+    isLoading: domainsLoading, 
+    error: domainsError 
   } = useDomainsListV2Query({ limit: DOMAINS_FETCH_LIMIT })
-
-  const allAvailableDomains = domainsResponse?.data?.map((domain) => domain.domain).sort() ?? []
+  
+  const allAvailableDomains = domainsResponse?.data?.map(domain => domain.domain).sort() ?? []
   const hasMoreDomains = domainsResponse?.pagination?.total && domainsResponse.pagination.total > DOMAINS_FETCH_LIMIT
 
   const firstPage = data?.pages?.[0]
@@ -297,9 +291,7 @@ export default function LogsPage() {
   // Use all available domains instead of just from current results
   const filtersUniqueDomains = allAvailableDomains
 
-  const { ref: sentinelRef, hasIntersected } = useIntersectionObserver({
-    rootMargin: '400px',
-  })
+  const { ref: sentinelRef, hasIntersected } = useIntersectionObserver({ rootMargin: '400px' })
   useEffect(() => {
     if (hasIntersected && hasNextPage && !isFetchingNextPage) {
       void fetchNextPage()
@@ -308,7 +300,7 @@ export default function LogsPage() {
 
   const handleRefresh = () => {
     // Spin counter-clockwise (negative rotation) like typical refresh icons
-    setRotationDegrees((prev) => prev - 360)
+    setRotationDegrees(prev => prev - 360)
     refetch()
     refetchScheduled()
   }
@@ -324,14 +316,14 @@ export default function LogsPage() {
 
   // Filter regular emails based on guard toggle
   const filteredEmails = useMemo(() => {
-    const allEmails = (data?.pages ?? []).flatMap((p) => p.emails)
-
+    const allEmails = (data?.pages ?? []).flatMap(p => p.emails)
+    
     if (showGuardEmails) {
       return allEmails // Show all emails including guard blocked ones
     }
-
+    
     // Filter out guard-blocked emails
-    return allEmails.filter((email) => {
+    return allEmails.filter(email => {
       if (email.type === 'inbound') {
         const inboundEmail = email as InboundEmailLogEntry
         return !inboundEmail.guardBlocked
@@ -348,12 +340,7 @@ export default function LogsPage() {
             <div className="flex items-center gap-2 text-destructive">
               <CircleXmark width="16" height="16" />
               <span>{error.message}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => refetch()}
-                className="ml-auto text-destructive hover:text-destructive/80"
-              >
+              <Button variant="ghost" size="sm" onClick={() => refetch()} className="ml-auto text-destructive hover:text-destructive/80">
                 Try Again
               </Button>
             </div>
@@ -377,18 +364,25 @@ export default function LogsPage() {
             <div className="flex items-center gap-2">
               <SidebarToggleButton />
               <div>
-                <h2 className="text-2xl font-semibold text-foreground mb-1 tracking-tight">Email Flow</h2>
+                <h2 className="text-2xl font-semibold text-foreground mb-1 tracking-tight">
+                  Email Flow
+                </h2>
               </div>
-            </div>
-            <Button variant="secondary" size="default" onClick={handleRefresh} disabled={isLoading}>
-              <Refresh2
-                width="14"
-                height="14"
-                className="mr-2 transition-transform duration-500"
-                style={{ transform: `rotate(${rotationDegrees}deg)` }}
-              />
-              Refresh
-            </Button>
+              </div>
+              <Button
+                variant="secondary"
+                size="default"
+                onClick={handleRefresh}
+                disabled={isLoading}
+              >
+                <Refresh2 
+                  width="14" 
+                  height="14" 
+                  className="mr-2 transition-transform duration-500"
+                  style={{ transform: `rotate(${rotationDegrees}deg)` }}
+                />
+                Refresh
+              </Button>
           </div>
         </div>
 
@@ -397,11 +391,7 @@ export default function LogsPage() {
           <div className="flex items-center gap-3">
             {/* Search - takes up most space */}
             <div className="relative flex-1">
-              <Magnifier2
-                width="16"
-                height="16"
-                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"
-              />
+              <Magnifier2 width="16" height="16" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search by subject, email, thread ID, attachment…"
                 value={searchQuery}
@@ -416,19 +406,14 @@ export default function LogsPage() {
                 <Button variant="outline" size="default" className="h-9 rounded-xl">
                   <Filter2 width="16" height="16" className="mr-2" />
                   Filters
-                  {(typeFilter !== 'all' ||
-                    statusFilter !== 'all' ||
-                    guardFilter !== 'all' ||
-                    domainFilter !== 'all') && (
+                  {(typeFilter !== 'all' || statusFilter !== 'all' || guardFilter !== 'all' || domainFilter !== 'all') && (
                     <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-xs">
-                      {
-                        [
-                          typeFilter !== 'all',
-                          statusFilter !== 'all',
-                          guardFilter !== 'all',
-                          domainFilter !== 'all',
-                        ].filter(Boolean).length
-                      }
+                      {[
+                        typeFilter !== 'all',
+                        statusFilter !== 'all',
+                        guardFilter !== 'all',
+                        domainFilter !== 'all'
+                      ].filter(Boolean).length}
                     </Badge>
                   )}
                 </Button>
@@ -448,7 +433,11 @@ export default function LogsPage() {
                           Show Scheduled
                         </Label>
                       </div>
-                      <Switch id="show-scheduled" checked={showScheduled} onCheckedChange={setShowScheduled} />
+                      <Switch
+                        id="show-scheduled"
+                        checked={showScheduled}
+                        onCheckedChange={setShowScheduled}
+                      />
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -457,41 +446,44 @@ export default function LogsPage() {
                           Show Guard Blocked
                         </Label>
                       </div>
-                      <Switch id="show-guard" checked={showGuardEmails} onCheckedChange={setShowGuardEmails} />
+                      <Switch
+                        id="show-guard"
+                        checked={showGuardEmails}
+                        onCheckedChange={setShowGuardEmails}
+                      />
                     </div>
                   </div>
 
                   <div className="space-y-3">
                     <div>
                       <label className="text-xs text-muted-foreground mb-1.5 block">Type</label>
-                      <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
                         <SelectTrigger className="h-9 rounded-xl">
-                          <SelectValue placeholder="Type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Types</SelectItem>
-                          <SelectItem value="inbound">Inbound</SelectItem>
-                          <SelectItem value="outbound">Outbound</SelectItem>
-                        </SelectContent>
-                      </Select>
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="inbound">Inbound</SelectItem>
+                <SelectItem value="outbound">Outbound</SelectItem>
+              </SelectContent>
+            </Select>
                     </div>
 
                     <div>
                       <label className="text-xs text-muted-foreground mb-1.5 block">Status</label>
-                      <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
                         <SelectTrigger className="h-9 rounded-xl">
-                          <SelectValue placeholder="Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Status</SelectItem>
-                          <SelectItem value="opened">Opened</SelectItem>
-                          <SelectItem value="delivered">Delivered</SelectItem>
-                          <SelectItem value="failed">Failed</SelectItem>
-                          <SelectItem value="pending">Pending</SelectItem>
-                          <SelectItem value="no_delivery">No Delivery</SelectItem>
-                          <SelectItem value="parse_failed">Parse Failed</SelectItem>
-                        </SelectContent>
-                      </Select>
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="delivered">Delivered</SelectItem>
+                <SelectItem value="failed">Failed</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="no_delivery">No Delivery</SelectItem>
+                <SelectItem value="parse_failed">Parse Failed</SelectItem>
+              </SelectContent>
+            </Select>
                     </div>
 
                     <div>
@@ -511,71 +503,68 @@ export default function LogsPage() {
 
                     <div>
                       <label className="text-xs text-muted-foreground mb-1.5 block">Domain</label>
-                      <Select value={domainFilter} onValueChange={setDomainFilter} disabled={domainsLoading}>
+            <Select 
+              value={domainFilter} 
+              onValueChange={setDomainFilter}
+              disabled={domainsLoading}
+            >
                         <SelectTrigger className="h-9 rounded-xl">
-                          <SelectValue placeholder={domainsLoading ? 'Loading...' : 'All Domains'} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Domains</SelectItem>
-                          {domainsLoading ? (
-                            <SelectItem value="loading" disabled>
+                          <SelectValue placeholder={domainsLoading ? "Loading..." : "All Domains"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Domains</SelectItem>
+                {domainsLoading ? (
+                  <SelectItem value="loading" disabled>
                               <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                                <div
-                                  className="w-3 h-3 border border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin"
-                                  aria-label="Loading domains"
-                                />
+                      <div 
+                        className="w-3 h-3 border border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" 
+                        aria-label="Loading domains"
+                      />
                                 Loading...
-                              </div>
-                            </SelectItem>
-                          ) : domainsError ? (
-                            <SelectItem value="error" disabled>
+                    </div>
+                  </SelectItem>
+                ) : domainsError ? (
+                  <SelectItem value="error" disabled>
                               <div className="flex items-center gap-2 text-destructive text-xs">
-                                <CircleXmark width="12" height="12" />
+                      <CircleXmark width="12" height="12" />
                                 Failed
-                              </div>
-                            </SelectItem>
-                          ) : filtersUniqueDomains.length > 0 ? (
-                            <>
-                              {filtersUniqueDomains.map((domain: string) => (
-                                <SelectItem key={domain} value={domain}>
-                                  {domain}
-                                </SelectItem>
-                              ))}
-                              {hasMoreDomains && (
-                                <SelectItem value="more-domains" disabled>
-                                  <div className="text-xs text-muted-foreground">
+                    </div>
+                  </SelectItem>
+                ) : filtersUniqueDomains.length > 0 ? (
+                  <>
+                    {filtersUniqueDomains.map((domain: string) => (
+                      <SelectItem key={domain} value={domain}>{domain}</SelectItem>
+                    ))}
+                    {hasMoreDomains && (
+                      <SelectItem value="more-domains" disabled>
+                        <div className="text-xs text-muted-foreground">
                                     + {(domainsResponse?.pagination?.total ?? 0) - DOMAINS_FETCH_LIMIT} more...
-                                  </div>
-                                </SelectItem>
-                              )}
-                            </>
-                          ) : (
-                            <SelectItem value="no-domains" disabled>
-                              No domains
-                            </SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
+                        </div>
+                      </SelectItem>
+                    )}
+                  </>
+                ) : (
+                            <SelectItem value="no-domains" disabled>No domains</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
                     </div>
                   </div>
 
-                  {(typeFilter !== 'all' ||
-                    statusFilter !== 'all' ||
-                    guardFilter !== 'all' ||
-                    domainFilter !== 'all') && (
+                  {(typeFilter !== 'all' || statusFilter !== 'all' || guardFilter !== 'all' || domainFilter !== 'all') && (
                     <>
                       <Separator />
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          setFilters({
-                            search: null,
-                            status: null,
-                            type: null,
-                            domain: null,
-                            guard: null,
-                            time: null,
+                          setFilters({ 
+                            search: null, 
+                            status: null, 
+                            type: null, 
+                            domain: null, 
+                            guard: null, 
+                            time: null 
                           })
                         }}
                         className="w-full"
@@ -612,27 +601,22 @@ export default function LogsPage() {
                 <div className="w-3 h-3 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
               </div>
             )}
-
+            
             {/* Email Volume Chart */}
             <div className="p-4 pb-2 relative">
               {chartData && chartData.chartData ? (
                 <div className="h-10">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData.chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                      <XAxis
-                        dataKey="time"
+                      <XAxis 
+                        dataKey="time" 
                         tick={{ fontSize: 10 }}
                         tickFormatter={(value) => {
-                          const date = new Date(value)
+                          const date = new Date(value);
                           if (chartData.intervalType === 'hour') {
-                            return date.toLocaleTimeString(undefined, {
-                              hour: 'numeric',
-                            })
+                            return date.toLocaleTimeString(undefined, { hour: 'numeric' })
                           }
-                          return date.toLocaleDateString(undefined, {
-                            month: 'short',
-                            day: 'numeric',
-                          })
+                          return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
                         }}
                         stroke="#888"
                         hide
@@ -645,26 +629,26 @@ export default function LogsPage() {
                           border: '1px solid #e5e7eb',
                           borderRadius: '8px',
                           padding: '8px 12px',
-                          fontSize: '12px',
+                          fontSize: '12px'
                         }}
                         labelFormatter={(value) => {
-                          const date = new Date(value)
+                          const date = new Date(value);
                           if (chartData.intervalType === 'hour') {
-                            return date.toLocaleString(undefined, {
-                              month: 'short',
-                              day: 'numeric',
+                            return date.toLocaleString(undefined, { 
+                              month: 'short', 
+                              day: 'numeric', 
                               hour: 'numeric',
-                              minute: '2-digit',
+                              minute: '2-digit'
                             })
                           }
-                          return date.toLocaleDateString(undefined, {
-                            month: 'short',
+                          return date.toLocaleDateString(undefined, { 
+                            month: 'short', 
                             day: 'numeric',
-                            year: 'numeric',
+                            year: 'numeric'
                           })
                         }}
                         formatter={(value: number, name: string) => {
-                          return [value, name === 'inbound' ? 'Inbound' : 'Outbound']
+                          return [value, name === 'inbound' ? 'Inbound' : 'Outbound'];
                         }}
                       />
                       <Bar dataKey="inbound" stackId="emails" fill="#9333ea" radius={[0, 0, 0, 0]} />
@@ -689,37 +673,32 @@ export default function LogsPage() {
             {/* Stats */}
             <div className="px-3 pb-3 pt-2">
               <div className="flex items-center justify-center gap-4 lg:gap-6 text-sm flex-wrap">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
                   <EnvelopeArrowLeft width="16" height="16" fill="#9333ea" secondaryfill="#9333ea" />
                   <span className="text-muted-foreground whitespace-nowrap">Inbound:</span>
                   <span className="font-semibold text-foreground tabular-nums">{stats.inbound}</span>
-                </div>
-                <div className="flex items-center gap-2">
+              </div>
+              <div className="flex items-center gap-2">
                   <EnvelopeArrowRight width="16" height="16" fill="#3b82f6" secondaryfill="#3b82f6" />
                   <span className="text-muted-foreground whitespace-nowrap">Outbound:</span>
                   <span className="font-semibold text-foreground tabular-nums">{stats.outbound}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Eye2 width="16" height="16" className="text-muted-foreground" />
-                  <span className="text-muted-foreground whitespace-nowrap">Opened:</span>
-                  <span className="font-semibold text-foreground tabular-nums">{stats.opened}</span>
-                </div>
-                <div className="flex items-center gap-2">
+              </div>
+              <div className="flex items-center gap-2">
                   <CircleCheck width="16" height="16" className="text-green-600" />
                   <span className="text-muted-foreground whitespace-nowrap">Delivered:</span>
                   <span className="font-semibold text-foreground tabular-nums">{stats.delivered}</span>
-                </div>
-                <div className="flex items-center gap-2">
+              </div>
+              <div className="flex items-center gap-2">
                   <TabClose width="16" height="16" className="text-destructive" />
                   <span className="text-muted-foreground whitespace-nowrap">Failed:</span>
                   <span className="font-semibold text-foreground tabular-nums">{stats.failed}</span>
-                </div>
-                <div className="flex items-center gap-2">
+              </div>
+              <div className="flex items-center gap-2">
                   <CirclePlay width="16" height="16" className="text-yellow-600" />
                   <span className="text-muted-foreground whitespace-nowrap">Pending:</span>
                   <span className="font-semibold text-foreground tabular-nums">{stats.pending}</span>
-                </div>
-                <div className="flex items-center gap-2">
+              </div>
+              <div className="flex items-center gap-2">
                   <CircleDots width="16" height="16" className="text-muted-foreground" />
                   <span className="text-muted-foreground whitespace-nowrap">No Delivery:</span>
                   <span className="font-semibold text-foreground tabular-nums">{stats.noDelivery}</span>
@@ -741,24 +720,19 @@ export default function LogsPage() {
             </div>
           </div>
         )}
-
+        
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
             <div className="text-muted-foreground">Loading emails...</div>
           </div>
-        ) : !(data?.pages?.flatMap((p) => p.emails) || []).length && !scheduledEmailsData?.data?.length ? (
+        ) : !((data?.pages?.flatMap(p => p.emails) || []).length) && !scheduledEmailsData?.data?.length ? (
           <div className="max-w-5xl mx-auto">
             <Card className=" rounded-xl p-8">
               <div className="text-center">
                 <Database2 width="48" height="48" className="text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2 text-foreground">No emails found</h3>
                 <p className="text-sm text-muted-foreground">
-                  {searchQuery ||
-                  statusFilter !== 'all' ||
-                  typeFilter !== 'all' ||
-                  domainFilter !== 'all' ||
-                  guardFilter !== 'all' ||
-                  timeRange !== '24h'
+                  {searchQuery || statusFilter !== 'all' || typeFilter !== 'all' || domainFilter !== 'all' || guardFilter !== 'all' || timeRange !== '24h'
                     ? 'Try adjusting your filters or search query.'
                     : 'Start receiving or sending emails to see logs here.'}
                 </p>
@@ -772,7 +746,9 @@ export default function LogsPage() {
               <div className="mb-6">
                 <div className="flex items-center gap-2 px-2 py-2 mb-2">
                   <Calendar2 width="16" height="16" className="text-muted-foreground" />
-                  <h3 className="text-sm font-semibold text-foreground">Scheduled Emails</h3>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Scheduled Emails
+                  </h3>
                   <Badge variant="default" className="ml-1">
                     {scheduledEmailsData.data.length} emails
                   </Badge>
@@ -787,7 +763,9 @@ export default function LogsPage() {
                     >
                       {/* From/To Email Column */}
                       <div className="flex-shrink-0 w-40 sm:w-52">
-                        <div className="text-sm font-medium text-foreground truncate">{scheduledEmail.from}</div>
+                        <div className="text-sm font-medium text-foreground truncate">
+                          {scheduledEmail.from}
+                        </div>
                         <div className="text-xs text-muted-foreground truncate">
                           {scheduledEmail.to[0]}
                           {scheduledEmail.to.length > 1 && (
@@ -798,7 +776,9 @@ export default function LogsPage() {
 
                       {/* Subject and Details Column */}
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm text-foreground truncate mb-1">{scheduledEmail.subject}</div>
+                        <div className="text-sm text-foreground truncate mb-1">
+                          {scheduledEmail.subject}
+                        </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <Clock2 width="12" height="12" />
                           <span className="hidden md:inline">
@@ -856,162 +836,118 @@ export default function LogsPage() {
             <div className="mb-6">
               <div className="flex items-center gap-2 px-2 py-2 mb-2">
                 <Envelope2 width="16" height="16" className="text-muted-foreground" />
-                <h3 className="text-sm font-semibold text-foreground">All Emails</h3>
+                <h3 className="text-sm font-semibold text-foreground">
+                  All Emails
+                </h3>
                 {stats && (
                   <Badge variant="default" className="ml-1">
                     {stats.inbound + stats.outbound} emails (lifetime)
                   </Badge>
                 )}
               </div>
-              <div className="border border-border rounded-[13px] bg-card overflow-hidden">
-                {filteredEmails.map((log) => {
-                  const isInbound = log.type === 'inbound'
-                  const inboundLog = isInbound ? (log as InboundEmailLogEntry) : null
-                  const outboundLog = !isInbound ? (log as OutboundEmailLogEntry) : null
+            <div className="border border-border rounded-[13px] bg-card overflow-hidden">
+              
+            {filteredEmails.map((log) => {
+              const isInbound = log.type === 'inbound'
+              const inboundLog = isInbound ? log as InboundEmailLogEntry : null
+              const outboundLog = !isInbound ? log as OutboundEmailLogEntry : null
 
-                  // Check if this is a blocked email
-                  const isBlocked = isInbound && inboundLog?.guardBlocked
+              // Check if this is a blocked email
+              const isBlocked = isInbound && inboundLog?.guardBlocked
 
-                  // Get status badge info
-                  const getStatusInfo = () => {
-                    if (isInbound && inboundLog) {
-                      const hasDeliveries = inboundLog.deliveries.length > 0
-                      const hasSuccessfulDelivery = inboundLog.deliveries.some((d) => d.status === 'success')
-                      const hasFailedDelivery = inboundLog.deliveries.some((d) => d.status === 'failed')
-
-                      if (isBlocked) {
-                        return {
-                          label: 'Blocked',
-                          variant: 'destructive' as const,
-                          customClass: '',
-                        }
-                      } else if (!inboundLog.parseSuccess) {
-                        return {
-                          label: 'Parse failed',
-                          variant: 'destructive' as const,
-                          customClass: '',
-                        }
-                      } else if (hasSuccessfulDelivery) {
-                        return {
-                          label: inboundLog.deliveries[0].config?.name || 'Delivered',
-                          variant: 'default' as const,
-                          customClass: 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200',
-                        }
-                      } else if (hasFailedDelivery) {
-                        return {
-                          label: 'Delivery failed',
-                          variant: 'destructive' as const,
-                          customClass: '',
-                        }
-                      } else if (!hasDeliveries) {
-                        return {
-                          label: 'No delivery',
-                          variant: 'secondary' as const,
-                          customClass: 'bg-purple-50 text-purple-700 border-purple-200',
-                        }
-                      }
-                      return {
-                        label: 'Pending',
-                        variant: 'secondary' as const,
-                        customClass: 'bg-purple-50 text-purple-700 border-purple-200',
-                      }
-                    } else if (outboundLog) {
-                      if (outboundLog.firstOpenedAt) {
-                        return {
-                          label: 'Opened',
-                          variant: 'secondary' as const,
-                          customClass: '',
-                        }
-                      } else if (outboundLog.status === 'sent') {
-                        return {
-                          label: 'Sent',
-                          variant: 'default' as const,
-                          customClass: 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200',
-                        }
-                      } else if (outboundLog.status === 'failed') {
-                        return {
-                          label: 'Failed',
-                          variant: 'destructive' as const,
-                          customClass: '',
-                        }
-                      }
-                      return {
-                        label: 'Pending',
-                        variant: 'secondary' as const,
-                        customClass: 'bg-blue-50 text-blue-700 border-blue-200',
-                      }
-                    }
-                    return {
-                      label: 'Unknown',
-                      variant: 'secondary' as const,
-                      customClass: '',
-                    }
+              // Get status badge info
+              const getStatusInfo = () => {
+                if (isInbound && inboundLog) {
+                  const hasDeliveries = inboundLog.deliveries.length > 0
+                  const hasSuccessfulDelivery = inboundLog.deliveries.some(d => d.status === 'success')
+                  const hasFailedDelivery = inboundLog.deliveries.some(d => d.status === 'failed')
+                  
+                  if (isBlocked) {
+                    return { label: 'Blocked', variant: 'destructive' as const, customClass: '' }
+                  } else if (!inboundLog.parseSuccess) {
+                    return { label: 'Parse failed', variant: 'destructive' as const, customClass: '' }
+                  } else if (hasSuccessfulDelivery) {
+                    return { label: inboundLog.deliveries[0].config?.name || 'Delivered', variant: 'default' as const, customClass: 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200' }
+                  } else if (hasFailedDelivery) {
+                    return { label: 'Delivery failed', variant: 'destructive' as const, customClass: '' }
+                  } else if (!hasDeliveries) {
+                    return { label: 'No delivery', variant: 'secondary' as const, customClass: 'bg-purple-50 text-purple-700 border-purple-200' }
                   }
+                  return { label: 'Pending', variant: 'secondary' as const, customClass: 'bg-purple-50 text-purple-700 border-purple-200' }
+                } else if (outboundLog) {
+                  if (outboundLog.status === 'sent') {
+                    return { label: 'Sent', variant: 'default' as const, customClass: 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200' }
+                  } else if (outboundLog.status === 'failed') {
+                    return { label: 'Failed', variant: 'destructive' as const, customClass: '' }
+                  }
+                  return { label: 'Pending', variant: 'secondary' as const, customClass: 'bg-blue-50 text-blue-700 border-blue-200' }
+                }
+                return { label: 'Unknown', variant: 'secondary' as const, customClass: '' }
+              }
 
-                  const statusInfo = getStatusInfo()
+              const statusInfo = getStatusInfo()
 
-                  return (
-                    <Link
-                      key={log.id}
-                      href={`/logs/${log.id}`}
-                      className={`flex items-center gap-4 px-6 py-4 hover:bg-muted/50 transition-colors cursor-pointer border-b border-border last:border-b-0 ${
-                        isBlocked ? 'bg-red-50' : ''
-                      }`}
+              return (
+                <Link
+                  key={log.id}
+                  href={`/logs/${log.id}`}
+                  className={`flex items-center gap-4 px-6 py-4 hover:bg-muted/50 transition-colors cursor-pointer border-b border-border last:border-b-0 ${
+                    isBlocked ? 'bg-red-50' : ''
+                  }`}
+                >
+                  {/* From/To Email Column */}
+                  <div className="flex-shrink-0 w-40 sm:w-52">
+                    <div className="text-sm font-medium text-foreground truncate">
+                      {log.from}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {isInbound && inboundLog ? inboundLog.recipient : outboundLog?.to[0]}
+                    </div>
+                  </div>
+
+                  {/* Subject and Details Column */}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-foreground truncate mb-1">
+                      {log.subject}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Clock2 width="12" height="12" />
+                      <span className="hidden md:inline">
+                        {format(new Date(log.createdAt), 'MMM d, HH:mm')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Timestamp Column */}
+                  <div className="flex-shrink-0 w-32 hidden sm:block">
+                    <div className="text-xs text-muted-foreground text-right">
+                      {format(new Date(log.createdAt), 'MMM d, HH:mm')}
+                    </div>
+                    <div className="text-xs text-muted-foreground/60 text-right">
+                      {formatDistanceToNow(new Date(log.createdAt), { addSuffix: true })}
+                    </div>
+                  </div>
+
+                  {/* Attachments Icon Placeholder (hidden on small screens) */}
+                  <div className="flex-shrink-0 hidden lg:flex items-center w-8">
+                    {/* Empty space to align with scheduled emails */}
+                  </div>
+
+                  {/* Status Badge */}
+                  <div className="flex-shrink-0 w-32 sm:w-40 text-right">
+                    <Badge 
+                      variant={statusInfo.variant}
+                      className={statusInfo.customClass || (statusInfo.variant === 'destructive' ? 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200' : '')}
                     >
-                      {/* From/To Email Column */}
-                      <div className="flex-shrink-0 w-40 sm:w-52">
-                        <div className="text-sm font-medium text-foreground truncate">{log.from}</div>
-                        <div className="text-xs text-muted-foreground truncate">
-                          {isInbound && inboundLog ? inboundLog.recipient : outboundLog?.to[0]}
-                        </div>
-                      </div>
+                      {statusInfo.label}
+                    </Badge>
+                  </div>
 
-                      {/* Subject and Details Column */}
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm text-foreground truncate mb-1">{log.subject}</div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Clock2 width="12" height="12" />
-                          <span className="hidden md:inline">{format(new Date(log.createdAt), 'MMM d, HH:mm')}</span>
-                        </div>
-                      </div>
-
-                      {/* Timestamp Column */}
-                      <div className="flex-shrink-0 w-32 hidden sm:block">
-                        <div className="text-xs text-muted-foreground text-right">
-                          {format(new Date(log.createdAt), 'MMM d, HH:mm')}
-                        </div>
-                        <div className="text-xs text-muted-foreground/60 text-right">
-                          {formatDistanceToNow(new Date(log.createdAt), {
-                            addSuffix: true,
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Attachments Icon Placeholder (hidden on small screens) */}
-                      <div className="flex-shrink-0 hidden lg:flex items-center w-8">
-                        {/* Empty space to align with scheduled emails */}
-                      </div>
-
-                      {/* Status Badge */}
-                      <div className="flex-shrink-0 w-32 sm:w-40 text-right">
-                        <Badge
-                          variant={statusInfo.variant}
-                          className={
-                            statusInfo.customClass ||
-                            (statusInfo.variant === 'destructive'
-                              ? 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200'
-                              : '')
-                          }
-                        >
-                          {statusInfo.label}
-                        </Badge>
-                      </div>
-
-                      {/* Arrow Icon (hidden on mobile) */}
-                      {/* <div className="flex-shrink-0 hidden sm:block">
+                  {/* Arrow Icon (hidden on mobile) */}
+                  {/* <div className="flex-shrink-0 hidden sm:block">
                     <CircleOpenArrowUpRight width="12" height="12" className="text-muted-foreground" />
                   </div> */}
-                      <div className="flex-shrink-0 hidden sm:block">
+                  <div className="flex-shrink-0 hidden sm:block">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1020,14 +956,14 @@ export default function LogsPage() {
                           <ArrowUpRight2 width="12" height="12" />
                         </Button>
                       </div>
-                    </Link>
-                  )
-                })}
-                {/* Infinite scroll sentinel */}
-                <div ref={sentinelRef as any} className="h-1" />
-              </div>
+                </Link>
+              )
+            })}
+            {/* Infinite scroll sentinel */}
+            <div ref={sentinelRef as any} className="h-1" />
+          </div>
             </div>
-
+            
             {/* Load More Button */}
             {hasNextPage && (
               <div className="mt-6 flex justify-center">
@@ -1054,4 +990,4 @@ export default function LogsPage() {
       </div>
     </div>
   )
-}
+} 

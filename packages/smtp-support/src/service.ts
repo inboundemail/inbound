@@ -4,7 +4,6 @@ import { and, eq, isNotNull, or } from "drizzle-orm";
 import type { HeaderLines, ParsedMail } from "mailparser";
 import { simpleParser } from "mailparser";
 import { nanoid } from "nanoid";
-import { buildSentEmailTags } from "@/app/api/e2/helper/ses-email-tags";
 import { auth } from "@/lib/auth/auth";
 import {
 	getAgentIdentityArn,
@@ -188,11 +187,7 @@ function uniqueEmails(values: string[]): string[] {
 }
 
 function extractAddressList(
-	addresses:
-		| ParsedMail["to"]
-		| ParsedMail["cc"]
-		| ParsedMail["bcc"]
-		| ParsedMail["replyTo"],
+	addresses: ParsedMail["to"] | ParsedMail["cc"] | ParsedMail["bcc"] | ParsedMail["replyTo"],
 ): string[] {
 	if (!addresses) {
 		return [];
@@ -212,9 +207,7 @@ function extractAddressList(
 	return uniqueEmails(extracted);
 }
 
-function extractStoredHeaders(
-	headerLines: HeaderLines,
-): Record<string, string> | null {
+function extractStoredHeaders(headerLines: HeaderLines): Record<string, string> | null {
 	const headers: Record<string, string> = {};
 
 	for (const header of headerLines) {
@@ -241,13 +234,9 @@ function extractStoredHeaders(
 	return Object.keys(headers).length > 0 ? headers : null;
 }
 
-function extractIdempotencyKey(
-	headers: Record<string, string> | null,
-): string | null {
+function extractIdempotencyKey(headers: Record<string, string> | null): string | null {
 	const key =
-		headers?.["Resend-Idempotency-Key"] ||
-		headers?.["X-Idempotency-Key"] ||
-		null;
+		headers?.["Resend-Idempotency-Key"] || headers?.["X-Idempotency-Key"] || null;
 
 	if (!key) {
 		return null;
@@ -297,10 +286,7 @@ function ensureRelayHeaders(
 }
 
 function hasHeaderSection(rawMessage: Buffer): boolean {
-	const preview = rawMessage.subarray(
-		0,
-		Math.min(rawMessage.length, 16 * 1024),
-	);
+	const preview = rawMessage.subarray(0, Math.min(rawMessage.length, 16 * 1024));
 	const previewText = preview.toString("latin1");
 
 	return previewText.includes("\r\n\r\n") || previewText.includes("\n\n");
@@ -332,9 +318,7 @@ function smtpResponseCodeForStatusCode(statusCode: number): number {
 	return 550;
 }
 
-async function resolveUserIdFromApiKey(
-	result: VerifyApiKeyResult,
-): Promise<string | null> {
+async function resolveUserIdFromApiKey(result: VerifyApiKeyResult): Promise<string | null> {
 	const resolved = result.key?.userId ?? result.key?.referenceId ?? null;
 	if (resolved) {
 		return resolved;
@@ -372,9 +356,7 @@ export async function authenticateSmtpUser(params: {
 	}
 
 	const authApi = auth.api as {
-		verifyApiKey?: (input: {
-			body: { key: string };
-		}) => Promise<VerifyApiKeyResult>;
+		verifyApiKey?: (input: { body: { key: string } }) => Promise<VerifyApiKeyResult>;
 	};
 
 	if (!authApi.verifyApiKey) {
@@ -470,16 +452,10 @@ async function parseRelayMessage(
 	const replyToAddresses = extractAddressList(parsed.replyTo);
 	const headers = extractStoredHeaders(parsed.headerLines);
 	const idempotencyKey = extractIdempotencyKey(headers);
-	const messageId = stripAngleBrackets(
-		parsed.messageId || `${nanoid()}@${fromDomain}`,
-	);
+	const messageId = stripAngleBrackets(parsed.messageId || `${nanoid()}@${fromDomain}`);
 	const attachments = toProcessedAttachments(parsed);
-	const hasDateHeader = parsed.headerLines.some(
-		(header) => header.key === "date",
-	);
-	const hasFromHeader = parsed.headerLines.some(
-		(header) => header.key === "from",
-	);
+	const hasDateHeader = parsed.headerLines.some((header) => header.key === "date");
+	const hasFromHeader = parsed.headerLines.some((header) => header.key === "from");
 	const hasMessageIdHeader = parsed.headerLines.some(
 		(header) => header.key === "message-id",
 	);
@@ -517,9 +493,7 @@ async function maybeAssignSentEmailThread(params: {
 	const rawReferences = params.headers?.References || "";
 	const candidateValues = new Set<string>();
 
-	for (const value of normalizeLookupMessageIds(
-		params.headers?.["In-Reply-To"],
-	)) {
+	for (const value of normalizeLookupMessageIds(params.headers?.["In-Reply-To"])) {
 		candidateValues.add(value);
 	}
 
@@ -540,9 +514,7 @@ async function maybeAssignSentEmailThread(params: {
 		.where(
 			and(
 				eq(structuredEmails.userId, params.userId),
-				or(
-					...lookupValues.map((value) => eq(structuredEmails.messageId, value)),
-				),
+				or(...lookupValues.map((value) => eq(structuredEmails.messageId, value))),
 				isNotNull(structuredEmails.threadId),
 			),
 		)
@@ -558,17 +530,14 @@ async function maybeAssignSentEmailThread(params: {
 						eq(sentEmails.userId, params.userId),
 						or(
 							...lookupValues.map((value) => eq(sentEmails.messageId, value)),
-							...lookupValues.map((value) =>
-								eq(sentEmails.sesMessageId, value),
-							),
+							...lookupValues.map((value) => eq(sentEmails.sesMessageId, value)),
 						),
 						isNotNull(sentEmails.threadId),
 					),
 				)
 				.limit(1);
 
-	const existingThreadId =
-		threadFromInbound?.threadId || threadFromSent?.threadId;
+	const existingThreadId = threadFromInbound?.threadId || threadFromSent?.threadId;
 
 	if (!existingThreadId) {
 		return;
@@ -653,10 +622,7 @@ export async function relaySmtpMessage(params: {
 
 	const rcptTo = uniqueEmails(params.envelope.rcptTo);
 	if (rcptTo.length === 0) {
-		throw new SmtpRelayError(
-			"Message must include at least one recipient",
-			554,
-		);
+		throw new SmtpRelayError("Message must include at least one recipient", 554);
 	}
 
 	const blocklistCheck = await checkRecipientsAgainstBlocklist(rcptTo);
@@ -726,9 +692,7 @@ export async function relaySmtpMessage(params: {
 		textBody: message.textBody,
 		htmlBody: message.htmlBody,
 		headers: message.headers ? JSON.stringify(message.headers) : null,
-		attachments: message.attachments
-			? JSON.stringify(message.attachments)
-			: null,
+		attachments: message.attachments ? JSON.stringify(message.attachments) : null,
 		status: SENT_EMAIL_STATUS.PENDING,
 		messageId: message.messageId,
 		provider: "ses",
@@ -775,7 +739,6 @@ export async function relaySmtpMessage(params: {
 				...(tenantSendingInfo.tenantName && {
 					TenantName: tenantSendingInfo.tenantName,
 				}),
-				EmailTags: buildSentEmailTags(sentEmailId),
 			}),
 		);
 
@@ -844,10 +807,10 @@ export async function relaySmtpMessage(params: {
 					error:
 						error instanceof Error
 							? {
-									name: error.name,
-									message: error.message,
-									stack: error.stack,
-								}
+								name: error.name,
+								message: error.message,
+								stack: error.stack,
+							}
 							: String(error),
 				}),
 				updatedAt: new Date(),
