@@ -34,6 +34,25 @@ interface OutboundSendGuardInput {
 	fromAddress: string;
 	fromDomain: string;
 	isAgentEmail: boolean;
+	/**
+	 * What to do when the hourly send limit is hit.
+	 *
+	 * - "pause_tenant" (default): pause the tenant and alert admins. This is
+	 *   the historical single-send behavior: an interactive caller pushing
+	 *   past the cap is treated as a potential abuse signal.
+	 * - "deny_only": reject this send but leave the tenant untouched and skip
+	 *   admin alerts. Used by bulk queue processing, where hitting the cap is
+	 *   expected backpressure: queued work must be able to wait for the next
+	 *   hourly window without pausing the tenant (which would permanently
+	 *   fail every other queued item with tenant_inactive).
+	 * - "ignore": skip the hourly-volume denial entirely; every other check
+	 *   (ban, tenant state, domain verification, sender address) still runs
+	 *   and can deny. Used only when accepting FUTURE-scheduled bulk batches:
+	 *   the current rolling window says nothing about capacity at delivery
+	 *   time, and the worker re-checks with "deny_only" at execution and
+	 *   reschedules overflow past the window.
+	 */
+	hourlyLimitAction?: "pause_tenant" | "deny_only" | "ignore";
 }
 
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
@@ -264,10 +283,86 @@ function deny(
 	};
 }
 
+export interface HourlySendCapacity {
+	limit: number | null;
+	sentLastHour: number;
+	remaining: number | null;
+	windowStart: Date;
+	windowEnd: Date;
+}
+
+/**
+ * Remaining hourly send capacity for a user (limit null = unlimited).
+ * Shares the exact window/override semantics used by enforceOutboundSendGuard
+ * so bulk acceptance cannot admit more items than the guard would allow.
+ */
+export async function getHourlySendCapacity(
+	userId: string,
+): Promise<HourlySendCapacity> {
+	const windowEnd = new Date();
+	const windowStart = new Date(windowEnd.getTime() - ONE_HOUR_IN_MS);
+	const [hourlyCountResult] = await db
+		.select({
+			total: count(),
+		})
+		.from(sentEmails)
+		.where(
+			and(
+				eq(sentEmails.userId, userId),
+				eq(sentEmails.status, "sent"),
+				or(
+					gte(sentEmails.sentAt, windowStart),
+					and(
+						isNull(sentEmails.sentAt),
+						gte(sentEmails.createdAt, windowStart),
+					),
+				),
+			),
+		)
+		.limit(1);
+
+	const sentLastHour = Number(hourlyCountResult?.total || 0);
+
+	const [override] = await db
+		.select({
+			hourlyLimit: rateLimitOverrides.hourlyLimit,
+			expiresAt: rateLimitOverrides.expiresAt,
+		})
+		.from(rateLimitOverrides)
+		.where(
+			and(
+				eq(rateLimitOverrides.userId, userId),
+				eq(rateLimitOverrides.isActive, true),
+			),
+		)
+		.limit(1);
+
+	const isOverrideValid =
+		override &&
+		(!override.expiresAt || override.expiresAt.getTime() > Date.now());
+
+	// null hourlyLimit = unlimited (no cap)
+	const limit = isOverrideValid ? override.hourlyLimit : HOURLY_SEND_LIMIT;
+
+	return {
+		limit,
+		sentLastHour,
+		remaining: limit === null ? null : Math.max(0, limit - sentLastHour),
+		windowStart,
+		windowEnd,
+	};
+}
+
 export async function enforceOutboundSendGuard(
 	input: OutboundSendGuardInput,
 ): Promise<OutboundSendGuardResult> {
-	const { userId, fromAddress, fromDomain, isAgentEmail } = input;
+	const {
+		userId,
+		fromAddress,
+		fromDomain,
+		isAgentEmail,
+		hourlyLimitAction = "pause_tenant",
+	} = input;
 
 	try {
 		const [userRecord] = await db
@@ -324,69 +419,40 @@ export async function enforceOutboundSendGuard(
 			);
 		}
 
-		const windowEnd = new Date();
-		const windowStart = new Date(windowEnd.getTime() - ONE_HOUR_IN_MS);
-		const [hourlyCountResult] = await db
-			.select({
-				total: count(),
-			})
-			.from(sentEmails)
-			.where(
-				and(
-					eq(sentEmails.userId, userId),
-					eq(sentEmails.status, "sent"),
-					or(
-						gte(sentEmails.sentAt, windowStart),
-						and(
-							isNull(sentEmails.sentAt),
-							gte(sentEmails.createdAt, windowStart),
-						),
-					),
-				),
-			)
-			.limit(1);
+		const capacity = await getHourlySendCapacity(userId);
+		const { sentLastHour, windowStart, windowEnd } = capacity;
+		const effectiveLimit = capacity.limit;
 
-		const sentLastHour = Number(hourlyCountResult?.total || 0);
+		// effectiveLimit === null means unlimited — skip the check entirely.
+		// "ignore" skips only this denial (future-scheduled acceptance); all
+		// other guard checks above and below still apply.
+		if (
+			effectiveLimit !== null &&
+			sentLastHour >= effectiveLimit &&
+			hourlyLimitAction !== "ignore"
+		) {
+			if (hourlyLimitAction === "pause_tenant") {
+				await pauseTenantForHourlyLimit({
+					tenantId: userTenant.id,
+					configurationSetName: userTenant.configurationSetName,
+				});
 
-		const [override] = await db
-			.select({
-				hourlyLimit: rateLimitOverrides.hourlyLimit,
-				expiresAt: rateLimitOverrides.expiresAt,
-			})
-			.from(rateLimitOverrides)
-			.where(
-				and(
-					eq(rateLimitOverrides.userId, userId),
-					eq(rateLimitOverrides.isActive, true),
-				),
-			)
-			.limit(1);
-
-		const isOverrideValid =
-			override &&
-			(!override.expiresAt || override.expiresAt.getTime() > Date.now());
-
-		// null hourlyLimit = unlimited (no cap)
-		const effectiveLimit = isOverrideValid
-			? override.hourlyLimit
-			: HOURLY_SEND_LIMIT;
-
-		// effectiveLimit === null means unlimited — skip the check entirely
-		if (effectiveLimit !== null && sentLastHour >= effectiveLimit) {
-			await pauseTenantForHourlyLimit({
-				tenantId: userTenant.id,
-				configurationSetName: userTenant.configurationSetName,
-			});
-
-			await sendHourlyLimitAlert({
-				userId,
-				userEmail: userRecord.email,
-				tenantId: userTenant.id,
-				sentLastHour,
-				limit: effectiveLimit,
-				windowStart,
-				windowEnd,
-			});
+				await sendHourlyLimitAlert({
+					userId,
+					userEmail: userRecord.email,
+					tenantId: userTenant.id,
+					sentLastHour,
+					limit: effectiveLimit,
+					windowStart,
+					windowEnd,
+				});
+			} else {
+				// deny_only: expected backpressure (bulk queue). No pause, no
+				// admin alert - the caller reschedules the work instead.
+				console.log(
+					`⏳ Hourly send limit reached for user ${userId} (deny_only): ${sentLastHour}/${effectiveLimit} in the last hour`,
+				);
+			}
 
 			return deny(
 				429,

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
 	boolean,
 	index,
@@ -6,6 +7,7 @@ import {
 	text,
 	timestamp,
 	unique,
+	uniqueIndex,
 	varchar,
 } from "drizzle-orm/pg-core";
 import {
@@ -610,6 +612,13 @@ export const sentEmails = pgTable(
 			table.userId,
 			table.firstOpenedAt,
 		),
+		// Partial unique index: guarantees one row per (batch, position) and
+		// its batch_id prefix also serves batch lookups, so no separate
+		// batch_id index is needed. WHERE clause keeps the ~4.3GB table's
+		// non-batch rows (batch_id IS NULL) out of the index entirely.
+		batchIdIndexUnique: uniqueIndex("sent_emails_batch_id_batch_index_unique")
+			.on(table.batchId, table.batchIndex)
+			.where(sql`${table.batchId} IS NOT NULL`),
 	}),
 );
 
@@ -693,6 +702,65 @@ export const scheduledEmails = pgTable("scheduled_emails", {
 	sentAt: timestamp("sent_at"), // When the email was actually sent
 	sentEmailId: varchar("sent_email_id", { length: 255 }), // Reference to sentEmails after successful sending
 });
+
+// Email Batches table - durable parent record for bulk sends (items live in sentEmails via batchId/batchIndex)
+export const emailBatches = pgTable(
+	"email_batches",
+	{
+		id: varchar("id", { length: 255 }).primaryKey(),
+		userId: varchar("user_id", { length: 255 }).notNull(),
+
+		// Lifecycle: 'queued', 'partially_queued', 'completed', 'cancelled'
+		status: varchar("status", { length: 50 }).notNull().default("queued"),
+
+		// Item accounting (counters are advisory; item rows are the source of truth)
+		total: integer("total").notNull(),
+		sentCount: integer("sent_count").notNull().default(0),
+		failedCount: integer("failed_count").notNull().default(0),
+		cancelledCount: integer("cancelled_count").notNull().default(0),
+
+		// Batch-level scheduling (null = immediate)
+		scheduledAt: timestamp("scheduled_at"),
+		timezone: varchar("timezone", { length: 50 }),
+
+		// Idempotency (unique per user via index below)
+		idempotencyKey: varchar("idempotency_key", { length: 256 }),
+
+		// JSON object mapping item id -> QStash message id (for cancellation)
+		qstashMessageIds: text("qstash_message_ids"),
+		lastError: text("last_error"),
+
+		createdAt: timestamp("created_at").defaultNow(),
+		updatedAt: timestamp("updated_at").defaultNow(),
+		completedAt: timestamp("completed_at"),
+	},
+	(table) => ({
+		userIdempotencyUnique: uniqueIndex(
+			"email_batches_user_idempotency_key_unique",
+		).on(table.userId, table.idempotencyKey),
+		userCreatedIdx: index("email_batches_user_created_idx").on(
+			table.userId,
+			table.createdAt,
+		),
+	}),
+);
+
+export const EMAIL_BATCH_STATUS = {
+	QUEUED: "queued",
+	PARTIALLY_QUEUED: "partially_queued",
+	COMPLETED: "completed",
+	CANCELLED: "cancelled",
+} as const;
+
+// Per-item lifecycle for bulk items stored in sentEmails.status
+// ('sent'/'failed' intentionally overlap with SENT_EMAIL_STATUS)
+export const BULK_EMAIL_ITEM_STATUS = {
+	QUEUED: "queued",
+	PROCESSING: "processing",
+	SENT: "sent",
+	FAILED: "failed",
+	CANCELLED: "cancelled",
+} as const;
 
 // Email Sending Evaluations table - stores AI evaluations of sent emails for fraud monitoring
 export const emailSendingEvaluations = pgTable(
@@ -797,6 +865,8 @@ export type BlockedSignupDomain = typeof blockedSignupDomains.$inferSelect;
 export type NewBlockedSignupDomain = typeof blockedSignupDomains.$inferInsert;
 export type SentEmail = typeof sentEmails.$inferSelect;
 export type NewSentEmail = typeof sentEmails.$inferInsert;
+export type EmailBatch = typeof emailBatches.$inferSelect;
+export type NewEmailBatch = typeof emailBatches.$inferInsert;
 export type EmailSendingEvaluation =
 	typeof emailSendingEvaluations.$inferSelect;
 export type NewEmailSendingEvaluation =
