@@ -105,10 +105,14 @@ export const getBulkEmailBatch = new Elysia().get(
 		// Never-confirmed queued items (creator crashed before publishing).
 		// GET deliberately does not publish them — only an idempotent replay
 		// may — but the derived status below must not claim 'queued' either.
-		const unconfirmedQueued = countUnconfirmedQueuedItems(
+		let unconfirmedQueued = countUnconfirmedQueuedItems(
 			items,
 			parseQstashMessageIdMap(batch.qstashMessageIds),
 		);
+
+		// Parent row the response is built from; replaced with a fresh read
+		// after successful reconciliation below.
+		let responseBatch = batch;
 
 		// Abandonment recovery on status reads: items that were confirmed
 		// queued but whose delivery message is long overdue (retries
@@ -127,7 +131,37 @@ export const getBulkEmailBatch = new Elysia().get(
 						items,
 						includeMissing: false,
 					});
+
+					// Reconciliation may have merged new message ids and
+					// repaired the parent's advisory status / last_error
+					// (e.g. partially_queued -> queued). Re-read the parent
+					// and recompute the unconfirmed count from the fresh
+					// message-id map so the response reflects post-reconcile
+					// state instead of the stale snapshot. Items are not
+					// re-read: reconciliation never changes item status and
+					// only bumps updatedAt on still-queued rows, which no
+					// response field (including stale_processing, computed
+					// over 'processing' rows) depends on.
+					const [reconciledBatch] = await db
+						.select()
+						.from(emailBatches)
+						.where(
+							and(
+								eq(emailBatches.id, params.id),
+								eq(emailBatches.userId, userId),
+							),
+						)
+						.limit(1);
+					if (reconciledBatch) {
+						responseBatch = reconciledBatch;
+						unconfirmedQueued = countUnconfirmedQueuedItems(
+							items,
+							parseQstashMessageIdMap(reconciledBatch.qstashMessageIds),
+						);
+					}
 				} catch (reconcileError) {
+					// Best effort: on any reconcile/refresh failure the read
+					// still answers from the pre-reconcile snapshot.
 					console.error(
 						"⚠️ Bulk batch status reconciliation failed (continuing):",
 						reconcileError,
@@ -137,30 +171,34 @@ export const getBulkEmailBatch = new Elysia().get(
 		}
 
 		return {
-			id: batch.id,
+			id: responseBatch.id,
 			// Derived (not mutated): item rows are the source of truth, so a
 			// batch whose advisory status drifted still reads as completed
 			// once every item is terminal, and a stored 'queued' with
 			// never-published items reads as partially_queued. CANCELLED is
 			// preserved.
 			status: deriveBatchReadStatus(
-				batch.status,
+				responseBatch.status,
 				counts,
-				batch.total,
+				responseBatch.total,
 				unconfirmedQueued,
 			),
-			total: batch.total,
+			total: responseBatch.total,
 			counts,
 			...(staleProcessing > 0 && { stale_processing: staleProcessing }),
-			...(batch.scheduledAt && {
-				scheduled_at: formatScheduledDate(batch.scheduledAt),
-				timezone: batch.timezone || "UTC",
+			...(responseBatch.scheduledAt && {
+				scheduled_at: formatScheduledDate(responseBatch.scheduledAt),
+				timezone: responseBatch.timezone || "UTC",
 			}),
-			...(batch.createdAt && { created_at: batch.createdAt.toISOString() }),
-			...(batch.completedAt && {
-				completed_at: batch.completedAt.toISOString(),
+			...(responseBatch.createdAt && {
+				created_at: responseBatch.createdAt.toISOString(),
 			}),
-			...(batch.lastError && { last_error: batch.lastError }),
+			...(responseBatch.completedAt && {
+				completed_at: responseBatch.completedAt.toISOString(),
+			}),
+			...(responseBatch.lastError && {
+				last_error: responseBatch.lastError,
+			}),
 			data: items.map((item) => ({
 				id: item.id,
 				index: item.batchIndex ?? 0,
