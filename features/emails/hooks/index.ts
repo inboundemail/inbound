@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
-import { markEmailAsRead, getEmailsList, getEmailDetailsFromParsed, getUnifiedEmailLogs } from '@/app/actions/primary'
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
+import { getEmailsList, getEmailDetailsFromParsed, getUnifiedEmailLogs } from '@/app/actions/primary'
 import type { EmailLogsOptions, EmailLogsResponse } from '../types'
 
 // Export the v2 hooks as primary exports
@@ -46,6 +46,8 @@ export function useUnifiedEmailLogsQuery(options: EmailLogsOptions = {}) {
     },
     staleTime: 30 * 1000,
     gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
     placeholderData: (prev) => prev,
   })
 }
@@ -54,7 +56,7 @@ export function useUnifiedEmailLogsQuery(options: EmailLogsOptions = {}) {
 export const emailKeys = {
   all: ['emails'] as const,
   lists: () => [...emailKeys.all, 'list'] as const,
-  list: (filters: Record<string, any>) => [...emailKeys.lists(), filters] as const,
+  list: <T extends object>(filters: T) => [...emailKeys.lists(), filters] as const,
   details: () => [...emailKeys.all, 'detail'] as const,
   detail: (id: string) => [...emailKeys.details(), id] as const,
 }
@@ -114,4 +116,4 @@ export function useEmailDetailsQuery(emailId: string, enabled = true) {
     staleTime: 60 * 1000, // 1 minute
     gcTime: 10 * 60 * 1000, // 10 minutes
   })
-} 
+}

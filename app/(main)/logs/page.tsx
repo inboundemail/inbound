@@ -16,7 +16,7 @@ import { formatDistanceToNow, format } from 'date-fns'
 import Link from 'next/link'
 import { Skeleton } from '@/components/ui/skeleton'
 import CircleXmark from '@/components/icons/circle-xmark'
-import { useQueryStates, parseAsString } from 'nuqs'
+import { useQueryStates, parseAsInteger, parseAsString } from 'nuqs'
 
 // Import Nucleo icons
 import Clock2 from '@/components/icons/clock-2'
@@ -40,15 +40,17 @@ import ArchiveExport from '@/components/icons/archive-export'
 import EnvelopeArrowLeft from '@/components/icons/envelope-arrow-left'
 import EnvelopeArrowRight from '@/components/icons/envelope-arrow-right'
 import Envelope2 from '@/components/icons/envelope-2'
+import ChevronDown from '@/components/icons/chevron-down'
 
-import { useInfiniteUnifiedEmailLogsQuery } from '@/features/emails/hooks'
+import { useUnifiedEmailLogsQuery } from '@/features/emails/hooks'
 import { useDomainsListV2Query } from '@/features/domains/hooks/useDomainV2Hooks'
 import { useScheduledEmailsQuery, useCancelScheduledEmailMutation } from '@/features/emails/hooks/useScheduledEmailsHooks'
-import { useIntersectionObserver } from '@/hooks/useIntersectionObserver'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import type { EmailLogsOptions, EmailLogEntry, InboundEmailLogEntry, OutboundEmailLogEntry } from '@/features/emails/types'
 import SidebarToggleButton from '@/components/sidebar-toggle-button'
 import { Card } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { PaginationControls } from '@/components/logs/pagination-controls'
 import Paperclip2 from '@/components/icons/paperclip-2'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { useQuery } from '@tanstack/react-query'
@@ -59,7 +61,9 @@ import CircleOpenArrowUpRight from '@/components/icons/circle-open-arrow-up-righ
 
 // Configuration constants
 const DOMAINS_FETCH_LIMIT = 100 // Maximum allowed by e2 API - if users have more domains,
-                                 // consider implementing search/autocomplete or pagination
+                                  // consider implementing search/autocomplete or pagination
+const LOGS_PAGE_SIZE = 50
+const SCHEDULED_PAGE_SIZE = 10
 
 function getStatusColor(email: EmailLogEntry): string {
   if (email.type === 'inbound') {
@@ -170,6 +174,8 @@ export default function LogsPage() {
     domain: parseAsString.withDefault('all'),
     guard: parseAsString.withDefault('all'),
     time: parseAsString.withDefault('24h'),
+    page: parseAsInteger.withDefault(1),
+    scheduledPage: parseAsInteger.withDefault(1),
   }, { history: 'push' })
 
   const searchQuery = filters.search
@@ -179,12 +185,15 @@ export default function LogsPage() {
   const guardFilter = filters.guard
   const timeRange = filters.time
 
-  const setSearchQuery = (value: string) => setFilters({ search: value || null })
-  const setStatusFilter = (value: string) => setFilters({ status: value === 'all' ? null : value })
-  const setTypeFilter = (value: string) => setFilters({ type: value === 'all' ? null : value })
-  const setDomainFilter = (value: string) => setFilters({ domain: value === 'all' ? null : value })
-  const setGuardFilter = (value: string) => setFilters({ guard: value === 'all' ? null : value })
-  const setTimeRange = (value: string) => setFilters({ time: value === '24h' ? null : value })
+  const setSearchQuery = (value: string) => setFilters(
+    { search: value || null, page: null },
+    { history: 'replace' },
+  )
+  const setStatusFilter = (value: string) => setFilters({ status: value === 'all' ? null : value, page: null })
+  const setTypeFilter = (value: string) => setFilters({ type: value === 'all' ? null : value, page: null })
+  const setDomainFilter = (value: string) => setFilters({ domain: value === 'all' ? null : value, page: null })
+  const setGuardFilter = (value: string) => setFilters({ guard: value === 'all' ? null : value, page: null })
+  const setTimeRange = (value: string) => setFilters({ time: value === '24h' ? null : value, page: null })
 
   const [selectedLog, setSelectedLog] = useState<EmailLogEntry | null>(null)
   const [rotationDegrees, setRotationDegrees] = useState(0)
@@ -206,6 +215,14 @@ export default function LogsPage() {
     return false
   })
 
+  const [scheduledExpanded, setScheduledExpanded] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('email-flow-scheduled-expanded')
+      return saved !== null ? saved === 'true' : true
+    }
+    return true
+  })
+
   // Persist toggle states to localStorage
   useEffect(() => {
     localStorage.setItem('email-flow-show-scheduled', showScheduled.toString())
@@ -215,6 +232,10 @@ export default function LogsPage() {
     localStorage.setItem('email-flow-show-guard', showGuardEmails.toString())
   }, [showGuardEmails])
 
+  useEffect(() => {
+    localStorage.setItem('email-flow-scheduled-expanded', scheduledExpanded.toString())
+  }, [scheduledExpanded])
+
   // Debounce inputs to cut request volume
   const debouncedSearch = useDebouncedValue(searchQuery, 300)
   const debouncedStatus = useDebouncedValue(statusFilter, 150)
@@ -222,35 +243,43 @@ export default function LogsPage() {
   const debouncedDomain = useDebouncedValue(domainFilter, 150)
   const debouncedGuard = useDebouncedValue(guardFilter, 150)
   const debouncedTime = useDebouncedValue(timeRange, 150)
+  const filtersAreSettled = debouncedSearch === searchQuery
+    && debouncedStatus === statusFilter
+    && debouncedType === typeFilter
+    && debouncedDomain === domainFilter
+    && debouncedGuard === guardFilter
+    && debouncedTime === timeRange
 
-  const infiniteOptions: Omit<EmailLogsOptions, 'offset'> = useMemo(() => ({
+  const logsOptions: EmailLogsOptions = useMemo(() => ({
     searchQuery: debouncedSearch,
-    statusFilter: debouncedStatus as any,
-    typeFilter: debouncedType as any,
+    statusFilter: debouncedStatus as EmailLogsOptions['statusFilter'],
+    typeFilter: debouncedType as EmailLogsOptions['typeFilter'],
     domainFilter: debouncedDomain,
-    guardFilter: debouncedGuard as any,
-    timeRange: debouncedTime as any,
-    limit: 50,
-  }), [debouncedSearch, debouncedStatus, debouncedType, debouncedDomain, debouncedGuard, debouncedTime])
+    guardFilter: debouncedGuard === 'all' && !showGuardEmails
+      ? 'allowed'
+      : debouncedGuard as EmailLogsOptions['guardFilter'],
+    timeRange: debouncedTime as EmailLogsOptions['timeRange'],
+    limit: LOGS_PAGE_SIZE,
+    offset: (Math.max(1, filters.page) - 1) * LOGS_PAGE_SIZE,
+  }), [debouncedSearch, debouncedStatus, debouncedType, debouncedDomain, debouncedGuard, debouncedTime, filters.page, showGuardEmails])
 
   const {
     data,
     isLoading,
     error,
     refetch,
-    hasNextPage,
-    isFetchingNextPage,
-    fetchNextPage,
     isFetching,
-  } = useInfiniteUnifiedEmailLogsQuery(infiniteOptions)
+    isPlaceholderData,
+  } = useUnifiedEmailLogsQuery(logsOptions)
 
   // Fetch scheduled emails
   const {
     data: scheduledEmailsData,
-    isLoading: isScheduledLoading,
-    refetch: refetchScheduled
+    isFetching: isScheduledFetching,
+    refetch: refetchScheduled,
   } = useScheduledEmailsQuery({ 
-    limit: 100, 
+    limit: SCHEDULED_PAGE_SIZE,
+    offset: (Math.max(1, filters.scheduledPage) - 1) * SCHEDULED_PAGE_SIZE,
     status: 'scheduled' // Only show emails that haven't been sent yet
   })
 
@@ -260,7 +289,7 @@ export default function LogsPage() {
   const { data: chartData, isLoading: isChartLoading } = useQuery({
     queryKey: ['email-volume-chart', debouncedTime],
     queryFn: async () => {
-      const result = await getEmailVolumeChartData(debouncedTime as any)
+      const result = await getEmailVolumeChartData(debouncedTime as NonNullable<EmailLogsOptions['timeRange']>)
       if (!result.success) {
         console.error('Chart data fetch failed:', result.error)
         return null
@@ -286,17 +315,9 @@ export default function LogsPage() {
   const allAvailableDomains = domainsResponse?.data?.map(domain => domain.domain).sort() ?? []
   const hasMoreDomains = domainsResponse?.pagination?.total && domainsResponse.pagination.total > DOMAINS_FETCH_LIMIT
 
-  const firstPage = data?.pages?.[0]
-  const stats = firstPage?.stats
+  const stats = data?.stats
   // Use all available domains instead of just from current results
   const filtersUniqueDomains = allAvailableDomains
-
-  const { ref: sentinelRef, hasIntersected } = useIntersectionObserver({ rootMargin: '400px' })
-  useEffect(() => {
-    if (hasIntersected && hasNextPage && !isFetchingNextPage) {
-      void fetchNextPage()
-    }
-  }, [hasIntersected, hasNextPage, isFetchingNextPage]) // Removed fetchNextPage from deps
 
   const handleRefresh = () => {
     // Spin counter-clockwise (negative rotation) like typical refresh icons
@@ -314,23 +335,35 @@ export default function LogsPage() {
     }
   }
 
-  // Filter regular emails based on guard toggle
-  const filteredEmails = useMemo(() => {
-    const allEmails = (data?.pages ?? []).flatMap(p => p.emails)
-    
-    if (showGuardEmails) {
-      return allEmails // Show all emails including guard blocked ones
+  const filteredEmails = data?.emails ?? []
+
+  useEffect(() => {
+    if (!filtersAreSettled || isFetching || !data) return
+
+    if (filters.page < 1) {
+      void setFilters({ page: null }, { history: 'replace' })
+      return
     }
-    
-    // Filter out guard-blocked emails
-    return allEmails.filter(email => {
-      if (email.type === 'inbound') {
-        const inboundEmail = email as InboundEmailLogEntry
-        return !inboundEmail.guardBlocked
-      }
-      return true // Show all outbound emails
-    })
-  }, [data, showGuardEmails])
+
+    const lastPage = Math.max(1, Math.ceil(data.pagination.total / LOGS_PAGE_SIZE))
+    if (filters.page > lastPage) {
+      void setFilters({ page: lastPage === 1 ? null : lastPage }, { history: 'replace' })
+    }
+  }, [data, filters.page, filtersAreSettled, isFetching, setFilters])
+
+  useEffect(() => {
+    if (isScheduledFetching || !scheduledEmailsData) return
+
+    if (filters.scheduledPage < 1) {
+      void setFilters({ scheduledPage: null }, { history: 'replace' })
+      return
+    }
+
+    const lastPage = Math.max(1, Math.ceil(scheduledEmailsData.pagination.total / SCHEDULED_PAGE_SIZE))
+    if (filters.scheduledPage > lastPage) {
+      void setFilters({ scheduledPage: lastPage === 1 ? null : lastPage }, { history: 'replace' })
+    }
+  }, [filters.scheduledPage, isScheduledFetching, scheduledEmailsData, setFilters])
 
   if (error) {
     return (
@@ -449,7 +482,10 @@ export default function LogsPage() {
                       <Switch
                         id="show-guard"
                         checked={showGuardEmails}
-                        onCheckedChange={setShowGuardEmails}
+                        onCheckedChange={(checked) => {
+                          setShowGuardEmails(checked)
+                          void setFilters({ page: null }, { history: 'replace' })
+                        }}
                       />
                     </div>
                   </div>
@@ -565,7 +601,8 @@ export default function LogsPage() {
                             type: null, 
                             domain: null, 
                             guard: null, 
-                            time: null 
+                            time: null,
+                            page: null,
                           })
                         }}
                         className="w-full"
@@ -597,7 +634,7 @@ export default function LogsPage() {
         {stats && (
           <div className="mb-6 bg-muted/30 border border-border rounded-xl overflow-hidden relative">
             {/* Loading overlay for stats when filters change */}
-            {isFetching && !isLoading && !isFetchingNextPage && (
+            {isPlaceholderData && (
               <div className="absolute inset-0 bg-background/30 backdrop-blur-[1px] flex items-center justify-center z-10 rounded-xl">
                 <div className="w-3 h-3 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
               </div>
@@ -717,21 +754,11 @@ export default function LogsPage() {
 
       {/* Logs List - Edge to Edge */}
       <div className="w-full max-w-5xl mx-auto px-2 relative">
-        {/* Loading overlay when filters are being applied */}
-        {isFetching && !isLoading && !isFetchingNextPage && (
-          <div className="absolute inset-0 bg-background/40 backdrop-blur-[2px] z-20 rounded-xl flex items-center justify-center">
-            <div className="flex items-center gap-2 text-muted-foreground bg-background px-4 py-2 rounded-xl border border-border shadow-sm">
-              <div className="w-4 h-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
-              <span className="text-sm font-medium">Updating results...</span>
-            </div>
-          </div>
-        )}
-        
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
             <div className="text-muted-foreground">Loading emails...</div>
           </div>
-        ) : !((data?.pages?.flatMap(p => p.emails) || []).length) && !scheduledEmailsData?.data?.length ? (
+        ) : !data?.pagination.total && !(showScheduled && scheduledEmailsData?.pagination.total) ? (
           <div className="max-w-5xl mx-auto">
             <Card className=" rounded-xl p-8">
               <div className="text-center">
@@ -748,25 +775,40 @@ export default function LogsPage() {
         ) : (
           <>
             {/* Scheduled Emails Section */}
-            {showScheduled && scheduledEmailsData?.data && scheduledEmailsData.data.length > 0 && (
-              <div className="mb-6">
-                <div className="flex items-center gap-2 px-2 py-2 mb-2">
-                  <Calendar2 width="16" height="16" className="text-muted-foreground" />
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Scheduled Emails
-                  </h3>
-                  <Badge variant="default" className="ml-1">
-                    {scheduledEmailsData.data.length} emails
-                  </Badge>
-                </div>
-                <div className="border border-border rounded-[13px] bg-card overflow-hidden">
-                  {scheduledEmailsData.data.map((scheduledEmail) => (
-                    <Link
-                      key={scheduledEmail.id}
-                      href={`#`}
-                      onClick={(e) => e.preventDefault()}
-                      className="flex items-center gap-4 px-6 py-4 hover:bg-muted/50 transition-colors cursor-pointer border-b border-border last:border-b-0"
-                    >
+            {showScheduled && scheduledEmailsData && scheduledEmailsData.pagination.total > 0 && (
+              <Collapsible
+                open={scheduledExpanded}
+                onOpenChange={setScheduledExpanded}
+                className="mb-6"
+              >
+                <h3 className="mb-2">
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="lg" className="w-full justify-start px-2">
+                      <Calendar2 width="16" height="16" className="text-muted-foreground" />
+                      <span className="text-sm font-semibold text-foreground">
+                        Scheduled Emails
+                      </span>
+                      <Badge variant="default" className="ml-1">
+                        {scheduledEmailsData.pagination.total}{' '}
+                        {scheduledEmailsData.pagination.total === 1 ? 'email' : 'emails'}
+                      </Badge>
+                      <ChevronDown
+                        width="16"
+                        height="16"
+                        className={`ml-auto text-muted-foreground transition-transform motion-reduce:transition-none ${scheduledExpanded ? '' : '-rotate-90'}`}
+                      />
+                    </Button>
+                  </CollapsibleTrigger>
+                </h3>
+                <CollapsibleContent>
+                  <div className="border border-border rounded-[13px] bg-card overflow-hidden">
+                    {scheduledEmailsData.data.map((scheduledEmail) => (
+                      <Link
+                        key={scheduledEmail.id}
+                        href={`#`}
+                        onClick={(e) => e.preventDefault()}
+                        className="flex items-center gap-4 px-6 py-4 hover:bg-muted/50 transition-colors cursor-pointer border-b border-border last:border-b-0"
+                      >
                       {/* From/To Email Column */}
                       <div className="flex-shrink-0 w-40 sm:w-52">
                         <div className="text-sm font-medium text-foreground truncate">
@@ -832,10 +874,23 @@ export default function LogsPage() {
                           <CircleXmark width="12" height="12" />
                         </Button>
                       </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
+                      </Link>
+                    ))}
+                  </div>
+                  <PaginationControls
+                    className="mt-4"
+                    ariaLabel="Scheduled email pagination"
+                    offset={scheduledEmailsData.pagination.offset}
+                    limit={scheduledEmailsData.pagination.limit}
+                    total={scheduledEmailsData.pagination.total}
+                    isFetching={isScheduledFetching}
+                    onOffsetChange={(offset) => {
+                      const page = Math.floor(offset / SCHEDULED_PAGE_SIZE) + 1
+                      void setFilters({ scheduledPage: page === 1 ? null : page })
+                    }}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
             )}
 
             {/* Regular Emails Section */}
@@ -967,35 +1022,23 @@ export default function LogsPage() {
                 </Link>
               )
             })}
-            {/* Infinite scroll sentinel */}
-            <div ref={sentinelRef as any} className="h-1" />
           </div>
+              <PaginationControls
+                className="mt-4"
+                ariaLabel="Email log pagination"
+                offset={data?.pagination.offset ?? 0}
+                limit={data?.pagination.limit ?? LOGS_PAGE_SIZE}
+                total={data?.pagination.total ?? 0}
+                isFetching={isFetching}
+                onOffsetChange={(offset) => {
+                  const page = Math.floor(offset / LOGS_PAGE_SIZE) + 1
+                  void setFilters({ page: page === 1 ? null : page })
+                }}
+              />
             </div>
-            
-            {/* Load More Button */}
-            {hasNextPage && (
-              <div className="mt-6 flex justify-center">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={() => fetchNextPage()}
-                  disabled={isFetchingNextPage}
-                  className="min-w-[200px]"
-                >
-                  {isFetchingNextPage ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin mr-2" />
-                      Loading...
-                    </>
-                  ) : (
-                    'Load More'
-                  )}
-                </Button>
-              </div>
-            )}
           </>
         )}
       </div>
     </div>
   )
-} 
+}
