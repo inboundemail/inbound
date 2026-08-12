@@ -10,6 +10,7 @@ function buildRates(overrides: Partial<TenantRates>): TenantRates {
 	return {
 		tenantId: "tenant_test",
 		configurationSetName: "cfg-test",
+		reputationPolicy: "strict",
 		bounceRate: 0,
 		complaintRate: 0,
 		totalSends: 0,
@@ -167,6 +168,39 @@ describe("checkRateThresholds", () => {
 				configurationSetName: "cfg-test",
 				tenantId: "tenant_test",
 			},
+		]);
+	});
+
+	it("uses higher critical thresholds for standard reputation policy", () => {
+		const alerts = checkRateThresholds(
+			buildRates({
+				reputationPolicy: "standard",
+				totalSends: 1000,
+				totalBounces: 60,
+				bounceRate: 0.06,
+				totalComplaints: 2,
+				complaintRate: 0.002,
+			}),
+		);
+
+		expect(alerts.every((alert) => alert.severity === "warning")).toBe(true);
+	});
+
+	it("emits critical alerts at the standard reputation thresholds", () => {
+		const alerts = checkRateThresholds(
+			buildRates({
+				reputationPolicy: "standard",
+				totalSends: 1000,
+				totalBounces: 70,
+				bounceRate: 0.07,
+				totalComplaints: 3,
+				complaintRate: 0.003,
+			}),
+		);
+
+		expect(alerts.map((alert) => alert.severity)).toEqual([
+			"critical",
+			"critical",
 		]);
 	});
 });

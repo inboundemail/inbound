@@ -18,8 +18,9 @@ import {
 	AUTO_SUSPEND_MIN_SENDS,
 	getTenantRates,
 	processSESEvent,
-	type RateAlert,
 	RATE_THRESHOLDS,
+	type RateAlert,
+	STANDARD_RATE_THRESHOLDS,
 } from "@/lib/ses-monitoring/rate-tracker";
 
 // Slack webhook for admin notifications
@@ -848,7 +849,10 @@ async function confirmSuspendWithDbRates(
 	}
 
 	const minSends = AUTO_SUSPEND_MIN_SENDS[alertType];
-	const threshold = RATE_THRESHOLDS[alertType].critical;
+	const threshold =
+		rates.reputationPolicy === "standard"
+			? STANDARD_RATE_THRESHOLDS[alertType].critical
+			: RATE_THRESHOLDS[alertType].critical;
 	const rate = alertType === "bounce" ? rates.bounceRate : rates.complaintRate;
 	const events =
 		alertType === "bounce" ? rates.totalBounces : rates.totalComplaints;

@@ -27,6 +27,17 @@ export const RATE_THRESHOLDS = {
 	},
 } as const;
 
+export const STANDARD_RATE_THRESHOLDS = {
+	bounce: {
+		warning: RATE_THRESHOLDS.bounce.warning,
+		critical: 0.07,
+	},
+	complaint: {
+		warning: RATE_THRESHOLDS.complaint.warning,
+		critical: 0.003,
+	},
+} as const;
+
 export const AUTO_SUSPEND_MIN_SENDS = {
 	bounce: 200,
 	complaint: 1000,
@@ -49,6 +60,7 @@ const RATE_WINDOW_HOURS = 24;
 export interface TenantRates {
 	tenantId: string;
 	configurationSetName: string;
+	reputationPolicy: string;
 	bounceRate: number;
 	complaintRate: number;
 	totalSends: number;
@@ -162,6 +174,7 @@ export async function getTenantRates(
 				id: sesTenants.id,
 				userId: sesTenants.userId,
 				tenantName: sesTenants.tenantName,
+				reputationPolicy: sesTenants.reputationPolicy,
 			})
 			.from(sesTenants)
 			.where(eq(sesTenants.configurationSetName, configurationSetName))
@@ -216,6 +229,7 @@ export async function getTenantRates(
 		return {
 			tenantId: tenant.id,
 			configurationSetName,
+			reputationPolicy: tenant.reputationPolicy,
 			bounceRate,
 			complaintRate,
 			totalSends,
@@ -235,6 +249,10 @@ export async function getTenantRates(
  */
 export function checkRateThresholds(rates: TenantRates): RateAlert[] {
 	const alerts: RateAlert[] = [];
+	const thresholds =
+		rates.reputationPolicy === "standard"
+			? STANDARD_RATE_THRESHOLDS
+			: RATE_THRESHOLDS;
 	const canAutoSuspendForBounce =
 		rates.totalSends >= AUTO_SUSPEND_MIN_SENDS.bounce;
 	const canAutoSuspendForComplaint =
@@ -249,25 +267,25 @@ export function checkRateThresholds(rates: TenantRates): RateAlert[] {
 	// Check bounce rate
 	if (
 		canAutoSuspendForBounce &&
-		rates.bounceRate >= RATE_THRESHOLDS.bounce.critical
+		rates.bounceRate >= thresholds.bounce.critical
 	) {
 		alerts.push({
 			alertType: "bounce",
 			severity: "critical",
 			currentRate: rates.bounceRate,
-			threshold: RATE_THRESHOLDS.bounce.critical,
+			threshold: thresholds.bounce.critical,
 			configurationSetName: rates.configurationSetName,
 			tenantId: rates.tenantId,
 		});
 	} else if (
 		canWarnForBounce &&
-		rates.bounceRate >= RATE_THRESHOLDS.bounce.warning
+		rates.bounceRate >= thresholds.bounce.warning
 	) {
 		alerts.push({
 			alertType: "bounce",
 			severity: "warning",
 			currentRate: rates.bounceRate,
-			threshold: RATE_THRESHOLDS.bounce.warning,
+			threshold: thresholds.bounce.warning,
 			configurationSetName: rates.configurationSetName,
 			tenantId: rates.tenantId,
 		});
@@ -276,25 +294,25 @@ export function checkRateThresholds(rates: TenantRates): RateAlert[] {
 	// Check complaint rate
 	if (
 		canAutoSuspendForComplaint &&
-		rates.complaintRate >= RATE_THRESHOLDS.complaint.critical
+		rates.complaintRate >= thresholds.complaint.critical
 	) {
 		alerts.push({
 			alertType: "complaint",
 			severity: "critical",
 			currentRate: rates.complaintRate,
-			threshold: RATE_THRESHOLDS.complaint.critical,
+			threshold: thresholds.complaint.critical,
 			configurationSetName: rates.configurationSetName,
 			tenantId: rates.tenantId,
 		});
 	} else if (
 		canWarnForComplaint &&
-		rates.complaintRate >= RATE_THRESHOLDS.complaint.warning
+		rates.complaintRate >= thresholds.complaint.warning
 	) {
 		alerts.push({
 			alertType: "complaint",
 			severity: "warning",
 			currentRate: rates.complaintRate,
-			threshold: RATE_THRESHOLDS.complaint.warning,
+			threshold: thresholds.complaint.warning,
 			configurationSetName: rates.configurationSetName,
 			tenantId: rates.tenantId,
 		});

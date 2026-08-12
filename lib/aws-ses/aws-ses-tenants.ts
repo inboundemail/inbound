@@ -88,7 +88,8 @@ type SesTenantRecord = typeof sesTenants.$inferSelect;
 const awsRegion = process.env.AWS_REGION || "us-east-2";
 const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
 const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-const STRICT_REPUTATION_POLICY_ARN = `arn:aws:ses:${awsRegion}:aws:reputation-policy/strict`;
+
+type ReputationPolicy = "standard" | "strict" | "none";
 
 let sesv2Client: SESv2Client | null = null;
 let snsClient: SNSClient | null = null;
@@ -312,16 +313,17 @@ export class SESTenantManager {
 		return `arn:aws:ses:${awsRegion}:${AWS_ACCOUNT_ID}:tenant/${tenantName}/${awsTenantId}`;
 	}
 
-	private async applyStrictReputationPolicy(
+	private async applyReputationPolicy(
 		tenantName: string,
 		awsTenantId: string,
+		reputationPolicy: ReputationPolicy,
 	): Promise<{ success: boolean; error?: string }> {
 		try {
 			const tenantArn = this.buildTenantArn(tenantName, awsTenantId);
 			const command = new UpdateReputationEntityPolicyCommand({
 				ReputationEntityType: "RESOURCE",
 				ReputationEntityReference: tenantArn,
-				ReputationEntityPolicy: STRICT_REPUTATION_POLICY_ARN,
+				ReputationEntityPolicy: `arn:aws:ses:${awsRegion}:aws:reputation-policy/${reputationPolicy}`,
 			});
 
 			await this.sesv2Client.send(command);
@@ -332,17 +334,23 @@ export class SESTenantManager {
 				error:
 					error instanceof Error
 						? error.message
-						: "Unknown error applying strict reputation policy",
+						: `Unknown error applying ${reputationPolicy} reputation policy`,
 			};
 		}
 	}
 
-	private async ensureStrictPolicyForTenantRecord(
+	private async ensureReputationPolicyForTenantRecord(
 		tenant: SesTenantRecord,
 	): Promise<{ tenant: SesTenantRecord; success: boolean; error?: string }> {
-		const policyResult = await this.applyStrictReputationPolicy(
+		const reputationPolicy: ReputationPolicy =
+			tenant.reputationPolicy === "standard" ||
+			tenant.reputationPolicy === "none"
+				? tenant.reputationPolicy
+				: "strict";
+		const policyResult = await this.applyReputationPolicy(
 			tenant.tenantName,
 			tenant.awsTenantId,
+			reputationPolicy,
 		);
 
 		if (!policyResult.success) {
@@ -353,7 +361,7 @@ export class SESTenantManager {
 			};
 		}
 
-		if (tenant.reputationPolicy === "strict") {
+		if (tenant.reputationPolicy === reputationPolicy) {
 			return {
 				tenant,
 				success: true,
@@ -363,14 +371,14 @@ export class SESTenantManager {
 		const [updatedTenant] = await db
 			.update(sesTenants)
 			.set({
-				reputationPolicy: "strict",
+				reputationPolicy,
 				updatedAt: new Date(),
 			})
 			.where(eq(sesTenants.id, tenant.id))
 			.returning();
 
 		return {
-			tenant: updatedTenant || { ...tenant, reputationPolicy: "strict" },
+			tenant: updatedTenant || { ...tenant, reputationPolicy },
 			success: true,
 		};
 	}
@@ -402,20 +410,20 @@ export class SESTenantManager {
 				.limit(1);
 
 			if (existingTenant.length > 0) {
-				const strictPolicyResult = await this.ensureStrictPolicyForTenantRecord(
+				const policyResult = await this.ensureReputationPolicyForTenantRecord(
 					existingTenant[0],
 				);
 
-				if (!strictPolicyResult.success) {
+				if (!policyResult.success) {
 					return {
 						tenant: existingTenant[0],
 						success: false,
-						error: `Tenant exists but strict reputation policy could not be enforced: ${strictPolicyResult.error || "Unknown error"}`,
+						error: `Tenant exists but its reputation policy could not be enforced: ${policyResult.error || "Unknown error"}`,
 					};
 				}
 
 				return {
-					tenant: strictPolicyResult.tenant,
+					tenant: policyResult.tenant,
 					success: true,
 				};
 			}
@@ -481,9 +489,10 @@ export class SESTenantManager {
 			console.log(
 				`🛡️ Enforcing strict reputation policy for: ${finalTenantName}`,
 			);
-			const strictPolicyResult = await this.applyStrictReputationPolicy(
+			const strictPolicyResult = await this.applyReputationPolicy(
 				finalTenantName,
 				awsTenantId,
+				"strict",
 			);
 
 			if (!strictPolicyResult.success) {
@@ -875,23 +884,23 @@ export class SESTenantManager {
 				.limit(1);
 
 			if (existingTenant.length > 0) {
-				const strictPolicyResult = await this.ensureStrictPolicyForTenantRecord(
+				const policyResult = await this.ensureReputationPolicyForTenantRecord(
 					existingTenant[0],
 				);
 
-				if (!strictPolicyResult.success) {
+				if (!policyResult.success) {
 					return {
 						tenant: existingTenant[0],
 						success: false,
-						error: `Failed to enforce strict reputation policy for existing tenant: ${strictPolicyResult.error || "Unknown error"}`,
+						error: `Failed to enforce reputation policy for existing tenant: ${policyResult.error || "Unknown error"}`,
 					};
 				}
 
 				console.log(
-					`📋 Found existing tenant for user ${userId}: ${strictPolicyResult.tenant.id}`,
+					`📋 Found existing tenant for user ${userId}: ${policyResult.tenant.id}`,
 				);
 				return {
-					tenant: strictPolicyResult.tenant,
+					tenant: policyResult.tenant,
 					success: true,
 				};
 			}
