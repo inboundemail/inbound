@@ -41,12 +41,14 @@ describe("delivery event deduplication", () => {
 			{
 				id: "evt_sns",
 				eventType: "bounce",
+				bounceType: "hard",
 				originalMessageId: "ses-message-id",
 				failedRecipient: "person@example.com",
 			},
 			{
 				id: "evt_dsn",
 				eventType: "bounce",
+				bounceType: "hard",
 				originalMessageId: "<SES-MESSAGE-ID>",
 				failedRecipient: "Person <PERSON@example.com>",
 			},
@@ -65,6 +67,7 @@ describe("delivery event deduplication", () => {
 		const first = {
 			id: "evt_first",
 			eventType: "bounce",
+			bounceType: "hard",
 			originalMessageId: null,
 			dsnEmailId: "inbound_dsn_123",
 			failedRecipient: "person@example.com",
@@ -76,6 +79,41 @@ describe("delivery event deduplication", () => {
 			bounces: 1,
 			complaints: 0,
 		});
+	});
+
+	it("does not count transient bounces toward reputation", () => {
+		expect(
+			countUniqueDeliveryEvents([
+				{
+					id: "evt_transient",
+					eventType: "bounce",
+					bounceType: "transient",
+					originalMessageId: "ses-message-id",
+					failedRecipient: "person@example.com",
+				},
+			]),
+		).toEqual({ bounces: 0, complaints: 0 });
+	});
+
+	it("prefers a hard-bounce classification across duplicate sources", () => {
+		expect(
+			countUniqueDeliveryEvents([
+				{
+					id: "evt_transient",
+					eventType: "bounce",
+					bounceType: "transient",
+					originalMessageId: "ses-message-id",
+					failedRecipient: "person@example.com",
+				},
+				{
+					id: "evt_hard",
+					eventType: "bounce",
+					bounceType: "hard",
+					originalMessageId: "<SES-MESSAGE-ID>",
+					failedRecipient: "Person <PERSON@example.com>",
+				},
+			]),
+		).toEqual({ bounces: 1, complaints: 0 });
 	});
 
 	it("falls back to the row id without a message id", () => {

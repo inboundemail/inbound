@@ -7,6 +7,7 @@ import { emailDeliveryEvents } from "@/lib/db/schema";
 
 interface DeliveryEventIdentity {
 	eventType: string;
+	bounceType?: string | null;
 	originalMessageId: string | null | undefined;
 	dsnEmailId?: string | null;
 	failedRecipient: string;
@@ -74,18 +75,23 @@ export function getDeliveryEventDedupeKey(
 export function countUniqueDeliveryEvents(
 	events: Array<DeliveryEventIdentity & { id: string }>,
 ): { bounces: number; complaints: number } {
-	const seen = new Set<string>();
+	const uniqueEvents = new Map<
+		string,
+		DeliveryEventIdentity & { id: string }
+	>();
 	let bounces = 0;
 	let complaints = 0;
 
 	for (const event of events) {
 		const key = getDeliveryEventDedupeKey(event);
-		if (seen.has(key)) {
-			continue;
+		const existing = uniqueEvents.get(key);
+		if (!existing || event.bounceType === "hard") {
+			uniqueEvents.set(key, event);
 		}
+	}
 
-		seen.add(key);
-		if (event.eventType === "bounce") {
+	for (const event of uniqueEvents.values()) {
+		if (event.eventType === "bounce" && event.bounceType === "hard") {
 			bounces++;
 		} else if (event.eventType === "complaint") {
 			complaints++;

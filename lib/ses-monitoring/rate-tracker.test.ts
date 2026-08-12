@@ -115,7 +115,7 @@ describe("checkRateThresholds", () => {
 		]);
 	});
 
-	it("emits critical bounce alert at or above 2.5% with enough volume", () => {
+	it("emits critical bounce alert at or above 5% with enough volume", () => {
 		const rates = buildRates({
 			totalSends: 200,
 			totalBounces: 5,
@@ -135,6 +135,18 @@ describe("checkRateThresholds", () => {
 		]);
 	});
 
+	it("warns without suspending below the hard-bounce critical rate", () => {
+		const alerts = checkRateThresholds(
+			buildRates({
+				totalSends: 200,
+				totalBounces: 8,
+				bounceRate: 0.04,
+			}),
+		);
+
+		expect(alerts[0]?.severity).toBe("warning");
+	});
+
 	it("does not emit critical complaint alert without enough send volume", () => {
 		const rates = buildRates({
 			totalSends: 250,
@@ -151,7 +163,7 @@ describe("checkRateThresholds", () => {
 		).toBe(false);
 	});
 
-	it("emits critical complaint alert at or above 0.1% with enough volume", () => {
+	it("does not suspend for a single complaint", () => {
 		const rates = buildRates({
 			totalSends: 1000,
 			totalComplaints: 1,
@@ -159,16 +171,43 @@ describe("checkRateThresholds", () => {
 		});
 
 		const alerts = checkRateThresholds(rates);
-		expect(alerts).toEqual([
-			{
-				alertType: "complaint",
-				severity: "critical",
-				currentRate: RATE_THRESHOLDS.complaint.critical,
-				threshold: RATE_THRESHOLDS.complaint.critical,
-				configurationSetName: "cfg-test",
-				tenantId: "tenant_test",
-			},
-		]);
+		expect(alerts[0]?.severity).toBe("warning");
+	});
+
+	it("emits a critical complaint alert after repeated complaints", () => {
+		const alerts = checkRateThresholds(
+			buildRates({
+				totalSends: 2000,
+				totalComplaints: 2,
+				complaintRate: RATE_THRESHOLDS.complaint.critical,
+			}),
+		);
+
+		expect(alerts[0]?.severity).toBe("critical");
+	});
+
+	it("suspends extreme low-volume hard-bounce abuse", () => {
+		const alerts = checkRateThresholds(
+			buildRates({
+				totalSends: 50,
+				totalBounces: 10,
+				bounceRate: 0.2,
+			}),
+		);
+
+		expect(alerts[0]?.severity).toBe("critical");
+	});
+
+	it("suspends extreme low-volume complaint abuse", () => {
+		const alerts = checkRateThresholds(
+			buildRates({
+				totalSends: 100,
+				totalComplaints: 2,
+				complaintRate: 0.02,
+			}),
+		);
+
+		expect(alerts[0]?.severity).toBe("critical");
 	});
 
 	it("uses higher critical thresholds for standard reputation policy", () => {

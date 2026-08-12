@@ -15,12 +15,10 @@ import { sendHarkNotification } from "@/lib/notifications/hark";
 import { getSesConfigurationSetName } from "@/lib/ses-monitoring/configuration-set";
 import { shouldTrackSesReputationEvent } from "@/lib/ses-monitoring/event-filter";
 import {
-	AUTO_SUSPEND_MIN_SENDS,
+	checkRateThresholds,
 	getTenantRates,
 	processSESEvent,
-	RATE_THRESHOLDS,
 	type RateAlert,
-	STANDARD_RATE_THRESHOLDS,
 } from "@/lib/ses-monitoring/rate-tracker";
 
 // Slack webhook for admin notifications
@@ -482,7 +480,18 @@ async function handleCloudWatchAlarm(alarm: CloudWatchAlarmMessage) {
 				`⏭️ CRITICAL alarm but suspend skipped for ${configurationSet}: ${dbConfirmation.reason}`,
 			);
 		}
-		if (dbConfirmation?.shouldSuspend) {
+		if (
+			dbConfirmation?.shouldSuspend &&
+			tenantOwner.tenantStatus !== "active"
+		) {
+			console.log(
+				`⏭️ CRITICAL alarm but tenant is already ${tenantOwner.tenantStatus}: ${configurationSet}`,
+			);
+		}
+		if (
+			dbConfirmation?.shouldSuspend &&
+			tenantOwner.tenantStatus === "active"
+		) {
 			console.log(
 				`🚨 CRITICAL alert - Auto-suspending sending for: ${configurationSet} (${dbConfirmation.reason})`,
 			);
@@ -843,35 +852,28 @@ async function confirmSuspendWithDbRates(
 	const rates = await getTenantRates(configurationSet);
 	if (!rates) {
 		return {
-			shouldSuspend: true,
-			reason: "could not compute 24h rates, deferring to CloudWatch",
+			shouldSuspend: false,
+			reason: "could not compute 24h rates; alerting without enforcement",
 		};
 	}
 
-	const minSends = AUTO_SUSPEND_MIN_SENDS[alertType];
-	const threshold =
-		rates.reputationPolicy === "standard"
-			? STANDARD_RATE_THRESHOLDS[alertType].critical
-			: RATE_THRESHOLDS[alertType].critical;
 	const rate = alertType === "bounce" ? rates.bounceRate : rates.complaintRate;
 	const events =
 		alertType === "bounce" ? rates.totalBounces : rates.totalComplaints;
+	const criticalAlert = checkRateThresholds(rates).find(
+		(alert) =>
+			alert.alertType === alertType && alert.severity === "critical",
+	);
 
-	if (rates.totalSends < minSends) {
+	if (!criticalAlert) {
 		return {
 			shouldSuspend: false,
-			reason: `low volume: ${rates.totalSends} sends in 24h (< ${minSends} minimum), ${events} ${alertType}s`,
-		};
-	}
-	if (rate < threshold) {
-		return {
-			shouldSuspend: false,
-			reason: `24h ${alertType} rate ${(rate * 100).toFixed(2)}% below critical threshold ${(threshold * 100).toFixed(2)}% (${events}/${rates.totalSends})`,
+			reason: `24h ${alertType} metrics did not meet critical rate, volume, and event-count gates (${events}/${rates.totalSends}, ${(rate * 100).toFixed(2)}%)`,
 		};
 	}
 	return {
 		shouldSuspend: true,
-		reason: `24h ${alertType} rate ${(rate * 100).toFixed(2)}% >= ${(threshold * 100).toFixed(2)}% over ${rates.totalSends} sends`,
+		reason: `24h ${alertType} rate ${(rate * 100).toFixed(2)}% >= ${(criticalAlert.threshold * 100).toFixed(2)}% over ${rates.totalSends} recipient attempts`,
 	};
 }
 
@@ -895,6 +897,12 @@ async function handleRateAlert(alert: RateAlert, configSetName: string) {
 
 		const rateDisplay = `${(alert.currentRate * 100).toFixed(2)}%`;
 		const thresholdDisplay = `${(alert.threshold * 100).toFixed(2)}%`;
+		if (alert.severity === "critical" && tenantOwner.tenantStatus !== "active") {
+			console.log(
+				`⏭️ handleRateAlert - Tenant already ${tenantOwner.tenantStatus}; skipping repeat enforcement`,
+			);
+			return;
+		}
 
 		// Send Slack notification
 		await sendAdminAlert({

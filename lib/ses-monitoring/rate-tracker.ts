@@ -7,7 +7,7 @@
  * Cost savings: ~$165/month (eliminated 1,652 CloudWatch alarms)
  */
 
-import { and, count, eq, gte, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { emailDeliveryEvents, sentEmails, sesTenants } from "@/lib/db/schema";
 import {
@@ -19,7 +19,7 @@ import {
 export const RATE_THRESHOLDS = {
 	bounce: {
 		warning: 0.02, // 2.0%
-		critical: 0.025, // 2.5%
+		critical: 0.05, // 5.0%
 	},
 	complaint: {
 		warning: 0.0008, // 0.08%
@@ -41,6 +41,24 @@ export const STANDARD_RATE_THRESHOLDS = {
 export const AUTO_SUSPEND_MIN_SENDS = {
 	bounce: 200,
 	complaint: 1000,
+} as const;
+
+export const AUTO_SUSPEND_MIN_EVENTS = {
+	bounce: 5,
+	complaint: 2,
+} as const;
+
+const EXTREME_ABUSE_THRESHOLDS = {
+	bounce: {
+		minimumSends: 50,
+		minimumEvents: 10,
+		rate: 0.15,
+	},
+	complaint: {
+		minimumSends: 100,
+		minimumEvents: 2,
+		rate: 0.01,
+	},
 } as const;
 
 export const WARNING_MINIMUMS = {
@@ -191,6 +209,7 @@ export async function getTenantRates(
 			.select({
 				id: emailDeliveryEvents.id,
 				eventType: emailDeliveryEvents.eventType,
+				bounceType: emailDeliveryEvents.bounceType,
 				originalMessageId: emailDeliveryEvents.originalMessageId,
 				dsnEmailId: emailDeliveryEvents.dsnEmailId,
 				failedRecipient: emailDeliveryEvents.failedRecipient,
@@ -206,9 +225,15 @@ export async function getTenantRates(
 
 		const deliveryEventCounts = countUniqueDeliveryEvents(deliveryEvents);
 
-		// Count total sends in the window (from sentEmails table)
+		// SES reputation events are per recipient, so the denominator must be too.
 		const [sendResult] = await db
-			.select({ count: count() })
+			.select({
+				count: sql<number>`coalesce(sum(
+					jsonb_array_length(${sentEmails.to}::jsonb) +
+					coalesce(jsonb_array_length(${sentEmails.cc}::jsonb), 0) +
+					coalesce(jsonb_array_length(${sentEmails.bcc}::jsonb), 0)
+				), 0)`,
+			})
 			.from(sentEmails)
 			.where(
 				and(
@@ -220,7 +245,7 @@ export async function getTenantRates(
 
 		const totalBounces = deliveryEventCounts.bounces;
 		const totalComplaints = deliveryEventCounts.complaints;
-		const totalSends = sendResult?.count || 0;
+		const totalSends = Number(sendResult?.count || 0);
 
 		// Calculate rates (avoid division by zero)
 		const bounceRate = totalSends > 0 ? totalBounces / totalSends : 0;
@@ -254,9 +279,18 @@ export function checkRateThresholds(rates: TenantRates): RateAlert[] {
 			? STANDARD_RATE_THRESHOLDS
 			: RATE_THRESHOLDS;
 	const canAutoSuspendForBounce =
-		rates.totalSends >= AUTO_SUSPEND_MIN_SENDS.bounce;
+		(rates.totalSends >= AUTO_SUSPEND_MIN_SENDS.bounce &&
+			rates.totalBounces >= AUTO_SUSPEND_MIN_EVENTS.bounce) ||
+		(rates.totalSends >= EXTREME_ABUSE_THRESHOLDS.bounce.minimumSends &&
+			rates.totalBounces >= EXTREME_ABUSE_THRESHOLDS.bounce.minimumEvents &&
+			rates.bounceRate >= EXTREME_ABUSE_THRESHOLDS.bounce.rate);
 	const canAutoSuspendForComplaint =
-		rates.totalSends >= AUTO_SUSPEND_MIN_SENDS.complaint;
+		(rates.totalSends >= AUTO_SUSPEND_MIN_SENDS.complaint &&
+			rates.totalComplaints >= AUTO_SUSPEND_MIN_EVENTS.complaint) ||
+		(rates.totalSends >= EXTREME_ABUSE_THRESHOLDS.complaint.minimumSends &&
+			rates.totalComplaints >=
+				EXTREME_ABUSE_THRESHOLDS.complaint.minimumEvents &&
+			rates.complaintRate >= EXTREME_ABUSE_THRESHOLDS.complaint.rate);
 	const canWarnForBounce =
 		rates.totalSends >= WARNING_MINIMUMS.bounce.sends ||
 		rates.totalBounces >= WARNING_MINIMUMS.bounce.events;

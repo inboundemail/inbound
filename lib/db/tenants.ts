@@ -13,6 +13,7 @@ export async function getTenantOwnerByConfigurationSet(configurationSetName: str
   tenantId: string;
   tenantName: string;
   awsTenantId: string;
+  tenantStatus: string;
 } | null> {
   try {
     console.log(`🔍 getTenantOwnerByConfigurationSet - Looking up owner for configuration set: ${configurationSetName}`);
@@ -29,6 +30,7 @@ export async function getTenantOwnerByConfigurationSet(configurationSetName: str
         tenantId: sesTenants.id,
         tenantName: sesTenants.tenantName,
         awsTenantId: sesTenants.awsTenantId,
+        tenantStatus: sesTenants.status,
       })
       .from(sesTenants)
       .innerJoin(user, eq(sesTenants.userId, user.id))
@@ -45,6 +47,7 @@ export async function getTenantOwnerByConfigurationSet(configurationSetName: str
           tenantId: sesTenants.id,
           tenantName: sesTenants.tenantName,
           awsTenantId: sesTenants.awsTenantId,
+          tenantStatus: sesTenants.status,
         })
         .from(sesTenants)
         .innerJoin(user, eq(sesTenants.userId, user.id))
