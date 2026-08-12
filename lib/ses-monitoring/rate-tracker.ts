@@ -7,7 +7,7 @@
  * Cost savings: ~$165/month (eliminated 1,652 CloudWatch alarms)
  */
 
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { emailDeliveryEvents, sentEmails, sesTenants } from "@/lib/db/schema";
 import {
@@ -195,7 +195,12 @@ export async function getTenantRates(
 				reputationPolicy: sesTenants.reputationPolicy,
 			})
 			.from(sesTenants)
-			.where(eq(sesTenants.configurationSetName, configurationSetName))
+			.where(
+				or(
+					eq(sesTenants.configurationSetName, configurationSetName),
+					eq(sesTenants.awsTenantId, configurationSetName),
+				),
+			)
 			.limit(1);
 
 		if (!tenant) {
@@ -226,26 +231,37 @@ export async function getTenantRates(
 		const deliveryEventCounts = countUniqueDeliveryEvents(deliveryEvents);
 
 		// SES reputation events are per recipient, so the denominator must be too.
-		const [sendResult] = await db
-			.select({
-				count: sql<number>`coalesce(sum(
-					jsonb_array_length(${sentEmails.to}::jsonb) +
-					coalesce(jsonb_array_length(${sentEmails.cc}::jsonb), 0) +
-					coalesce(jsonb_array_length(${sentEmails.bcc}::jsonb), 0)
-				), 0)`,
-			})
-			.from(sentEmails)
-			.where(
-				and(
-					eq(sentEmails.userId, tenant.userId),
-					eq(sentEmails.status, "sent"),
-					gte(sentEmails.sentAt, windowStart),
-				),
-			);
-
 		const totalBounces = deliveryEventCounts.bounces;
 		const totalComplaints = deliveryEventCounts.complaints;
-		const totalSends = Number(sendResult?.count || 0);
+		const sendFilter = and(
+			eq(sentEmails.userId, tenant.userId),
+			eq(sentEmails.status, "sent"),
+			gte(sentEmails.sentAt, windowStart),
+		);
+		let totalSends: number;
+		try {
+			const [sendResult] = await db
+				.select({
+					count: sql<number>`coalesce(sum(
+						jsonb_array_length(${sentEmails.to}::jsonb) +
+						coalesce(jsonb_array_length(${sentEmails.cc}::jsonb), 0) +
+						coalesce(jsonb_array_length(${sentEmails.bcc}::jsonb), 0)
+					), 0)`,
+				})
+				.from(sentEmails)
+				.where(sendFilter);
+			totalSends = Number(sendResult?.count || 0);
+		} catch (error) {
+			console.error(
+				"Failed to count recipient attempts; using sent-message count:",
+				error,
+			);
+			const [fallbackResult] = await db
+				.select({ count: count() })
+				.from(sentEmails)
+				.where(sendFilter);
+			totalSends = Number(fallbackResult?.count || 0);
+		}
 
 		// Calculate rates (avoid division by zero)
 		const bounceRate = totalSends > 0 ? totalBounces / totalSends : 0;

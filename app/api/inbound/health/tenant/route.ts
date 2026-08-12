@@ -471,6 +471,9 @@ async function handleCloudWatchAlarm(alarm: CloudWatchAlarmMessage) {
 		// Auto-suspend sending on CRITICAL alerts, only when the 24h database
 		// window confirms the rate with sufficient send volume
 		let sendingSuspended = false;
+		if (tenantOwner.tenantStatus === "suspended") {
+			sendingSuspended = true;
+		}
 		const dbConfirmation =
 			alertInfo.severity === "critical"
 				? await confirmSuspendWithDbRates(configurationSet, alertInfo.alertType)
@@ -482,15 +485,15 @@ async function handleCloudWatchAlarm(alarm: CloudWatchAlarmMessage) {
 		}
 		if (
 			dbConfirmation?.shouldSuspend &&
-			tenantOwner.tenantStatus !== "active"
+			tenantOwner.tenantStatus === "suspended"
 		) {
 			console.log(
-				`⏭️ CRITICAL alarm but tenant is already ${tenantOwner.tenantStatus}: ${configurationSet}`,
+				`⏭️ CRITICAL alarm but tenant is already suspended: ${configurationSet}`,
 			);
 		}
 		if (
 			dbConfirmation?.shouldSuspend &&
-			tenantOwner.tenantStatus === "active"
+			tenantOwner.tenantStatus !== "suspended"
 		) {
 			console.log(
 				`🚨 CRITICAL alert - Auto-suspending sending for: ${configurationSet} (${dbConfirmation.reason})`,
@@ -897,9 +900,9 @@ async function handleRateAlert(alert: RateAlert, configSetName: string) {
 
 		const rateDisplay = `${(alert.currentRate * 100).toFixed(2)}%`;
 		const thresholdDisplay = `${(alert.threshold * 100).toFixed(2)}%`;
-		if (alert.severity === "critical" && tenantOwner.tenantStatus !== "active") {
+		if (alert.severity === "critical" && tenantOwner.tenantStatus === "suspended") {
 			console.log(
-				`⏭️ handleRateAlert - Tenant already ${tenantOwner.tenantStatus}; skipping repeat enforcement`,
+				"⏭️ handleRateAlert - Tenant already suspended; skipping repeat enforcement",
 			);
 			return;
 		}
