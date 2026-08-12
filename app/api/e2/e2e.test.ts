@@ -721,6 +721,7 @@ async function startLocalServer(): Promise<void> {
 			env: {
 				...process.env,
 				PORT: String(LOCAL_PORT),
+				INBOUND_E2E_TEST_MODE: "true",
 			},
 			stdio: SHOW_LOCAL_SERVER_LOGS ? "inherit" : "ignore",
 		},

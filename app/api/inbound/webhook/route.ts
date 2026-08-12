@@ -139,6 +139,10 @@ async function checkAndTrackInboundTrigger(
 		return { allowed: true };
 	}
 
+	if (process.env.INBOUND_E2E_TEST_MODE === "true") {
+		return { allowed: true };
+	}
+
 	try {
 		// Check if user can use inbound triggers
 		const { data: triggerCheck, error: triggerCheckError } = await autumn.check(
