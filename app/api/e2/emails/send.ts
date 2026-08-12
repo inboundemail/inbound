@@ -615,6 +615,7 @@ export const sendEmail = new Elysia().post(
 				.set({
 					status: SENT_EMAIL_STATUS.SENT,
 					messageId,
+					sesMessageId: messageId,
 					providerResponse: JSON.stringify(sesResponse),
 					sentAt: new Date(),
 					updatedAt: new Date(),

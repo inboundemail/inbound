@@ -482,6 +482,7 @@ async function handleScheduledEmail(payload: QStashPayload) {
 				.set({
 					status: SENT_EMAIL_STATUS.SENT,
 					messageId: messageId,
+					sesMessageId: messageId,
 					providerResponse: JSON.stringify(sesResponse),
 					sentAt: new Date(),
 					updatedAt: new Date(),
@@ -849,6 +850,7 @@ async function handleBatchEmail(
 			.set({
 				status: SENT_EMAIL_STATUS.SENT,
 				messageId: messageId,
+				sesMessageId: messageId,
 				providerResponse: JSON.stringify(sesResponse),
 				sentAt: new Date(),
 				updatedAt: new Date(),
