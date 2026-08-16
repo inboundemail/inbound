@@ -1,11 +1,12 @@
 import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 import { Receiver } from "@upstash/qstash";
 import { waitUntil } from "@vercel/functions";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, lt } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { type NextRequest, NextResponse } from "next/server";
+
+import { refreshEmailBatchStatus } from "@/app/api/e2/emails/batch-state";
 import { buildSentEmailTags } from "@/app/api/e2/helper/ses-email-tags";
-import type { PostEmailsRequest } from "@/lib/api-types";
 import {
 	getAgentIdentityArn,
 	getTenantSendingInfoForDomainOrParent,
@@ -13,6 +14,8 @@ import {
 } from "@/lib/aws-ses/identity-arn-helper";
 import { db } from "@/lib/db";
 import {
+	EMAIL_BATCH_STATUS,
+	emailBatches,
 	SCHEDULED_EMAIL_STATUS,
 	SENT_EMAIL_STATUS,
 	scheduledEmails,
@@ -23,29 +26,18 @@ import {
 	canUserSendFromEmail,
 	extractEmailAddress,
 } from "@/lib/email-management/agent-email-helper";
+import { checkRecipientsAgainstBlocklist } from "@/lib/email-management/email-blocking";
 import { evaluateSending } from "@/lib/email-management/email-evaluation";
 import { enforceOutboundSendGuard } from "@/lib/email-management/outbound-send-guard";
 import { checkSendingSpike } from "@/lib/email-management/sending-spike-detector";
 import { buildRawEmailMessage } from "../../e2/helper/email-builder";
 
-/**
- * POST /api/webhooks/send-email
- * QStash webhook for processing scheduled emails
- *
- * This endpoint is called by QStash when a scheduled email is due to be sent.
- *
- * Security: Protected by QStash signature verification
- * Has tests? ❌ (TODO)
- * Has logging? ✅
- * Has types? ✅
- */
-
-// Initialize SES client
 const awsRegion = process.env.AWS_REGION || "us-east-2";
 const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
 const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
 
 let sesClient: SESv2Client | null = null;
+let batchSesClient: SESv2Client | null = null;
 
 if (awsAccessKeyId && awsSecretAccessKey) {
 	sesClient = new SESv2Client({
@@ -55,47 +47,140 @@ if (awsAccessKeyId && awsSecretAccessKey) {
 			secretAccessKey: awsSecretAccessKey,
 		},
 	});
+	batchSesClient = new SESv2Client({
+		region: awsRegion,
+		credentials: {
+			accessKeyId: awsAccessKeyId,
+			secretAccessKey: awsSecretAccessKey,
+		},
+		maxAttempts: 1,
+	});
 } else {
 	console.warn(
 		"⚠️ AWS credentials not configured. Scheduled email processing will not work.",
 	);
 }
 
-// Initialize QStash receiver for signature verification
 const qstashReceiver = new Receiver({
 	currentSigningKey: process.env.QSTASH_CURRENT_SIGNING_KEY!,
 	nextSigningKey: process.env.QSTASH_NEXT_SIGNING_KEY!,
 });
 
+const PROCESSING_LEASE_TIMEOUT_MS = 10 * 60 * 1000;
+
 interface QStashPayload {
 	type: "scheduled" | "batch";
-	scheduledEmailId?: string; // for scheduled
-	emailId?: string; // for batch
-	userId?: string; // for batch
-	emailData?: PostEmailsRequest; // for batch
-	batchId?: string; // for batch
-	batchIndex?: number; // for batch
+	scheduledEmailId?: string;
+	emailId?: string;
+	userId?: string;
+	batchId?: string;
+	batchIndex?: number;
 }
 
 interface StoredAttachment {
 	filename?: string;
 	contentType?: string;
 	content_type?: string;
-	[key: string]: unknown;
+	content?: string;
+	size?: number;
+	content_id?: string;
+}
+
+function parseJsonArraySafe<T>(jsonString: string | null): T[] {
+	if (!jsonString) return [];
+	try {
+		const parsed: unknown = JSON.parse(jsonString);
+		return Array.isArray(parsed) ? (parsed as T[]) : [];
+	} catch {
+		return [];
+	}
+}
+
+function parseJsonObjectSafe<T extends Record<string, unknown>>(
+	jsonString: string | null,
+): T | undefined {
+	if (!jsonString) return undefined;
+	try {
+		const parsed: unknown = JSON.parse(jsonString);
+		return typeof parsed === "object" &&
+			parsed !== null &&
+			!Array.isArray(parsed)
+			? (parsed as T)
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function isSesRetryableError(error: unknown): boolean {
+	if (!(error instanceof Error)) return false;
+
+	const errorName = (error as { name?: string }).name ?? "";
+	const errorCode = (error as { $metadata?: { httpStatusCode?: number } })
+		.$metadata?.httpStatusCode;
+
+	if (errorCode === 429 || errorCode === 503) return true;
+
+	const retryableNames = [
+		"Throttling",
+		"ThrottlingException",
+		"TooManyRequestsException",
+		"ServiceUnavailableException",
+		"ServiceUnavailable",
+	];
+
+	return retryableNames.some(
+		(name) => errorName.includes(name) || error.message.includes(name),
+	);
+}
+
+function getContentTypeForAttachment(
+	att: StoredAttachment,
+	index: number,
+): string {
+	if (att.contentType) return att.contentType;
+	if (att.content_type) return att.content_type;
+
+	console.log(`⚠️ Attachment ${index + 1} missing contentType, using fallback`);
+	const filename = att.filename || "unknown";
+	const ext = filename.toLowerCase().split(".").pop();
+
+	const contentTypeMap: Record<string, string> = {
+		pdf: "application/pdf",
+		jpg: "image/jpeg",
+		jpeg: "image/jpeg",
+		png: "image/png",
+		gif: "image/gif",
+		txt: "text/plain",
+		html: "text/html",
+		json: "application/json",
+		zip: "application/zip",
+		doc: "application/msword",
+		docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		xls: "application/vnd.ms-excel",
+		xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	};
+
+	return contentTypeMap[ext || ""] || "application/octet-stream";
+}
+
+function generateDeterministicMessageId(
+	emailId: string,
+	fromDomain: string,
+): string {
+	return `<${emailId}@${fromDomain}>`;
 }
 
 export async function POST(request: NextRequest) {
 	console.log("📨 QStash Webhook - Received scheduled email request");
 
 	try {
-		// Verify QStash signature
 		const signature = request.headers.get("upstash-signature");
 		if (!signature) {
 			console.error("❌ QStash Webhook - Missing signature");
 			return NextResponse.json({ error: "Missing signature" }, { status: 401 });
 		}
 
-		// Get raw body for signature verification
 		const body = await request.text();
 
 		try {
@@ -109,12 +194,10 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
 		}
 
-		// Parse the payload
 		const payload: QStashPayload = JSON.parse(body);
 
-		// Route to appropriate handler based on type
 		if (payload.type === "batch") {
-			return handleBatchEmail(request, payload, body);
+			return handleBatchEmail(payload);
 		} else if (payload.type === "scheduled") {
 			return handleScheduledEmail(payload);
 		} else {
@@ -136,7 +219,6 @@ export async function POST(request: NextRequest) {
 	}
 }
 
-// Handler for scheduled emails
 async function handleScheduledEmail(payload: QStashPayload) {
 	if (!payload.scheduledEmailId) {
 		console.error("❌ QStash Webhook - Missing scheduledEmailId");
@@ -150,7 +232,6 @@ async function handleScheduledEmail(payload: QStashPayload) {
 	console.log("📧 Processing scheduled email:", scheduledEmailId);
 
 	try {
-		// Check if SES is configured
 		if (!sesClient) {
 			console.error("❌ AWS SES not configured");
 			return NextResponse.json(
@@ -161,7 +242,6 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			);
 		}
 
-		// Fetch the scheduled email from database
 		const [scheduledEmail] = await db
 			.select()
 			.from(scheduledEmails)
@@ -170,14 +250,12 @@ async function handleScheduledEmail(payload: QStashPayload) {
 
 		if (!scheduledEmail) {
 			console.error("❌ Scheduled email not found:", scheduledEmailId);
-			// Return 400 so QStash doesn't retry (email was deleted/doesn't exist)
 			return NextResponse.json(
 				{ error: "Scheduled email not found" },
 				{ status: 400 },
 			);
 		}
 
-		// Check if already processed
 		if (scheduledEmail.status === SCHEDULED_EMAIL_STATUS.SENT) {
 			console.log("✅ Email already sent, skipping:", scheduledEmailId);
 			return NextResponse.json(
@@ -209,7 +287,6 @@ async function handleScheduledEmail(payload: QStashPayload) {
 				`🚫 Blocking scheduled email for user ${scheduledEmail.userId}: ${scheduledGuard.reasonCode}`,
 			);
 
-			// Update scheduled email status to failed
 			await db
 				.update(scheduledEmails)
 				.set({
@@ -219,7 +296,6 @@ async function handleScheduledEmail(payload: QStashPayload) {
 				})
 				.where(eq(scheduledEmails.id, scheduledEmailId));
 
-			// Return 200 so QStash doesn't retry - this is intentional blocking
 			return NextResponse.json(
 				{
 					error: scheduledGuard.error || "Email blocked",
@@ -229,7 +305,6 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			);
 		}
 
-		// Mark as processing to prevent duplicate processing
 		await db
 			.update(scheduledEmails)
 			.set({
@@ -239,7 +314,6 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			})
 			.where(eq(scheduledEmails.id, scheduledEmailId));
 
-		// Parse email data
 		const toAddresses = JSON.parse(scheduledEmail.toAddresses);
 		const ccAddresses = scheduledEmail.ccAddresses
 			? JSON.parse(scheduledEmail.ccAddresses)
@@ -257,74 +331,13 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			? JSON.parse(scheduledEmail.attachments)
 			: [];
 
-		// Validate and fix attachment data - ensure contentType is set
 		const attachments = rawAttachments.map(
-			(att: StoredAttachment, index: number) => {
-				if (!att.contentType && !att.content_type) {
-					console.log(
-						`⚠️ Attachment ${index + 1} missing contentType, using fallback`,
-					);
-					const filename = att.filename || "unknown";
-					const ext = filename.toLowerCase().split(".").pop();
-					let contentType = "application/octet-stream";
-
-					// Common file type mappings
-					switch (ext) {
-						case "pdf":
-							contentType = "application/pdf";
-							break;
-						case "jpg":
-						case "jpeg":
-							contentType = "image/jpeg";
-							break;
-						case "png":
-							contentType = "image/png";
-							break;
-						case "gif":
-							contentType = "image/gif";
-							break;
-						case "txt":
-							contentType = "text/plain";
-							break;
-						case "html":
-							contentType = "text/html";
-							break;
-						case "json":
-							contentType = "application/json";
-							break;
-						case "zip":
-							contentType = "application/zip";
-							break;
-						case "doc":
-							contentType = "application/msword";
-							break;
-						case "docx":
-							contentType =
-								"application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-							break;
-						case "xls":
-							contentType = "application/vnd.ms-excel";
-							break;
-						case "xlsx":
-							contentType =
-								"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-							break;
-					}
-
-					return {
-						...att,
-						contentType: contentType,
-					};
-				}
-
-				return {
-					...att,
-					contentType: att.contentType || att.content_type,
-				};
-			},
+			(att: StoredAttachment, index: number) => ({
+				...att,
+				contentType: getContentTypeForAttachment(att, index),
+			}),
 		);
 
-		// Create sent email record first (for tracking)
 		const sentEmailId = nanoid();
 		const sentEmailData = {
 			id: sentEmailId,
@@ -354,7 +367,6 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			.values(sentEmailData)
 			.returning();
 
-		// Build raw email message
 		console.log("📧 Building raw email message for scheduled email");
 		const rawMessage = buildRawEmailMessage({
 			from: scheduledEmail.fromAddress,
@@ -370,7 +382,6 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			date: new Date(),
 		});
 
-		// Get the tenant sending info (identity ARN, configuration set, and tenant name) for tenant-level tracking
 		const fromDomain = scheduledEmail.fromDomain;
 
 		let tenantSendingInfo: TenantSendingInfo = {
@@ -425,9 +436,6 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			);
 		}
 
-		// Send via AWS SES using SESv2 SendEmailCommand with TenantName
-		// Per AWS docs: https://docs.aws.amazon.com/ses/latest/dg/tenants.html
-		// Use full fromAddress (with display name) for proper sender name display
 		const rawCommand = new SendEmailCommand({
 			FromEmailAddress: scheduledEmail.fromAddress,
 			...(tenantSendingInfo.identityArn && {
@@ -463,9 +471,7 @@ async function handleScheduledEmail(payload: QStashPayload) {
 
 		console.log("✅ Scheduled email sent successfully via SES:", messageId);
 
-		// Update both records with success
 		await Promise.all([
-			// Update scheduled email
 			db
 				.update(scheduledEmails)
 				.set({
@@ -476,7 +482,6 @@ async function handleScheduledEmail(payload: QStashPayload) {
 				})
 				.where(eq(scheduledEmails.id, scheduledEmailId)),
 
-			// Update sent email
 			db
 				.update(sentEmails)
 				.set({
@@ -490,7 +495,6 @@ async function handleScheduledEmail(payload: QStashPayload) {
 				.where(eq(sentEmails.id, createdSentEmail.id)),
 		]);
 
-		// Evaluate email for security risks (non-blocking)
 		waitUntil(
 			evaluateSending(createdSentEmail.id, scheduledEmail.userId, {
 				from: scheduledEmail.fromAddress,
@@ -501,7 +505,6 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			}),
 		);
 
-		// Check for sending spikes (non-blocking)
 		waitUntil(checkSendingSpike(scheduledEmail.userId));
 
 		console.log("✅ Scheduled email processed successfully:", scheduledEmailId);
@@ -523,7 +526,6 @@ async function handleScheduledEmail(payload: QStashPayload) {
 		const errorMessage =
 			error instanceof Error ? error.message : "Unknown error";
 
-		// Try to update the scheduled email with error info
 		try {
 			if (payload.scheduledEmailId) {
 				await db
@@ -538,7 +540,6 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			console.error("❌ Failed to update error in database:", updateError);
 		}
 
-		// Return 500 so QStash will retry
 		return NextResponse.json(
 			{
 				error: "Failed to process scheduled email",
@@ -549,73 +550,233 @@ async function handleScheduledEmail(payload: QStashPayload) {
 	}
 }
 
-// Handler for batch emails
-async function handleBatchEmail(
-	_request: NextRequest,
-	payload: QStashPayload,
-	_body: string,
-) {
-	if (!payload.emailId || !payload.userId || !payload.emailData) {
-		console.error("❌ QStash Webhook - Missing required batch fields");
+async function handleBatchEmail(payload: QStashPayload) {
+	const { emailId, userId, batchId, batchIndex } = payload;
+
+	if (
+		!emailId ||
+		!userId ||
+		!batchId ||
+		batchIndex === undefined ||
+		batchIndex === null
+	) {
+		console.error("❌ QStash Webhook - Missing required batch fields", {
+			emailId,
+			userId,
+			batchId,
+			batchIndex,
+		});
 		return NextResponse.json(
-			{ error: "Missing required batch fields" },
+			{
+				error:
+					"Missing required batch fields: emailId, userId, batchId, batchIndex",
+			},
 			{ status: 400 },
 		);
 	}
 
-	const { emailId, userId, batchId, batchIndex } = payload;
 	console.log("📧 Processing batch email:", { emailId, batchId, batchIndex });
 
-	// Check if SES is configured
-	if (!sesClient) {
+	if (!batchSesClient) {
 		console.error("❌ AWS SES not configured");
 		return NextResponse.json(
-			{
-				error: "AWS SES not configured",
-			},
+			{ error: "AWS SES not configured" },
 			{ status: 500 },
 		);
 	}
 
-	// Fetch the pending sent email record
 	const [sentEmail] = await db
 		.select()
 		.from(sentEmails)
-		.where(eq(sentEmails.id, emailId))
+		.where(and(eq(sentEmails.id, emailId), eq(sentEmails.userId, userId)))
 		.limit(1);
 
 	if (!sentEmail) {
-		console.error("❌ Sent email not found:", emailId);
+		console.error("❌ Sent email not found or user mismatch:", emailId);
 		return NextResponse.json(
 			{ error: "Sent email not found" },
 			{ status: 400 },
 		);
 	}
 
-	const effectiveUserId = sentEmail.userId;
-	if (effectiveUserId !== userId) {
-		console.error("❌ QStash Webhook - Payload userId mismatch", {
+	if (sentEmail.batchId !== batchId || sentEmail.batchIndex !== batchIndex) {
+		console.error("❌ QStash Webhook - Batch metadata mismatch", {
 			emailId,
-			payloadUserId: userId,
-			recordUserId: effectiveUserId,
+			expectedBatchId: batchId,
+			actualBatchId: sentEmail.batchId,
+			expectedBatchIndex: batchIndex,
+			actualBatchIndex: sentEmail.batchIndex,
 		});
 		return NextResponse.json(
-			{ error: "Invalid batch payload user association" },
+			{ error: "Batch metadata mismatch" },
 			{ status: 400 },
 		);
 	}
 
-	// Check if already processed
-	if (sentEmail.status === SENT_EMAIL_STATUS.SENT) {
-		console.log("✅ Email already sent, skipping:", emailId);
+	const [batch] = await db
+		.select({
+			id: emailBatches.id,
+			status: emailBatches.status,
+		})
+		.from(emailBatches)
+		.where(and(eq(emailBatches.id, batchId), eq(emailBatches.userId, userId)))
+		.limit(1);
+
+	if (!batch) {
+		console.error("❌ Batch not found or user mismatch:", batchId);
+		return NextResponse.json({ error: "Batch not found" }, { status: 400 });
+	}
+
+	if (batch.status === EMAIL_BATCH_STATUS.CANCELLED) {
+		if (sentEmail.status === SENT_EMAIL_STATUS.PENDING) {
+			await db
+				.update(sentEmails)
+				.set({
+					status: SENT_EMAIL_STATUS.CANCELLED,
+					updatedAt: new Date(),
+				})
+				.where(
+					and(
+						eq(sentEmails.id, emailId),
+						eq(sentEmails.userId, userId),
+						eq(sentEmails.batchId, batchId),
+						eq(sentEmails.status, SENT_EMAIL_STATUS.PENDING),
+					),
+				);
+			waitUntil(refreshEmailBatchStatus(batchId, userId).catch(console.error));
+		}
+		console.log("⏭️ Parent batch cancelled, skipping:", emailId);
 		return NextResponse.json(
-			{ message: "Email already sent" },
+			{ message: "Parent batch cancelled" },
 			{ status: 200 },
 		);
 	}
 
-	if (sentEmail.status === SENT_EMAIL_STATUS.FAILED) {
-		console.log("⚠️ Email previously failed, retrying:", emailId);
+	const currentStatus = sentEmail.status;
+
+	if (
+		currentStatus === SENT_EMAIL_STATUS.SENT ||
+		currentStatus === SENT_EMAIL_STATUS.FAILED ||
+		currentStatus === SENT_EMAIL_STATUS.CANCELLED ||
+		currentStatus === SENT_EMAIL_STATUS.PROVIDER_UNKNOWN
+	) {
+		console.log(`⏭️ Email already ${currentStatus}, skipping:`, emailId);
+		return NextResponse.json(
+			{ message: `Email already ${currentStatus}` },
+			{ status: 200 },
+		);
+	}
+
+	const processingToken = nanoid();
+	const now = new Date();
+	let claimedEmail: { id: string } | undefined;
+
+	if (currentStatus === SENT_EMAIL_STATUS.PENDING) {
+		const [claimed] = await db
+			.update(sentEmails)
+			.set({
+				status: SENT_EMAIL_STATUS.PROCESSING,
+				processingToken: processingToken,
+				processingStartedAt: now,
+				providerSubmittedAt: null,
+				failureReason: null,
+				updatedAt: now,
+			})
+			.where(
+				and(
+					eq(sentEmails.id, emailId),
+					eq(sentEmails.userId, userId),
+					eq(sentEmails.batchId, batchId),
+					eq(sentEmails.status, SENT_EMAIL_STATUS.PENDING),
+				),
+			)
+			.returning({ id: sentEmails.id });
+		claimedEmail = claimed;
+	} else if (currentStatus === SENT_EMAIL_STATUS.PROCESSING) {
+		if (sentEmail.providerSubmittedAt) {
+			console.log("⏭️ Processing with provider submitted, skipping:", emailId);
+			return NextResponse.json(
+				{ message: "Provider outcome unresolved" },
+				{ status: 200 },
+			);
+		}
+
+		const staleThreshold = new Date(
+			now.getTime() - PROCESSING_LEASE_TIMEOUT_MS,
+		);
+		if (
+			sentEmail.processingStartedAt &&
+			sentEmail.processingStartedAt > staleThreshold
+		) {
+			console.log("⏭️ Processing lease still valid, skipping:", emailId);
+			return NextResponse.json(
+				{ message: "Processing lease still valid" },
+				{ status: 200 },
+			);
+		}
+
+		console.log("🔄 Reclaiming stale processing lease:", emailId);
+		const [claimed] = await db
+			.update(sentEmails)
+			.set({
+				processingToken: processingToken,
+				processingStartedAt: now,
+				providerSubmittedAt: null,
+				failureReason: null,
+				updatedAt: now,
+			})
+			.where(
+				and(
+					eq(sentEmails.id, emailId),
+					eq(sentEmails.userId, userId),
+					eq(sentEmails.batchId, batchId),
+					eq(sentEmails.status, SENT_EMAIL_STATUS.PROCESSING),
+					isNull(sentEmails.providerSubmittedAt),
+					lt(sentEmails.processingStartedAt, staleThreshold),
+				),
+			)
+			.returning({ id: sentEmails.id });
+		claimedEmail = claimed;
+	}
+
+	if (!claimedEmail) {
+		console.log("⏭️ Lost race to claim email, skipping:", emailId);
+		return NextResponse.json(
+			{ message: "Lost race to claim email" },
+			{ status: 200 },
+		);
+	}
+
+	const [parentAfterClaim] = await db
+		.select({ status: emailBatches.status })
+		.from(emailBatches)
+		.where(and(eq(emailBatches.id, batchId), eq(emailBatches.userId, userId)))
+		.limit(1);
+
+	if (parentAfterClaim?.status === EMAIL_BATCH_STATUS.CANCELLED) {
+		console.log("⏭️ Parent cancelled after claim, reverting:", emailId);
+		await db
+			.update(sentEmails)
+			.set({
+				status: SENT_EMAIL_STATUS.CANCELLED,
+				processingToken: null,
+				processingStartedAt: null,
+				updatedAt: new Date(),
+			})
+			.where(
+				and(
+					eq(sentEmails.id, emailId),
+					eq(sentEmails.userId, userId),
+					eq(sentEmails.batchId, batchId),
+					eq(sentEmails.status, SENT_EMAIL_STATUS.PROCESSING),
+					eq(sentEmails.processingToken, processingToken),
+				),
+			);
+		waitUntil(refreshEmailBatchStatus(batchId, userId).catch(console.error));
+		return NextResponse.json(
+			{ message: "Parent batch cancelled after claim" },
+			{ status: 200 },
+		);
 	}
 
 	const batchFromAddress = extractEmailAddress(sentEmail.from);
@@ -623,27 +784,64 @@ async function handleBatchEmail(
 		sentEmail.from,
 	);
 	const batchGuard = await enforceOutboundSendGuard({
-		userId: effectiveUserId,
+		userId,
 		fromAddress: batchFromAddress,
 		fromDomain: sentEmail.fromDomain,
 		isAgentEmail: batchIsAgentEmail,
 	});
+
 	if (!batchGuard.allowed) {
 		console.log(
-			`🚫 Blocking batch email for user ${effectiveUserId}: ${batchGuard.reasonCode}`,
+			`🚫 Blocking batch email for user ${userId}: ${batchGuard.reasonCode}`,
 		);
 
-		// Update sent email status to failed
+		if (batchGuard.statusCode >= 500) {
+			console.log("🔄 Guard retryable error, resetting to pending:", emailId);
+			await db
+				.update(sentEmails)
+				.set({
+					status: SENT_EMAIL_STATUS.PENDING,
+					processingToken: null,
+					processingStartedAt: null,
+					providerSubmittedAt: null,
+					qstashMessageId: null,
+					updatedAt: new Date(),
+				})
+				.where(
+					and(
+						eq(sentEmails.id, emailId),
+						eq(sentEmails.userId, userId),
+						eq(sentEmails.batchId, batchId),
+						eq(sentEmails.status, SENT_EMAIL_STATUS.PROCESSING),
+						eq(sentEmails.processingToken, processingToken),
+					),
+				);
+			return NextResponse.json(
+				{ error: "Guard check temporarily unavailable" },
+				{ status: 500 },
+			);
+		}
+
 		await db
 			.update(sentEmails)
 			.set({
 				status: SENT_EMAIL_STATUS.FAILED,
 				failureReason: `Email blocked: ${batchGuard.error || "Outbound security guard"}`,
+				processingToken: null,
 				updatedAt: new Date(),
 			})
-			.where(eq(sentEmails.id, emailId));
+			.where(
+				and(
+					eq(sentEmails.id, emailId),
+					eq(sentEmails.userId, userId),
+					eq(sentEmails.batchId, batchId),
+					eq(sentEmails.status, SENT_EMAIL_STATUS.PROCESSING),
+					eq(sentEmails.processingToken, processingToken),
+				),
+			);
 
-		// Return 200 so QStash doesn't retry - this is intentional blocking
+		waitUntil(refreshEmailBatchStatus(batchId, userId).catch(console.error));
+
 		return NextResponse.json(
 			{
 				error: batchGuard.error || "Email blocked",
@@ -653,91 +851,166 @@ async function handleBatchEmail(
 		);
 	}
 
-	try {
-		// Parse email data
-		const toAddresses = JSON.parse(sentEmail.to);
-		const ccAddresses = sentEmail.cc ? JSON.parse(sentEmail.cc) : [];
-		const bccAddresses = sentEmail.bcc ? JSON.parse(sentEmail.bcc) : [];
-		const replyToAddresses = sentEmail.replyTo
-			? JSON.parse(sentEmail.replyTo)
-			: [];
-		const headers = sentEmail.headers
-			? JSON.parse(sentEmail.headers)
-			: undefined;
-		const rawAttachments = sentEmail.attachments
-			? JSON.parse(sentEmail.attachments)
-			: [];
+	const toAddresses = parseJsonArraySafe<string>(sentEmail.to);
+	const ccAddresses = parseJsonArraySafe<string>(sentEmail.cc);
+	const bccAddresses = parseJsonArraySafe<string>(sentEmail.bcc);
+	const allRecipients = [...toAddresses, ...ccAddresses, ...bccAddresses];
 
-		// Validate and fix attachment data - ensure contentType is set
-		const attachments = rawAttachments.map(
-			(att: StoredAttachment, index: number) => {
-				if (!att.contentType && !att.content_type) {
-					console.log(
-						`⚠️ Attachment ${index + 1} missing contentType, using fallback`,
-					);
-					const filename = att.filename || "unknown";
-					const ext = filename.toLowerCase().split(".").pop();
-					let contentType = "application/octet-stream";
-
-					// Common file type mappings
-					switch (ext) {
-						case "pdf":
-							contentType = "application/pdf";
-							break;
-						case "jpg":
-						case "jpeg":
-							contentType = "image/jpeg";
-							break;
-						case "png":
-							contentType = "image/png";
-							break;
-						case "gif":
-							contentType = "image/gif";
-							break;
-						case "txt":
-							contentType = "text/plain";
-							break;
-						case "html":
-							contentType = "text/html";
-							break;
-						case "json":
-							contentType = "application/json";
-							break;
-						case "zip":
-							contentType = "application/zip";
-							break;
-						case "doc":
-							contentType = "application/msword";
-							break;
-						case "docx":
-							contentType =
-								"application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-							break;
-						case "xls":
-							contentType = "application/vnd.ms-excel";
-							break;
-						case "xlsx":
-							contentType =
-								"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-							break;
-					}
-
-					return {
-						...att,
-						contentType: contentType,
-					};
-				}
-
-				return {
-					...att,
-					contentType: att.contentType || att.content_type,
-				};
-			},
+	const blocklistCheck = await checkRecipientsAgainstBlocklist(allRecipients);
+	if (blocklistCheck.hasBlockedRecipients) {
+		console.log(
+			`🚫 Blocked recipients found for batch email ${emailId}: ${blocklistCheck.blockedAddresses.join(", ")}`,
 		);
 
-		// Build raw email message
+		await db
+			.update(sentEmails)
+			.set({
+				status: SENT_EMAIL_STATUS.FAILED,
+				failureReason: `Cannot send to blocked recipient(s): ${blocklistCheck.blockedAddresses.join(", ")}`,
+				processingToken: null,
+				updatedAt: new Date(),
+			})
+			.where(
+				and(
+					eq(sentEmails.id, emailId),
+					eq(sentEmails.userId, userId),
+					eq(sentEmails.batchId, batchId),
+					eq(sentEmails.status, SENT_EMAIL_STATUS.PROCESSING),
+					eq(sentEmails.processingToken, processingToken),
+				),
+			);
+
+		waitUntil(refreshEmailBatchStatus(batchId, userId).catch(console.error));
+
+		return NextResponse.json(
+			{
+				error: `Blocked recipients: ${blocklistCheck.blockedAddresses.join(", ")}`,
+			},
+			{ status: 200 },
+		);
+	}
+
+	const { Autumn: autumn } = await import("autumn-js");
+
+	try {
+		const { data: emailCheck, error: emailCheckError } = await autumn.check({
+			customer_id: userId,
+			feature_id: "emails_sent",
+			required_balance: 1,
+		});
+
+		if (emailCheckError) {
+			console.error(
+				"❌ Autumn email check error (retryable):",
+				emailCheckError,
+			);
+			await db
+				.update(sentEmails)
+				.set({
+					status: SENT_EMAIL_STATUS.PENDING,
+					processingToken: null,
+					processingStartedAt: null,
+					providerSubmittedAt: null,
+					qstashMessageId: null,
+					updatedAt: new Date(),
+				})
+				.where(
+					and(
+						eq(sentEmails.id, emailId),
+						eq(sentEmails.userId, userId),
+						eq(sentEmails.batchId, batchId),
+						eq(sentEmails.status, SENT_EMAIL_STATUS.PROCESSING),
+						eq(sentEmails.processingToken, processingToken),
+					),
+				);
+
+			return NextResponse.json(
+				{ error: "Billing check temporarily unavailable" },
+				{ status: 500 },
+			);
+		}
+
+		if (!emailCheck.allowed) {
+			console.log("❌ Email sending quota exceeded for user:", userId);
+			await db
+				.update(sentEmails)
+				.set({
+					status: SENT_EMAIL_STATUS.FAILED,
+					failureReason: "Email sending quota exceeded",
+					processingToken: null,
+					updatedAt: new Date(),
+				})
+				.where(
+					and(
+						eq(sentEmails.id, emailId),
+						eq(sentEmails.userId, userId),
+						eq(sentEmails.batchId, batchId),
+						eq(sentEmails.status, SENT_EMAIL_STATUS.PROCESSING),
+						eq(sentEmails.processingToken, processingToken),
+					),
+				);
+
+			waitUntil(refreshEmailBatchStatus(batchId, userId).catch(console.error));
+
+			return NextResponse.json(
+				{ error: "Email sending quota exceeded" },
+				{ status: 200 },
+			);
+		}
+	} catch (autumnError) {
+		console.error("❌ Autumn check failed (retryable):", autumnError);
+		await db
+			.update(sentEmails)
+			.set({
+				status: SENT_EMAIL_STATUS.PENDING,
+				processingToken: null,
+				processingStartedAt: null,
+				providerSubmittedAt: null,
+				qstashMessageId: null,
+				updatedAt: new Date(),
+			})
+			.where(
+				and(
+					eq(sentEmails.id, emailId),
+					eq(sentEmails.userId, userId),
+					eq(sentEmails.batchId, batchId),
+					eq(sentEmails.status, SENT_EMAIL_STATUS.PROCESSING),
+					eq(sentEmails.processingToken, processingToken),
+				),
+			);
+
+		return NextResponse.json(
+			{ error: "Billing check temporarily unavailable" },
+			{ status: 500 },
+		);
+	}
+
+	let rawMessage: string;
+	let batchTenantInfo: TenantSendingInfo;
+	const deterministicMessageId = generateDeterministicMessageId(
+		emailId,
+		sentEmail.fromDomain,
+	);
+
+	try {
+		const replyToAddresses = parseJsonArraySafe<string>(sentEmail.replyTo);
+		const headers = parseJsonObjectSafe<Record<string, string>>(
+			sentEmail.headers,
+		);
+		const rawAttachments = parseJsonArraySafe<StoredAttachment>(
+			sentEmail.attachments,
+		);
+
+		const attachments = rawAttachments.map((att, index) => ({
+			...att,
+			contentType: getContentTypeForAttachment(att, index),
+			filename: att.filename || "attachment",
+			content: att.content || "",
+			size: att.size || 0,
+		}));
+
 		console.log("📧 Building raw email message for batch email");
-		const rawMessage = buildRawEmailMessage({
+		rawMessage = buildRawEmailMessage({
 			from: sentEmail.from,
 			to: toAddresses,
 			cc: ccAddresses.length > 0 ? ccAddresses : undefined,
@@ -748,13 +1021,13 @@ async function handleBatchEmail(
 			htmlBody: sentEmail.htmlBody || undefined,
 			customHeaders: headers,
 			attachments: attachments,
+			messageId: deterministicMessageId,
 			date: new Date(),
 		});
 
-		// Get the tenant sending info (identity ARN, configuration set, and tenant name) for tenant-level tracking
 		const batchFromDomain = sentEmail.fromDomain;
 
-		let batchTenantInfo: TenantSendingInfo = {
+		batchTenantInfo = {
 			identityArn: null,
 			configurationSetName: null,
 			tenantName: null,
@@ -770,7 +1043,7 @@ async function handleBatchEmail(
 				? getRootDomain(batchFromDomain)
 				: undefined;
 			batchTenantInfo = await getTenantSendingInfoForDomainOrParent(
-				effectiveUserId,
+				userId,
 				batchFromDomain,
 				batchParentDomain || undefined,
 			);
@@ -805,10 +1078,61 @@ async function handleBatchEmail(
 				"⚠️ No TenantName available - batch email will NOT appear in tenant dashboard!",
 			);
 		}
+	} catch (prepError) {
+		console.error("❌ Pre-SES preparation error (retryable):", prepError);
+		await db
+			.update(sentEmails)
+			.set({
+				status: SENT_EMAIL_STATUS.PENDING,
+				processingToken: null,
+				processingStartedAt: null,
+				providerSubmittedAt: null,
+				qstashMessageId: null,
+				updatedAt: new Date(),
+			})
+			.where(
+				and(
+					eq(sentEmails.id, emailId),
+					eq(sentEmails.userId, userId),
+					eq(sentEmails.batchId, batchId),
+					eq(sentEmails.status, SENT_EMAIL_STATUS.PROCESSING),
+					eq(sentEmails.processingToken, processingToken),
+				),
+			);
 
-		// Send via AWS SES using SESv2 SendEmailCommand with TenantName
-		// Per AWS docs: https://docs.aws.amazon.com/ses/latest/dg/tenants.html
-		// Use sentEmail.from (with display name) for proper sender name display
+		return NextResponse.json(
+			{ error: "Email preparation temporarily unavailable" },
+			{ status: 500 },
+		);
+	}
+
+	const [tokenValid] = await db
+		.update(sentEmails)
+		.set({
+			providerSubmittedAt: new Date(),
+			messageId: deterministicMessageId,
+			updatedAt: new Date(),
+		})
+		.where(
+			and(
+				eq(sentEmails.id, emailId),
+				eq(sentEmails.userId, userId),
+				eq(sentEmails.batchId, batchId),
+				eq(sentEmails.status, SENT_EMAIL_STATUS.PROCESSING),
+				eq(sentEmails.processingToken, processingToken),
+			),
+		)
+		.returning({ id: sentEmails.id });
+
+	if (!tokenValid) {
+		console.log("⏭️ Token lost before SES submission, aborting:", emailId);
+		return NextResponse.json(
+			{ message: "Token lost before submission" },
+			{ status: 200 },
+		);
+	}
+
+	try {
 		const rawCommand = new SendEmailCommand({
 			FromEmailAddress: sentEmail.from,
 			...(batchTenantInfo.identityArn && {
@@ -839,53 +1163,86 @@ async function handleBatchEmail(
 			EmailTags: buildSentEmailTags(emailId),
 		});
 
-		const sesResponse = await sesClient.send(rawCommand);
-		const messageId = sesResponse.MessageId;
+		const sesResponse = await batchSesClient.send(rawCommand);
+		const sesMessageId = sesResponse.MessageId;
 
-		console.log("✅ Batch email sent successfully via SES:", messageId);
+		console.log("✅ Batch email sent successfully via SES:", sesMessageId);
 
-		// Update sent email record with success
-		await db
+		const [updatedEmail] = await db
 			.update(sentEmails)
 			.set({
 				status: SENT_EMAIL_STATUS.SENT,
-				messageId: messageId,
-				sesMessageId: messageId,
+				sesMessageId: sesMessageId,
 				providerResponse: JSON.stringify(sesResponse),
 				sentAt: new Date(),
+				processingToken: null,
 				updatedAt: new Date(),
 			})
-			.where(eq(sentEmails.id, emailId));
+			.where(
+				and(
+					eq(sentEmails.id, emailId),
+					eq(sentEmails.userId, userId),
+					eq(sentEmails.batchId, batchId),
+					eq(sentEmails.status, SENT_EMAIL_STATUS.PROCESSING),
+					eq(sentEmails.processingToken, processingToken),
+				),
+			)
+			.returning({ id: sentEmails.id });
 
-		// Track email usage with Autumn (blocking - every email must count towards quota)
+		if (!updatedEmail) {
+			console.warn(
+				"⚠️ Token lost after SES success, another worker may have taken over:",
+				emailId,
+			);
+			return NextResponse.json(
+				{ message: "Token lost after SES success" },
+				{ status: 200 },
+			);
+		}
+
 		try {
-			const { Autumn: autumn } = await import("autumn-js");
-			const { data: emailCheck } = await autumn.check({
-				customer_id: effectiveUserId,
+			const { error: trackError } = await autumn.track({
+				customer_id: userId,
 				feature_id: "emails_sent",
+				value: 1,
+				idempotency_key: emailId,
 			});
 
-			if (emailCheck && !emailCheck.unlimited) {
-				console.log("📊 Tracking email usage with Autumn");
-				const { error: trackError } = await autumn.track({
-					customer_id: effectiveUserId,
-					feature_id: "emails_sent",
-					value: 1,
-				});
-
-				if (trackError) {
-					console.error("❌ Failed to track email usage:", trackError);
-					// Don't fail the request if tracking fails, but log it
-				}
+			if (trackError) {
+				console.error("❌ Failed to track email usage:", trackError);
+				await db
+					.update(sentEmails)
+					.set({
+						usageTrackingError: String(trackError),
+						updatedAt: new Date(),
+					})
+					.where(eq(sentEmails.id, emailId));
+			} else {
+				await db
+					.update(sentEmails)
+					.set({
+						usageTrackedAt: new Date(),
+						usageTrackingError: null,
+						updatedAt: new Date(),
+					})
+					.where(eq(sentEmails.id, emailId));
 			}
 		} catch (trackError) {
 			console.error("❌ Failed to track email usage:", trackError);
-			// Don't fail the request if tracking fails
+			await db
+				.update(sentEmails)
+				.set({
+					usageTrackingError:
+						trackError instanceof Error
+							? trackError.message
+							: String(trackError),
+					updatedAt: new Date(),
+				})
+				.where(eq(sentEmails.id, emailId));
 		}
 
-		// Evaluate email for security risks (non-blocking)
 		waitUntil(
-			evaluateSending(emailId, effectiveUserId, {
+			evaluateSending(emailId, userId, {
 				from: sentEmail.from,
 				to: toAddresses,
 				subject: sentEmail.subject,
@@ -894,8 +1251,9 @@ async function handleBatchEmail(
 			}),
 		);
 
-		// Check for sending spikes (non-blocking)
-		waitUntil(checkSendingSpike(effectiveUserId));
+		waitUntil(checkSendingSpike(userId));
+
+		waitUntil(refreshEmailBatchStatus(batchId, userId).catch(console.error));
 
 		console.log("✅ Batch email processed successfully:", emailId);
 
@@ -903,38 +1261,73 @@ async function handleBatchEmail(
 			{
 				success: true,
 				emailId: emailId,
-				messageId: messageId,
+				messageId: sesMessageId,
 			},
 			{ status: 200 },
 		);
-	} catch (error) {
-		console.error("❌ QStash Webhook - Error processing batch email:", error);
+	} catch (sesError) {
+		console.error("❌ SES submission error:", sesError);
 
-		const errorMessage =
-			error instanceof Error ? error.message : "Unknown error";
-
-		// Update sent email record with error
-		try {
+		if (isSesRetryableError(sesError)) {
+			console.log("🔄 Retryable SES error, resetting to pending:", emailId);
 			await db
 				.update(sentEmails)
 				.set({
-					status: SENT_EMAIL_STATUS.FAILED,
-					failureReason: errorMessage,
-					providerResponse: JSON.stringify(error),
+					status: SENT_EMAIL_STATUS.PENDING,
+					processingToken: null,
+					processingStartedAt: null,
+					providerSubmittedAt: null,
+					messageId: null,
+					qstashMessageId: null,
 					updatedAt: new Date(),
 				})
-				.where(eq(sentEmails.id, emailId));
-		} catch (updateError) {
-			console.error("❌ Failed to update error in database:", updateError);
+				.where(
+					and(
+						eq(sentEmails.id, emailId),
+						eq(sentEmails.userId, userId),
+						eq(sentEmails.batchId, batchId),
+						eq(sentEmails.status, SENT_EMAIL_STATUS.PROCESSING),
+						eq(sentEmails.processingToken, processingToken),
+					),
+				);
+
+			return NextResponse.json(
+				{ error: "SES temporarily unavailable, will retry" },
+				{ status: 500 },
+			);
 		}
 
-		// Return 500 so QStash will retry
+		const errorMessage =
+			sesError instanceof Error ? sesError.message : "Unknown error";
+
+		console.log("⚠️ Ambiguous SES error, marking PROVIDER_UNKNOWN:", emailId);
+		await db
+			.update(sentEmails)
+			.set({
+				status: SENT_EMAIL_STATUS.PROVIDER_UNKNOWN,
+				failureReason: `Provider outcome unknown: ${errorMessage}`,
+				processingToken: null,
+				providerResponse: JSON.stringify(sesError),
+				updatedAt: new Date(),
+			})
+			.where(
+				and(
+					eq(sentEmails.id, emailId),
+					eq(sentEmails.userId, userId),
+					eq(sentEmails.batchId, batchId),
+					eq(sentEmails.status, SENT_EMAIL_STATUS.PROCESSING),
+					eq(sentEmails.processingToken, processingToken),
+				),
+			);
+
+		waitUntil(refreshEmailBatchStatus(batchId, userId).catch(console.error));
+
 		return NextResponse.json(
 			{
-				error: "Failed to process batch email",
+				error: "Provider outcome unknown",
 				details: errorMessage,
 			},
-			{ status: 500 },
+			{ status: 200 },
 		);
 	}
 }

@@ -89,6 +89,10 @@ resources:
       delete: delete /api/e2/emails/{id}
       reply: post /api/e2/emails/{id}/reply
       retry: post /api/e2/emails/{id}/retry
+      send_batch: post /api/e2/emails/batch
+      retrieve_batch: get /api/e2/emails/batch/{batchId}
+      cancel_batch: delete /api/e2/emails/batch/{batchId}
+      retry_batch: post /api/e2/emails/batch/{batchId}/retry
   mail:
     methods:
       list: get /api/e2/mail/threads

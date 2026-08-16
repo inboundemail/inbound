@@ -1,5 +1,7 @@
 import { eq, or, sql } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
+
+import { handleAcceptedEvent } from "@/app/api/inbound/health/tenant/accepted-event";
 import { parseOpenEvent } from "@/app/api/inbound/health/tenant/open-event";
 import {
 	isTrustedSnsUrl,
@@ -251,6 +253,21 @@ export async function POST(request: NextRequest) {
 
 				if (event.eventType === "open") {
 					await handleSESOpen(event);
+					continue;
+				}
+
+				if (
+					event.eventType === "send" ||
+					event.eventType === "delivery"
+				) {
+					try {
+						await handleAcceptedEvent(event);
+					} catch (acceptedErr) {
+						console.error(
+							"❌ handleAcceptedEvent error (non-fatal):",
+							acceptedErr,
+						);
+					}
 					continue;
 				}
 

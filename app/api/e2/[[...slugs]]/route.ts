@@ -23,12 +23,15 @@ import { deleteEmailAddress } from "../email-addresses/delete";
 import { getEmailAddress } from "../email-addresses/get";
 import { listEmailAddresses } from "../email-addresses/list";
 import { updateEmailAddress } from "../email-addresses/update";
+import { cancelEmailBatch } from "../emails/batch-cancel";
+import { createEmailBatch } from "../emails/batch-create";
+import { getEmailBatch } from "../emails/batch-get";
+import { retryEmailBatch } from "../emails/batch-retry";
 import { cancelEmail } from "../emails/cancel";
 import { getEmail } from "../emails/get";
 import { listEmails } from "../emails/list";
 import { replyToEmail } from "../emails/reply";
 import { retryEmail } from "../emails/retry";
-// Email routes
 import { sendEmail } from "../emails/send";
 import { updateEmail } from "../emails/update";
 import { createEndpoint } from "../endpoints/create";
@@ -482,6 +485,10 @@ https://inbound.new/api/e2
 	// Email routes (sending, listing, managing)
 	.use(sendEmail)
 	.use(listEmails)
+	.use(createEmailBatch)
+	.use(retryEmailBatch)
+	.use(getEmailBatch)
+	.use(cancelEmailBatch)
 	.use(getEmail)
 	.use(updateEmail)
 	.use(cancelEmail)
