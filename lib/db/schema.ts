@@ -591,7 +591,9 @@ export const sentEmails = pgTable(
 		batchId: varchar("batch_id", { length: 255 }),
 		batchIndex: integer("batch_index"),
 		qstashMessageId: varchar("qstash_message_id", { length: 255 }),
-		qstashPublishAttempt: integer("qstash_publish_attempt").notNull().default(0),
+		qstashPublishAttempt: integer("qstash_publish_attempt")
+			.notNull()
+			.default(0),
 		processingToken: varchar("processing_token", { length: 255 }),
 		processingStartedAt: timestamp("processing_started_at"),
 		providerSubmittedAt: timestamp("provider_submitted_at"),

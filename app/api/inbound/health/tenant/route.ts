@@ -58,13 +58,7 @@ interface CloudWatchAlarmMessage {
 
 // SES Event notification format
 interface SESEvent {
-	eventType:
-		| "send"
-		| "reject"
-		| "bounce"
-		| "complaint"
-		| "delivery"
-		| "open";
+	eventType: "send" | "reject" | "bounce" | "complaint" | "delivery" | "open";
 	mail: {
 		timestamp: string;
 		messageId: string;
@@ -256,10 +250,7 @@ export async function POST(request: NextRequest) {
 					continue;
 				}
 
-				if (
-					event.eventType === "send" ||
-					event.eventType === "delivery"
-				) {
+				if (event.eventType === "send" || event.eventType === "delivery") {
 					try {
 						await handleAcceptedEvent(event);
 					} catch (acceptedErr) {
@@ -881,8 +872,7 @@ async function confirmSuspendWithDbRates(
 	const events =
 		alertType === "bounce" ? rates.totalBounces : rates.totalComplaints;
 	const criticalAlert = checkRateThresholds(rates).find(
-		(alert) =>
-			alert.alertType === alertType && alert.severity === "critical",
+		(alert) => alert.alertType === alertType && alert.severity === "critical",
 	);
 
 	if (!criticalAlert) {
@@ -917,7 +907,10 @@ async function handleRateAlert(alert: RateAlert, configSetName: string) {
 
 		const rateDisplay = `${(alert.currentRate * 100).toFixed(2)}%`;
 		const thresholdDisplay = `${(alert.threshold * 100).toFixed(2)}%`;
-		if (alert.severity === "critical" && tenantOwner.tenantStatus === "suspended") {
+		if (
+			alert.severity === "critical" &&
+			tenantOwner.tenantStatus === "suspended"
+		) {
 			console.log(
 				"⏭️ handleRateAlert - Tenant already suspended; skipping repeat enforcement",
 			);

@@ -1,12 +1,12 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { BatchEmailItem } from "@/app/api/e2/emails/batch-schemas";
 import {
 	computeCanonicalHash,
 	computeChildIdempotencyHash,
-	validateEmailItem,
-	validateAggregateBatchAttachments,
 	isPostgresUniqueViolation,
 	type ProcessedAttachmentSize,
+	validateAggregateBatchAttachments,
+	validateEmailItem,
 } from "@/app/api/e2/emails/batch-utils";
 
 const minimalValidEmail: BatchEmailItem = {
