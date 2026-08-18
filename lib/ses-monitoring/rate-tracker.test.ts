@@ -16,6 +16,7 @@ function buildRates(overrides: Partial<TenantRates>): TenantRates {
 		totalSends: 0,
 		totalBounces: 0,
 		totalComplaints: 0,
+		uniqueComplaintRecipients: 0,
 		windowStart: new Date(now.getTime() - 60_000),
 		windowEnd: now,
 		...overrides,
@@ -174,11 +175,24 @@ describe("checkRateThresholds", () => {
 		expect(alerts[0]?.severity).toBe("warning");
 	});
 
-	it("emits a critical complaint alert after repeated complaints", () => {
+	it("does not suspend for repeated complaints from one recipient", () => {
+		const rates = buildRates({
+			totalSends: 1000,
+			totalComplaints: 2,
+			uniqueComplaintRecipients: 1,
+			complaintRate: 2 / 1000,
+		});
+
+		const alerts = checkRateThresholds(rates);
+		expect(alerts[0]?.severity).toBe("warning");
+	});
+
+	it("emits a critical complaint alert after complaints from multiple recipients", () => {
 		const alerts = checkRateThresholds(
 			buildRates({
 				totalSends: 2000,
 				totalComplaints: 2,
+				uniqueComplaintRecipients: 2,
 				complaintRate: RATE_THRESHOLDS.complaint.critical,
 			}),
 		);
@@ -203,6 +217,7 @@ describe("checkRateThresholds", () => {
 			buildRates({
 				totalSends: 100,
 				totalComplaints: 2,
+				uniqueComplaintRecipients: 2,
 				complaintRate: 0.02,
 			}),
 		);
@@ -218,6 +233,7 @@ describe("checkRateThresholds", () => {
 				totalBounces: 60,
 				bounceRate: 0.06,
 				totalComplaints: 2,
+				uniqueComplaintRecipients: 2,
 				complaintRate: 0.002,
 			}),
 		);
@@ -233,6 +249,7 @@ describe("checkRateThresholds", () => {
 				totalBounces: 70,
 				bounceRate: 0.07,
 				totalComplaints: 3,
+				uniqueComplaintRecipients: 3,
 				complaintRate: 0.003,
 			}),
 		);

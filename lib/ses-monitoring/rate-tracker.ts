@@ -13,6 +13,7 @@ import { emailDeliveryEvents, sentEmails, sesTenants } from "@/lib/db/schema";
 import {
 	countUniqueDeliveryEvents,
 	insertDeliveryEventOnce,
+	normalizeDeliveryEventRecipient,
 } from "@/lib/email-management/delivery-event-dedupe";
 
 // Rate thresholds for tenant alerting and automatic suspension
@@ -84,6 +85,7 @@ export interface TenantRates {
 	totalSends: number;
 	totalBounces: number;
 	totalComplaints: number;
+	uniqueComplaintRecipients: number;
 	windowStart: Date;
 	windowEnd: Date;
 }
@@ -229,6 +231,11 @@ export async function getTenantRates(
 			);
 
 		const deliveryEventCounts = countUniqueDeliveryEvents(deliveryEvents);
+		const uniqueComplaintRecipients = new Set(
+			deliveryEvents
+				.filter((event) => event.eventType === "complaint")
+				.map((event) => normalizeDeliveryEventRecipient(event.failedRecipient)),
+		).size;
 
 		// SES reputation events are per recipient, so the denominator must be too.
 		const totalBounces = deliveryEventCounts.bounces;
@@ -276,6 +283,7 @@ export async function getTenantRates(
 			totalSends,
 			totalBounces,
 			totalComplaints,
+			uniqueComplaintRecipients,
 			windowStart,
 			windowEnd,
 		};
@@ -302,9 +310,9 @@ export function checkRateThresholds(rates: TenantRates): RateAlert[] {
 			rates.bounceRate >= EXTREME_ABUSE_THRESHOLDS.bounce.rate);
 	const canAutoSuspendForComplaint =
 		(rates.totalSends >= AUTO_SUSPEND_MIN_SENDS.complaint &&
-			rates.totalComplaints >= AUTO_SUSPEND_MIN_EVENTS.complaint) ||
+			rates.uniqueComplaintRecipients >= AUTO_SUSPEND_MIN_EVENTS.complaint) ||
 		(rates.totalSends >= EXTREME_ABUSE_THRESHOLDS.complaint.minimumSends &&
-			rates.totalComplaints >=
+			rates.uniqueComplaintRecipients >=
 				EXTREME_ABUSE_THRESHOLDS.complaint.minimumEvents &&
 			rates.complaintRate >= EXTREME_ABUSE_THRESHOLDS.complaint.rate);
 	const canWarnForBounce =
