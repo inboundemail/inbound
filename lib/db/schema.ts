@@ -729,6 +729,7 @@ export const SCHEDULED_EMAIL_STATUS = {
 	SENT: "sent",
 	FAILED: "failed",
 	CANCELLED: "cancelled",
+	PAUSED: "paused",
 } as const;
 
 // Export types for Better Auth tables (using the imported tables)

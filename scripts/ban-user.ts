@@ -134,6 +134,7 @@ async function main() {
 					inArray(scheduledEmails.status, [
 						SCHEDULED_EMAIL_STATUS.SCHEDULED,
 						SCHEDULED_EMAIL_STATUS.PROCESSING,
+						SCHEDULED_EMAIL_STATUS.PAUSED,
 					]),
 				),
 			)

@@ -37,6 +37,7 @@ const ListEmailsQuerySchema = t.Object({
         t.Literal("bounced"),
         t.Literal("scheduled"),
         t.Literal("cancelled"),
+        t.Literal("paused"),
         t.Literal("unread"),
         t.Literal("read"),
         t.Literal("archived"),
@@ -477,7 +478,7 @@ export const listEmails = new Elysia().get(
     if (type === "all" || type === "sent") {
       // Skip if status filter only applies to received or scheduled emails
       if (
-        !["unread", "read", "archived", "scheduled", "cancelled"].includes(
+        !["unread", "read", "archived", "scheduled", "cancelled", "paused"].includes(
           status
         )
       ) {
@@ -605,6 +606,8 @@ export const listEmails = new Elysia().get(
           scheduledConditions.push(eq(scheduledEmails.status, "scheduled"));
         } else if (status === "cancelled") {
           scheduledConditions.push(eq(scheduledEmails.status, "cancelled"));
+        } else if (status === "paused") {
+          scheduledConditions.push(eq(scheduledEmails.status, "paused"));
         } else if (status === "pending") {
           scheduledConditions.push(eq(scheduledEmails.status, "processing"));
         } else if (status === "failed") {

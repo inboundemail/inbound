@@ -26,7 +26,9 @@ import { updateEmailAddress } from "../email-addresses/update";
 import { cancelEmail } from "../emails/cancel";
 import { getEmail } from "../emails/get";
 import { listEmails } from "../emails/list";
+import { pauseEmail } from "../emails/pause";
 import { replyToEmail } from "../emails/reply";
+import { resumeEmail } from "../emails/resume";
 import { retryEmail } from "../emails/retry";
 // Email routes
 import { sendEmail } from "../emails/send";
@@ -485,6 +487,8 @@ https://inbound.new/api/e2
 	.use(getEmail)
 	.use(updateEmail)
 	.use(cancelEmail)
+	.use(pauseEmail)
+	.use(resumeEmail)
 	.use(replyToEmail)
 	.use(retryEmail)
 	// Inbox routes (threaded conversations)

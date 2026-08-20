@@ -194,6 +194,11 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			);
 		}
 
+		if (scheduledEmail.status === SCHEDULED_EMAIL_STATUS.PAUSED) {
+			console.log("⏸️ Email is paused, skipping:", scheduledEmailId);
+			return NextResponse.json({ message: "Email is paused" }, { status: 200 });
+		}
+
 		const scheduledFromAddress = extractEmailAddress(
 			scheduledEmail.fromAddress,
 		);
