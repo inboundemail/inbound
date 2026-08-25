@@ -41,11 +41,12 @@ export class ConnectionLimits {
 		else this.perIp.set(ip, current - 1);
 	}
 
-	assertAuthAllowed(ip: string): Error | null {
-		const record = this.failures.get(ip);
+	assertAuthAllowed(ip: string, username: string): Error | null {
+		const key = this.authKey(ip, username);
+		const record = this.failures.get(key);
 		if (!record) return null;
 		if (Date.now() - record.windowStart > this.failureWindowMs) {
-			this.failures.delete(ip);
+			this.failures.delete(key);
 			return null;
 		}
 		if (record.count >= this.failureLimit) {
@@ -54,11 +55,12 @@ export class ConnectionLimits {
 		return null;
 	}
 
-	recordAuthFailure(ip: string): void {
+	recordAuthFailure(ip: string, username: string): void {
 		const now = Date.now();
-		const record = this.failures.get(ip);
+		const key = this.authKey(ip, username);
+		const record = this.failures.get(key);
 		if (!record || now - record.windowStart > this.failureWindowMs) {
-			this.failures.set(ip, { count: 1, windowStart: now });
+			this.failures.set(key, { count: 1, windowStart: now });
 		} else {
 			record.count++;
 		}
@@ -66,8 +68,12 @@ export class ConnectionLimits {
 		if (this.failures.size > 10_000) this.sweepFailures(now);
 	}
 
-	recordAuthSuccess(ip: string): void {
-		this.failures.delete(ip);
+	recordAuthSuccess(ip: string, username: string): void {
+		this.failures.delete(this.authKey(ip, username));
+	}
+
+	private authKey(ip: string, username: string): string {
+		return `${ip}\0${username}`;
 	}
 
 	private sweepFailures(now: number): void {
