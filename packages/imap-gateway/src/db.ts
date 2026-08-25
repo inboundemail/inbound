@@ -460,11 +460,15 @@ export class MailStore {
 						  AND se.raw_content IS NOT NULL
 						  AND (
 							lower(se.recipient) = ANY(${addresses})
-							OR split_part(lower(se.recipient), '@', 2) = ANY(${domains})
+							OR (
+								split_part(lower(se.recipient), '@', 2) = ANY(${domains})
+								AND split_part(lower(se.recipient), '@', 1) <> 'dmarc'
+							)
 							OR se.envelope_recipients && ${addresses}::text[]
 							OR EXISTS (
 								SELECT 1 FROM unnest(se.envelope_recipients) AS envelope(address)
 								WHERE split_part(envelope.address, '@', 2) = ANY(${domains})
+								  AND split_part(envelope.address, '@', 1) <> 'dmarc'
 							)
 						  )
 						  AND NOT EXISTS (

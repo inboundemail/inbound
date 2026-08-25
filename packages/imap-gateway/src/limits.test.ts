@@ -15,13 +15,26 @@ describe("ConnectionLimits", () => {
 		expect(limits.onConnect(third)).toBeNull();
 	});
 
-	it("blocks repeated authentication failures and clears on success", () => {
+	it("isolates authentication failures by IP and username", () => {
 		const limits = new ConnectionLimits(2, 2, 60_000);
-		limits.recordAuthFailure("192.0.2.2");
-		expect(limits.assertAuthAllowed("192.0.2.2")).toBeNull();
-		limits.recordAuthFailure("192.0.2.2");
-		expect(limits.assertAuthAllowed("192.0.2.2")).toBeInstanceOf(Error);
-		limits.recordAuthSuccess("192.0.2.2");
-		expect(limits.assertAuthAllowed("192.0.2.2")).toBeNull();
+		limits.recordAuthFailure("192.0.2.2", "first@example.com");
+		expect(
+			limits.assertAuthAllowed("192.0.2.2", "first@example.com"),
+		).toBeNull();
+		limits.recordAuthFailure("192.0.2.2", "first@example.com");
+		expect(
+			limits.assertAuthAllowed("192.0.2.2", "first@example.com"),
+		).toBeInstanceOf(Error);
+		expect(
+			limits.assertAuthAllowed("192.0.2.2", "second@example.com"),
+		).toBeNull();
+		limits.recordAuthSuccess("192.0.2.2", "second@example.com");
+		expect(
+			limits.assertAuthAllowed("192.0.2.2", "first@example.com"),
+		).toBeInstanceOf(Error);
+		limits.recordAuthSuccess("192.0.2.2", "first@example.com");
+		expect(
+			limits.assertAuthAllowed("192.0.2.2", "first@example.com"),
+		).toBeNull();
 	});
 });

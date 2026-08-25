@@ -101,21 +101,21 @@ export function buildHandlers(
 
 		onAuth(authData: AuthData, _session: ImapSession, callback: Callback) {
 			const ip = _session.remoteAddress ?? "unknown";
-			const limited = limits.assertAuthAllowed(ip);
-			if (limited) return callback(limited);
 			const address = authData.username.trim().toLowerCase();
+			const limited = limits.assertAuthAllowed(ip, address);
+			if (limited) return callback(null);
 			if (!address.includes("@") || !authData.password) {
-				limits.recordAuthFailure(ip);
-				return callback(new Error("Invalid credentials"));
+				limits.recordAuthFailure(ip, address);
+				return callback(null);
 			}
 			auth
 				.authenticate(address, authData.password)
 				.then((result) => {
 					if (!result) {
-						limits.recordAuthFailure(ip);
-						return callback(new Error("Invalid credentials"));
+						limits.recordAuthFailure(ip, address);
+						return callback(null);
 					}
-					limits.recordAuthSuccess(ip);
+					limits.recordAuthSuccess(ip, address);
 					callback(null, {
 						user: {
 							...result,
