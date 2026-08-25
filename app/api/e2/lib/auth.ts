@@ -9,6 +9,8 @@ import { apikey, user } from "@/lib/db/auth-schema";
 // Only initialize if env vars are present
 let redis: Redis | null = null;
 let ratelimit: Ratelimit | null = null;
+let mailboxLoginRatelimit: Ratelimit | null = null;
+let mailboxIpRatelimit: Ratelimit | null = null;
 
 // SECURITY: Controls fail-closed behavior when rate limiting is unavailable
 // Set to "true" ONLY in development environments
@@ -31,6 +33,18 @@ if (
 		limiter: Ratelimit.slidingWindow(10, "1 s"),
 		analytics: true,
 		prefix: "e2:ratelimit",
+	});
+	mailboxLoginRatelimit = new Ratelimit({
+		redis,
+		limiter: Ratelimit.slidingWindow(60, "1 m"),
+		analytics: true,
+		prefix: "e2:mailbox-auth:login",
+	});
+	mailboxIpRatelimit = new Ratelimit({
+		redis,
+		limiter: Ratelimit.slidingWindow(3000, "1 m"),
+		analytics: true,
+		prefix: "e2:mailbox-auth:ip",
 	});
 } else {
 	if (ALLOW_REQUESTS_WITHOUT_RATE_LIMIT) {
@@ -83,6 +97,258 @@ function getHeaderRecord(headers: unknown): Record<string, string> {
 	return {};
 }
 
+function getClientIp(request: Request): string {
+	return (
+		request.headers
+			.get("x-vercel-forwarded-for")
+			?.split(",")[0]
+			?.trim()
+			.toLowerCase() ||
+		request.headers.get("cf-connecting-ip")?.trim().toLowerCase() ||
+		request.headers.get("x-real-ip")?.trim().toLowerCase() ||
+		request.headers
+			.get("x-forwarded-for")
+			?.split(",")[0]
+			?.trim()
+			.toLowerCase() ||
+		"unknown"
+	);
+}
+
+export async function enforceAuthenticatedUserAndRateLimit(
+	userId: string,
+	set: { status?: number | string; headers?: unknown },
+): Promise<void> {
+	const [userRecord] = await db
+		.select({
+			banned: user.banned,
+			banReason: user.banReason,
+			banExpires: user.banExpires,
+		})
+		.from(user)
+		.where(eq(user.id, userId))
+		.limit(1);
+
+	if (!userRecord) {
+		set.status = 401;
+		const userNotFoundHeaders = {
+			...getHeaderRecord(set.headers),
+			"WWW-Authenticate": 'Bearer realm="API", charset="UTF-8"',
+			"Content-Type": "application/json; charset=utf-8",
+		};
+		set.headers = userNotFoundHeaders;
+		throw new AuthError(
+			{
+				error: "Unauthorized",
+				message: "User not found.",
+				statusCode: 401,
+			},
+			userNotFoundHeaders,
+		);
+	}
+
+	if (userRecord.banned) {
+		const banExpiresAt = userRecord.banExpires
+			? new Date(userRecord.banExpires)
+			: null;
+		const banStillActive = banExpiresAt
+			? banExpiresAt.getTime() >= Date.now()
+			: true;
+
+		if (banStillActive) {
+			set.status = 403;
+			const bannedHeaders = {
+				...getHeaderRecord(set.headers),
+				"Content-Type": "application/json; charset=utf-8",
+			};
+			set.headers = bannedHeaders;
+			throw new AuthError(
+				{
+					error: "Forbidden",
+					message:
+						userRecord.banReason ||
+						"Account suspended. Please contact support.",
+					statusCode: 403,
+				},
+				bannedHeaders,
+			);
+		}
+	}
+
+	if (ratelimit) {
+		let rateLimitResult: Awaited<ReturnType<typeof ratelimit.limit>>;
+
+		try {
+			rateLimitResult = await ratelimit.limit(userId);
+		} catch (error) {
+			console.error("🚨 Rate limiting service failure:", error);
+			set.status = 503;
+			const unavailableHeaders = {
+				"Content-Type": "application/json; charset=utf-8",
+				"Retry-After": "60",
+			};
+			set.headers = unavailableHeaders;
+			throw new AuthError(
+				{
+					error: "Service Unavailable",
+					message:
+						"Rate limiting service is temporarily unavailable. Please try again later.",
+					statusCode: 503,
+				},
+				unavailableHeaders,
+			);
+		}
+
+		const {
+			success: rateLimitSuccess,
+			limit,
+			remaining,
+			reset,
+		} = rateLimitResult;
+
+		console.log("📊 Rate limit check:", {
+			success: rateLimitSuccess,
+			limit,
+			remaining,
+			reset: new Date(reset).toISOString(),
+		});
+
+		set.headers = {
+			...getHeaderRecord(set.headers),
+			"X-RateLimit-Limit": limit.toString(),
+			"X-RateLimit-Remaining": remaining.toString(),
+			"X-RateLimit-Reset": reset.toString(),
+		};
+
+		if (!rateLimitSuccess) {
+			console.log("⚠️ Rate limit exceeded for userId:", userId);
+			const retryAfterSeconds = Math.ceil((reset - Date.now()) / 1000);
+			set.status = 429;
+			const rateLimitHeaders = {
+				...getHeaderRecord(set.headers),
+				"Retry-After": retryAfterSeconds.toString(),
+				"Content-Type": "application/json; charset=utf-8",
+			};
+			set.headers = rateLimitHeaders;
+			throw new AuthError(
+				{
+					error: "Too Many Requests",
+					message: `Rate limit exceeded. Maximum ${limit} requests per second. Retry after ${retryAfterSeconds} seconds.`,
+					statusCode: 429,
+				},
+				rateLimitHeaders,
+			);
+		}
+	} else {
+		if (!ALLOW_REQUESTS_WITHOUT_RATE_LIMIT) {
+			console.error(
+				"🚨 SECURITY: Blocking request - rate limiting unavailable and ALLOW_REQUESTS_WITHOUT_RATE_LIMIT is not enabled",
+			);
+			set.status = 503;
+			const unavailableHeaders = {
+				"Content-Type": "application/json; charset=utf-8",
+				"Retry-After": "60",
+			};
+			set.headers = unavailableHeaders;
+			throw new AuthError(
+				{
+					error: "Service Unavailable",
+					message:
+						"Rate limiting service is temporarily unavailable. Please try again later.",
+					statusCode: 503,
+				},
+				unavailableHeaders,
+			);
+		}
+		console.warn(
+			"⚠️ [DEV MODE] Rate limiting bypassed - ALLOW_REQUESTS_WITHOUT_RATE_LIMIT=true",
+		);
+	}
+}
+
+export async function enforceMailboxAuthenticationRateLimit(
+	request: Request,
+	loginAddress: string,
+	set: { status?: number | string; headers?: unknown },
+): Promise<void> {
+	if (!mailboxLoginRatelimit || !mailboxIpRatelimit) {
+		if (ALLOW_REQUESTS_WITHOUT_RATE_LIMIT) return;
+
+		set.status = 503;
+		const headers = {
+			"Content-Type": "application/json; charset=utf-8",
+			"Retry-After": "60",
+		};
+		set.headers = headers;
+		throw new AuthError(
+			{
+				error: "Service Unavailable",
+				message:
+					"Rate limiting service is temporarily unavailable. Please try again later.",
+				statusCode: 503,
+			},
+			headers,
+		);
+	}
+
+	const clientIp = getClientIp(request);
+	const normalizedLoginAddress = loginAddress.trim().toLowerCase();
+	let results: Awaited<ReturnType<typeof mailboxLoginRatelimit.limit>>[];
+	try {
+		results = await Promise.all([
+			mailboxLoginRatelimit.limit(`${clientIp}:${normalizedLoginAddress}`),
+			mailboxIpRatelimit.limit(clientIp),
+		]);
+	} catch (error) {
+		console.error("Mailbox authentication rate limiting service failure:", error);
+		set.status = 503;
+		const headers = {
+			"Content-Type": "application/json; charset=utf-8",
+			"Retry-After": "60",
+		};
+		set.headers = headers;
+		throw new AuthError(
+			{
+				error: "Service Unavailable",
+				message:
+					"Rate limiting service is temporarily unavailable. Please try again later.",
+				statusCode: 503,
+			},
+			headers,
+		);
+	}
+
+	const result = results.find(({ success }) => !success) ?? results[0];
+	set.headers = {
+		...getHeaderRecord(set.headers),
+		"X-RateLimit-Limit": result.limit.toString(),
+		"X-RateLimit-Remaining": result.remaining.toString(),
+		"X-RateLimit-Reset": result.reset.toString(),
+	};
+
+	if (!result.success) {
+		const retryAfterSeconds = Math.max(
+			1,
+			Math.ceil((result.reset - Date.now()) / 1000),
+		);
+		set.status = 429;
+		const headers = {
+			...getHeaderRecord(set.headers),
+			"Retry-After": retryAfterSeconds.toString(),
+			"Content-Type": "application/json; charset=utf-8",
+		};
+		set.headers = headers;
+		throw new AuthError(
+			{
+				error: "Too Many Requests",
+				message: "Too many authentication attempts. Please try again later.",
+				statusCode: 429,
+			},
+			headers,
+		);
+	}
+}
+
 /**
  * Validates authentication (session or API key) and checks rate limits
  * Throws AuthError with RFC-compliant headers on failure
@@ -107,11 +373,7 @@ export async function validateAndRateLimit(
 ): Promise<string> {
 	try {
 		// Get client IP from various headers (Vercel/Cloudflare/etc)
-		const clientIp =
-			request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-			request.headers.get("x-real-ip") ||
-			request.headers.get("cf-connecting-ip") ||
-			"unknown";
+		const clientIp = getClientIp(request);
 		console.log("🌐 [E2] Client IP:", clientIp);
 		console.log("🔐 Validating request authentication and rate limit");
 
@@ -208,155 +470,7 @@ export async function validateAndRateLimit(
 			);
 		}
 
-		const [userRecord] = await db
-			.select({
-				banned: user.banned,
-				banReason: user.banReason,
-				banExpires: user.banExpires,
-			})
-			.from(user)
-			.where(eq(user.id, userId))
-			.limit(1);
-
-		if (!userRecord) {
-			set.status = 401;
-			const userNotFoundHeaders = {
-				...getHeaderRecord(set.headers),
-				"WWW-Authenticate": 'Bearer realm="API", charset="UTF-8"',
-				"Content-Type": "application/json; charset=utf-8",
-			};
-			set.headers = userNotFoundHeaders;
-			throw new AuthError(
-				{
-					error: "Unauthorized",
-					message: "User not found.",
-					statusCode: 401,
-				},
-				userNotFoundHeaders,
-			);
-		}
-
-		if (userRecord.banned) {
-			const banExpiresAt = userRecord.banExpires
-				? new Date(userRecord.banExpires)
-				: null;
-			const banStillActive = banExpiresAt
-				? banExpiresAt.getTime() >= Date.now()
-				: true;
-
-			if (banStillActive) {
-				set.status = 403;
-				const bannedHeaders = {
-					...getHeaderRecord(set.headers),
-					"Content-Type": "application/json; charset=utf-8",
-				};
-				set.headers = bannedHeaders;
-				throw new AuthError(
-					{
-						error: "Forbidden",
-						message:
-							userRecord.banReason ||
-							"Account suspended. Please contact support.",
-						statusCode: 403,
-					},
-					bannedHeaders,
-				);
-			}
-		}
-
-		// Check rate limit for this userId (if configured)
-		if (ratelimit) {
-			let rateLimitResult: Awaited<ReturnType<typeof ratelimit.limit>>;
-
-			try {
-				rateLimitResult = await ratelimit.limit(userId);
-			} catch (error) {
-				console.error("🚨 Rate limiting service failure:", error);
-				set.status = 503;
-				const unavailableHeaders = {
-					"Content-Type": "application/json; charset=utf-8",
-					"Retry-After": "60",
-				};
-				set.headers = unavailableHeaders;
-				throw new AuthError(
-					{
-						error: "Service Unavailable",
-						message:
-							"Rate limiting service is temporarily unavailable. Please try again later.",
-						statusCode: 503,
-					},
-					unavailableHeaders,
-				);
-			}
-
-			const {
-				success: rateLimitSuccess,
-				limit,
-				remaining,
-				reset,
-			} = rateLimitResult;
-
-			console.log("📊 Rate limit check:", {
-				success: rateLimitSuccess,
-				limit,
-				remaining,
-				reset: new Date(reset).toISOString(),
-			});
-
-			// Set rate limit headers on all requests (RFC 6585 recommendation)
-			set.headers = {
-				...getHeaderRecord(set.headers),
-				"X-RateLimit-Limit": limit.toString(),
-				"X-RateLimit-Remaining": remaining.toString(),
-				"X-RateLimit-Reset": reset.toString(),
-			};
-
-			if (!rateLimitSuccess) {
-				console.log("⚠️ Rate limit exceeded for userId:", userId);
-				// RFC 6585: 429 responses SHOULD include Retry-After header
-				const retryAfterSeconds = Math.ceil((reset - Date.now()) / 1000);
-				set.status = 429;
-				const rateLimitHeaders = {
-					...getHeaderRecord(set.headers),
-					"Retry-After": retryAfterSeconds.toString(),
-					"Content-Type": "application/json; charset=utf-8",
-				};
-				set.headers = rateLimitHeaders;
-				throw new AuthError(
-					{
-						error: "Too Many Requests",
-						message: `Rate limit exceeded. Maximum ${limit} requests per second. Retry after ${retryAfterSeconds} seconds.`,
-						statusCode: 429,
-					},
-					rateLimitHeaders,
-				);
-			}
-		} else {
-			// SECURITY: Fail-closed pattern - block requests when rate limiting is unavailable
-			if (!ALLOW_REQUESTS_WITHOUT_RATE_LIMIT) {
-				console.error(
-					"🚨 SECURITY: Blocking request - rate limiting unavailable and ALLOW_REQUESTS_WITHOUT_RATE_LIMIT is not enabled",
-				);
-				set.status = 503;
-				const unavailableHeaders = {
-					"Content-Type": "application/json; charset=utf-8",
-					"Retry-After": "60",
-				};
-				set.headers = unavailableHeaders;
-				throw new AuthError(
-					{
-						error: "Service Unavailable",
-						message:
-							"Rate limiting service is temporarily unavailable. Please try again later.",
-						statusCode: 503,
-					},
-					unavailableHeaders,
-				);
-			}
-			console.warn(
-				"⚠️ [DEV MODE] Rate limiting bypassed - ALLOW_REQUESTS_WITHOUT_RATE_LIMIT=true",
-			);
-		}
+		await enforceAuthenticatedUserAndRateLimit(userId, set);
 
 		return userId;
 	} catch (error) {

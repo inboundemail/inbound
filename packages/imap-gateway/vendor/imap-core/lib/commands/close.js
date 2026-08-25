@@ -22,6 +22,7 @@ module.exports = {
         }
 
         let mailbox = this.selected.mailbox;
+        let mailboxPath = this.selected.path;
 
         this.session.selected = this.selected = false;
         this.state = 'Authenticated';
@@ -30,7 +31,8 @@ module.exports = {
             mailbox,
             {
                 isUid: false,
-                silent: true
+                silent: true,
+                path: mailboxPath
             },
             this.session,
             () => {

@@ -27,6 +27,14 @@ module.exports = {
             });
         }
 
+        if (this.selected.readOnly) {
+            return callback(null, {
+                response: 'NO',
+                code: 'READ-ONLY',
+                message: 'Mailbox is read-only'
+            });
+        }
+
         let range = (command.attributes[0] && command.attributes[0].value) || '';
         let path = Buffer.from((command.attributes[1] && command.attributes[1].value) || '', 'binary').toString();
         path = imapTools.normalizeMailbox(path, !this.acceptUTF8Enabled);

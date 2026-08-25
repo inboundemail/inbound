@@ -41,9 +41,11 @@ module.exports = {
             return callback(E);
         }
 
-        // mark CONDSTORE as enabled
-        if (parsed.terms.indexOf('modseq') >= 0 && !this.selected.condstoreEnabled) {
-            this.condstoreEnabled = this.selected.condstoreEnabled = true;
+        if (parsed.terms.indexOf('modseq') >= 0) {
+            return callback(null, {
+                response: 'BAD',
+                message: 'CONDSTORE is not supported'
+            });
         }
 
         let logdata = {

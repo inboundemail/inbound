@@ -67,6 +67,7 @@ const AttachmentSchema = t.Object({
 	filename: t.String(),
 	content: t.String(),
 	content_type: t.Optional(t.String()),
+	content_id: t.Optional(t.String({ maxLength: 128 })),
 	path: t.Optional(t.String()),
 });
 
@@ -199,6 +200,15 @@ export const sendEmail = new Elysia().post(
 				.limit(1);
 
 			if (existingEmail.length > 0) {
+				if (existingEmail[0].status !== SENT_EMAIL_STATUS.SENT) {
+					set.status = 503;
+					set.headers["Retry-After"] = "60";
+					return {
+						error:
+							"An email with this idempotency key has not been successfully sent. Please try again later.",
+					};
+				}
+
 				console.log(
 					"♻️ Idempotent request - returning existing email:",
 					existingEmail[0].id,
@@ -297,6 +307,11 @@ export const sendEmail = new Elysia().post(
 		// Validate email addresses
 		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 		const allRecipients = [...toAddresses, ...ccAddresses, ...bccAddresses];
+
+		if (allRecipients.length === 0) {
+			set.status = 400;
+			return { error: "At least one recipient is required in to, cc, or bcc" };
+		}
 
 		for (const email of allRecipients) {
 			const address = extractEmailAddress(email);
@@ -682,6 +697,7 @@ export const sendEmail = new Elysia().post(
 			403: ErrorResponse,
 			429: ErrorResponse,
 			500: ErrorResponse,
+			503: ErrorResponse,
 		},
 		detail: {
 			tags: ["Emails"],
