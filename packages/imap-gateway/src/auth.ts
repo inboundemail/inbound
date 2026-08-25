@@ -33,6 +33,7 @@ export class ApiAuth {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ loginAddress: address, password }),
+				signal: AbortSignal.timeout(this.config.apiTimeoutMs),
 			},
 		);
 		if (response.status === 401 || response.status === 403) return null;

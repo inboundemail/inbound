@@ -72,6 +72,7 @@ const AttachmentSchema = t.Object({
 	filename: t.String({ description: "Filename shown to the recipient" }),
 	content: t.Optional(t.String({ description: "Base64-encoded file content" })),
 	content_type: t.Optional(t.String()),
+	content_id: t.Optional(t.String({ maxLength: 128 })),
 	path: t.Optional(
 		t.String({ description: "Public or signed URL for Inbound to fetch" }),
 	),
@@ -303,6 +304,11 @@ export const sendEmail = new Elysia().post(
 		// Validate email addresses
 		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 		const allRecipients = [...toAddresses, ...ccAddresses, ...bccAddresses];
+
+		if (allRecipients.length === 0) {
+			set.status = 400;
+			return { error: "At least one recipient is required in to, cc, or bcc" };
+		}
 
 		for (const email of allRecipients) {
 			const address = extractEmailAddress(email);

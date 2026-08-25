@@ -69,7 +69,7 @@ function upgrade(connection) {
     };
 
     // Apply additional socket options if these are set in the server options
-    ['requestCert', 'rejectUnauthorized', 'NPNProtocols', 'SNICallback', 'session', 'requestOCSP'].forEach(key => {
+    ['minVersion', 'requestCert', 'rejectUnauthorized', 'NPNProtocols', 'SNICallback', 'session', 'requestOCSP'].forEach(key => {
         if (key in connection._server.options) {
             socketOptions[key] = connection._server.options[key];
         }

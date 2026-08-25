@@ -400,8 +400,15 @@ class IMAPServer extends EventEmitter {
 
         // upgrade connection
         tlsSocket = new tls.TLSSocket(socket, socketOptions);
+        errorTimer = setTimeout(() => {
+            let err = new Error('TLS handshake timed out');
+            err.code = 'TLSHandshakeTimeout';
+            tlsSocket.destroy(err);
+        }, this.options.tlsHandshakeTimeout || 10 * 1000);
+        errorTimer.unref();
 
         let onCloseError = hadError => {
+            clearTimeout(errorTimer);
             if (hadError) {
                 return onError();
             }
@@ -414,6 +421,7 @@ class IMAPServer extends EventEmitter {
         tlsSocket.once('tlsClientError', onError);
 
         tlsSocket.on('secure', () => {
+            clearTimeout(errorTimer);
             socket.removeListener('error', onError);
             tlsSocket.removeListener('close', onCloseError);
             tlsSocket.removeListener('error', onError);
