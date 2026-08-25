@@ -24,7 +24,9 @@ module.exports = {
         // Do nothing if in read only mode
         if (this.selected.readOnly) {
             return callback(null, {
-                response: 'OK'
+                response: 'NO',
+                code: 'READ-ONLY',
+                message: 'Mailbox is read-only'
             });
         }
 

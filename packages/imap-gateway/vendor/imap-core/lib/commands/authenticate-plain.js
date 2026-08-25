@@ -16,7 +16,12 @@ module.exports = {
     handler(command, callback, next) {
         let token = ((command.attributes && command.attributes[0] && command.attributes[0].value) || '').toString().trim();
 
-        let requireClientToken = (command.command || '').toString().toUpperCase() === 'AUTHENTICATE PLAIN-CLIENTTOKEN' ? true : false;
+        if ((command.command || '').toString().toUpperCase() !== 'AUTHENTICATE PLAIN') {
+            return callback(null, {
+                response: 'BAD',
+                message: 'Unsupported authentication mechanism'
+            });
+        }
 
         if (!this.secure && !this._server.options.disableSTARTTLS && !this._server.options.ignoreSTARTTLS) {
             // Only allow authentication using TLS
@@ -38,20 +43,20 @@ module.exports = {
             this._nextHandler = (token, next) => {
                 this._nextHandler = false;
                 next(); // keep the parser flowing
-                authenticate(this, token, requireClientToken, callback);
+                authenticate(this, token, callback);
             };
             this.send('+');
             return next(); // resume input parser. Normally this is done by callback() but we need the next input sooner
         }
 
-        authenticate(this, token, requireClientToken, callback);
+        authenticate(this, token, callback);
     }
 };
 
-function authenticate(connection, token, requireClientToken, callback) {
+function authenticate(connection, token, callback) {
     let data = Buffer.from(token, 'base64').toString().split('\x00');
 
-    if ((!requireClientToken && data.length !== 3) || (requireClientToken && data.length !== 4)) {
+    if (data.length !== 3) {
         return callback(null, {
             response: 'BAD',
             message: 'Invalid SASL argument'
@@ -60,7 +65,6 @@ function authenticate(connection, token, requireClientToken, callback) {
 
     let username = (data[1] || '').toString().trim();
     let password = (data[2] || '').toString().trim();
-    let clientToken = (data[3] || '').toString().trim() || false;
 
     // Do auth
     connection._server.onAuth(
@@ -68,7 +72,6 @@ function authenticate(connection, token, requireClientToken, callback) {
             method: 'PLAIN',
             username,
             password,
-            clientToken,
             connection
         },
         connection.session,
@@ -119,14 +122,12 @@ function authenticate(connection, token, requireClientToken, callback) {
                     username,
                     method: 'PLAIN',
                     action: 'success',
-                    cid: connection.id,
-                    clientToken
+                    cid: connection.id
                 },
-                '[%s] %s authenticated using %s%s',
+                '[%s] %s authenticated using %s',
                 connection.id,
                 username,
-                'PLAIN' + (requireClientToken ? '-CLIENTTOKEN' : ''),
-                clientToken ? ' with token "' + clientToken + '"' : ''
+                'PLAIN'
             );
 
             connection.setUser(response.user);
