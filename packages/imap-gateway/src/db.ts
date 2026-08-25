@@ -460,7 +460,10 @@ export class MailStore {
 						  AND se.raw_content IS NOT NULL
 						  AND (
 							lower(se.recipient) = ANY(${addresses})
-							OR split_part(lower(se.recipient), '@', 2) = ANY(${domains})
+							OR (
+								split_part(lower(se.recipient), '@', 2) = ANY(${domains})
+								AND split_part(lower(se.recipient), '@', 1) <> 'dmarc'
+							)
 						  )
 						  AND NOT EXISTS (
 							SELECT 1 FROM imap_mailbox_messages mm

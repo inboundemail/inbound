@@ -126,13 +126,12 @@ export class SmtpGateway {
 		session: SMTPServerSession,
 	): Promise<SMTPServerAuthenticationResponse> {
 		const ip = session.remoteAddress;
-		this.assertNotThrottled(ip);
-
 		const username = (auth.username ?? "").trim().toLowerCase();
 		const password = (auth.password ?? "").trim();
+		this.assertNotThrottled(ip, username);
 
 		if (!username.includes("@") || password.length === 0) {
-			this.recordFailure(ip);
+			this.recordFailure(ip, username);
 			throw new SmtpRelayError({
 				responseCode: 535,
 				message: "5.7.8 Authentication failed: invalid mailbox credentials",
@@ -141,14 +140,14 @@ export class SmtpGateway {
 
 		const identity = await this.client.authenticateSmtp(username, password);
 		if (!identity) {
-			this.recordFailure(ip);
+			this.recordFailure(ip, username);
 			throw new SmtpRelayError({
 				responseCode: 535,
 				message: "5.7.8 Authentication failed: invalid mailbox credentials",
 			});
 		}
 
-		this.authFailures.delete(ip);
+		this.authFailures.delete(this.authKey(ip, username));
 		const user: AuthenticatedUser = { apiKey: password, identity };
 		return { user };
 	}
@@ -242,13 +241,14 @@ export class SmtpGateway {
 		this.activeData--;
 	}
 
-	private assertNotThrottled(ip: string): void {
-		const record = this.authFailures.get(ip);
+	private assertNotThrottled(ip: string, username: string): void {
+		const key = this.authKey(ip, username);
+		const record = this.authFailures.get(key);
 		if (!record) return;
 		const expired =
 			Date.now() - record.windowStart > this.config.authFailureWindowMs;
 		if (expired) {
-			this.authFailures.delete(ip);
+			this.authFailures.delete(key);
 			return;
 		}
 		if (record.count >= this.config.authFailureLimit) {
@@ -259,14 +259,19 @@ export class SmtpGateway {
 		}
 	}
 
-	private recordFailure(ip: string): void {
+	private recordFailure(ip: string, username: string): void {
 		const now = Date.now();
-		const record = this.authFailures.get(ip);
+		const key = this.authKey(ip, username);
+		const record = this.authFailures.get(key);
 		if (!record || now - record.windowStart > this.config.authFailureWindowMs) {
-			this.authFailures.set(ip, { count: 1, windowStart: now });
+			this.authFailures.set(key, { count: 1, windowStart: now });
 			return;
 		}
 		record.count += 1;
+	}
+
+	private authKey(ip: string, username: string): string {
+		return `${ip}\0${username}`;
 	}
 }
 

@@ -35,7 +35,10 @@ export class ApiAuth {
 				body: JSON.stringify({ loginAddress: address, password }),
 			},
 		);
-		if (!response.ok) return null;
+		if (response.status === 401 || response.status === 403) return null;
+		if (!response.ok) {
+			throw new Error(`Authentication backend returned ${response.status}`);
+		}
 		return (await response.json()) as AuthenticatedMailbox;
 	}
 }
