@@ -29,9 +29,12 @@ export function GetStartedTabs() {
 
 	return (
 		<div>
-			<div className="flex items-center">
+			<div className="flex items-center justify-between gap-4">
+				<h2 className="font-heading text-lg font-semibold tracking-tight text-[#1c1917]">
+					get started
+				</h2>
 				<div
-					className="flex rounded-lg bg-background p-1"
+					className="flex rounded-lg bg-[#f0efee] p-0.5"
 					role="tablist"
 					aria-label="setup path"
 				>
@@ -40,10 +43,10 @@ export function GetStartedTabs() {
 						role="tab"
 						aria-selected={mode === "agent"}
 						onClick={() => selectMode("agent")}
-						className={`rounded-md px-3.5 py-2 text-sm transition-[background-color,color,box-shadow] ${
+						className={`rounded-[6px] px-3.5 py-2 text-sm transition-[background-color,color,box-shadow] ${
 							mode === "agent"
-								? "bg-card text-[var(--text-primary)] shadow-sm"
-								: "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+								? "bg-white text-[#1c1917] shadow-sm"
+								: "text-[#78716c] hover:text-[#1c1917]"
 						}`}
 					>
 						agent led
@@ -53,10 +56,10 @@ export function GetStartedTabs() {
 						role="tab"
 						aria-selected={mode === "human"}
 						onClick={() => selectMode("human")}
-						className={`rounded-md px-3.5 py-2 text-sm transition-[background-color,color,box-shadow] ${
+						className={`rounded-[6px] px-3.5 py-2 text-sm transition-[background-color,color,box-shadow] ${
 							mode === "human"
-								? "bg-card text-[var(--text-primary)] shadow-sm"
-								: "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+								? "bg-white text-[#1c1917] shadow-sm"
+								: "text-[#78716c] hover:text-[#1c1917]"
 						}`}
 					>
 						human led
@@ -69,7 +72,7 @@ export function GetStartedTabs() {
 					<button
 						type="button"
 						onClick={copyContent}
-						className="group mt-5 flex min-h-14 w-full items-center justify-between gap-4 rounded-xl bg-[var(--button-primary-bg)] px-5 text-left text-white transition-[opacity,transform] duration-200 hover:opacity-90 active:scale-[0.99] motion-reduce:transform-none"
+						className="group mt-4 flex min-h-14 w-full items-center justify-between gap-4 rounded-xl bg-[#8161FF] px-5 text-left text-white transition-[background-color,transform] duration-200 ease-[cubic-bezier(0.2,0,0,1)] will-change-transform hover:bg-[#6b4fd9] active:scale-[0.99]"
 					>
 						<span className="flex items-center gap-2.5 font-medium">
 							<Sparkles className="size-4" />
@@ -84,8 +87,8 @@ export function GetStartedTabs() {
 							)}
 						</span>
 					</button>
-					<p className="mt-3 text-sm tracking-normal text-[var(--text-muted)]">
-						Paste into your coding agent.
+					<p className="mt-3 text-sm text-[#78716c]">
+						paste it into opencode, claude code, cursor, or any coding agent.
 					</p>
 				</>
 			) : (
@@ -93,7 +96,7 @@ export function GetStartedTabs() {
 					<button
 						type="button"
 						onClick={copyContent}
-						className="group mt-5 flex min-h-14 w-full items-center justify-between gap-4 rounded-xl bg-sidebar px-5 text-left font-mono text-sm tracking-normal text-white transition-[opacity,transform] duration-200 hover:opacity-90 active:scale-[0.99] motion-reduce:transform-none"
+						className="group mt-4 flex min-h-14 w-full items-center justify-between gap-4 rounded-xl bg-[#1c1917] px-5 text-left font-mono text-sm text-[#fafaf9] transition-[background-color,transform] duration-200 ease-[cubic-bezier(0.2,0,0,1)] will-change-transform hover:bg-[#292524] active:scale-[0.99]"
 					>
 						<span>
 							<span className="text-[#a8a29e]">$ </span>
@@ -108,6 +111,9 @@ export function GetStartedTabs() {
 							)}
 						</span>
 					</button>
+					<p className="mt-3 text-sm text-[#78716c]">
+						install the sdk, then send your first email in five lines of code.
+					</p>
 				</>
 			)}
 		</div>

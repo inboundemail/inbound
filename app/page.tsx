@@ -1,13 +1,70 @@
-import { BookOpen, Workflow } from "lucide-react";
-import { headers } from "next/headers";
+import {
+	ArrowDownRight,
+	ArrowRight,
+	ArrowUpRight,
+	AtSign,
+	Check,
+	Code2,
+	GitBranch,
+	Inbox,
+	MessageSquareReply,
+	ShieldCheck,
+	Webhook,
+} from "lucide-react";
+import { cookies, headers } from "next/headers";
+import Image from "next/image";
 import Link from "next/link";
-import EnvelopeSparkle from "@/components/icons/envelope-sparkle";
-import { GetStartedTabs } from "@/components/marketing/get-started-tabs";
 import { DemoInbox } from "@/components/marketing/demo-inbox";
+import { GetStartedTabs } from "@/components/marketing/get-started-tabs";
 import { HeroSignupButton } from "@/components/marketing/hero-signup-button";
+import { HomepageControl } from "@/components/marketing/homepage-control";
+import { HomepageExperimentTracker } from "@/components/marketing/homepage-experiment-tracker";
 import { MarketingFooter, MarketingNav } from "@/components/marketing-nav";
 import { PricingTable } from "@/components/pricing-table";
 import { auth } from "@/lib/auth/auth";
+import {
+	HOMEPAGE_EXPERIMENT_COOKIE,
+	isHomepageVariant,
+} from "@/lib/homepage-experiment";
+
+const capabilities = [
+	{
+		icon: Inbox,
+		title: "Receive",
+		description: "Unlimited mailboxes on your domain.",
+	},
+	{
+		icon: Webhook,
+		title: "Route",
+		description: "Deliver messages to any webhook in under 100ms.",
+	},
+	{
+		icon: MessageSquareReply,
+		title: "Reply",
+		description: "Send from any address with automatic threading.",
+	},
+];
+
+const routes = [
+	{ address: "support@acme.com", endpoint: "/api/support-agent" },
+	{ address: "billing@acme.com", endpoint: "/api/billing" },
+	{ address: "*@acme.com", endpoint: "/api/catch-all" },
+];
+
+const questions = [
+	{
+		question: "Can I use my own domain?",
+		answer: "Yes. Point your MX records to Inbound.",
+	},
+	{
+		question: "How fast are webhooks delivered?",
+		answer: "Typically under 100ms, with automatic retries.",
+	},
+	{
+		question: "What about spam filtering?",
+		answer: "Reject, flag, or accept spam in your mailbox settings.",
+	},
+];
 
 export default async function Page() {
 	const session = await auth.api
@@ -17,200 +74,252 @@ export default async function Page() {
 		.catch(() => null);
 
 	const isLoggedIn = !!session?.user;
+	const assignedVariant = (await cookies()).get(
+		HOMEPAGE_EXPERIMENT_COOKIE,
+	)?.value;
+	const variant = isHomepageVariant(assignedVariant)
+		? assignedVariant
+		: "control";
+
+	if (variant === "control") {
+		return (
+			<>
+				<HomepageExperimentTracker variant={variant} />
+				<HomepageControl isLoggedIn={isLoggedIn} />
+			</>
+		);
+	}
 
 	return (
-		<div className="min-h-screen bg-[#fafaf9] text-[#1c1917] selection:bg-[#8161FF] selection:text-white">
-			{/* Top announcement banner */}
-			<div className="bg-[#8161FF] text-white text-center py-2 px-4">
-				<p className="text-sm">
-					<span className="font-medium">Extra domains now just $3.50/mo</span>
-					<span className="opacity-80 ml-1.5">— add as many as you need</span>
-				</p>
-			</div>
+		<div className="min-h-screen overflow-hidden bg-background text-[var(--text-primary)] selection:bg-[var(--button-primary-bg)] selection:text-white">
+			<HomepageExperimentTracker variant={variant} />
+			<div className="mx-auto min-h-screen max-w-6xl border-x border-border bg-card px-5 sm:px-8 [&>footer]:mt-0 [&>footer]:py-7">
+				<div className="-mx-5 border-b border-border px-5 sm:-mx-8 sm:px-8">
+					<MarketingNav isLoggedIn={isLoggedIn} />
+				</div>
 
-			<div className="max-w-2xl mx-auto px-6">
-				<MarketingNav isLoggedIn={isLoggedIn} />
+				<main>
+					<section className="grid gap-8 py-12 sm:py-14 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-12 lg:py-16">
+						<div>
+							<h1 className="max-w-xl font-outfit text-6xl font-medium leading-[0.98] tracking-tight sm:text-7xl xl:text-8xl">
+								The inbox
+								<br />
+								<span className="text-primary">is an API.</span>
+							</h1>
 
-				{/* Hero */}
-				<section className="pt-20 pb-16">
-					<h1 className="max-w-2xl font-heading text-[32px] leading-[1.2] tracking-tight text-[#1B1917]">
-						email infrastructure built for{" "}
-						<span className="whitespace-nowrap text-[#8161FF]">
-							<EnvelopeSparkle className="inline-block size-8 align-middle" />{" "}
-							agent inboxes,
-						</span>{" "}
-						webhooks, and{" "}
-						<span className="whitespace-nowrap text-[#8161FF]">
-							<Workflow className="inline-block size-7 align-middle" />{" "}
-							automated workflows.
-						</span>
-					</h1>
-					<p className="mt-3 max-w-xl text-base leading-relaxed text-[#52525b]">
-						send, receive, and reply in thread through one simple api & cli.
-					</p>
+							<p className="mt-7 max-w-md text-lg leading-relaxed tracking-normal text-[var(--text-secondary)] sm:text-xl">
+								Email for agents, apps, and workflows.
+							</p>
 
-					{!isLoggedIn && <HeroSignupButton />}
-
-					{/* Email Generator - Client Component */}
-					<DemoInbox />
-				</section>
-
-				{/* Get started */}
-				<section className="py-12 border-t border-[#e7e5e4]">
-					<GetStartedTabs />
-					<p className="mt-4 text-sm text-[#52525b] flex items-center gap-4">
-						<Link
-							href="/docs"
-							className="text-[#1c1917] hover:underline flex items-center gap-1.5"
-						>
-							<BookOpen className="w-4 h-4" />
-							Read the docs
-						</Link>
-						<span className="text-[#a8a29e]">or</span>
-						<a
-							href="https://github.com/inbound-org"
-							target="_blank"
-							rel="noopener noreferrer"
-							className="text-[#1c1917] hover:underline flex items-center gap-1.5"
-						>
-							<svg className="w-4 h-4" viewBox="0 0 24 24" fill="#000337">
-								<path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-							</svg>
-							view on GitHub
-						</a>
-					</p>
-				</section>
-
-				<section className="py-10 border-t border-[#e7e5e4]">
-					<p className="text-xs text-[#78716c] uppercase tracking-wide mb-6">
-						Trusted by
-					</p>
-					<div className="flex items-center gap-10">
-						<img
-							src="/images/agentuity.png"
-							alt="Agentuity"
-							className="h-5 object-contain opacity-70 grayscale hover:opacity-100 hover:grayscale-0 transition-all"
-						/>
-						<img
-							src="/images/mandarin-3d.png"
-							alt="Mandarin 3D"
-							className="h-5 object-contain opacity-70 grayscale hover:opacity-100 hover:grayscale-0 transition-all"
-						/>
-						<img
-							src="/images/teslanav.png"
-							alt="TeslaNav"
-							className="h-5 object-contain opacity-70 grayscale hover:opacity-100 hover:grayscale-0 transition-all"
-						/>
-					</div>
-
-					<div className="mt-8 bg-[#fafaf9] rounded-lg">
-						<div className="flex items-start gap-3">
-							<div className="flex-shrink-0 w-10 h-10 bg-[#18181b] rounded-lg flex items-center justify-center">
-								<img
-									src="/images/linkdr.svg"
-									alt="LinkDR"
-									className="h-5 w-5"
-								/>
+							<div className="mt-9 flex flex-wrap items-center gap-3">
+								{isLoggedIn ? (
+									<Link
+										href="/logs"
+										className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-[var(--button-primary-bg)] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+									>
+										Open dashboard <ArrowRight className="size-4" />
+									</Link>
+								) : (
+									<HeroSignupButton />
+								)}
+								<Link
+									href="/docs"
+									className="inline-flex min-h-12 items-center gap-2 rounded-lg border border-border bg-card px-5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-muted"
+								>
+									Read the docs <ArrowUpRight className="size-4" />
+								</Link>
 							</div>
-							<div>
+
+							<div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs tracking-normal text-[var(--text-muted)]">
+								<span className="inline-flex items-center gap-1.5">
+									<Check className="size-3.5 text-primary" /> Unlimited
+									mailboxes
+								</span>
+								<span className="inline-flex items-center gap-1.5">
+									<Check className="size-3.5 text-primary" /> Starts at $4/mo
+								</span>
+							</div>
+						</div>
+
+						<div className="border-t border-border pt-7 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
+							<div className="flex items-center justify-between border-b border-border pb-5">
+								<div className="flex items-center gap-2.5">
+									<Inbox className="size-4 text-primary" />
+									<span className="text-sm font-medium">Live inbox</span>
+								</div>
+								<span className="inline-flex items-center gap-1.5 font-mono text-xs tracking-normal text-[var(--text-muted)]">
+									<span className="size-1.5 rounded-full bg-emerald-500" /> live
+								</span>
+							</div>
+
+							<div className="border-b border-border py-7">
+								<div className="flex items-center justify-between font-mono text-xs tracking-normal text-[var(--text-muted)]">
+									<span>RECEIVED</span>
+									<ArrowDownRight className="size-4" />
+								</div>
+								<div className="mt-7 flex items-start gap-3">
+									<AtSign className="mt-0.5 size-5 shrink-0 text-primary" />
+									<div className="min-w-0">
+										<p className="truncate font-mono text-sm tracking-normal">
+											agent@yourcompany.com
+										</p>
+									</div>
+								</div>
+								<div className="mt-6 flex items-center gap-2 font-mono text-xs tracking-normal text-[var(--text-secondary)]">
+									<Webhook className="size-3.5 text-primary" />
+									POST /api/agent
+									<span className="ml-auto text-emerald-600">200 OK</span>
+								</div>
+							</div>
+
+							<div className="pt-7">
+								<DemoInbox />
+							</div>
+						</div>
+					</section>
+
+					<section className="-mx-5 grid gap-5 border-y border-border bg-background px-5 py-5 sm:-mx-8 sm:grid-cols-[auto_1fr] sm:items-center sm:gap-10 sm:px-8 sm:py-6">
+						<p className="font-mono text-xs tracking-normal text-[var(--text-muted)]">
+							TRUSTED BY
+						</p>
+						<div className="flex flex-wrap items-center gap-x-10 gap-y-6 sm:justify-end sm:gap-x-14">
+							<Image
+								src="/images/agentuity.png"
+								alt="Agentuity"
+								width={118}
+								height={28}
+								className="h-5 w-auto object-contain opacity-60 grayscale transition-opacity hover:opacity-100"
+							/>
+							<Image
+								src="/images/mandarin-3d.png"
+								alt="Mandarin 3D"
+								width={118}
+								height={28}
+								className="h-5 w-auto object-contain opacity-60 grayscale transition-opacity hover:opacity-100"
+							/>
+							<Image
+								src="/images/teslanav.png"
+								alt="TeslaNav"
+								width={118}
+								height={28}
+								className="h-5 w-auto object-contain opacity-60 grayscale transition-opacity hover:opacity-100"
+							/>
+						</div>
+					</section>
+
+					<section className="grid gap-7 py-9 sm:py-11 lg:grid-cols-[0.6fr_1fr] lg:items-center lg:gap-10">
+						<div>
+							<h2 className="max-w-md font-outfit text-3xl font-medium leading-tight tracking-tight sm:text-4xl">
+								Get started.
+							</h2>
+						</div>
+
+						<div className="border-t border-border pt-7 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
+							<GetStartedTabs />
+							<div className="mt-7 border-t border-border pt-5 text-sm">
 								<a
-									href="https://linkdr.com"
+									href="https://github.com/inbound-org"
 									target="_blank"
 									rel="noopener noreferrer"
-									className="font-medium text-[#18181b] hover:underline"
+									className="inline-flex items-center gap-1.5 text-[var(--text-secondary)] transition-colors hover:text-primary"
 								>
-									LinkDR
+									<Code2 className="size-4" /> GitHub
 								</a>
-								<p className="text-sm text-[#52525b] leading-relaxed">
-									LinkDR uses Inbound to power their internal order management
-									system for backlink management, processing thousands of
-									automated emails daily.
-								</p>
 							</div>
 						</div>
-					</div>
-				</section>
+					</section>
 
-				{/* What it does */}
-				<section className="py-12 border-t border-[#e7e5e4]">
-					<h2 className="font-heading text-xl font-semibold tracking-tight mb-6">
-						What is Inbound?
-					</h2>
-					<div className="space-y-4 text-[#3f3f46] leading-relaxed">
-						<p>
-							Inbound lets you send and receive emails programmatically. Add
-							your domain, configure your MX records, and you're ready to go.
-							Unlimited mailboxes on that domain, no setup required for each
-							address.
-						</p>
-						<p>
-							Send from any address on your domain. Receive at any address.
-							Route specific addresses to dedicated endpoints, or set up a
-							catch-all that forwards everything to a single webhook. Perfect
-							for support domains that route all incoming mail to an AI agent.
-						</p>
-						<p>
-							Every email preserves threading automatically. Reply
-							programmatically and we handle all the headers so your responses
-							show up in the right thread. It just works.
-						</p>
-					</div>
+					<section className="border-t border-border py-9 sm:py-11">
+						<div className="max-w-2xl">
+							<h2 className="font-outfit text-3xl font-medium leading-tight tracking-tight sm:text-4xl">
+								Send, receive, and reply.
+							</h2>
+						</div>
 
-					<div className="mt-8 space-y-2">
-						<p className="text-xs text-[#78716c] uppercase tracking-wide mb-3">
-							Example routes
-						</p>
-						<div className="font-mono text-sm space-y-1.5">
-							<div className="flex items-center gap-3">
-								<span className="text-[#52525b]">support@acme.com</span>
-								<span className="text-[#a8a29e]">&rarr;</span>
-								<span className="text-[#3f3f46]">/api/support-agent</span>
+						<div className="mt-8 grid gap-7 md:grid-cols-3 md:gap-0">
+							{capabilities.map(({ icon: Icon, title, description }) => (
+								<div
+									key={title}
+									className="border-t border-border pt-6 md:border-l md:border-t-0 md:px-8 md:pt-0 md:first:border-l-0 md:first:pl-0 md:last:pr-0"
+								>
+									<Icon className="size-5 text-primary" />
+									<h3 className="mt-5 font-outfit text-xl font-medium tracking-tight">
+										{title}
+									</h3>
+									<p className="mt-3 text-sm leading-relaxed tracking-normal text-[var(--text-secondary)]">
+										{description}
+									</p>
+								</div>
+							))}
+						</div>
+
+						<div className="mt-8 grid gap-7 border-t border-border pt-7 lg:grid-cols-[1.3fr_0.7fr] lg:gap-10">
+							<div>
+								<div className="flex items-center justify-between">
+									<div className="inline-flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+										<GitBranch className="size-4 text-primary" /> Routes
+									</div>
+									<span className="font-mono text-xs tracking-normal text-[var(--text-muted)]">
+										acme.com
+									</span>
+								</div>
+								<div className="mt-7 space-y-4 font-mono text-xs tracking-normal sm:text-sm">
+									{routes.map(({ address, endpoint }) => (
+										<div
+											key={address}
+											className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4"
+										>
+											<span className="text-[var(--text-primary)] sm:min-w-44">
+												{address}
+											</span>
+											<ArrowRight className="hidden size-3.5 text-[var(--text-muted)] sm:block" />
+											<span className="text-primary">{endpoint}</span>
+										</div>
+									))}
+								</div>
 							</div>
-							<div className="flex items-center gap-3">
-								<span className="text-[#52525b]">billing@acme.com</span>
-								<span className="text-[#a8a29e]">&rarr;</span>
-								<span className="text-[#3f3f46]">/api/billing</span>
-							</div>
-							<div className="flex items-center gap-3">
-								<span className="text-[#52525b]">*@acme.com</span>
-								<span className="text-[#a8a29e]">&rarr;</span>
-								<span className="text-[#3f3f46]">/api/catch-all</span>
-							</div>
-						</div>
-					</div>
-				</section>
 
-				<PricingTable />
+							<div className="border-t border-border pt-7 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
+								<ShieldCheck className="size-5 text-primary" />
+								<div className="mt-6">
+									<p className="font-outfit text-xl font-medium tracking-tight">
+										Included
+									</p>
+									<p className="mt-2 text-sm leading-relaxed tracking-normal text-[var(--text-secondary)]">
+										Spam filtering, retries, and threading.
+									</p>
+								</div>
+							</div>
+						</div>
+					</section>
 
-				{/* FAQ */}
-				<section className="py-12 border-t border-[#e7e5e4]">
-					<h2 className="font-heading text-xl font-semibold tracking-tight mb-6">
-						FAQ
-					</h2>
-					<div className="space-y-6">
-						<div>
-							<p className="text-[#1c1917]">Can I use my own domain?</p>
-							<p className="text-sm text-[#52525b] mt-1">
-								Yes. Configure your MX records to point to our servers and you
-								can receive email at any address on your domain.
-							</p>
+					<section className="grid gap-9 border-t border-border py-9 sm:py-11 lg:grid-cols-2 lg:gap-0">
+						<div className="lg:pr-9">
+							<h2 className="font-outfit text-3xl font-medium leading-tight tracking-tight sm:text-4xl">
+								Pricing
+							</h2>
+							<div className="mt-7 [&>section]:border-t-0 [&>section]:py-0">
+								<PricingTable showHeader={false} />
+							</div>
 						</div>
-						<div>
-							<p className="text-[#1c1917]">How fast are webhooks delivered?</p>
-							<p className="text-sm text-[#52525b] mt-1">
-								Typically under 100ms from when we receive the email. We retry
-								failed webhooks with exponential backoff.
-							</p>
+
+						<div className="border-t border-border pt-8 lg:border-l lg:border-t-0 lg:pl-9 lg:pt-0">
+							<h2 className="font-outfit text-3xl font-medium leading-tight tracking-tight sm:text-4xl">
+								FAQ
+							</h2>
+							<div className="mt-7 divide-y divide-border">
+								{questions.map(({ question, answer }) => (
+									<div key={question} className="py-5 first:pt-0 last:pb-0">
+										<h3 className="font-medium">{question}</h3>
+										<p className="mt-2 text-sm leading-relaxed tracking-normal text-[var(--text-secondary)]">
+											{answer}
+										</p>
+									</div>
+								))}
+							</div>
 						</div>
-						<div>
-							<p className="text-[#1c1917]">What about spam filtering?</p>
-							<p className="text-sm text-[#52525b] mt-1">
-								We run incoming email through spam detection. You can choose to
-								reject, flag, or accept spam in your mailbox settings.
-							</p>
-						</div>
-					</div>
-				</section>
+					</section>
+				</main>
 
 				<MarketingFooter />
 			</div>
