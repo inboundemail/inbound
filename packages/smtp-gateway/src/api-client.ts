@@ -107,20 +107,20 @@ export class InboundApiClient {
 		loginAddress: string,
 		password: string,
 	): Promise<SmtpIdentity | null> {
-		const response = await fetch(
+		const failure = "4.3.0 Authentication backend unavailable, try again later";
+		const response = await this.request(
 			`${this.config.apiBaseUrl}/mailboxes/authenticate-smtp`,
 			{
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ loginAddress, password }),
 			},
+			this.config.authRequestTimeoutMs,
+			failure,
 		);
 		if (response.ok) return (await response.json()) as SmtpIdentity;
 		if (response.status === 401 || response.status === 403) return null;
-		throw new SmtpRelayError({
-			responseCode: 451,
-			message: "4.3.0 Authentication backend unavailable, try again later",
-		});
+		throw new SmtpRelayError({ responseCode: 451, message: failure });
 	}
 
 	async sendEmail(
@@ -128,7 +128,7 @@ export class InboundApiClient {
 		payload: SendEmailPayload,
 		idempotencyKey: string,
 	): Promise<SendEmailResult> {
-		const response = await fetch(
+		const response = await this.request(
 			`${this.config.apiBaseUrl}${this.config.sendPath}`,
 			{
 				method: "POST",
@@ -139,6 +139,8 @@ export class InboundApiClient {
 				},
 				body: JSON.stringify(payload),
 			},
+			this.config.sendRequestTimeoutMs,
+			"4.3.0 Temporary upstream failure, try again later",
 		);
 		if (!response.ok) {
 			const apiMessage = await readErrorMessage(response);
@@ -147,5 +149,21 @@ export class InboundApiClient {
 			);
 		}
 		return (await response.json()) as SendEmailResult;
+	}
+
+	private async request(
+		url: string,
+		options: RequestInit,
+		timeoutMs: number,
+		failure: string,
+	): Promise<Response> {
+		try {
+			return await fetch(url, {
+				...options,
+				signal: AbortSignal.timeout(timeoutMs),
+			});
+		} catch {
+			throw new SmtpRelayError({ responseCode: 451, message: failure });
+		}
 	}
 }

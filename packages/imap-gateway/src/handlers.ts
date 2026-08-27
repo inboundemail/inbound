@@ -35,6 +35,13 @@ interface ImapSession {
 		address: string;
 	};
 	remoteAddress?: string;
+	selected?:
+		| {
+				mailbox?: string;
+				path?: string;
+				readOnly?: boolean;
+		  }
+		| false;
 	formatResponse: (command: string, uid: number, data: unknown) => unknown;
 	getQueryResponse: (
 		query: unknown,
@@ -96,26 +103,36 @@ export function buildHandlers(
 		return user;
 	}
 
+	function sourceIsReadOnly(session: ImapSession, mailboxId: string): boolean {
+		const selected = session.selected;
+		return (
+			!selected ||
+			selected.mailbox !== mailboxId ||
+			Boolean(selected.readOnly) ||
+			Boolean(selected.path?.startsWith("Scopes/"))
+		);
+	}
+
 	return {
 		logger,
 
 		onAuth(authData: AuthData, _session: ImapSession, callback: Callback) {
 			const ip = _session.remoteAddress ?? "unknown";
-			const limited = limits.assertAuthAllowed(ip);
-			if (limited) return callback(limited);
 			const address = authData.username.trim().toLowerCase();
+			const limited = limits.assertAuthAllowed(ip, address);
+			if (limited) return callback(null);
 			if (!address.includes("@") || !authData.password) {
-				limits.recordAuthFailure(ip);
-				return callback(new Error("Invalid credentials"));
+				limits.recordAuthFailure(ip, address);
+				return callback(null);
 			}
 			auth
 				.authenticate(address, authData.password)
 				.then((result) => {
 					if (!result) {
-						limits.recordAuthFailure(ip);
-						return callback(new Error("Invalid credentials"));
+						limits.recordAuthFailure(ip, address);
+						return callback(null);
 					}
-					limits.recordAuthSuccess(ip);
+					limits.recordAuthSuccess(ip, address);
 					callback(null, {
 						user: {
 							...result,
@@ -199,7 +216,9 @@ export function buildHandlers(
 						modifyIndex: fresh?.modseq ?? mailbox.modseq,
 						uidList,
 						flags: [],
-						readOnly: Boolean(mailbox.scopeId),
+						readOnly:
+							Boolean(mailbox.scopeId) ||
+							requireUser(session).accessMode !== "read_write",
 					});
 				})
 				.catch((err: Error) => callback(err));
@@ -293,6 +312,9 @@ export function buildHandlers(
 				await store.ensureDefaultMailboxes(user);
 				const mailbox = await store.getMailboxByPath(user, path);
 				if (!mailbox) return { success: "TRYCREATE" as const, info: null };
+				if (mailbox.scopeId) {
+					return { success: "READ-ONLY" as const, info: null };
+				}
 				const date = internaldate ? new Date(internaldate) : new Date();
 				const info = await store.appendMessage(
 					mailbox,
@@ -331,6 +353,9 @@ export function buildHandlers(
 					update.destination,
 				);
 				if (!destination) return { success: "TRYCREATE" as const, info: null };
+				if (destination.scopeId) {
+					return { success: "READ-ONLY" as const, info: null };
+				}
 				const info = await store.copyMessages(
 					mailboxId,
 					destination,
@@ -352,6 +377,7 @@ export function buildHandlers(
 				const user = requireUser(session);
 				if (
 					user.accessMode !== "read_write" ||
+					sourceIsReadOnly(session, mailboxId) ||
 					update.destination.startsWith("Scopes/")
 				)
 					return { success: "READ-ONLY" as const, info: null };
@@ -360,6 +386,9 @@ export function buildHandlers(
 					update.destination,
 				);
 				if (!destination) return { success: "TRYCREATE" as const, info: null };
+				if (destination.scopeId) {
+					return { success: "READ-ONLY" as const, info: null };
+				}
 				const info = await store.copyMessages(
 					mailboxId,
 					destination,
@@ -389,13 +418,17 @@ export function buildHandlers(
 						raw = await store.getRawContent(
 							row.structuredEmailId,
 							row.rawSource,
-							requireUser(session).userId,
+							requireUser(session),
 						);
 						if (!raw) continue;
 					}
 
 					const flags = [...row.flags];
-					const markAsSeen = options.markAsSeen && !flags.includes("\\Seen");
+					const markAsSeen =
+						options.markAsSeen &&
+						requireUser(session).accessMode === "read_write" &&
+						!sourceIsReadOnly(session, mailboxId) &&
+						!flags.includes("\\Seen");
 					if (markAsSeen) flags.unshift("\\Seen");
 
 					const messageData = {
@@ -456,7 +489,10 @@ export function buildHandlers(
 			_session: ImapSession,
 			callback: Callback,
 		) {
-			if (requireUser(_session).accessMode !== "read_write") {
+			if (
+				requireUser(_session).accessMode !== "read_write" ||
+				sourceIsReadOnly(_session, mailboxId)
+			) {
 				return callback(null, "READ-ONLY", []);
 			}
 			store
@@ -467,16 +503,34 @@ export function buildHandlers(
 
 		onExpunge(
 			mailboxId: string,
-			update: { isUid: boolean; messages?: number[] },
+			update: {
+				isUid: boolean;
+				messages?: number[];
+				silent?: boolean;
+				path?: string;
+			},
 			_session: ImapSession,
 			callback: Callback,
 		) {
-			if (requireUser(_session).accessMode !== "read_write") {
-				return callback(null, "READ-ONLY");
-			}
-			store
-				.expunge(mailboxId, update.isUid ? (update.messages ?? []) : undefined)
-				.then(() => callback(null, true))
+			(async () => {
+				const user = requireUser(_session);
+				if (user.accessMode !== "read_write") return "READ-ONLY";
+				if (sourceIsReadOnly(_session, mailboxId)) {
+					if (_session.selected || update.silent !== true || !update.path) {
+						return "READ-ONLY";
+					}
+					const mailbox = await store.getMailboxByPath(user, update.path);
+					if (!mailbox || mailbox.id !== mailboxId || mailbox.scopeId) {
+						return "READ-ONLY";
+					}
+				}
+				await store.expunge(
+					mailboxId,
+					update.isUid ? (update.messages ?? []) : undefined,
+				);
+				return true;
+			})()
+				.then((result) => callback(null, result))
 				.catch((err: Error) => callback(err));
 		},
 	};

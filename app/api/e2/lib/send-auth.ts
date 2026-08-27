@@ -1,4 +1,7 @@
-import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
+import {
+	enforceAuthenticatedUserAndRateLimit,
+	validateAndRateLimit,
+} from "@/app/api/e2/lib/auth";
 import {
 	authenticateManagedMailCredential,
 	normalizeEmailAddress,
@@ -19,6 +22,7 @@ export async function authenticateEmailSend(
 	if (apiKey?.startsWith("mail_") || apiKey?.startsWith("imap_")) {
 		const credential = await authenticateManagedMailCredential(apiKey);
 		if (credential) {
+			await enforceAuthenticatedUserAndRateLimit(credential.userId, set);
 			return {
 				userId: credential.userId,
 				senderPolicy: {

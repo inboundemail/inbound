@@ -41,6 +41,7 @@ const tls =
 		? {
 				key: readFileSync(config.tlsKeyPath),
 				cert: readFileSync(config.tlsCertPath),
+				minVersion: "TLSv1.2" as const,
 			}
 		: null;
 
@@ -59,6 +60,7 @@ function startServer(secure: boolean, port: number) {
 		ignoreSTARTTLS: !tls,
 		useProxy: false,
 		maxConnections: config.maxConnections,
+		maxMessage: config.maxMessageBytes,
 		...(tls ?? {}),
 		...(tls
 			? {
@@ -105,8 +107,8 @@ function startServer(secure: boolean, port: number) {
 		console.error("[imap-gateway] server error", err);
 	});
 
+	server.server.maxConnections = config.maxConnections;
 	server.listen(port, () => {
-		server.server.maxConnections = config.maxConnections;
 		console.log(
 			`[imap-gateway] ${config.hostname} listening on :${port} (${secure ? "TLS" : "plaintext dev"})`,
 		);
@@ -114,8 +116,37 @@ function startServer(secure: boolean, port: number) {
 	return server;
 }
 
-if (tls) startServer(true, config.securePort);
-if (config.allowPlaintext) startServer(false, config.port);
+const servers: Array<{ close: (callback: () => void) => void }> = [];
+if (tls) servers.push(startServer(true, config.securePort));
+if (config.allowPlaintext) servers.push(startServer(false, config.port));
 
-process.on("SIGTERM", () => process.exit(0));
-process.on("SIGINT", () => process.exit(0));
+let shuttingDown = false;
+function shutdown(): void {
+	if (shuttingDown) return;
+	shuttingDown = true;
+	clearInterval(orphanCleanup);
+	const shutdownTimeout = setTimeout(() => {
+		console.error("[imap-gateway] graceful shutdown timed out");
+		process.exit(1);
+	}, 10_000);
+	shutdownTimeout.unref();
+	Promise.all([
+		...servers.map(
+			(server) => new Promise<void>((resolve) => server.close(resolve)),
+		),
+		notifier.stop(),
+	])
+		.then(() => store.end())
+		.then(() => {
+			clearTimeout(shutdownTimeout);
+			process.exit(0);
+		})
+		.catch((err: Error) => {
+			clearTimeout(shutdownTimeout);
+			console.error("[imap-gateway] graceful shutdown failed", err.message);
+			process.exit(1);
+		});
+}
+
+process.once("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);
