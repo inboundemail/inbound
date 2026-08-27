@@ -3,6 +3,7 @@ import { Client as QStashClient } from "@upstash/qstash";
 import { waitUntil } from "@vercel/functions";
 import { Autumn as autumn } from "autumn-js";
 import { and, eq } from "drizzle-orm";
+import type { InferSelectModel } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { nanoid } from "nanoid";
 import { buildSentEmailTags } from "@/app/api/e2/helper/ses-email-tags";
@@ -185,10 +186,12 @@ export const sendEmail = new Elysia().post(
 
 		// Check for idempotency key
 		const idempotencyKey = request.headers.get("Idempotency-Key");
-		if (idempotencyKey) {
-			console.log("🔑 Idempotency key provided:", idempotencyKey);
+		const findExistingIdempotencyEmail = async () => {
+			if (!idempotencyKey) {
+				return undefined;
+			}
 
-			const existingEmail = await db
+			const [existingEmail] = await db
 				.select()
 				.from(sentEmails)
 				.where(
@@ -199,21 +202,33 @@ export const sendEmail = new Elysia().post(
 				)
 				.limit(1);
 
-			if (existingEmail.length > 0) {
-				if (existingEmail[0].status !== SENT_EMAIL_STATUS.SENT) {
-					set.status = 503;
-					set.headers["Retry-After"] = "60";
-					return {
-						error:
-							"An email with this idempotency key has not been successfully sent. Please try again later.",
-					};
-				}
+			return existingEmail;
+		};
+		const returnExistingIdempotencyResponse = (
+			existingEmail: InferSelectModel<typeof sentEmails>,
+		) => {
+			if (existingEmail.status !== SENT_EMAIL_STATUS.SENT) {
+				set.status = 503;
+				set.headers["Retry-After"] = "60";
+				return {
+					error:
+						"An email with this idempotency key has not been successfully sent. Please try again later.",
+				};
+			}
 
-				console.log(
-					"♻️ Idempotent request - returning existing email:",
-					existingEmail[0].id,
-				);
-				return { id: existingEmail[0].id };
+			console.log(
+				"♻️ Idempotent request - returning existing email:",
+				existingEmail.id,
+			);
+			return { id: existingEmail.id };
+		};
+
+		if (idempotencyKey) {
+			console.log("🔑 Idempotency key provided:", idempotencyKey);
+
+			const existingEmail = await findExistingIdempotencyEmail();
+			if (existingEmail) {
+				return returnExistingIdempotencyResponse(existingEmail);
 			}
 		}
 
@@ -490,31 +505,46 @@ export const sendEmail = new Elysia().post(
 		const emailId = nanoid();
 		console.log("💾 Creating sent email record:", emailId);
 
-		await db.insert(sentEmails).values({
-			id: emailId,
-			from: body.from,
-			fromAddress,
-			fromDomain,
-			to: JSON.stringify(toAddresses),
-			cc: ccAddresses.length > 0 ? JSON.stringify(ccAddresses) : null,
-			bcc: bccAddresses.length > 0 ? JSON.stringify(bccAddresses) : null,
-			replyTo:
-				replyToAddresses.length > 0 ? JSON.stringify(replyToAddresses) : null,
-			subject: body.subject,
-			textBody: body.text,
-			htmlBody: body.html,
-			headers: body.headers ? JSON.stringify(body.headers) : null,
-			attachments:
-				processedAttachments.length > 0
-					? JSON.stringify(attachmentsToStorageFormat(processedAttachments))
-					: null,
-			tags: body.tags ? JSON.stringify(body.tags) : null,
-			status: SENT_EMAIL_STATUS.PENDING,
-			userId,
-			idempotencyKey,
-			createdAt: new Date(),
-			updatedAt: new Date(),
-		});
+		const [createdEmail] = await db
+			.insert(sentEmails)
+			.values({
+				id: emailId,
+				from: body.from,
+				fromAddress,
+				fromDomain,
+				to: JSON.stringify(toAddresses),
+				cc: ccAddresses.length > 0 ? JSON.stringify(ccAddresses) : null,
+				bcc: bccAddresses.length > 0 ? JSON.stringify(bccAddresses) : null,
+				replyTo:
+					replyToAddresses.length > 0 ? JSON.stringify(replyToAddresses) : null,
+				subject: body.subject,
+				textBody: body.text,
+				htmlBody: body.html,
+				headers: body.headers ? JSON.stringify(body.headers) : null,
+				attachments:
+					processedAttachments.length > 0
+						? JSON.stringify(attachmentsToStorageFormat(processedAttachments))
+						: null,
+				tags: body.tags ? JSON.stringify(body.tags) : null,
+				status: SENT_EMAIL_STATUS.PENDING,
+				userId,
+				idempotencyKey: idempotencyKey || null,
+				createdAt: new Date(),
+				updatedAt: new Date(),
+			})
+			.onConflictDoNothing({
+				target: [sentEmails.userId, sentEmails.idempotencyKey],
+			})
+			.returning({ id: sentEmails.id });
+
+		if (!createdEmail) {
+			const existingEmail = await findExistingIdempotencyEmail();
+			if (!existingEmail) {
+				throw new Error("Sent email insert returned no row");
+			}
+
+			return returnExistingIdempotencyResponse(existingEmail);
+		}
 
 		// Check if SES is configured
 		if (!sesClient) {
