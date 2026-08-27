@@ -6,6 +6,7 @@ import {
 	text,
 	timestamp,
 	unique,
+	uniqueIndex,
 	varchar,
 } from "drizzle-orm/pg-core";
 import {
@@ -587,8 +588,17 @@ export const sentEmails = pgTable(
 		threadPosition: integer("thread_position"), // Position in thread
 
 		// Batch sending fields
-		batchId: varchar("batch_id", { length: 255 }), // For grouping batch sends
-		batchIndex: integer("batch_index"), // Order within batch
+		batchId: varchar("batch_id", { length: 255 }),
+		batchIndex: integer("batch_index"),
+		qstashMessageId: varchar("qstash_message_id", { length: 255 }),
+		qstashPublishAttempt: integer("qstash_publish_attempt")
+			.notNull()
+			.default(0),
+		processingToken: varchar("processing_token", { length: 255 }),
+		processingStartedAt: timestamp("processing_started_at"),
+		providerSubmittedAt: timestamp("provider_submitted_at"),
+		usageTrackedAt: timestamp("usage_tracked_at"),
+		usageTrackingError: text("usage_tracking_error"),
 
 		// User and timestamps
 		userId: varchar("user_id", { length: 255 }).notNull(),
@@ -609,6 +619,46 @@ export const sentEmails = pgTable(
 		userFirstOpenedIdx: index("sent_emails_user_first_opened_idx").on(
 			table.userId,
 			table.firstOpenedAt,
+		),
+		userBatchIdx: index("sent_emails_user_batch_idx").on(
+			table.userId,
+			table.batchId,
+			table.batchIndex,
+		),
+		batchIdxUnique: uniqueIndex("sent_emails_batch_idx_unique").on(
+			table.batchId,
+			table.batchIndex,
+		),
+	}),
+);
+
+export const emailBatches = pgTable(
+	"email_batches",
+	{
+		id: varchar("id", { length: 255 }).primaryKey(),
+		userId: varchar("user_id", { length: 255 }).notNull(),
+		status: varchar("status", { length: 50 }).notNull().default("creating"),
+		idempotencyKey: varchar("idempotency_key", { length: 256 }),
+		requestHash: varchar("request_hash", { length: 64 }).notNull(),
+		totalCount: integer("total_count").notNull(),
+		publishedCount: integer("published_count").notNull().default(0),
+		lastError: text("last_error"),
+		createdAt: timestamp("created_at").defaultNow(),
+		updatedAt: timestamp("updated_at").defaultNow(),
+		completedAt: timestamp("completed_at"),
+	},
+	(table) => ({
+		userCreatedIdx: index("email_batches_user_created_idx").on(
+			table.userId,
+			table.createdAt,
+		),
+		userStatusIdx: index("email_batches_user_status_idx").on(
+			table.userId,
+			table.status,
+		),
+		userIdempotencyUnique: unique("email_batches_user_idempotency_unique").on(
+			table.userId,
+			table.idempotencyKey,
 		),
 	}),
 );
@@ -862,8 +912,23 @@ export const DELIVERY_STATUS = {
 
 export const SENT_EMAIL_STATUS = {
 	PENDING: "pending",
+	PROCESSING: "processing",
 	SENT: "sent",
 	FAILED: "failed",
+	CANCELLED: "cancelled",
+	PROVIDER_UNKNOWN: "provider_unknown",
+} as const;
+
+export const EMAIL_BATCH_STATUS = {
+	CREATING: "creating",
+	QUEUED: "queued",
+	PARTIALLY_QUEUED: "partially_queued",
+	PROCESSING: "processing",
+	COMPLETED: "completed",
+	PARTIALLY_FAILED: "partially_failed",
+	FAILED: "failed",
+	CANCELLED: "cancelled",
+	REQUIRES_ATTENTION: "requires_attention",
 } as const;
 
 // Email Delivery Events table - tracks bounces, complaints, and delivery failures from DSNs
@@ -1071,6 +1136,10 @@ export type DeliveryStatus =
 	(typeof DELIVERY_STATUS)[keyof typeof DELIVERY_STATUS];
 export type SentEmailStatus =
 	(typeof SENT_EMAIL_STATUS)[keyof typeof SENT_EMAIL_STATUS];
+export type EmailBatchStatus =
+	(typeof EMAIL_BATCH_STATUS)[keyof typeof EMAIL_BATCH_STATUS];
+export type EmailBatch = typeof emailBatches.$inferSelect;
+export type NewEmailBatch = typeof emailBatches.$inferInsert;
 
 // Guard Rules types
 export type GuardRule = typeof guardRules.$inferSelect;
