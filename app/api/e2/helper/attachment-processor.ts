@@ -59,6 +59,7 @@ const ALLOWED_CONTENT_TYPES = [
   
   // Text and Data
   'text/plain',
+  'text/calendar',
   'text/csv',
   'text/html',
   'text/css',
