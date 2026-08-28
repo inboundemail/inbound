@@ -23,6 +23,9 @@ import { deleteEmailAddress } from "../email-addresses/delete";
 import { getEmailAddress } from "../email-addresses/get";
 import { listEmailAddresses } from "../email-addresses/list";
 import { updateEmailAddress } from "../email-addresses/update";
+import { cancelBulkEmailBatch } from "../emails/bulk-cancel";
+import { getBulkEmailBatch } from "../emails/bulk-get";
+import { sendBulkEmails } from "../emails/bulk-send";
 import { cancelEmail } from "../emails/cancel";
 import { getEmail } from "../emails/get";
 import { listEmails } from "../emails/list";
@@ -483,6 +486,9 @@ https://inbound.new/api/e2
 	.use(revokeCurrentApiKey)
 	// Email routes (sending, listing, managing)
 	.use(sendEmail)
+	.use(sendBulkEmails)
+	.use(getBulkEmailBatch)
+	.use(cancelBulkEmailBatch)
 	.use(listEmails)
 	.use(getEmail)
 	.use(updateEmail)

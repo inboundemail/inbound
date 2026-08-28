@@ -62,15 +62,15 @@ if (awsAccessKeyId && awsSecretAccessKey) {
 	});
 }
 
-// Request schema
-const AttachmentSchema = t.Object({
+// Request schema (shared with bulk send)
+export const AttachmentSchema = t.Object({
 	filename: t.String(),
 	content: t.String(),
 	content_type: t.Optional(t.String()),
 	path: t.Optional(t.String()),
 });
 
-const TagSchema = t.Object({
+export const TagSchema = t.Object({
 	name: t.String(),
 	value: t.String(),
 });
