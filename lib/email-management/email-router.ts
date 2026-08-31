@@ -6,7 +6,7 @@
  */
 
 import { Autumn as autumn } from "autumn-js";
-import { and, asc, eq, or, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { Endpoint } from "@/features/endpoints/types";
 import { getTenantSendingInfoForDomainOrParent } from "@/lib/aws-ses/identity-arn-helper";
@@ -550,7 +550,10 @@ async function findEndpointForEmail(
 			.from(emailAddresses)
 			.where(
 				and(
-					eq(emailAddresses.address, recipient),
+					ilike(
+						emailAddresses.address,
+						recipient.trim().replace(/[\\%_]/g, "\\$&"),
+					),
 					eq(emailAddresses.isActive, true),
 					eq(emailAddresses.userId, userId),
 				),

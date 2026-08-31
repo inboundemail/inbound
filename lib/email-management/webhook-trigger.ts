@@ -5,7 +5,7 @@
  */
 
 import { createHash, createHmac } from "crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ilike, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
 	emailAddresses,
@@ -219,8 +219,12 @@ export async function triggerEmailAction(
 			.from(emailAddresses)
 			.where(
 				and(
-					eq(emailAddresses.address, emailData.recipient),
+					ilike(
+						emailAddresses.address,
+						emailData.recipient.trim().replace(/[\\%_]/g, "\\$&"),
+					),
 					eq(emailAddresses.isActive, true),
+					eq(emailAddresses.userId, emailData.userId),
 				),
 			)
 			.limit(1);
@@ -238,7 +242,13 @@ export async function triggerEmailAction(
 		const webhookRecord = await db
 			.select()
 			.from(webhooks)
-			.where(and(eq(webhooks.id, webhookId), eq(webhooks.isActive, true)))
+			.where(
+				and(
+					eq(webhooks.id, webhookId),
+					eq(webhooks.isActive, true),
+					eq(webhooks.userId, emailData.userId),
+				),
+			)
 			.limit(1);
 
 		if (!webhookRecord[0]) {
