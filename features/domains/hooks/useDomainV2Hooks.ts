@@ -172,30 +172,51 @@ export const domainV2Keys = {
 };
 
 // Hook for domains list (replacement for useDomainStatsQuery) - uses Elysia e2 API via Eden
-export const useDomainsListV2Query = (params?: GetDomainsRequest) => {
+export const useDomainsListV2Query = (
+	params?: GetDomainsRequest & { fetchAll?: boolean },
+) => {
 	return useQuery<GetDomainsResponse>({
 		queryKey: domainV2Keys.list(params),
-		queryFn: async () => {
-			const { data, error } = await client.api.e2.domains.get({
-				query: {
-					limit: params?.limit,
-					offset: params?.offset,
-					status: params?.status as
-						| "pending"
-						| "verified"
-						| "failed"
-						| undefined,
-					canReceive: params?.canReceive as "true" | "false" | undefined,
-					check: params?.check as "true" | undefined,
-				},
-			});
+		queryFn: async ({ signal }) => {
+			const domains: E2DomainWithStats[] = [];
+			let offset = params?.offset ?? 0;
+			let e2Response: E2DomainsListResponse;
+			do {
+				const { data, error } = await client.api.e2.domains.get({
+					fetch: { signal },
+					query: {
+						limit: params?.limit,
+						offset,
+						status: params?.status as
+							| "pending"
+							| "verified"
+							| "failed"
+							| undefined,
+						canReceive: params?.canReceive as "true" | "false" | undefined,
+						check: params?.check as "true" | undefined,
+					},
+				});
 
-			if (error) {
-				throw new Error(getEdenErrorMessage(error, "Failed to fetch domains"));
+				if (error) {
+					throw new Error(getEdenErrorMessage(error, "Failed to fetch domains"));
+				}
+
+				e2Response = data as E2DomainsListResponse;
+				domains.push(...e2Response.data);
+				offset = e2Response.pagination.offset + e2Response.pagination.limit;
+			} while (params?.fetchAll && e2Response.pagination.hasMore);
+
+			if (params?.fetchAll) {
+				e2Response = {
+					...e2Response,
+					data: domains,
+					pagination: {
+						...e2Response.pagination,
+						limit: domains.length,
+						offset: params.offset ?? 0,
+					},
+				};
 			}
-
-			// Type the e2 API response
-			const e2Response = data as E2DomainsListResponse;
 
 			// Calculate meta statistics from the data
 			const verifiedCount = e2Response.data.filter(
