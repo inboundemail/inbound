@@ -45,7 +45,7 @@ export default function EmailsPage() {
     isLoading,
     error,
     refetch: refetchDomains
-  } = useDomainsListV2Query({ limit: 100 })
+  } = useDomainsListV2Query({ limit: 100, fetchAll: true })
 
 
 
@@ -258,4 +258,3 @@ export default function EmailsPage() {
     </div>
   )
 }
-
