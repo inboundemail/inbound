@@ -15,6 +15,9 @@ const EmailDetailSchema = t.Object({
   ]),
   from: t.String(),
   to: t.Array(t.String()),
+  envelope_recipient: t.Optional(
+    t.Nullable(t.String({ description: "Stored delivery recipient for received emails, independent of message headers" }))
+  ),
   cc: t.Optional(t.Nullable(t.Array(t.String()))),
   bcc: t.Optional(t.Nullable(t.Array(t.String()))),
   reply_to: t.Optional(t.Nullable(t.Array(t.String()))),
@@ -102,6 +105,7 @@ export const getEmail = new Elysia().get(
         object: "email" as const,
         id: email.id,
         type: "received" as const,
+        envelope_recipient: email.recipient,
         from: parseFromData(email.fromData),
         to: parseAddressesFromData(email.toData),
         cc: parseAddressesFromData(email.ccData),

@@ -114,6 +114,9 @@ const EmailItemSchema = t.Object({
   to: t.Array(t.String(), {
     description: "Array of recipient email addresses",
   }),
+  envelope_recipient: t.Optional(
+    t.Nullable(t.String({ description: "Stored delivery recipient for received emails, independent of message headers" }))
+  ),
   cc: t.Optional(
     t.Array(t.String(), {
       description: "Array of CC recipient email addresses",
@@ -441,6 +444,7 @@ export const listEmails = new Elysia().get(
         emails.push({
           id: email.id,
           type: "received" as const,
+          envelope_recipient: email.recipient,
           message_id: email.messageId,
           from: fromParsed.address,
           from_name: fromParsed.name,

@@ -66,6 +66,9 @@ const ThreadMessageSchema = t.Object({
   to: t.Array(t.String(), {
     description: "Array of recipient email addresses",
   }),
+  envelope_recipient: t.Optional(
+    t.Nullable(t.String({ description: "Stored delivery recipient for inbound messages, independent of message headers" }))
+  ),
   cc: t.Array(t.String(), {
     description: "Array of CC recipient email addresses",
   }),
@@ -304,6 +307,7 @@ export const getThread = new Elysia().get(
         id: email.id,
         message_id: email.messageId,
         type: "inbound" as const,
+        envelope_recipient: email.recipient,
         thread_position: email.threadPosition || 0,
 
         // Content

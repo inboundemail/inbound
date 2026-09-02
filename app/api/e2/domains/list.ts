@@ -108,6 +108,7 @@ const PaginationSchema = t.Object({
 const ListDomainsResponse = t.Object({
   data: t.Array(DomainSchema),
   pagination: PaginationSchema,
+  capabilities: t.Object({ envelopeRecipients: t.Boolean() }),
 });
 
 export const listDomains = new Elysia().get(
@@ -417,6 +418,7 @@ export const listDomains = new Elysia().get(
 
     const response = {
       data: enhancedDomains,
+      capabilities: { envelopeRecipients: true },
       pagination: {
         limit,
         offset,
