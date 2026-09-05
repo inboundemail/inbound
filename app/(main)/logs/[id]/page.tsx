@@ -9,9 +9,10 @@ import {
 	sentEmails,
 	endpointDeliveries,
 	endpoints,
+	emailGroups,
 	sesEvents,
 } from "@/lib/db/schema";
-import { and, eq, desc, asc } from "drizzle-orm";
+import { and, eq, desc, asc, inArray } from "drizzle-orm";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,8 +42,9 @@ import type {
 // Import the attachment list component
 import { AttachmentList } from "@/components/logs/attachment-list";
 import { ClickableId } from "@/components/logs/clickable-id";
-import { ResendEmailDialog } from "@/components/logs/resend-email-dialog";
-import { CodeBlock } from "@/components/ui/code-block";
+import { DeliveryRecoveryPanel } from "@/components/logs/delivery-recovery-panel";
+import { getDeliveryDestination, getDeliveryResponse } from "@/lib/email-management/delivery-diagnostics";
+import type { RecoveryDelivery } from "@/lib/email-management/delivery-diagnostics";
 import ArrowBoldRight from "@/components/icons/arrow-bold-right";
 import FolderLink from "@/components/icons/folder-link";
 import ChatBubble2 from "@/components/icons/chat-bubble-2";
@@ -122,7 +124,7 @@ export default async function LogDetailPage({
 	// Fetch rich details based on type
 	let inboundDetails:
 		| (GetMailByIdResponse & {
-				deliveries?: Array<any>;
+				deliveries: RecoveryDelivery[];
 				guardBlocked?: boolean;
 				guardReason?: string | null;
 				guardAction?: string | null;
@@ -225,45 +227,50 @@ export default async function LogDetailPage({
 				deliveryType: endpointDeliveries.deliveryType,
 				attempts: endpointDeliveries.attempts,
 				lastAttemptAt: endpointDeliveries.lastAttemptAt,
+				updatedAt: endpointDeliveries.updatedAt,
 				responseData: endpointDeliveries.responseData,
 				endpointId: endpointDeliveries.endpointId,
+				availableEndpointId: endpoints.id,
 				endpointName: endpoints.name,
 				endpointType: endpoints.type,
+				endpointActive: endpoints.isActive,
 				endpointConfig: endpoints.config,
 			})
 			.from(endpointDeliveries)
-			.leftJoin(endpoints, eq(endpointDeliveries.endpointId, endpoints.id))
+			.leftJoin(endpoints, and(eq(endpointDeliveries.endpointId, endpoints.id), eq(endpoints.userId, userId)))
 			.where(eq(endpointDeliveries.emailId, row.emailId))
 			.orderBy(desc(endpointDeliveries.lastAttemptAt));
 
-		const deliveries = deliveriesRaw.map((d) => {
-			let parsedResponse: any = null;
-			let parsedConfig: any = null;
-			try {
-				parsedResponse = d.responseData
-					? JSON.parse(d.responseData as unknown as string)
-					: null;
-			} catch {}
-			try {
-				parsedConfig = d.endpointConfig
-					? JSON.parse(d.endpointConfig as unknown as string)
-					: null;
-			} catch {}
-			return {
-				id: d.id,
-				type: d.deliveryType || "unknown",
-				status: d.status || "unknown",
-				attempts: d.attempts || 0,
-				lastAttemptAt: d.lastAttemptAt?.toISOString() || null,
-				responseData: parsedResponse,
-				config: {
-					name: d.endpointName || "Unknown Endpoint",
-					type: d.endpointType || "unknown",
-					config: parsedConfig,
-					endpointId: d.endpointId, // Add the endpointId for the resend dialog
-				},
-			};
-		});
+		const groupEndpointIds = deliveriesRaw
+			.filter((delivery) => delivery.endpointType === "email_group")
+			.map((delivery) => delivery.endpointId);
+		const groupAddresses = groupEndpointIds.length > 0
+			? await db.select({ endpointId: emailGroups.endpointId, address: emailGroups.emailAddress })
+				.from(emailGroups)
+				.innerJoin(endpoints, and(eq(emailGroups.endpointId, endpoints.id), eq(endpoints.userId, userId)))
+				.where(inArray(emailGroups.endpointId, groupEndpointIds))
+			: [];
+		const deliveries: RecoveryDelivery[] = deliveriesRaw.map((delivery) => ({
+			id: delivery.id,
+			status: delivery.status,
+			attempts: delivery.attempts,
+			lastAttemptAt: delivery.lastAttemptAt?.toISOString() || null,
+			updatedAt: delivery.updatedAt?.toISOString() || null,
+			response: getDeliveryResponse(delivery.responseData),
+			endpoint: {
+				id: delivery.endpointId,
+				name: delivery.endpointName || "Removed endpoint",
+				type: delivery.endpointType || delivery.deliveryType,
+				isActive: delivery.endpointActive ?? false,
+				available: delivery.availableEndpointId !== null,
+				destination: getDeliveryDestination(
+					delivery.endpointType || delivery.deliveryType,
+					delivery.endpointType === "email_group"
+						? { emails: groupAddresses.filter((group) => group.endpointId === delivery.endpointId).map((group) => group.address) }
+						: delivery.endpointConfig,
+				),
+			},
+		}));
 
 		// Defensive check: emailId should never be null since it's NOT NULL in schema
 		if (!row.emailId) {
@@ -685,7 +692,7 @@ export default async function LogDetailPage({
 																	: "text-yellow-600"
 														}`}
 													>
-														{inboundDetails.deliveries[0]?.config?.name ||
+														{inboundDetails.deliveries[0]?.endpoint.name ||
 															"Webhook"}
 													</span>
 													<span className="text-sm font-semibold text-foreground capitalize">
@@ -698,6 +705,17 @@ export default async function LogDetailPage({
 							</div>
 						</CardContent>
 					</Card>
+
+					{isInbound && inboundDetails && (
+						<DeliveryRecoveryPanel
+							emailId={inboundDetails.id}
+							deliveries={inboundDetails.deliveries}
+							parseSuccess={inboundDetails.metadata.parseSuccess}
+							parseError={inboundDetails.metadata.parseError}
+							guardBlocked={inboundDetails.guardBlocked || false}
+							guardReason={inboundDetails.guardReason || null}
+						/>
+					)}
 
 					{/* Thread Information Card */}
 					{currentThreadId && threadMembers.length > 0 && (
@@ -863,113 +881,6 @@ export default async function LogDetailPage({
 									</Tabs>
 								</CardContent>
 							</Card>
-
-							{isInbound && inboundDetails?.deliveries && (
-								<Card className="rounded-xl overflow-hidden">
-									<CardContent className="p-6">
-										<div className="flex items-center justify-between mb-3">
-											<h3 className="text-sm font-semibold">
-												Delivery Information
-											</h3>
-											{inboundDetails.deliveries.length > 0 && (
-												<ResendEmailDialog
-													emailId={inboundDetails.id}
-													defaultEndpointId={
-														inboundDetails.deliveries[0]?.config?.endpointId
-													}
-													deliveries={inboundDetails.deliveries}
-												/>
-											)}
-										</div>
-										{inboundDetails.deliveries.length === 0 ? (
-											<p className="text-sm text-muted-foreground">
-												No delivery configured for this email
-											</p>
-										) : (
-											<div className="divide-y divide-border rounded-lg border">
-												{inboundDetails.deliveries.map(
-													(delivery: any, idx: number) => (
-														<div key={delivery.id} className="p-4">
-															<div className="flex items-start justify-between">
-																<div>
-																	<h4 className="font-medium text-foreground">
-																		{delivery.config?.name ||
-																			"Unknown Endpoint"}
-																	</h4>
-																	<p className="text-sm text-muted-foreground">
-																		{delivery.type === "webhook"
-																			? "Webhook"
-																			: "Email Forward"}
-																	</p>
-																</div>
-																<div className="flex items-center gap-2">
-																	<Badge
-																		variant={
-																			delivery.status === "success"
-																				? "default"
-																				: delivery.status === "failed"
-																					? "destructive"
-																					: "secondary"
-																		}
-																		className={
-																			delivery.status === "success"
-																				? "bg-green-500/10 text-green-600 border-green-500/20"
-																				: delivery.status === "failed"
-																					? ""
-																					: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
-																		}
-																	>
-																		{String(delivery.status).toUpperCase()}
-																	</Badge>
-																</div>
-															</div>
-															<div className="mt-3 grid grid-cols-2 gap-4 text-sm">
-																<div>
-																	<span className="text-muted-foreground">
-																		Attempts:
-																	</span>
-																	<p className="font-medium">
-																		{delivery.attempts}
-																	</p>
-																</div>
-																{delivery.lastAttemptAt && (
-																	<div>
-																		<span className="text-muted-foreground">
-																			Last Attempt:
-																		</span>
-																		<p className="font-medium">
-																			{format(
-																				new Date(delivery.lastAttemptAt),
-																				"PPp",
-																			)}
-																		</p>
-																	</div>
-																)}
-															</div>
-															{delivery.responseData && (
-																<div className="mt-3">
-																	<div className="text-muted-foreground text-xs mb-1">
-																		Response Data:
-																	</div>
-																	<CodeBlock
-																		code={JSON.stringify(
-																			delivery.responseData,
-																			null,
-																			2,
-																		)}
-																		size="sm"
-																		variant="default"
-																	/>
-																</div>
-															)}
-														</div>
-													),
-												)}
-											</div>
-										)}
-									</CardContent>
-								</Card>
-							)}
 
 							{!isInbound && (
 								<Card className="rounded-xl overflow-hidden">

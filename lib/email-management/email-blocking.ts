@@ -13,7 +13,7 @@ function extractDomain(email: string): string {
 /**
  * Check if an email address is already blocked
  */
-export async function isEmailBlocked(emailAddress: string): Promise<boolean> {
+export async function isEmailBlocked(emailAddress: string, options: { throwOnError?: boolean } = {}): Promise<boolean> {
   try {
     const blocked = await db
       .select({ id: blockedEmails.id })
@@ -24,6 +24,7 @@ export async function isEmailBlocked(emailAddress: string): Promise<boolean> {
     return blocked.length > 0
   } catch (error) {
     console.error('Error checking if email is blocked:', error)
+    if (options.throwOnError) throw error
     return false
   }
 }
