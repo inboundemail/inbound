@@ -42,11 +42,11 @@ import EnvelopeArrowRight from '@/components/icons/envelope-arrow-right'
 import Envelope2 from '@/components/icons/envelope-2'
 import ChevronDown from '@/components/icons/chevron-down'
 
-import { useUnifiedEmailLogsQuery } from '@/features/emails/hooks'
+import { useDashboardEmailLogsQuery } from '@/features/emails/hooks'
 import { useDomainsListV2Query } from '@/features/domains/hooks/useDomainV2Hooks'
 import { useScheduledEmailsQuery, useCancelScheduledEmailMutation } from '@/features/emails/hooks/useScheduledEmailsHooks'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
-import type { EmailLogsOptions, EmailLogEntry, InboundEmailLogEntry, OutboundEmailLogEntry } from '@/features/emails/types'
+import type { EmailLogsOptions } from '@/features/emails/types'
 import SidebarToggleButton from '@/components/sidebar-toggle-button'
 import { Card } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -64,44 +64,6 @@ const DOMAINS_FETCH_LIMIT = 100 // Maximum allowed by e2 API - if users have mor
                                   // consider implementing search/autocomplete or pagination
 const LOGS_PAGE_SIZE = 50
 const SCHEDULED_PAGE_SIZE = 10
-
-function getStatusColor(email: EmailLogEntry): string {
-  if (email.type === 'inbound') {
-    const inboundEmail = email as InboundEmailLogEntry
-    const hasDeliveries = inboundEmail.deliveries.length > 0
-    const hasSuccessfulDelivery = inboundEmail.deliveries.some(d => d.status === 'success')
-    const hasFailedDelivery = inboundEmail.deliveries.some(d => d.status === 'failed')
-    const hasPendingDelivery = inboundEmail.deliveries.some(d => d.status === 'pending')
-
-    if (!inboundEmail.parseSuccess) {
-      return '#ef4444' // red-500
-    } else if (hasSuccessfulDelivery) {
-      return '#22c55e' // green-500
-    } else if (hasFailedDelivery) {
-      return '#ef4444' // red-500
-    } else if (hasPendingDelivery) {
-      return '#eab308' // yellow-500
-    } else if (!hasDeliveries) {
-      return '#9ca3af' // gray-400
-    } else {
-      return '#9ca3af' // gray-400
-    }
-  } else {
-    // Outbound email
-    const outboundEmail = email as OutboundEmailLogEntry
-
-    switch (outboundEmail.status) {
-      case 'sent':
-        return '#22c55e' // green-500
-      case 'failed':
-        return '#ef4444' // red-500
-      case 'pending':
-        return '#eab308' // yellow-500
-      default:
-        return '#9ca3af' // gray-400
-    }
-  }
-}
 
 // Loading skeleton component
 function LogsPageSkeleton() {
@@ -195,7 +157,6 @@ export default function LogsPage() {
   const setGuardFilter = (value: string) => setFilters({ guard: value === 'all' ? null : value, page: null })
   const setTimeRange = (value: string) => setFilters({ time: value === '24h' ? null : value, page: null })
 
-  const [selectedLog, setSelectedLog] = useState<EmailLogEntry | null>(null)
   const [rotationDegrees, setRotationDegrees] = useState(0)
 
   // Toggle states with localStorage persistence (NOT in URL)
@@ -270,7 +231,7 @@ export default function LogsPage() {
     refetch,
     isFetching,
     isPlaceholderData,
-  } = useUnifiedEmailLogsQuery(logsOptions)
+  } = useDashboardEmailLogsQuery(logsOptions)
 
   // Fetch scheduled emails
   const {
@@ -910,42 +871,31 @@ export default function LogsPage() {
               
             {filteredEmails.map((log) => {
               const isInbound = log.type === 'inbound'
-              const inboundLog = isInbound ? log as InboundEmailLogEntry : null
-              const outboundLog = !isInbound ? log as OutboundEmailLogEntry : null
+              const isBlocked = log.status === 'blocked'
 
-              // Check if this is a blocked email
-              const isBlocked = isInbound && inboundLog?.guardBlocked
-
-              // Get status badge info
               const getStatusInfo = () => {
-                if (isInbound && inboundLog) {
-                  const hasDeliveries = inboundLog.deliveries.length > 0
-                  const hasSuccessfulDelivery = inboundLog.deliveries.some(d => d.status === 'success')
-                  const hasFailedDelivery = inboundLog.deliveries.some(d => d.status === 'failed')
-                  
+                if (isInbound) {
                   if (isBlocked) {
                     return { label: 'Blocked', variant: 'destructive' as const, customClass: '' }
-                  } else if (!inboundLog.parseSuccess) {
+                  } else if (log.status === 'parse_failed') {
                     return { label: 'Parse failed', variant: 'destructive' as const, customClass: '' }
-                  } else if (hasSuccessfulDelivery) {
-                    return { label: inboundLog.deliveries[0].config?.name || 'Delivered', variant: 'default' as const, customClass: 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200' }
-                  } else if (hasFailedDelivery) {
+                  } else if (log.status === 'delivered') {
+                    return { label: log.endpointName || 'Delivered', variant: 'default' as const, customClass: 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200' }
+                  } else if (log.status === 'delivery_failed') {
                     return { label: 'Delivery failed', variant: 'destructive' as const, customClass: '' }
-                  } else if (!hasDeliveries) {
+                  } else if (log.status === 'no_delivery') {
                     return { label: 'No delivery', variant: 'secondary' as const, customClass: 'bg-purple-50 text-purple-700 border-purple-200' }
                   }
                   return { label: 'Pending', variant: 'secondary' as const, customClass: 'bg-purple-50 text-purple-700 border-purple-200' }
-                } else if (outboundLog) {
-                  if (outboundLog.firstOpenedAt) {
-                    return { label: 'Opened', variant: 'secondary' as const, customClass: '' }
-                  } else if (outboundLog.status === 'sent') {
-                    return { label: 'Sent', variant: 'default' as const, customClass: 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200' }
-                  } else if (outboundLog.status === 'failed') {
-                    return { label: 'Failed', variant: 'destructive' as const, customClass: '' }
-                  }
-                  return { label: 'Pending', variant: 'secondary' as const, customClass: 'bg-blue-50 text-blue-700 border-blue-200' }
                 }
-                return { label: 'Unknown', variant: 'secondary' as const, customClass: '' }
+                if (log.status === 'opened') {
+                  return { label: 'Opened', variant: 'secondary' as const, customClass: '' }
+                } else if (log.status === 'sent') {
+                  return { label: 'Sent', variant: 'default' as const, customClass: 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200' }
+                } else if (log.status === 'failed') {
+                  return { label: 'Failed', variant: 'destructive' as const, customClass: '' }
+                }
+                return { label: 'Pending', variant: 'secondary' as const, customClass: 'bg-blue-50 text-blue-700 border-blue-200' }
               }
 
               const statusInfo = getStatusInfo()
@@ -964,7 +914,7 @@ export default function LogsPage() {
                       {log.from}
                     </div>
                     <div className="text-xs text-muted-foreground truncate">
-                      {isInbound && inboundLog ? inboundLog.recipient : outboundLog?.to[0]}
+                      {log.recipient}
                     </div>
                   </div>
 
@@ -976,7 +926,7 @@ export default function LogsPage() {
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Clock2 width="12" height="12" />
                       <span className="hidden md:inline">
-                        {format(new Date(log.createdAt), 'MMM d, HH:mm')}
+                        {format(new Date(log.createdAt ?? NaN), 'MMM d, HH:mm')}
                       </span>
                     </div>
                   </div>
@@ -984,10 +934,10 @@ export default function LogsPage() {
                   {/* Timestamp Column */}
                   <div className="flex-shrink-0 w-32 hidden sm:block">
                     <div className="text-xs text-muted-foreground text-right">
-                      {format(new Date(log.createdAt), 'MMM d, HH:mm')}
+                      {format(new Date(log.createdAt ?? NaN), 'MMM d, HH:mm')}
                     </div>
                     <div className="text-xs text-muted-foreground/60 text-right">
-                      {formatDistanceToNow(new Date(log.createdAt), { addSuffix: true })}
+                      {formatDistanceToNow(new Date(log.createdAt ?? NaN), { addSuffix: true })}
                     </div>
                   </div>
 

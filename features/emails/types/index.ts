@@ -75,6 +75,23 @@ export interface EmailLogsResponse {
   stats: EmailLogStats
 }
 
+export interface DashboardEmailLogEntry {
+  id: string
+  type: 'inbound' | 'outbound'
+  from: string | null
+  recipient: string | undefined
+  subject: string
+  createdAt: string | undefined
+  status: 'blocked' | 'parse_failed' | 'delivered' | 'delivery_failed' | 'no_delivery' | 'pending' | 'opened' | 'sent' | 'failed'
+  endpointName: string | null
+}
+
+export interface DashboardEmailLogsResponse {
+  emails: DashboardEmailLogEntry[]
+  pagination: EmailLogsResponse['pagination']
+  stats: Pick<EmailLogStats, 'inbound' | 'outbound' | 'opened' | 'delivered' | 'failed' | 'pending' | 'noDelivery'>
+}
+
 export interface EmailLogsOptions {
   limit?: number
   offset?: number

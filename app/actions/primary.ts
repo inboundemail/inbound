@@ -17,6 +17,11 @@ import {
 import { nanoid } from "nanoid";
 import { headers } from "next/headers";
 import { NextRequest } from "next/server";
+import type {
+	DashboardEmailLogEntry,
+	DashboardEmailLogsResponse,
+	EmailLogStats,
+} from "@/features/emails/types";
 import { auth } from "@/lib/auth/auth";
 import { AWSSESReceiptRuleManager } from "@/lib/aws-ses/aws-ses-rules";
 import { BatchRuleManager } from "@/lib/aws-ses/batch-rule-manager";
@@ -2820,7 +2825,7 @@ export async function getDomainEmailAddressesForAdmin(domainId: string) {
 // UNIFIED EMAIL LOGS (INBOUND + OUTBOUND)
 // ============================================================================
 
-export async function getUnifiedEmailLogs(options?: {
+type UnifiedEmailLogsOptions = {
 	limit?: number;
 	offset?: number;
 	searchQuery?: string;
@@ -2829,7 +2834,9 @@ export async function getUnifiedEmailLogs(options?: {
 	domainFilter?: string;
 	guardFilter?: string;
 	timeRange?: string;
-}) {
+};
+
+async function getEmailLogPage(options?: UnifiedEmailLogsOptions) {
 	try {
 		const session = await auth.api.getSession({
 			headers: await headers(),
@@ -3070,6 +3077,30 @@ export async function getUnifiedEmailLogs(options?: {
 			.filter((email) => email.typeOrder === 1)
 			.map((email) => email.id);
 
+		return {
+			userId,
+			page,
+			inboundIds,
+			outboundIds,
+			pagination: {
+				total,
+				limit,
+				offset,
+				hasMore: offset + limit < total,
+			},
+		};
+	} catch (error) {
+		console.error("Error fetching unified email logs:", error);
+		return { error: "Failed to fetch unified email logs" };
+	}
+}
+
+export async function getUnifiedEmailLogs(options?: UnifiedEmailLogsOptions) {
+	try {
+		const selection = await getEmailLogPage(options);
+		if ("error" in selection) return { error: selection.error };
+		const { userId, page, inboundIds, outboundIds, pagination } = selection;
+
 		const [inboundEmailsRaw, outboundEmailsRaw] = await Promise.all([
 			inboundIds.length > 0
 				? db
@@ -3279,132 +3310,311 @@ export async function getUnifiedEmailLogs(options?: {
 		});
 		const uniqueDomains = Array.from(uniqueDomainsSet).sort();
 
-		// Calculate LIFETIME stats using SQL aggregates (not filtered by time/domain/search)
-		// Only filter by userId for lifetime totals
-		const lifetimeInboundConditions = [eq(structuredEmails.userId, userId)];
-		const lifetimeOutboundConditions = [eq(sentEmails.userId, userId)];
-
-		// Inbound stats
-		const inboundStatsQuery = db
-			.select({
-				totalInbound: sql<number>`COUNT(*)`.as("total_inbound"),
-				avgProcessing: sql<number>`AVG(${sesEvents.processingTimeMillis})`.as(
-					"avg_processing",
-				),
-				parseFailed:
-					sql<number>`COUNT(CASE WHEN ${structuredEmails.parseSuccess} = false THEN 1 END)`.as(
-						"parse_failed",
-					),
-			})
-			.from(structuredEmails)
-			.leftJoin(sesEvents, eq(structuredEmails.sesEventId, sesEvents.id))
-			.where(and(...lifetimeInboundConditions));
-
-		// Outbound stats
-		const outboundStatsQuery = db
-			.select({
-				totalOutbound: sql<number>`COUNT(*)`.as("total_outbound"),
-				sent: sql<number>`COUNT(CASE WHEN ${sentEmails.status} = 'sent' THEN 1 END)`.as(
-					"sent",
-				),
-				failed:
-					sql<number>`COUNT(CASE WHEN ${sentEmails.status} = 'failed' THEN 1 END)`.as(
-						"failed",
-					),
-				pending:
-					sql<number>`COUNT(CASE WHEN ${sentEmails.status} = 'pending' THEN 1 END)`.as(
-						"pending",
-					),
-				opened:
-					sql<number>`COUNT(CASE WHEN ${sentEmails.firstOpenedAt} IS NOT NULL THEN 1 END)`.as(
-						"opened",
-					),
-			})
-			.from(sentEmails)
-			.where(and(...lifetimeOutboundConditions));
-
-		const deliveryStatsQuery = db
-			.select({
-				withDeliveries: countDistinct(endpointDeliveries.emailId),
-				successful: countDistinct(
-					sql`CASE WHEN ${endpointDeliveries.status} = 'success' THEN ${endpointDeliveries.emailId} END`,
-				),
-				failed: countDistinct(
-					sql`CASE WHEN ${endpointDeliveries.status} = 'failed' THEN ${endpointDeliveries.emailId} END`,
-				),
-				pending: countDistinct(
-					sql`CASE WHEN ${endpointDeliveries.status} = 'pending' THEN ${endpointDeliveries.emailId} END`,
-				),
-			})
-			.from(endpointDeliveries)
-			.innerJoin(
-				structuredEmails,
-				eq(endpointDeliveries.emailId, structuredEmails.emailId),
-			)
-			.where(eq(structuredEmails.userId, userId));
-
-		const [inboundStats, outboundStats, deliveryStats] = await Promise.all([
-			inboundStatsQuery,
-			outboundStatsQuery,
-			deliveryStatsQuery,
-		]);
-
-		const inboundStatsRow = inboundStats[0] || {
-			totalInbound: 0,
-			avgProcessing: 0,
-			parseFailed: 0,
-		};
-		const outboundStatsRow = outboundStats[0] || {
-			totalOutbound: 0,
-			sent: 0,
-			failed: 0,
-			pending: 0,
-			opened: 0,
-		};
-
-		// Parse counts as numbers to avoid string concatenation
-		const withDeliveriesCount = deliveryStats[0]?.withDeliveries || 0;
-		const successfulDeliveriesCount = deliveryStats[0]?.successful || 0;
-		const failedDeliveriesCount = deliveryStats[0]?.failed || 0;
-		const pendingDeliveriesCount = deliveryStats[0]?.pending || 0;
-
-		const stats = {
-			totalEmails:
-				Number(inboundStatsRow.totalInbound) +
-				Number(outboundStatsRow.totalOutbound),
-			inbound: Number(inboundStatsRow.totalInbound),
-			outbound: Number(outboundStatsRow.totalOutbound),
-			opened: Number(outboundStatsRow.opened),
-			delivered: successfulDeliveriesCount + Number(outboundStatsRow.sent),
-			failed:
-				failedDeliveriesCount +
-				Number(inboundStatsRow.parseFailed) +
-				Number(outboundStatsRow.failed),
-			pending: pendingDeliveriesCount + Number(outboundStatsRow.pending),
-			noDelivery: Number(inboundStatsRow.totalInbound) - withDeliveriesCount,
-			avgProcessingTime: Math.round(Number(inboundStatsRow.avgProcessing) || 0),
-		};
+		const stats = await getEmailLogStats(userId);
 
 		return {
 			success: true,
 			data: {
 				emails: paginatedEmails,
-				pagination: {
-					total,
-					limit,
-					offset,
-					hasMore: offset + limit < total,
-				},
+				pagination,
 				filters: {
 					uniqueDomains,
 				},
-				stats: stats,
+				stats,
 			},
 		};
 	} catch (error) {
 		console.error("Error fetching unified email logs:", error);
 		return { error: "Failed to fetch unified email logs" };
 	}
+}
+
+export async function getDashboardEmailLogs(options?: UnifiedEmailLogsOptions) {
+	try {
+		const selection = await getEmailLogPage(options);
+		if ("error" in selection) return { error: selection.error };
+		const { userId, page, inboundIds, outboundIds, pagination } = selection;
+
+		const [inboundEmailsRaw, outboundEmailsRaw] = await Promise.all([
+			inboundIds.length > 0
+				? db
+						.select({
+							id: structuredEmails.id,
+							emailId: structuredEmails.emailId,
+							fromData: structuredEmails.fromData,
+							toData: structuredEmails.toData,
+							subject: structuredEmails.subject,
+							createdAt: structuredEmails.createdAt,
+							parseSuccess: structuredEmails.parseSuccess,
+							guardBlocked: structuredEmails.guardBlocked,
+						})
+						.from(structuredEmails)
+						.where(
+							and(
+								eq(structuredEmails.userId, userId),
+								inArray(structuredEmails.id, inboundIds),
+							),
+						)
+				: [],
+			outboundIds.length > 0
+				? db
+						.select({
+							id: sentEmails.id,
+							fromAddress: sentEmails.fromAddress,
+							to: sentEmails.to,
+							subject: sentEmails.subject,
+							createdAt: sentEmails.createdAt,
+							status: sentEmails.status,
+							firstOpenedAt: sentEmails.firstOpenedAt,
+						})
+						.from(sentEmails)
+						.where(
+							and(
+								eq(sentEmails.userId, userId),
+								inArray(sentEmails.id, outboundIds),
+							),
+						)
+				: [],
+		]);
+
+		const emailIds = inboundEmailsRaw.map((email) => email.emailId);
+		const deliveries =
+			emailIds.length > 0
+				? await db
+						.select({
+							emailId: endpointDeliveries.emailId,
+							status: endpointDeliveries.status,
+							endpointName: endpoints.name,
+						})
+						.from(endpointDeliveries)
+						.leftJoin(endpoints, eq(endpointDeliveries.endpointId, endpoints.id))
+						.where(inArray(endpointDeliveries.emailId, emailIds))
+				: [];
+		const deliveriesMap = new Map<
+			string,
+			{
+				endpointName: string;
+				hasSuccessfulDelivery: boolean;
+				hasFailedDelivery: boolean;
+			}
+		>();
+		for (const delivery of deliveries) {
+			if (delivery.emailId === null) continue;
+			const summary = deliveriesMap.get(delivery.emailId) || {
+				endpointName: delivery.endpointName || "Unknown Endpoint",
+				hasSuccessfulDelivery: false,
+				hasFailedDelivery: false,
+			};
+			summary.hasSuccessfulDelivery ||= delivery.status === "success";
+			summary.hasFailedDelivery ||= delivery.status === "failed";
+			deliveriesMap.set(delivery.emailId, summary);
+		}
+
+		const inboundEmails = inboundEmailsRaw.map((row): DashboardEmailLogEntry => {
+			let parsedFromData: ParsedEmailAddress | null = null;
+			let parsedToData: ParsedEmailAddress | null = null;
+			try {
+				if (row.fromData) parsedFromData = JSON.parse(row.fromData);
+				if (row.toData) parsedToData = JSON.parse(row.toData);
+			} catch (error) {
+				console.error("Failed to parse inbound email data:", error);
+			}
+
+			const delivery = deliveriesMap.get(row.emailId);
+			const status: DashboardEmailLogEntry["status"] = row.guardBlocked
+				? "blocked"
+				: !row.parseSuccess
+					? "parse_failed"
+					: delivery?.hasSuccessfulDelivery
+						? "delivered"
+						: delivery?.hasFailedDelivery
+							? "delivery_failed"
+							: !delivery
+								? "no_delivery"
+								: "pending";
+			return {
+				id: row.id,
+				type: "inbound",
+				from: parsedFromData?.addresses?.[0]?.address || "unknown",
+				recipient: parsedToData?.addresses?.[0]?.address || "unknown",
+				subject: row.subject || "No Subject",
+				createdAt: row.createdAt?.toISOString(),
+				status,
+				endpointName: status === "delivered" ? delivery!.endpointName : null,
+			};
+		});
+		const outboundEmails = outboundEmailsRaw.map((email): DashboardEmailLogEntry => {
+			let toArray: string[] = [];
+			try {
+				if (email.to) toArray = JSON.parse(email.to);
+			} catch (error) {
+				console.error("Failed to parse outbound email data:", error);
+			}
+
+			return {
+				id: email.id,
+				type: "outbound",
+				from: email.fromAddress,
+				recipient: toArray[0],
+				subject: email.subject || "No Subject",
+				createdAt: email.createdAt?.toISOString(),
+				status: email.firstOpenedAt
+					? "opened"
+					: email.status === "sent"
+						? "sent"
+						: email.status === "failed"
+							? "failed"
+							: "pending",
+				endpointName: null,
+			};
+		});
+		const inboundById = new Map(inboundEmails.map((email) => [email.id, email]));
+		const outboundById = new Map(outboundEmails.map((email) => [email.id, email]));
+		const emails = page.flatMap((email) => {
+			const hydratedEmail = email.typeOrder === 0
+				? inboundById.get(email.id)
+				: outboundById.get(email.id);
+			return hydratedEmail ? [hydratedEmail] : [];
+		});
+		const stats = await getEmailLogStats(userId, true);
+		const data: DashboardEmailLogsResponse = { emails, pagination, stats };
+		return { success: true, data };
+	} catch (error) {
+		console.error("Error fetching dashboard email logs:", error);
+		return { error: "Failed to fetch dashboard email logs" };
+	}
+}
+
+async function getEmailLogStats(
+	userId: string,
+	dashboard: true,
+): Promise<DashboardEmailLogsResponse["stats"]>;
+async function getEmailLogStats(
+	userId: string,
+	dashboard?: false,
+): Promise<EmailLogStats>;
+async function getEmailLogStats(userId: string, dashboard = false) {
+	// Calculate LIFETIME stats using SQL aggregates (not filtered by time/domain/search)
+	// Only filter by userId for lifetime totals
+	const lifetimeInboundConditions = [eq(structuredEmails.userId, userId)];
+	const lifetimeOutboundConditions = [eq(sentEmails.userId, userId)];
+
+	// Inbound stats
+	const inboundStatsFields = {
+		totalInbound: sql<number>`COUNT(*)`.as("total_inbound"),
+		parseFailed:
+			sql<number>`COUNT(CASE WHEN ${structuredEmails.parseSuccess} = false THEN 1 END)`.as(
+				"parse_failed",
+			),
+	};
+	const inboundStatsQuery = dashboard
+		? db
+				.select(inboundStatsFields)
+				.from(structuredEmails)
+				.where(and(...lifetimeInboundConditions))
+		: db
+				.select({
+					...inboundStatsFields,
+					avgProcessing: sql<number>`AVG(${sesEvents.processingTimeMillis})`.as(
+						"avg_processing",
+					),
+				})
+				.from(structuredEmails)
+				.leftJoin(sesEvents, eq(structuredEmails.sesEventId, sesEvents.id))
+				.where(and(...lifetimeInboundConditions));
+
+	// Outbound stats
+	const outboundStatsQuery = db
+		.select({
+			totalOutbound: sql<number>`COUNT(*)`.as("total_outbound"),
+			sent: sql<number>`COUNT(CASE WHEN ${sentEmails.status} = 'sent' THEN 1 END)`.as(
+				"sent",
+			),
+			failed:
+				sql<number>`COUNT(CASE WHEN ${sentEmails.status} = 'failed' THEN 1 END)`.as(
+					"failed",
+				),
+			pending:
+				sql<number>`COUNT(CASE WHEN ${sentEmails.status} = 'pending' THEN 1 END)`.as(
+					"pending",
+				),
+			opened:
+				sql<number>`COUNT(CASE WHEN ${sentEmails.firstOpenedAt} IS NOT NULL THEN 1 END)`.as(
+					"opened",
+				),
+		})
+		.from(sentEmails)
+		.where(and(...lifetimeOutboundConditions));
+
+	const deliveryStatsQuery = db
+		.select({
+			withDeliveries: countDistinct(endpointDeliveries.emailId),
+			successful: countDistinct(
+				sql`CASE WHEN ${endpointDeliveries.status} = 'success' THEN ${endpointDeliveries.emailId} END`,
+			),
+			failed: countDistinct(
+				sql`CASE WHEN ${endpointDeliveries.status} = 'failed' THEN ${endpointDeliveries.emailId} END`,
+			),
+			pending: countDistinct(
+				sql`CASE WHEN ${endpointDeliveries.status} = 'pending' THEN ${endpointDeliveries.emailId} END`,
+			),
+		})
+		.from(endpointDeliveries)
+		.innerJoin(
+			structuredEmails,
+			eq(endpointDeliveries.emailId, structuredEmails.emailId),
+		)
+		.where(eq(structuredEmails.userId, userId));
+
+	const [inboundStats, outboundStats, deliveryStats] = await Promise.all([
+		inboundStatsQuery,
+		outboundStatsQuery,
+		deliveryStatsQuery,
+	]);
+
+	const inboundStatsRow = inboundStats[0] || {
+		totalInbound: 0,
+		avgProcessing: 0,
+		parseFailed: 0,
+	};
+	const outboundStatsRow = outboundStats[0] || {
+		totalOutbound: 0,
+		sent: 0,
+		failed: 0,
+		pending: 0,
+		opened: 0,
+	};
+
+	// Parse counts as numbers to avoid string concatenation
+	const withDeliveriesCount = deliveryStats[0]?.withDeliveries || 0;
+	const successfulDeliveriesCount = deliveryStats[0]?.successful || 0;
+	const failedDeliveriesCount = deliveryStats[0]?.failed || 0;
+	const pendingDeliveriesCount = deliveryStats[0]?.pending || 0;
+
+	const stats = {
+		inbound: Number(inboundStatsRow.totalInbound),
+		outbound: Number(outboundStatsRow.totalOutbound),
+		opened: Number(outboundStatsRow.opened),
+		delivered: successfulDeliveriesCount + Number(outboundStatsRow.sent),
+		failed:
+			failedDeliveriesCount +
+			Number(inboundStatsRow.parseFailed) +
+			Number(outboundStatsRow.failed),
+		pending: pendingDeliveriesCount + Number(outboundStatsRow.pending),
+		noDelivery: Number(inboundStatsRow.totalInbound) - withDeliveriesCount,
+	};
+
+	if (dashboard) return stats;
+
+	return {
+		...stats,
+		totalEmails: stats.inbound + stats.outbound,
+		avgProcessingTime: Math.round(
+			Number(
+				"avgProcessing" in inboundStatsRow ? inboundStatsRow.avgProcessing : 0,
+			) || 0,
+		),
+	};
 }
 
 // Get email volume chart data (optimized for time series visualization)

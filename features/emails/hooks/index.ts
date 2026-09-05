@@ -1,6 +1,6 @@
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
-import { getEmailsList, getEmailDetailsFromParsed, getUnifiedEmailLogs } from '@/app/actions/primary'
-import type { EmailLogsOptions, EmailLogsResponse } from '../types'
+import { getEmailsList, getEmailDetailsFromParsed, getUnifiedEmailLogs, getDashboardEmailLogs } from '@/app/actions/primary'
+import type { DashboardEmailLogsResponse, EmailLogsOptions, EmailLogsResponse } from '@/features/emails/types'
 
 // Export the v2 hooks as primary exports
 export {
@@ -43,6 +43,24 @@ export function useUnifiedEmailLogsQuery(options: EmailLogsOptions = {}) {
         throw new Error(result.error)
       }
       return result.data as EmailLogsResponse
+    },
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    placeholderData: (prev) => prev,
+  })
+}
+
+export function useDashboardEmailLogsQuery(options: EmailLogsOptions = {}) {
+  return useQuery({
+    queryKey: ['unified-email-logs', 'dashboard-summary', options],
+    queryFn: async (): Promise<DashboardEmailLogsResponse> => {
+      const result = await getDashboardEmailLogs(options)
+      if (!result.success) {
+        throw new Error(result.error)
+      }
+      return result.data
     },
     staleTime: 30 * 1000,
     gcTime: 5 * 60 * 1000,
