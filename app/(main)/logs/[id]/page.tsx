@@ -706,17 +706,6 @@ export default async function LogDetailPage({
 						</CardContent>
 					</Card>
 
-					{isInbound && inboundDetails && (
-						<DeliveryRecoveryPanel
-							emailId={inboundDetails.id}
-							deliveries={inboundDetails.deliveries}
-							parseSuccess={inboundDetails.metadata.parseSuccess}
-							parseError={inboundDetails.metadata.parseError}
-							guardBlocked={inboundDetails.guardBlocked || false}
-							guardReason={inboundDetails.guardReason || null}
-						/>
-					)}
-
 					{/* Thread Information Card */}
 					{currentThreadId && threadMembers.length > 0 && (
 						<Card className="rounded-xl overflow-hidden mb-4">
@@ -881,6 +870,18 @@ export default async function LogDetailPage({
 									</Tabs>
 								</CardContent>
 							</Card>
+
+							{isInbound && inboundDetails && (
+								<DeliveryRecoveryPanel
+									key={inboundDetails.id}
+									emailId={inboundDetails.id}
+									deliveries={inboundDetails.deliveries}
+									parseSuccess={inboundDetails.metadata.parseSuccess}
+									parseError={inboundDetails.metadata.parseError}
+									guardBlocked={inboundDetails.guardBlocked || false}
+									guardReason={inboundDetails.guardReason || null}
+								/>
+							)}
 
 							{!isInbound && (
 								<Card className="rounded-xl overflow-hidden">
