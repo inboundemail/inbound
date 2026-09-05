@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useRef, useState } from "react";
+import { useIsMutating } from "@tanstack/react-query";
+import Link from "next/link";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -12,433 +15,242 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
-import {
-	Command,
-	CommandEmpty,
-	CommandGroup,
-	CommandInput,
-	CommandItem,
-	CommandList,
-} from "@/components/ui/command";
-import {
-	Popover,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
-import Check2 from "@/components/icons/check-2";
-import DoubleChevronDown from "@/components/icons/double-chevron-down";
-import { Label } from "@/components/ui/label";
-import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
-import Refresh2 from "@/components/icons/refresh-2";
-import Loader from "@/components/icons/loader";
-import Webhook from "@/components/icons/webhook";
-import Envelope2 from "@/components/icons/envelope-2";
-import UserGroup from "@/components/icons/user-group";
-import { ResendStatusLog } from "./resend-status-log";
-import { client } from "@/lib/api/client";
+	useEndpointsInfiniteQuery,
+	flattenEndpointPages,
+} from "@/features/endpoints/hooks/useEndpointsInfiniteQuery";
+import { useRetryDeliveryMutation } from "@/features/emails/hooks/useRetryDeliveryMutation";
+import { getDeliveryDestination } from "@/lib/email-management/delivery-diagnostics";
+import type { RecoveryDelivery } from "@/lib/email-management/delivery-diagnostics";
 
 interface ResendEmailDialogProps {
 	emailId: string;
-	defaultEndpointId?: string;
-	deliveries?: Array<{
-		id: string;
-		config?: {
-			name: string;
-			type: string;
-		};
-	}>;
+	deliveries: RecoveryDelivery[];
+	disabledReason?: string | null;
 }
 
-interface Endpoint {
-	id: string;
-	name: string;
-	type: "webhook" | "email" | "email_group";
-	isActive: boolean;
-	description?: string | null;
-}
-
-// Fetch user endpoints using Eden
-async function fetchEndpoints(): Promise<Endpoint[]> {
-	const { data, error } = await client.api.e2.endpoints.get();
-
-	if (error) {
-		throw new Error((error as any)?.error || "Failed to fetch endpoints");
-	}
-
-	return (data?.data || []) as Endpoint[];
-}
-
-// Resend email to specific endpoint using Eden client
-async function resendToEndpoint(emailId: string, endpointId: string) {
-	const { data, error } = await client.api.e2
-		.emails({ id: emailId })
-		.retry.post({
-			endpoint_id: endpointId,
-		});
-
-	if (error) {
-		throw new Error(
-			(error as { error?: string })?.error || "Failed to resend email",
-		);
-	}
-
-	return data;
-}
-
-function getEndpointIcon(type: string) {
-	switch (type) {
-		case "webhook":
-			return Webhook;
-		case "email":
-			return Envelope2;
-		case "email_group":
-			return UserGroup;
-		default:
-			return Webhook;
-	}
-}
-
-function getEndpointDisplayName(type: string) {
-	switch (type) {
-		case "email":
-			return "Email";
-		case "email_group":
-			return "Email Group";
-		case "webhook":
-			return "Webhook";
-		default:
-			return type;
-	}
-}
-
-export function ResendEmailDialog({
-	emailId,
-	defaultEndpointId,
-	deliveries = [],
-}: ResendEmailDialogProps) {
+export function ResendEmailDialog(props: ResendEmailDialogProps) {
 	const [open, setOpen] = useState(false);
-	const [comboboxOpen, setComboboxOpen] = useState(false);
-	const [selectedEndpointId, setSelectedEndpointId] = useState<string>("");
-	const [isResending, setIsResending] = useState(false);
-	const [logs, setLogs] = useState<
-		Array<{ ts: Date; text: string; type: "info" | "success" | "error" }>
-	>([]);
-	const [lastStatus, setLastStatus] = useState<
-		| {
-				success: boolean;
-				message: string;
-				deliveryId?: string;
-				timestamp: Date;
-		  }
-		| undefined
-	>();
-
-	// Fetch available endpoints
-	const { data: endpoints = [], isLoading: endpointsLoading } = useQuery({
-		queryKey: ["endpoints"],
-		queryFn: fetchEndpoints,
-		enabled: open, // Only fetch when dialog is open
-	});
-
-	// Set default endpoint when dialog opens or endpoints load
-	useEffect(() => {
-		if (endpoints.length > 0 && !selectedEndpointId) {
-			// Try to use the defaultEndpointId first, or fall back to first active endpoint
-			const defaultEndpoint = defaultEndpointId
-				? endpoints.find((e) => e.id === defaultEndpointId && e.isActive)
-				: null;
-
-			const fallbackEndpoint = endpoints.find((e) => e.isActive);
-
-			if (defaultEndpoint) {
-				setSelectedEndpointId(defaultEndpoint.id);
-			} else if (fallbackEndpoint) {
-				setSelectedEndpointId(fallbackEndpoint.id);
-			}
-		}
-	}, [endpoints, defaultEndpointId, selectedEndpointId]);
-
-	// Reset state when dialog closes
-	useEffect(() => {
-		if (!open) {
-			setSelectedEndpointId("");
-			setIsResending(false);
-			setLogs([]);
-			setLastStatus(undefined);
-			setComboboxOpen(false);
-		}
-	}, [open]);
-
-	const appendLog = (
-		text: string,
-		type: "info" | "success" | "error" = "info",
-	) => {
-		setLogs((prev) => [...prev, { ts: new Date(), text, type }]);
-	};
-
-	const handleResend = async () => {
-		if (!selectedEndpointId || isResending) return;
-
-		const selectedEndpoint = endpoints.find((e) => e.id === selectedEndpointId);
-		const endpointName = selectedEndpoint?.name || "Unknown Endpoint";
-
-		setIsResending(true);
-		appendLog(`Starting resend to ${endpointName}...`, "info");
-
-		try {
-			const result = await resendToEndpoint(emailId, selectedEndpointId);
-
-			if (result.success) {
-				appendLog(`✓ Successfully resent to ${endpointName}`, "success");
-				setLastStatus({
-					success: true,
-					message: result.message || "Email resent successfully",
-					deliveryId: result.delivery_id,
-					timestamp: new Date(),
-				});
-				toast.success("Email resent successfully");
-			} else {
-				appendLog(`✗ Failed to resend: Unknown error`, "error");
-				setLastStatus({
-					success: false,
-					message: "Failed to resend email",
-					timestamp: new Date(),
-				});
-				toast.error("Failed to resend email");
-			}
-		} catch (error) {
-			const errorMessage =
-				error instanceof Error ? error.message : "Failed to resend email";
-			appendLog(`✗ Error: ${errorMessage}`, "error");
-			setLastStatus({
-				success: false,
-				message: errorMessage,
-				timestamp: new Date(),
-			});
-			console.error("Resend error:", error);
-			toast.error(errorMessage);
-		} finally {
-			setIsResending(false);
-		}
-	};
-
-	const selectedEndpoint = endpoints.find((e) => e.id === selectedEndpointId);
-	const activeEndpoints = endpoints.filter((e) => e.isActive);
+	const busy =
+		useIsMutating({ mutationKey: ["delivery-recovery", props.emailId] }) > 0;
 
 	return (
-		<Dialog open={open} onOpenChange={setOpen}>
+		<Dialog
+			open={open}
+			onOpenChange={(value) => {
+				if (!busy) setOpen(value);
+			}}
+		>
 			<DialogTrigger asChild>
-				<Button variant="outline" size="sm" className="h-8 px-3 gap-1.5">
-					<Refresh2 width="14" height="14" />
-					Resend
+				<Button variant="primary" disabled={!!props.disabledReason || busy}>
+					Send to endpoint
 				</Button>
 			</DialogTrigger>
-			<DialogContent className="sm:max-w-[480px]">
-				<DialogHeader className="space-y-3">
-					<DialogTitle className="text-lg font-semibold">
-						Resend Email
-					</DialogTitle>
-					<DialogDescription className="text-sm text-muted-foreground leading-relaxed">
-						Choose an endpoint to resend this email to. This will create a new
-						delivery attempt.
-					</DialogDescription>
-				</DialogHeader>
+			{open && <ResendConfirmation {...props} onClose={() => setOpen(false)} />}
+		</Dialog>
+	);
+}
 
-				<div className="grid gap-6 py-4">
-					<div className="space-y-3">
-						<Label htmlFor="endpoint" className="text-sm font-medium">
-							Destination Endpoint
-						</Label>
-						{endpointsLoading ? (
-							<div className="flex items-center justify-center h-12 border border-dashed border-border/60 rounded-lg bg-muted/20">
-								<div className="flex items-center gap-2 text-muted-foreground">
-									<Loader width="16" height="16" className="animate-spin" />
-									<span className="text-sm">Loading endpoints...</span>
-								</div>
-							</div>
-						) : activeEndpoints.length === 0 ? (
-							<div className="text-sm text-muted-foreground p-4 border border-dashed border-border/60 rounded-lg bg-muted/20 text-center">
-								<div className="font-medium mb-1">No Active Endpoints</div>
-								<div className="text-xs">
-									Please create and activate an endpoint first.
-								</div>
-							</div>
-						) : (
-							<Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
-								<PopoverTrigger asChild>
-									<Button
-										variant="outline"
-										role="combobox"
-										aria-expanded={comboboxOpen}
-										className="w-full justify-between"
-									>
-										{selectedEndpointId
-											? (() => {
-													const endpoint = activeEndpoints.find(
-														(e) => e.id === selectedEndpointId,
-													);
-													const Icon = endpoint
-														? getEndpointIcon(endpoint.type)
-														: Webhook;
-													return (
-														<div className="flex items-center gap-3">
-															<Icon
-																width="16"
-																height="16"
-																className="text-muted-foreground flex-shrink-0"
-															/>
-															<div className="flex-1 min-w-0">
-																<span className="font-medium truncate block">
-																	{endpoint?.name}
-																</span>
-																<span className="text-xs text-muted-foreground capitalize">
-																	{endpoint
-																		? getEndpointDisplayName(endpoint.type)
-																		: "Unknown"}{" "}
-																	endpoint
-																</span>
-															</div>
-														</div>
-													);
-												})()
-											: "Select an endpoint..."}
-										<DoubleChevronDown
-											width="16"
-											height="16"
-											className="ml-2 h-4 w-4 shrink-0 opacity-50"
-										/>
-									</Button>
-								</PopoverTrigger>
-								<PopoverContent className="w-[--radix-popover-trigger-width] p-0 overflow-hidden">
-									<Command className="rounded-lg">
-										<CommandInput placeholder="Search endpoints..." />
-										<CommandList className="max-h-[280px] overflow-y-auto">
-											<CommandEmpty>No endpoints found.</CommandEmpty>
-											<CommandGroup>
-												{activeEndpoints.map((endpoint) => {
-													const Icon = getEndpointIcon(endpoint.type);
-													return (
-														<CommandItem
-															key={endpoint.id}
-															value={`${endpoint.name} ${endpoint.type}`}
-															onSelect={() => {
-																setSelectedEndpointId(endpoint.id);
-																setComboboxOpen(false);
-															}}
-															className="px-3 py-2.5"
-														>
-															<Check2
-																width="16"
-																height="16"
-																className={cn(
-																	"mr-2 h-4 w-4",
-																	selectedEndpointId === endpoint.id
-																		? "opacity-100"
-																		: "opacity-0",
-																)}
-															/>
-															<div className="flex items-start gap-3 flex-1">
-																<div className="flex-shrink-0 mt-0.5">
-																	<Icon
-																		width="16"
-																		height="16"
-																		className="text-muted-foreground"
-																	/>
-																</div>
-																<div className="flex-1 min-w-0">
-																	<div className="font-medium text-sm truncate">
-																		{endpoint.name}
-																	</div>
-																	<div className="text-xs text-muted-foreground capitalize">
-																		{getEndpointDisplayName(endpoint.type)}{" "}
-																		endpoint
-																	</div>
-																	{endpoint.description && (
-																		<div className="text-xs text-muted-foreground mt-1 line-clamp-2">
-																			{endpoint.description}
-																		</div>
-																	)}
-																</div>
-															</div>
-														</CommandItem>
-													);
-												})}
-											</CommandGroup>
-										</CommandList>
-									</Command>
-								</PopoverContent>
-							</Popover>
-						)}
-					</div>
+function ResendConfirmation({
+	emailId,
+	deliveries,
+	disabledReason,
+	onClose,
+}: ResendEmailDialogProps & { onClose: () => void }) {
+	const [selectedEndpointId, setSelectedEndpointId] = useState("");
+	const [confirmed, setConfirmed] = useState(false);
+	const submitting = useRef(false);
+	const mutation = useRetryDeliveryMutation(emailId);
+	const busy =
+		useIsMutating({ mutationKey: ["delivery-recovery", emailId] }) > 0;
+	const query = useEndpointsInfiniteQuery({ active: true, limit: 50 });
+	const endpoints = flattenEndpointPages(query.data?.pages).filter(
+		(endpoint) => endpoint.isActive,
+	);
+	const selectedEndpoint = endpoints.find(
+		(endpoint) => endpoint.id === selectedEndpointId,
+	);
+	const destination = selectedEndpoint
+		? getDeliveryDestination(
+				selectedEndpoint.type,
+				selectedEndpoint.type === "email_group"
+					? { emails: selectedEndpoint.groupEmails }
+					: selectedEndpoint.config,
+			)
+		: null;
+	const priorDeliveries = deliveries.filter(
+		(delivery) => delivery.endpoint.id === selectedEndpointId,
+	);
+	const processing = priorDeliveries.some(
+		(delivery) => delivery.status === "processing",
+	);
+	const alreadyDelivered = priorDeliveries.some(
+		(delivery) => delivery.status === "success",
+	);
+	const blockedReason =
+		disabledReason ||
+		(processing
+			? "This endpoint has a delivery in progress. Refresh its status before another attempt, even if it appears stalled."
+			: selectedEndpoint && !destination
+				? "This endpoint has no valid destination. Correct its settings before sending."
+				: null);
 
-					{selectedEndpoint && (
-						<div className="p-4 bg-muted/30 rounded-lg border border-border/50">
-							<div className="flex items-start gap-3">
-								<div className="flex-shrink-0">
-									{(() => {
-										const Icon = getEndpointIcon(selectedEndpoint.type);
-										return (
-											<Icon
-												width="20"
-												height="20"
-												className="text-muted-foreground mt-0.5"
-											/>
-										);
-									})()}
-								</div>
-								<div className="flex-1 min-w-0">
-									<div className="text-sm font-semibold text-foreground">
-										{selectedEndpoint.name}
-									</div>
-									<div className="text-xs text-muted-foreground capitalize mt-0.5">
-										{getEndpointDisplayName(selectedEndpoint.type)} endpoint
-									</div>
-									{selectedEndpoint.description && (
-										<div className="text-xs text-muted-foreground mt-2 leading-relaxed">
-											{selectedEndpoint.description}
-										</div>
-									)}
-								</div>
-							</div>
+	const handleSend = async () => {
+		if (
+			submitting.current ||
+			busy ||
+			blockedReason ||
+			!selectedEndpoint ||
+			!confirmed ||
+			mutation.isSuccess
+		)
+			return;
+		submitting.current = true;
+		try {
+			const result = await mutation.mutateAsync({
+				emailId,
+				endpointId: selectedEndpoint.id,
+			});
+			toast.success(result.message);
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "Delivery failed");
+		} finally {
+			submitting.current = false;
+			setConfirmed(false);
+		}
+	};
+
+	return (
+		<DialogContent className="max-h-[90dvh] overflow-y-auto [font-family:'Helvetica_Neue',sans-serif]">
+			<DialogHeader>
+				<DialogTitle>Send to endpoint</DialogTitle>
+				<DialogDescription>
+					Choose the destination for this email. Sending may create a duplicate,
+					including after a failed or timed-out attempt.
+				</DialogDescription>
+			</DialogHeader>
+			<div className="space-y-4 text-sm">
+				<div className="space-y-2">
+					<label
+						htmlFor={`recovery-endpoint-${emailId}`}
+						className="font-medium"
+					>
+						Endpoint
+					</label>
+					<select
+						id={`recovery-endpoint-${emailId}`}
+						className="w-full rounded-md border border-input bg-background px-3 py-2 text-base sm:text-sm"
+						value={selectedEndpointId}
+						disabled={busy || query.isLoading || mutation.isSuccess}
+						onChange={(event) => {
+							setSelectedEndpointId(event.target.value);
+							setConfirmed(false);
+							mutation.reset();
+						}}
+					>
+						<option value="">
+							{query.isLoading ? "Loading endpoints…" : "Choose an endpoint"}
+						</option>
+						{endpoints.map((endpoint) => (
+							<option key={endpoint.id} value={endpoint.id}>
+								{endpoint.name} · {endpoint.type.replaceAll("_", " ")}
+							</option>
+						))}
+					</select>
+					{query.hasNextPage && (
+						<Button
+							variant="outline"
+							disabled={query.isFetchingNextPage || busy}
+							onClick={() => query.fetchNextPage()}
+						>
+							{query.isFetchingNextPage ? "Loading…" : "Load more endpoints"}
+						</Button>
+					)}
+					{query.error && (
+						<div role="alert" className="space-y-2">
+							<p className="text-destructive">
+								Could not load endpoints. {query.error.message}
+							</p>
+							<Button
+								variant="outline"
+								onClick={() => query.refetch()}
+								disabled={query.isFetching}
+							>
+								Try again
+							</Button>
 						</div>
 					)}
-
-					<ResendStatusLog logs={logs} lastStatus={lastStatus} />
+					{!query.isLoading && !query.error && endpoints.length === 0 && (
+						<p>
+							No active endpoints.{" "}
+							<Link href="/endpoints" className="underline underline-offset-4">
+								Create or enable an endpoint
+							</Link>{" "}
+							first.
+						</p>
+					)}
 				</div>
-
-				<DialogFooter>
+				{selectedEndpoint && (
+					<div className="space-y-2">
+						<p className="font-medium">Current destination</p>
+						<p className="break-all [font-family:'Berkeley_Mono',monospace]">
+							{destination || "Not configured"}
+						</p>
+						<Link
+							href={`/endpoints/${selectedEndpoint.id}`}
+							className="inline-block py-2 underline underline-offset-4"
+						>
+							Endpoint settings
+						</Link>
+						{alreadyDelivered && (
+							<p>
+								This email was already delivered to this endpoint. Sending again
+								will create another delivery attempt.
+							</p>
+						)}
+					</div>
+				)}
+				{blockedReason && (
+					<p role="status" className="text-muted-foreground">
+						{blockedReason}
+					</p>
+				)}
+				{selectedEndpoint && !blockedReason && !mutation.isSuccess && (
+					<label className="flex min-h-11 cursor-pointer items-start gap-3 py-2">
+						<input
+							type="checkbox"
+							className="mt-1"
+							checked={confirmed}
+							disabled={busy}
+							onChange={(event) => setConfirmed(event.target.checked)}
+						/>
+						<span>
+							I confirm this destination and understand the receiver may receive
+							a duplicate.
+						</span>
+					</label>
+				)}
+				{mutation.error && (
+					<p role="alert" className="text-destructive">
+						{mutation.error.message}
+					</p>
+				)}
+				{mutation.isSuccess && <p role="status">{mutation.data.message}</p>}
+			</div>
+			<DialogFooter>
+				<Button variant="outline" disabled={busy} onClick={onClose}>
+					{mutation.isSuccess ? "Done" : "Cancel"}
+				</Button>
+				{!mutation.isSuccess && (
 					<Button
-						variant="outline"
-						onClick={() => setOpen(false)}
-						disabled={isResending}
-					>
-						Cancel
-					</Button>
-					<Button
-						onClick={handleResend}
+						onClick={handleSend}
 						disabled={
-							!selectedEndpointId || isResending || activeEndpoints.length === 0
+							!selectedEndpoint || !confirmed || busy || !!blockedReason
 						}
 					>
-						{isResending ? (
-							<>
-								<Loader width="14" height="14" className="mr-2 animate-spin" />
-								Sending...
-							</>
-						) : (
-							"Send"
-						)}
+						{mutation.isPending ? "Sending…" : "Confirm send"}
 					</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
+				)}
+			</DialogFooter>
+		</DialogContent>
 	);
 }

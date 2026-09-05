@@ -6,7 +6,7 @@
  */
 
 import { Autumn as autumn } from "autumn-js";
-import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, ilike, isNull, lt, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { Endpoint } from "@/features/endpoints/types";
 import { getTenantSendingInfoForDomainOrParent } from "@/lib/aws-ses/identity-arn-helper";
@@ -16,11 +16,17 @@ import {
 	emailDomains,
 	endpointDeliveries,
 	endpoints,
+	sesEvents,
 	structuredEmails,
+	webhookDeliveries,
 } from "@/lib/db/schema";
 import { getOrCreateVerificationToken } from "@/lib/webhooks/verification";
 import { evaluateGuardRules } from "../guard/rule-matcher";
-import { checkRecipientsAgainstBlocklist } from "./email-blocking";
+import { isDsn } from "@/lib/email-management/dsn-parser";
+import {
+	checkRecipientsAgainstBlocklist,
+	isEmailBlocked,
+} from "@/lib/email-management/email-blocking";
 import { EmailForwarder } from "./email-forwarder";
 import type { ParsedEmailData } from "./email-parser";
 import { sanitizeHtml } from "./email-parser";
@@ -37,26 +43,180 @@ type StructuredEmailWithData = NonNullable<
 /**
  * Main email routing function - routes emails to appropriate endpoints
  */
+type DeliveryResult = {
+	success: boolean;
+	message: string;
+	delivery_id?: string;
+};
+
+type RetryTarget = {
+	deliveryId?: string;
+	endpointId?: string;
+};
+
+type RetryOptions = RetryTarget & { userId: string };
+
+export class EmailRetryError extends Error {
+	constructor(
+		message: string,
+		public readonly status: 400 | 404,
+	) {
+		super(message);
+	}
+}
+
+export async function retryEmailDelivery(
+	emailId: string,
+	userId: string,
+	target: RetryTarget = {},
+): Promise<DeliveryResult> {
+	if (target.deliveryId !== undefined && target.endpointId !== undefined) {
+		throw new EmailRetryError(
+			"Choose either delivery_id or endpoint_id, not both",
+			400,
+		);
+	}
+	if (target.deliveryId === "" || target.endpointId === "") {
+		throw new EmailRetryError(
+			"Delivery and endpoint IDs must not be empty",
+			400,
+		);
+	}
+	return routeEmailWithResult(emailId, { ...target, userId });
+}
+
 export async function routeEmail(emailId: string): Promise<void> {
+	await routeEmailWithResult(emailId);
+}
+
+async function routeEmailWithResult(
+	emailId: string,
+	retry?: RetryOptions,
+): Promise<DeliveryResult> {
 	console.log(`🎯 routeEmail - Processing email ID: ${emailId}`);
 
 	try {
 		// Get email with structured data
-		const emailData = await getEmailWithStructuredData(emailId);
+		const emailData = await getEmailWithStructuredData(emailId, retry?.userId);
 		if (!emailData) {
-			throw new Error("Email not found or missing structured data");
+			throw new EmailRetryError(
+				"Email not found or missing structured data",
+				404,
+			);
+		}
+		emailId = emailData.emailId;
+		if (retry && !emailData.parseSuccess) {
+			throw new EmailRetryError(
+				"Email parsing failed; delivery cannot be retried",
+				400,
+			);
+		}
+		if (retry && emailData.guardBlocked) {
+			throw new EmailRetryError(
+				"Email is blocked by Guard and cannot be retried",
+				400,
+			);
+		}
+		if (retry) {
+			const headers: Record<string, unknown> = emailData.headers
+				? JSON.parse(emailData.headers)
+				: {};
+			if (
+				isDsn(
+					emailData.rawContent ||
+						emailData.textBody ||
+						emailData.htmlBody ||
+						"",
+					headers,
+				)
+			) {
+				throw new EmailRetryError(
+					"Delivery status notifications cannot be retried",
+					400,
+				);
+			}
+			const [sesEvent] = await db
+				.select({ source: sesEvents.source })
+				.from(sesEvents)
+				.where(eq(sesEvents.id, emailData.sesEventId))
+				.limit(1);
+			if (!sesEvent) {
+				throw new EmailRetryError(
+					"Unable to verify the original envelope sender; delivery was not attempted",
+					400,
+				);
+			}
+			if (await isEmailBlocked(sesEvent.source, { throwOnError: true })) {
+				throw new EmailRetryError(
+					"The original envelope sender is blocked; delivery was not attempted",
+					400,
+				);
+			}
+		}
+		let targetEndpoint: Endpoint | null = null;
+		let targetEndpointId = retry?.endpointId;
+		if (retry?.deliveryId) {
+			const [delivery] = await db
+				.select()
+				.from(endpointDeliveries)
+				.where(
+					and(
+						eq(endpointDeliveries.id, retry.deliveryId),
+						eq(endpointDeliveries.emailId, emailId),
+					),
+				)
+				.limit(1);
+			if (!delivery) {
+				throw new EmailRetryError("Delivery not found for this email", 404);
+			}
+			if (delivery.status === "success") {
+				throw new EmailRetryError(
+					"Delivery already succeeded. Use resend to deliver again.",
+					400,
+				);
+			}
+			if (delivery.status === "processing") {
+				throw new EmailRetryError("Delivery is already in progress", 400);
+			}
+			targetEndpointId = delivery.endpointId;
+		}
+		if (targetEndpointId) {
+			const [endpoint] = await db
+				.select()
+				.from(endpoints)
+				.where(
+					and(
+						eq(endpoints.id, targetEndpointId),
+						eq(endpoints.userId, emailData.userId),
+						eq(endpoints.isActive, true),
+					),
+				)
+				.limit(1);
+			if (!endpoint) {
+				throw new EmailRetryError("Endpoint not found or is inactive", 404);
+			}
+			targetEndpoint = endpoint;
 		}
 
 		// 🧵 NEW: Process threading before routing
 		let threadingResult: ThreadingResult | null = null;
 		try {
-			threadingResult = await EmailThreader.processEmailForThreading(
-				emailId,
-				emailData.userId,
-			);
-			console.log(
-				`🧵 Email ${emailId} assigned to thread ${threadingResult.threadId} at position ${threadingResult.threadPosition}${threadingResult.isNewThread ? " (new thread)" : ""}`,
-			);
+			threadingResult = retry
+				? emailData.threadId && emailData.threadPosition
+					? {
+							threadId: emailData.threadId,
+							threadPosition: emailData.threadPosition,
+							isNewThread: false,
+						}
+					: null
+				: await EmailThreader.processEmailForThreading(
+						emailId,
+						emailData.userId,
+					);
+			if (threadingResult)
+				console.log(
+					`🧵 Email ${emailId} assigned to thread ${threadingResult.threadId} at position ${threadingResult.threadPosition}${threadingResult.isNewThread ? " (new thread)" : ""}`,
+				);
 		} catch (threadingError) {
 			// Don't fail routing if threading fails - log error and continue
 			console.error(`⚠️ Threading failed for email ${emailId}:`, threadingError);
@@ -76,7 +236,10 @@ export async function routeEmail(emailId: string): Promise<void> {
 			console.log(
 				`📊 routeEmail - DMARC email detected for ${emailData.recipient}, checking domain settings`,
 			);
-			return; // Email is stored but not routed based on domain configuration
+			return {
+				success: false,
+				message: "DMARC delivery is disabled by domain settings",
+			};
 		}
 
 		// 🛡️ GUARD: Check feature flag before evaluating Guard rules
@@ -87,6 +250,12 @@ export async function routeEmail(emailId: string): Promise<void> {
 				feature_id: "inbound_guard",
 			});
 			if (guardCheckError) {
+				if (retry) {
+					throw new EmailRetryError(
+						"Unable to verify Guard policy; try again later",
+						400,
+					);
+				}
 				console.error(
 					`⚠️ routeEmail - Autumn inbound_guard check error for user ${emailData.userId}:`,
 					guardCheckError,
@@ -95,6 +264,12 @@ export async function routeEmail(emailId: string): Promise<void> {
 				guardFeatureEnabled = !!guardCheck?.allowed;
 			}
 		} catch (featureError) {
+			if (retry) {
+				throw new EmailRetryError(
+					"Unable to verify Guard policy; try again later",
+					400,
+				);
+			}
 			console.error(
 				"⚠️ routeEmail - Failed to check inbound_guard feature:",
 				featureError,
@@ -134,7 +309,10 @@ export async function routeEmail(emailId: string): Promise<void> {
 				);
 
 				// Email is stored but not routed - blocked by Guard
-				return;
+				return {
+					success: false,
+					message: "Email is blocked by Guard and cannot be delivered",
+				};
 			}
 
 			// Handle other Guard actions (flag, label) that don't block
@@ -169,6 +347,15 @@ export async function routeEmail(emailId: string): Promise<void> {
 			}
 
 			if (guardResult.action === "route" && guardResult.routeToEndpointId) {
+				if (
+					targetEndpoint &&
+					targetEndpoint.id !== guardResult.routeToEndpointId
+				) {
+					throw new EmailRetryError(
+						"Guard policy routes this email to a different endpoint",
+						400,
+					);
+				}
 				console.log(
 					`🛡️ routeEmail - Email ${emailId} ROUTED by Guard rule to endpoint: ${guardResult.routeToEndpointId}`,
 				);
@@ -203,24 +390,7 @@ export async function routeEmail(emailId: string): Promise<void> {
 					.limit(1);
 
 				if (guardEndpoint) {
-					// Route to Guard-specified endpoint
-					switch (guardEndpoint.type) {
-						case "webhook":
-							await handleWebhookEndpoint(emailId, guardEndpoint);
-							break;
-						case "email":
-						case "email_group":
-							await handleEmailForwardEndpoint(
-								emailId,
-								guardEndpoint,
-								emailData,
-							);
-							break;
-					}
-					console.log(
-						`✅ routeEmail - Successfully routed email ${emailId} via Guard to ${guardEndpoint.type} endpoint`,
-					);
-					return;
+					targetEndpoint = guardEndpoint;
 				} else {
 					console.warn(
 						`⚠️ routeEmail - Guard specified endpoint ${guardResult.routeToEndpointId} not found, falling back to normal routing`,
@@ -234,8 +404,9 @@ export async function routeEmail(emailId: string): Promise<void> {
 		}
 
 		// 🧵 Thread Continuity: Check if this is a thread reply and route to original endpoint
-		let endpoint: Endpoint | null = null;
+		let endpoint: Endpoint | null = targetEndpoint;
 		if (
+			!endpoint &&
 			threadingResult &&
 			!threadingResult.isNewThread &&
 			threadingResult.threadPosition &&
@@ -274,7 +445,40 @@ export async function routeEmail(emailId: string): Promise<void> {
 				`⚠️ routeEmail - No endpoint configured for ${emailData.recipient}, falling back to legacy webhook lookup`,
 			);
 			// Fallback to existing webhook logic for backward compatibility
-			const result = await triggerEmailAction(emailId);
+			const result = await triggerEmailAction(
+				emailData.structuredId,
+				retry ? { manualRetry: true, userId: retry.userId } : undefined,
+			);
+			if (retry && result.deliveryId) {
+				const [delivery] = await db
+					.select({
+						status: webhookDeliveries.status,
+						error: webhookDeliveries.error,
+						responseCode: webhookDeliveries.responseCode,
+					})
+					.from(webhookDeliveries)
+					.where(
+						and(
+							eq(webhookDeliveries.id, result.deliveryId),
+							eq(webhookDeliveries.emailId, emailData.structuredId),
+						),
+					)
+					.limit(1);
+				return {
+					success: delivery?.status === "success",
+					message:
+						delivery?.status === "success"
+							? "Legacy webhook delivery completed"
+							: delivery?.status === "processing"
+								? "Legacy webhook delivery is already in progress"
+								: delivery?.error ||
+									result.error ||
+									(delivery?.responseCode
+										? `Legacy webhook delivery failed with HTTP ${delivery.responseCode}`
+										: "Legacy webhook delivery did not complete"),
+					delivery_id: result.deliveryId,
+				};
+			}
 			if (!result.success) {
 				// Log the error but don't throw - this allows the email to be processed even without a webhook
 				console.warn(
@@ -283,63 +487,35 @@ export async function routeEmail(emailId: string): Promise<void> {
 				console.log(
 					`📧 routeEmail - Email ${emailId} processed but not routed (no webhook/endpoint configured)`,
 				);
-				return;
+				return {
+					success: false,
+					message: result.error || "Legacy webhook processing failed",
+					delivery_id: result.deliveryId,
+				};
 			}
-			return;
+			return {
+				success: true,
+				message: "Legacy webhook delivery completed",
+				delivery_id: result.deliveryId,
+			};
 		}
 
 		console.log(
 			`📍 routeEmail - Found endpoint: ${endpoint.name} (type: ${endpoint.type}) for ${emailData.recipient}`,
 		);
 
-		// OPTIMIZATION: Check if this email has already been delivered to this endpoint
-		// This is a fast-path check to avoid even calling the handler functions
-		// Note: The handlers also INSERT delivery records first (with unique constraint)
-		// to prevent race conditions at the network send level
-		const existingDelivery = await db
-			.select({
-				id: endpointDeliveries.id,
-				status: endpointDeliveries.status,
-				attempts: endpointDeliveries.attempts,
-			})
-			.from(endpointDeliveries)
-			.where(
-				and(
-					eq(endpointDeliveries.emailId, emailId),
-					eq(endpointDeliveries.endpointId, endpoint.id),
-				),
-			)
-			.limit(1);
-
-		if (existingDelivery[0]) {
-			if (existingDelivery[0].status === "success") {
-				console.log(
-					`⏭️  routeEmail - Email ${emailId} already successfully delivered to endpoint ${endpoint.id} (attempts: ${existingDelivery[0].attempts}). Skipping duplicate delivery.`,
-				);
-				return;
-			}
-			// Allow re-delivery for pending/failed deliveries (retries)
-			console.log(
-				`🔄 routeEmail - Email ${emailId} has existing delivery for endpoint ${endpoint.id} (status: ${existingDelivery[0].status}, attempts: ${existingDelivery[0].attempts}). Allowing re-delivery.`,
-			);
-		}
-
-		// Route based on endpoint type
 		switch (endpoint.type) {
 			case "webhook":
-				await handleWebhookEndpoint(emailId, endpoint);
-				break;
+				return handleWebhookEndpoint(emailId, endpoint, retry);
 			case "email":
 			case "email_group":
-				await handleEmailForwardEndpoint(emailId, endpoint, emailData);
-				break;
+				return handleEmailForwardEndpoint(emailId, endpoint, emailData, retry);
 			default:
-				throw new Error(`Unknown endpoint type: ${endpoint.type}`);
+				throw new EmailRetryError(
+					`Unsupported endpoint type: ${endpoint.type}`,
+					400,
+				);
 		}
-
-		console.log(
-			`✅ routeEmail - Successfully routed email ${emailId} via ${endpoint.type} endpoint`,
-		);
 	} catch (error) {
 		console.error(`❌ routeEmail - Error processing email ${emailId}:`, error);
 		throw error;
@@ -349,13 +525,14 @@ export async function routeEmail(emailId: string): Promise<void> {
 /**
  * Get email data with structured information
  */
-async function getEmailWithStructuredData(emailId: string) {
+async function getEmailWithStructuredData(emailId: string, userId?: string) {
 	// Get the full structured email data in a single query
 	const emailWithStructuredData = await db
 		.select({
 			// Email record fields
 			emailId: structuredEmails.emailId,
 			userId: structuredEmails.userId,
+			sesEventId: structuredEmails.sesEventId,
 
 			// Structured email data (ParsedEmailData)
 			structuredId: structuredEmails.id,
@@ -378,6 +555,7 @@ async function getEmailWithStructuredData(emailId: string) {
 			priority: structuredEmails.priority,
 			parseSuccess: structuredEmails.parseSuccess,
 			parseError: structuredEmails.parseError,
+			guardBlocked: structuredEmails.guardBlocked,
 
 			// Threading fields
 			threadId: structuredEmails.threadId,
@@ -385,9 +563,12 @@ async function getEmailWithStructuredData(emailId: string) {
 		})
 		.from(structuredEmails)
 		.where(
-			or(
-				eq(structuredEmails.id, emailId),
-				eq(structuredEmails.emailId, emailId),
+			and(
+				or(
+					eq(structuredEmails.id, emailId),
+					eq(structuredEmails.emailId, emailId),
+				),
+				userId ? eq(structuredEmails.userId, userId) : undefined,
 			),
 		)
 		.limit(1);
@@ -682,120 +863,154 @@ async function findEndpointForEmail(
 	}
 }
 
-function isUniqueConstraintError(error: unknown): boolean {
-	if (!(error instanceof Error)) {
-		return false;
-	}
+type DeliveryClaim = {
+	id: string;
+	attempts: number;
+	updatedAt: Date;
+};
 
-	const errorWithCode = error as Error & { code?: string };
-	return (
-		errorWithCode.code === "23505" ||
-		error.message.includes("duplicate key") ||
-		error.message.includes("unique constraint")
-	);
-}
-
-async function claimWebhookEndpointDelivery(
+async function claimEndpointDelivery(
 	emailId: string,
-	endpointId: string,
-): Promise<string | null> {
-	const deliveryId = nanoid();
+	endpoint: Endpoint,
+	retry?: RetryOptions,
+): Promise<DeliveryClaim | DeliveryResult> {
 	const now = new Date();
-
-	try {
-		await db.insert(endpointDeliveries).values({
-			id: deliveryId,
-			emailId,
-			endpointId,
-			deliveryType: "webhook",
-			status: "processing",
-			attempts: 1,
-			lastAttemptAt: now,
-			createdAt: now,
-			updatedAt: now,
-		});
-		return deliveryId;
-	} catch (error) {
-		if (!isUniqueConstraintError(error)) {
-			throw error;
+	if (!retry?.deliveryId) {
+		const [inserted] = await db
+			.insert(endpointDeliveries)
+			.values({
+				id: nanoid(),
+				emailId,
+				endpointId: endpoint.id,
+				deliveryType: endpoint.type === "webhook" ? "webhook" : "email_forward",
+				status: "processing",
+				attempts: 1,
+				lastAttemptAt: now,
+				createdAt: now,
+				updatedAt: now,
+			})
+			.onConflictDoNothing({
+				target: [endpointDeliveries.emailId, endpointDeliveries.endpointId],
+			})
+			.returning({ id: endpointDeliveries.id });
+		if (inserted) {
+			return { id: inserted.id, attempts: 1, updatedAt: now };
 		}
 	}
-
-	const [existingDelivery] = await db
-		.select({
-			id: endpointDeliveries.id,
-			status: endpointDeliveries.status,
-			updatedAt: endpointDeliveries.updatedAt,
-		})
+	const [existing] = await db
+		.select()
 		.from(endpointDeliveries)
 		.where(
 			and(
 				eq(endpointDeliveries.emailId, emailId),
-				eq(endpointDeliveries.endpointId, endpointId),
+				eq(endpointDeliveries.endpointId, endpoint.id),
+				retry?.deliveryId
+					? eq(endpointDeliveries.id, retry.deliveryId)
+					: undefined,
 			),
 		)
 		.limit(1);
-
-	if (!existingDelivery) {
-		throw new Error(
-			`Expected an existing webhook delivery for emailId=${emailId} endpointId=${endpointId}`,
-		);
+	if (!existing) {
+		throw new EmailRetryError("Delivery not found for this email", 404);
 	}
-
-	if (existingDelivery.status === "success") {
-		console.log(
-			`⏭️  handleWebhookEndpoint - Delivery already succeeded for emailId=${emailId}, endpointId=${endpointId}. Skipping duplicate.`,
-		);
-		return null;
+	if (existing.status === "success" && retry?.endpointId !== endpoint.id) {
+		return {
+			success: !retry,
+			message: "Delivery already succeeded. Use resend to deliver again.",
+			delivery_id: existing.id,
+		};
 	}
-
-	// A 'processing' delivery is retryable if the worker likely crashed:
-	// use a 5-minute timeout as a conservative stale-lock threshold.
-	const PROCESSING_STALE_MS = 5 * 60 * 1000;
-	if (existingDelivery.status === "processing") {
-		const staleAt = new Date(
-			(existingDelivery.updatedAt?.getTime() ?? 0) + PROCESSING_STALE_MS,
-		);
-		if (now < staleAt) {
-			console.log(
-				`⏭️  handleWebhookEndpoint - Delivery is already in progress (not yet stale) for emailId=${emailId}, endpointId=${endpointId}. Skipping duplicate.`,
-			);
-			return null;
-		}
-		console.log(
-			`⚠️  handleWebhookEndpoint - Stale processing delivery detected (>${PROCESSING_STALE_MS / 1000}s) for emailId=${emailId}, endpointId=${endpointId}. Reclaiming.`,
-		);
+	if (
+		existing.status === "processing" &&
+		(retry ||
+			now.getTime() - (existing.updatedAt?.getTime() ?? 0) < 5 * 60 * 1000)
+	) {
+		return {
+			success: false,
+			message: "Delivery is already in progress; no new attempt was made",
+			delivery_id: existing.id,
+		};
 	}
-	// Any other status ('pending', 'failed') falls through to the CAS update below.
-	// These are explicitly retryable — a failed delivery should be reattempted.
-
-	const [claimedDelivery] = await db
+	if (
+		!["pending", "failed", "success", "processing"].includes(existing.status)
+	) {
+		return {
+			success: false,
+			message: "This delivery is not retryable",
+			delivery_id: existing.id,
+		};
+	}
+	const attempts = (existing.attempts ?? 0) + 1;
+	const [claimed] = await db
 		.update(endpointDeliveries)
 		.set({
 			status: "processing",
-			attempts: sql`COALESCE(${endpointDeliveries.attempts}, 0) + 1`,
+			attempts,
 			lastAttemptAt: now,
 			updatedAt: now,
 		})
 		.where(
 			and(
-				eq(endpointDeliveries.id, existingDelivery.id),
-				eq(endpointDeliveries.status, existingDelivery.status),
+				eq(endpointDeliveries.id, existing.id),
+				eq(endpointDeliveries.emailId, emailId),
+				eq(endpointDeliveries.endpointId, endpoint.id),
+				eq(endpointDeliveries.status, existing.status),
+				existing.attempts === null
+					? isNull(endpointDeliveries.attempts)
+					: eq(endpointDeliveries.attempts, existing.attempts),
+				existing.updatedAt === null
+					? isNull(endpointDeliveries.updatedAt)
+					: and(
+							gte(endpointDeliveries.updatedAt, existing.updatedAt),
+							lt(
+								endpointDeliveries.updatedAt,
+								new Date(existing.updatedAt.getTime() + 1),
+							),
+						),
 			),
 		)
 		.returning({ id: endpointDeliveries.id });
-
-	if (!claimedDelivery) {
-		console.log(
-			`⏭️  handleWebhookEndpoint - Another worker claimed delivery ${existingDelivery.id} for emailId=${emailId}, endpointId=${endpointId}. Skipping duplicate.`,
-		);
-		return null;
+	if (!claimed) {
+		return {
+			success: false,
+			message:
+				"Delivery changed or another attempt claimed it; no new attempt was made",
+			delivery_id: existing.id,
+		};
 	}
+	return { id: claimed.id, attempts, updatedAt: now };
+}
 
-	console.log(
-		`🔄 handleWebhookEndpoint - Reclaiming delivery ${existingDelivery.id} for retry (was: ${existingDelivery.status}) for emailId=${emailId}, endpointId=${endpointId}.`,
-	);
-	return existingDelivery.id;
+async function recordDeliveryResult(
+	claim: DeliveryClaim,
+	values: Pick<
+		typeof endpointDeliveries.$inferInsert,
+		"status" | "responseData"
+	>,
+	message: string,
+): Promise<DeliveryResult> {
+	const [recorded] = await db
+		.update(endpointDeliveries)
+		.set({
+			...values,
+			updatedAt: new Date(),
+		})
+		.where(
+			and(
+				eq(endpointDeliveries.id, claim.id),
+				eq(endpointDeliveries.status, "processing"),
+				eq(endpointDeliveries.attempts, claim.attempts),
+				eq(endpointDeliveries.updatedAt, claim.updatedAt),
+			),
+		)
+		.returning({ status: endpointDeliveries.status });
+	return {
+		success: recorded?.status === "success",
+		message: recorded
+			? message
+			: "Delivery changed while sending; this attempt's outcome could not be recorded. Check delivery status before retrying.",
+		delivery_id: claim.id,
+	};
 }
 
 /**
@@ -804,11 +1019,13 @@ async function claimWebhookEndpointDelivery(
 async function handleWebhookEndpoint(
 	emailId: string,
 	endpoint: Endpoint,
-): Promise<void> {
-	const deliveryId = await claimWebhookEndpointDelivery(emailId, endpoint.id);
-	if (!deliveryId) {
-		return;
+	retry?: RetryOptions,
+): Promise<DeliveryResult> {
+	const claim = await claimEndpointDelivery(emailId, endpoint, retry);
+	if (!("id" in claim)) {
+		return claim;
 	}
+	const deliveryId = claim.id;
 
 	try {
 		console.log(
@@ -816,7 +1033,10 @@ async function handleWebhookEndpoint(
 		);
 
 		// Get email with structured data
-		const emailData = await getEmailWithStructuredData(emailId);
+		const emailData = await getEmailWithStructuredData(
+			emailId,
+			endpoint.userId,
+		);
 		if (!emailData) {
 			throw new Error("Email not found or missing structured data");
 		}
@@ -1164,12 +1384,10 @@ async function handleWebhookEndpoint(
 			console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 		}
 
-		// Update the pre-created delivery record with results
-		await db
-			.update(endpointDeliveries)
-			.set({
+		const result = await recordDeliveryResult(
+			claim,
+			{
 				status: deliverySuccess ? "success" : "failed",
-				lastAttemptAt: new Date(),
 				responseData: JSON.stringify({
 					responseCode,
 					responseBody: responseBody ? responseBody.substring(0, 2000) : null,
@@ -1181,9 +1399,11 @@ async function handleWebhookEndpoint(
 					strippedFields: strippedFields.length > 0 ? strippedFields : null,
 					deliveredAt: new Date().toISOString(),
 				}),
-				updatedAt: new Date(),
-			})
-			.where(eq(endpointDeliveries.id, deliveryId));
+			},
+			deliverySuccess
+				? "Webhook delivered successfully"
+				: errorMessage || `Webhook delivery failed with HTTP ${responseCode}`,
+		);
 
 		if (!deliverySuccess) {
 			// Log the failure but don't throw - webhook receiver errors are not our fault
@@ -1193,28 +1413,33 @@ async function handleWebhookEndpoint(
 			console.log(
 				`   This is a receiver-side error and does not affect email processing`,
 			);
-			return; // Exit gracefully without throwing
+			return result;
 		}
 
 		console.log(
 			`✅ handleWebhookEndpoint - Successfully delivered email ${emailId} to webhook ${endpoint.name} (${deliveryTime}ms)`,
 		);
+		return result;
 	} catch (error) {
-		// Update delivery record to failed state if any error occurred during processing
+		let result: DeliveryResult = {
+			success: false,
+			message:
+				"Delivery failed and its outcome could not be recorded. Check delivery status before retrying.",
+			delivery_id: deliveryId,
+		};
 		try {
-			await db
-				.update(endpointDeliveries)
-				.set({
+			result = await recordDeliveryResult(
+				claim,
+				{
 					status: "failed",
-					lastAttemptAt: new Date(),
 					responseData: JSON.stringify({
 						error: error instanceof Error ? error.message : "Unknown error",
 						errorType: error instanceof Error ? error.name : "Unknown",
 						failedAt: new Date().toISOString(),
 					}),
-					updatedAt: new Date(),
-				})
-				.where(eq(endpointDeliveries.id, deliveryId));
+				},
+				error instanceof Error ? error.message : "Webhook delivery failed",
+			);
 		} catch (updateError) {
 			console.error(
 				"❌ handleWebhookEndpoint - Failed to update delivery record:",
@@ -1231,6 +1456,7 @@ async function handleWebhookEndpoint(
 		);
 		console.error(`  Delivery ID:    ${deliveryId}`);
 		console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+		if (retry) return result;
 		throw error;
 	}
 }
@@ -1242,65 +1468,13 @@ async function handleEmailForwardEndpoint(
 	emailId: string,
 	endpoint: Endpoint,
 	emailData: StructuredEmailWithData,
-): Promise<void> {
-	// PRE-CREATE delivery record to prevent race condition duplicates
-	let deliveryId = nanoid();
-
-	try {
-		// Insert delivery record BEFORE forwarding to prevent race conditions
-		await db.insert(endpointDeliveries).values({
-			id: deliveryId,
-			emailId,
-			endpointId: endpoint.id,
-			deliveryType: "email_forward",
-			status: "pending",
-			attempts: 1,
-			lastAttemptAt: new Date(),
-			createdAt: new Date(),
-			updatedAt: new Date(),
-		});
-		console.log(
-			`🔒 handleEmailForwardEndpoint - Created delivery lock ${deliveryId} for ${emailId} → ${endpoint.id}`,
-		);
-	} catch (error: unknown) {
-		const errCode = (error as { code?: string })?.code;
-		const errMsg = (error as { message?: string })?.message;
-		// Check if this is a unique constraint violation
-		if (
-			errCode === "23505" ||
-			errMsg?.includes("duplicate key") ||
-			errMsg?.includes("unique constraint")
-		) {
-			// Check if the existing delivery is a retry (pending/failed) or already succeeded
-			const [existingDelivery] = await db
-				.select({
-					id: endpointDeliveries.id,
-					status: endpointDeliveries.status,
-				})
-				.from(endpointDeliveries)
-				.where(
-					and(
-						eq(endpointDeliveries.emailId, emailId),
-						eq(endpointDeliveries.endpointId, endpoint.id),
-					),
-				)
-				.limit(1);
-
-			if (existingDelivery && existingDelivery.status !== "success") {
-				deliveryId = existingDelivery.id;
-				console.log(
-					`🔄 handleEmailForwardEndpoint - Retry: reusing delivery ${deliveryId} for ${emailId} → ${endpoint.id} (status was: ${existingDelivery.status})`,
-				);
-			} else {
-				console.log(
-					`⏭️  handleEmailForwardEndpoint - Delivery already succeeded for emailId=${emailId}, endpointId=${endpoint.id}. Skipping duplicate.`,
-				);
-				return;
-			}
-		} else {
-			throw error;
-		}
+	retry?: RetryOptions,
+): Promise<DeliveryResult> {
+	const claim = await claimEndpointDelivery(emailId, endpoint, retry);
+	if (!("id" in claim)) {
+		return claim;
 	}
+	const deliveryId = claim.id;
 
 	try {
 		console.log(
@@ -1342,21 +1516,18 @@ async function handleEmailForwardEndpoint(
 				console.error(
 					`🚫 handleEmailForwardEndpoint - All forward recipients are blocked, cannot forward email ${emailId}`,
 				);
-				await db
-					.update(endpointDeliveries)
-					.set({
+				return await recordDeliveryResult(
+					claim,
+					{
 						status: "failed",
-						lastAttemptAt: new Date(),
 						responseData: JSON.stringify({
 							error: "ALL_RECIPIENTS_BLOCKED",
 							message: `All forward recipients are on the blocklist (previous bounces): ${blocklistCheck.blockedAddresses.join(", ")}`,
 							blockedAddresses: blocklistCheck.blockedAddresses,
 						}),
-						updatedAt: new Date(),
-					})
-					.where(eq(endpointDeliveries.id, deliveryId));
-
-				return; // Exit without forwarding
+					},
+					"All forward recipients are blocked due to previous bounces",
+				);
 			} else {
 				console.log(
 					`⚠️ handleEmailForwardEndpoint - Skipping ${blocklistCheck.blockedAddresses.length} blocked recipient(s), forwarding to ${toAddresses.length} remaining: ${toAddresses.join(", ")}`,
@@ -1385,23 +1556,19 @@ async function handleEmailForwardEndpoint(
 				`   Recipient: ${recipientAddress}, Forward targets: ${toAddresses.join(", ")}`,
 			);
 
-			// Update delivery record with loop detection failure
-			await db
-				.update(endpointDeliveries)
-				.set({
+			return await recordDeliveryResult(
+				claim,
+				{
 					status: "failed",
-					lastAttemptAt: new Date(),
 					responseData: JSON.stringify({
 						error: "FORWARDING_LOOP_DETECTED",
 						message: `Cannot forward email to the same address it was received at: ${loopingAddresses.join(", ")}`,
 						recipient: recipientAddress,
 						forwardTargets: toAddresses,
 					}),
-					updatedAt: new Date(),
-				})
-				.where(eq(endpointDeliveries.id, deliveryId));
-
-			return; // Exit without forwarding
+				},
+				"Cannot forward email back to its original recipient",
+			);
 		}
 
 		console.log(
@@ -1461,39 +1628,37 @@ async function handleEmailForwardEndpoint(
 			tenantName: tenantName || undefined,
 		});
 
-		// Update delivery record with success
-		await db
-			.update(endpointDeliveries)
-			.set({
+		return await recordDeliveryResult(
+			claim,
+			{
 				status: "success",
-				lastAttemptAt: new Date(),
 				responseData: JSON.stringify({
 					toAddresses,
 					fromAddress,
 					forwardedAt: new Date().toISOString(),
 				}),
-				updatedAt: new Date(),
-			})
-			.where(eq(endpointDeliveries.id, deliveryId));
-
-		console.log(
-			`✅ handleEmailForwardEndpoint - Successfully forwarded email to ${toAddresses.length} recipients`,
+			},
+			"Email forwarded successfully",
 		);
 	} catch (error) {
-		// Update delivery record to failed state
+		let result: DeliveryResult = {
+			success: false,
+			message:
+				"Delivery failed and its outcome could not be recorded. Check delivery status before retrying.",
+			delivery_id: deliveryId,
+		};
 		try {
-			await db
-				.update(endpointDeliveries)
-				.set({
+			result = await recordDeliveryResult(
+				claim,
+				{
 					status: "failed",
-					lastAttemptAt: new Date(),
 					responseData: JSON.stringify({
 						error: error instanceof Error ? error.message : "Unknown error",
 						failedAt: new Date().toISOString(),
 					}),
-					updatedAt: new Date(),
-				})
-				.where(eq(endpointDeliveries.id, deliveryId));
+				},
+				error instanceof Error ? error.message : "Email forwarding failed",
+			);
 		} catch (updateError) {
 			console.error(
 				"❌ handleEmailForwardEndpoint - Failed to update delivery record:",
@@ -1505,6 +1670,7 @@ async function handleEmailForwardEndpoint(
 			`❌ handleEmailForwardEndpoint - Error forwarding email:`,
 			error,
 		);
+		if (retry) return result;
 		throw error;
 	}
 }

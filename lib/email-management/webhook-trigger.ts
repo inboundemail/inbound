@@ -5,7 +5,7 @@
  */
 
 import { createHash, createHmac } from "crypto";
-import { and, eq, ilike, sql } from "drizzle-orm";
+import { and, eq, gte, ilike, isNull, lt } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
 	emailAddresses,
@@ -39,13 +39,16 @@ function isUniqueConstraintError(error: unknown): boolean {
 	);
 }
 
+type LegacyDeliveryClaim = { attempts: number; updatedAt: Date };
+
 async function claimLegacyWebhookDelivery(
 	deliveryId: string,
 	emailId: string,
 	webhookId: string,
 	webhookUrl: string,
 	payload: string,
-): Promise<boolean> {
+	manualRetry = false,
+): Promise<LegacyDeliveryClaim | null> {
 	const now = new Date();
 
 	try {
@@ -61,7 +64,7 @@ async function claimLegacyWebhookDelivery(
 			createdAt: now,
 			updatedAt: now,
 		});
-		return true;
+		return { attempts: 1, updatedAt: now };
 	} catch (error) {
 		if (!isUniqueConstraintError(error)) {
 			throw error;
@@ -72,6 +75,7 @@ async function claimLegacyWebhookDelivery(
 		.select({
 			id: webhookDeliveries.id,
 			status: webhookDeliveries.status,
+			attempts: webhookDeliveries.attempts,
 			updatedAt: webhookDeliveries.updatedAt,
 		})
 		.from(webhookDeliveries)
@@ -88,7 +92,7 @@ async function claimLegacyWebhookDelivery(
 		console.log(
 			`⏭️  triggerEmailAction - Delivery already succeeded for emailId=${emailId}, webhookId=${webhookId}. Skipping duplicate.`,
 		);
-		return false;
+		return null;
 	}
 
 	// A 'processing' delivery is retryable if the worker likely crashed:
@@ -98,11 +102,11 @@ async function claimLegacyWebhookDelivery(
 		const staleAt = new Date(
 			(existingDelivery.updatedAt?.getTime() ?? 0) + PROCESSING_STALE_MS,
 		);
-		if (now < staleAt) {
+		if (manualRetry || now < staleAt) {
 			console.log(
 				`⏭️  triggerEmailAction - Delivery is already in progress (not yet stale) for emailId=${emailId}, webhookId=${webhookId}. Skipping duplicate.`,
 			);
-			return false;
+			return null;
 		}
 		console.log(
 			`⚠️  triggerEmailAction - Stale processing delivery detected (>${PROCESSING_STALE_MS / 1000}s) for emailId=${emailId}, webhookId=${webhookId}. Reclaiming.`,
@@ -111,24 +115,33 @@ async function claimLegacyWebhookDelivery(
 	// Any other status ('pending', 'failed') falls through to the CAS update below.
 	// These are explicitly retryable — a failed delivery should be reattempted.
 
+	const attempts = (existingDelivery.attempts ?? 0) + 1;
 	const [claimedDelivery] = await db
 		.update(webhookDeliveries)
 		.set({
 			status: "processing",
-			attempts: sql`COALESCE(${webhookDeliveries.attempts}, 0) + 1`,
+			attempts,
 			lastAttemptAt: now,
 			updatedAt: now,
 			endpoint: webhookUrl,
 			payload,
-			error: null,
-			responseCode: null,
-			responseBody: null,
-			deliveryTime: null,
 		})
 		.where(
 			and(
 				eq(webhookDeliveries.id, deliveryId),
 				eq(webhookDeliveries.status, existingDelivery.status),
+				existingDelivery.attempts === null
+					? isNull(webhookDeliveries.attempts)
+					: eq(webhookDeliveries.attempts, existingDelivery.attempts),
+				existingDelivery.updatedAt === null
+					? isNull(webhookDeliveries.updatedAt)
+					: and(
+							gte(webhookDeliveries.updatedAt, existingDelivery.updatedAt),
+							lt(
+								webhookDeliveries.updatedAt,
+								new Date(existingDelivery.updatedAt.getTime() + 1),
+							),
+						),
 			),
 		)
 		.returning({ id: webhookDeliveries.id });
@@ -137,13 +150,13 @@ async function claimLegacyWebhookDelivery(
 		console.log(
 			`⏭️  triggerEmailAction - Another worker claimed delivery ${deliveryId} for emailId=${emailId}, webhookId=${webhookId}. Skipping duplicate.`,
 		);
-		return false;
+		return null;
 	}
 
 	console.log(
 		`🔄 triggerEmailAction - Reclaiming delivery ${deliveryId} for retry (was: ${existingDelivery.status}) for emailId=${emailId}, webhookId=${webhookId}.`,
 	);
-	return true;
+	return { attempts, updatedAt: now };
 }
 
 /**
@@ -152,7 +165,9 @@ async function claimLegacyWebhookDelivery(
  */
 export async function triggerEmailAction(
 	emailId: string,
+	options: { manualRetry?: boolean; userId?: string } = {},
 ): Promise<{ success: boolean; error?: string; deliveryId?: string }> {
+	let claimedDeliveryId: string | undefined;
 	try {
 		console.log(`🎯 triggerEmailAction - Processing email ID: ${emailId}`);
 
@@ -184,7 +199,14 @@ export async function triggerEmailAction(
 				userId: structuredEmails.userId,
 			})
 			.from(structuredEmails)
-			.where(eq(structuredEmails.id, emailId))
+			.where(
+				and(
+					eq(structuredEmails.id, emailId),
+					options.userId
+						? eq(structuredEmails.userId, options.userId)
+						: undefined,
+				),
+			)
 			.limit(1);
 
 		if (!emailRecords[0]) {
@@ -378,17 +400,32 @@ export async function triggerEmailAction(
 		}
 
 		const deliveryId = buildLegacyWebhookDeliveryId(emailData.id, webhook.id);
-		const shouldSend = await claimLegacyWebhookDelivery(
+		const claim = await claimLegacyWebhookDelivery(
 			deliveryId,
 			emailData.id,
 			webhook.id,
 			webhook.url,
 			payloadString,
+			options.manualRetry,
 		);
 
-		if (!shouldSend) {
-			return { success: true, deliveryId };
+		if (!claim) {
+			if (!options.manualRetry) return { success: true, deliveryId };
+			const [delivery] = await db
+				.select({ status: webhookDeliveries.status })
+				.from(webhookDeliveries)
+				.where(eq(webhookDeliveries.id, deliveryId))
+				.limit(1);
+			return {
+				success: delivery?.status === "success",
+				deliveryId,
+				error:
+					delivery?.status === "success"
+						? undefined
+						: "Delivery is already in progress or changed; no new attempt was made",
+			};
 		}
+		claimedDeliveryId = deliveryId;
 		// Send the webhook
 		const startTime = Date.now();
 		let deliverySuccess = false;
@@ -435,7 +472,7 @@ export async function triggerEmailAction(
 			);
 		}
 
-		await db
+		const [recorded] = await db
 			.update(webhookDeliveries)
 			.set({
 				endpoint: webhook.url,
@@ -448,7 +485,23 @@ export async function triggerEmailAction(
 				error: errorMessage || null,
 				updatedAt: new Date(),
 			})
-			.where(eq(webhookDeliveries.id, deliveryId));
+			.where(
+				and(
+					eq(webhookDeliveries.id, deliveryId),
+					eq(webhookDeliveries.status, "processing"),
+					eq(webhookDeliveries.attempts, claim.attempts),
+					eq(webhookDeliveries.updatedAt, claim.updatedAt),
+				),
+			)
+			.returning({ status: webhookDeliveries.status });
+		if (!recorded) {
+			return {
+				success: false,
+				error:
+					"Delivery changed while sending; this attempt's outcome could not be recorded",
+				deliveryId,
+			};
+		}
 
 		// Update webhook stats
 		await db
@@ -483,6 +536,7 @@ export async function triggerEmailAction(
 		return {
 			success: false,
 			error: error instanceof Error ? error.message : "Unknown error",
+			deliveryId: claimedDeliveryId,
 		};
 	}
 }
