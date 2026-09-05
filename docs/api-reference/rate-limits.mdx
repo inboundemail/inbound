@@ -14,12 +14,12 @@ The response headers describe your current rate limit following every request in
 
 ## Default Rate Limits
 
-The default maximum rate limit is **10 requests per second** across all API endpoints. This applies uniformly to:
+The default maximum rate limit is **100 requests per second per account**, shared across authenticated E2 API endpoints. This single budget covers:
 
-- **Email sending endpoints**: 10 requests per second
-- **Email management endpoints**: 10 requests per second 
-- **Domain/configuration endpoints**: 10 requests per second
-- **All other API endpoints**: 10 requests per second
+- **Email sending endpoints**: 100 requests per second
+- **Email management endpoints**: 100 requests per second
+- **Domain/configuration endpoints**: 100 requests per second
+- **All other authenticated E2 endpoints**: 100 requests per second
 
 This number can be increased for trusted senders upon request.
 
@@ -29,8 +29,9 @@ After exceeding the rate limit, you'll receive a `429 Too Many Requests` respons
 
 ```json
 {
-  "error": "Rate limit exceeded",
-  "message": "Maximum 10 requests per second allowed. Upgrade or contact support for higher limits."
+  "error": "Too Many Requests",
+  "message": "Rate limit exceeded. Maximum 100 requests per second. Retry after 1 seconds.",
+  "statusCode": 429
 }
 ```
 

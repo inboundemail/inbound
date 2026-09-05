@@ -15,7 +15,7 @@ The Inbound API returns standard HTTP status codes to indicate success or failur
 | `400` | Bad Request | Invalid request parameters or missing required fields |
 | `401` | Unauthorized | Invalid or missing API key |
 | `404` | Not Found | Requested resource does not exist |
-| `429` | Too Many Requests | Rate limit exceeded (2 requests/second) |
+| `429` | Too Many Requests | Rate limit exceeded (100 requests/second per account across E2 endpoints) |
 | `500` | Internal Server Error | Server error occurred |
 
 ## Common Error Types
@@ -61,8 +61,8 @@ The Inbound API returns standard HTTP status codes to indicate success or failur
 
 ### Rate Limiting (429)
 
-- **`Rate limit exceeded`** - Too many requests (limit: 2 per second)
-- **`Maximum 2 requests per second allowed. Upgrade or contact support for higher limits.`** - Rate limit details
+- **`Too Many Requests`** - Too many requests (limit: 100 per second per account across E2 endpoints)
+- **`Rate limit exceeded. Maximum 100 requests per second. Retry after 1 seconds.`** - Example rate limit message; the retry delay varies
 
 ### Server Errors (500)
 

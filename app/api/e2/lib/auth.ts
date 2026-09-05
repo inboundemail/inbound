@@ -25,10 +25,10 @@ if (
 		token: process.env.UPSTASH_REDIS_REST_TOKEN,
 	});
 
-	// Rate limiter: 10 requests per second per account
+	// Rate limiter: 100 requests per second per account
 	ratelimit = new Ratelimit({
 		redis,
-		limiter: Ratelimit.slidingWindow(10, "1 s"),
+		limiter: Ratelimit.slidingWindow(100, "1 s"),
 		analytics: true,
 		prefix: "e2:ratelimit",
 	});
