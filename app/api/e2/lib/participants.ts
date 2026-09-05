@@ -1,6 +1,6 @@
 import { db } from "@/lib/db"
 import { structuredEmails, sentEmails } from "@/lib/db/schema"
-import { eq, and } from "drizzle-orm"
+import { eq, and, inArray } from "drizzle-orm"
 
 /**
  * Format a participant as "Name <email>" or just "email" if no name is available
@@ -46,6 +46,76 @@ export async function getThreadParticipantNames(
       and(eq(sentEmails.threadId, threadId), eq(sentEmails.userId, userId))
     )
 
+  return getParticipantNames(emails, sentEmailsList)
+}
+
+export async function getThreadParticipantNamesBatch(
+  threadIds: string[],
+  userId: string
+): Promise<Map<string, string[]>> {
+  if (threadIds.length === 0) return new Map()
+
+  const [emails, sentEmailsList] = await Promise.all([
+    db
+      .select({
+        threadId: structuredEmails.threadId,
+        fromData: structuredEmails.fromData,
+        toData: structuredEmails.toData,
+        ccData: structuredEmails.ccData,
+      })
+      .from(structuredEmails)
+      .where(
+        and(
+          inArray(structuredEmails.threadId, threadIds),
+          eq(structuredEmails.userId, userId)
+        )
+      ),
+    db
+      .select({
+        threadId: sentEmails.threadId,
+        from: sentEmails.from,
+        to: sentEmails.to,
+      })
+      .from(sentEmails)
+      .where(
+        and(inArray(sentEmails.threadId, threadIds), eq(sentEmails.userId, userId))
+      ),
+  ])
+
+  const inboundByThread = new Map<string, typeof emails>()
+  for (const email of emails) {
+    if (email.threadId === null) continue
+    const threadEmails = inboundByThread.get(email.threadId) ?? []
+    threadEmails.push(email)
+    inboundByThread.set(email.threadId, threadEmails)
+  }
+
+  const outboundByThread = new Map<string, typeof sentEmailsList>()
+  for (const email of sentEmailsList) {
+    if (email.threadId === null) continue
+    const threadEmails = outboundByThread.get(email.threadId) ?? []
+    threadEmails.push(email)
+    outboundByThread.set(email.threadId, threadEmails)
+  }
+
+  return new Map(
+    threadIds.map((threadId) => [
+      threadId,
+      getParticipantNames(
+        inboundByThread.get(threadId) ?? [],
+        outboundByThread.get(threadId) ?? []
+      ),
+    ])
+  )
+}
+
+function getParticipantNames(
+  emails: Pick<
+    typeof structuredEmails.$inferSelect,
+    "fromData" | "toData" | "ccData"
+  >[],
+  sentEmailsList: Pick<typeof sentEmails.$inferSelect, "from" | "to">[]
+): string[] {
   // Map of email -> formatted name (to deduplicate and keep best name)
   const participantMap = new Map<string, string>()
 

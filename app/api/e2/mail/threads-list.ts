@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
-import { getThreadParticipantNames } from "@/app/api/e2/lib/participants";
+import { getThreadParticipantNamesBatch } from "@/app/api/e2/lib/participants";
 import { db } from "@/lib/db";
 import {
   emailThreads,
@@ -495,6 +495,15 @@ export const listThreads = new Elysia().get(
         getThreadUnreadCounts(threadIds, userId),
       ]);
 
+      const participantThreadIds = threads
+        .filter((thread) => !unreadOnly || (unreadCounts.get(thread.id) ?? 0) > 0)
+        .slice(0, limit - threadItems.length)
+        .map((thread) => thread.id);
+      const participantNamesByThread = await getThreadParticipantNamesBatch(
+        participantThreadIds,
+        userId
+      );
+
       // Process threads
       for (const thread of threads) {
         if (threadItems.length >= limit) {
@@ -522,10 +531,7 @@ export const listThreads = new Elysia().get(
         }
 
         // Get formatted participant names (e.g., "First Last <email@domain.com>")
-        const participantNames = await getThreadParticipantNames(
-          thread.id,
-          userId
-        );
+        const participantNames = participantNamesByThread.get(thread.id) ?? [];
 
         threadItems.push({
           id: thread.id,

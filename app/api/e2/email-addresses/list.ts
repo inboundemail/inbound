@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { validateAndRateLimit } from "../lib/auth";
+import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
 import { db } from "@/lib/db";
 import {
   emailAddresses,
@@ -7,7 +7,7 @@ import {
   endpoints,
   webhooks,
 } from "@/lib/db/schema";
-import { eq, and, desc, count } from "drizzle-orm";
+import { eq, and, desc, count, inArray } from "drizzle-orm";
 
 // Request/Response Types (OpenAPI-compatible)
 const ListEmailAddressesQuery = t.Object({
@@ -157,6 +157,58 @@ export const listEmailAddresses = new Elysia().get(
     const totalCount = totalCountResult[0]?.count || 0;
     console.log("📊 Total email addresses count:", totalCount);
 
+    const endpointIds = [
+      ...new Set(
+        userEmailAddresses.flatMap((emailAddress) =>
+          emailAddress.endpointId ? [emailAddress.endpointId] : []
+        )
+      ),
+    ];
+    const webhookIds = [
+      ...new Set(
+        userEmailAddresses.flatMap((emailAddress) =>
+          !emailAddress.endpointId && emailAddress.webhookId
+            ? [emailAddress.webhookId]
+            : []
+        )
+      ),
+    ];
+    const [addressEndpoints, addressWebhooks] = await Promise.all([
+      endpointIds.length > 0
+        ? db
+            .select({
+              id: endpoints.id,
+              name: endpoints.name,
+              type: endpoints.type,
+              config: endpoints.config,
+              isActive: endpoints.isActive,
+            })
+            .from(endpoints)
+            .where(
+              and(inArray(endpoints.id, endpointIds), eq(endpoints.userId, userId))
+            )
+        : [],
+      webhookIds.length > 0
+        ? db
+            .select({
+              id: webhooks.id,
+              name: webhooks.name,
+              url: webhooks.url,
+              isActive: webhooks.isActive,
+            })
+            .from(webhooks)
+            .where(
+              and(inArray(webhooks.id, webhookIds), eq(webhooks.userId, userId))
+            )
+        : [],
+    ]);
+    const endpointsById = new Map(
+      addressEndpoints.map((endpoint) => [endpoint.id, endpoint])
+    );
+    const webhooksById = new Map(
+      addressWebhooks.map((webhook) => [webhook.id, webhook])
+    );
+
     // Enhance email addresses with routing information
     console.log("🔧 Enhancing email addresses with routing information");
     const enhancedEmailAddresses = await Promise.all(
@@ -165,7 +217,7 @@ export const listEmailAddresses = new Elysia().get(
           type: "webhook" | "endpoint" | "none";
           id: string | null;
           name: string | null;
-          config?: any;
+          config?: unknown;
           isActive: boolean;
         } = {
           type: "none",
@@ -176,46 +228,27 @@ export const listEmailAddresses = new Elysia().get(
 
         // Get endpoint or webhook routing info
         if (emailAddress.endpointId) {
-          const endpoint = await db
-            .select({
-              id: endpoints.id,
-              name: endpoints.name,
-              type: endpoints.type,
-              config: endpoints.config,
-              isActive: endpoints.isActive,
-            })
-            .from(endpoints)
-            .where(eq(endpoints.id, emailAddress.endpointId))
-            .limit(1);
+          const endpoint = endpointsById.get(emailAddress.endpointId);
 
-          if (endpoint[0]) {
+          if (endpoint) {
             routing = {
               type: "endpoint",
-              id: endpoint[0].id,
-              name: endpoint[0].name,
-              config: JSON.parse(endpoint[0].config),
-              isActive: endpoint[0].isActive || false,
+              id: endpoint.id,
+              name: endpoint.name,
+              config: JSON.parse(endpoint.config),
+              isActive: endpoint.isActive || false,
             };
           }
         } else if (emailAddress.webhookId) {
-          const webhook = await db
-            .select({
-              id: webhooks.id,
-              name: webhooks.name,
-              url: webhooks.url,
-              isActive: webhooks.isActive,
-            })
-            .from(webhooks)
-            .where(eq(webhooks.id, emailAddress.webhookId))
-            .limit(1);
+          const webhook = webhooksById.get(emailAddress.webhookId);
 
-          if (webhook[0]) {
+          if (webhook) {
             routing = {
               type: "webhook",
-              id: webhook[0].id,
-              name: webhook[0].name,
-              config: { url: webhook[0].url },
-              isActive: webhook[0].isActive || false,
+              id: webhook.id,
+              name: webhook.name,
+              config: { url: webhook.url },
+              isActive: webhook.isActive || false,
             };
           }
         }

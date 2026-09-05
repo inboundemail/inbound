@@ -1,5 +1,6 @@
 import { Elysia, t } from "elysia";
-import { validateAndRateLimit } from "../lib/auth";
+import { eq, and, desc, sql, or, like, gte, inArray, type SQL } from "drizzle-orm";
+import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
 import { db } from "@/lib/db";
 import {
   sentEmails,
@@ -8,7 +9,6 @@ import {
   emailDomains,
   emailAddresses,
 } from "@/lib/db/schema";
-import { eq, and, desc, sql, or, like, gte } from "drizzle-orm";
 
 // Query parameters schema with full OpenAPI descriptions
 const ListEmailsQuerySchema = t.Object({
@@ -249,7 +249,7 @@ function parseAddressesFromData(field: string | null): string[] {
   if (!field) return [];
   try {
     const parsed = JSON.parse(field);
-    return parsed?.addresses?.map((a: any) => a.address).filter(Boolean) || [];
+    return parsed?.addresses?.map((a: { address?: string }) => a.address).filter(Boolean) || [];
   } catch {
     return [];
   }
@@ -317,16 +317,10 @@ export const listEmails = new Elysia().get(
       return { error: "Offset must be non-negative" };
     }
 
-    const emails: any[] = [];
+    let emails: (typeof EmailItemSchema.static)[] = [];
     let total = 0;
-    let receivedTotal = 0;
-    let sentTotal = 0;
-    let scheduledTotal = 0;
     const timeThreshold = getTimeThreshold(timeRange);
-
-    // For "all" type queries, we need to fetch enough records from each table
-    // to properly paginate after combining and sorting. Cap at 10000 to prevent memory issues.
-    const allTypeFetchLimit = Math.min(offset + limit, 10000);
+    const fallbackCreatedAt = new Date().toISOString();
 
     // Resolve domain filter - supports ID, registered domain, or raw domain name
     let resolvedDomain: string | null = null;
@@ -370,12 +364,16 @@ export const listEmails = new Elysia().get(
       resolvedAddress = address.length > 0 ? address[0].address : addressFilter;
     }
 
-    // Fetch received emails (if type is 'all' or 'received')
-    if (type === "all" || type === "received") {
-      console.log("🔍 Fetching received emails...");
+    const receivedConditions: (SQL | undefined)[] = [eq(structuredEmails.userId, userId)];
+    const sentConditions: (SQL | undefined)[] = [eq(sentEmails.userId, userId)];
+    const scheduledConditions: (SQL | undefined)[] = [eq(scheduledEmails.userId, userId)];
+    const includeReceived = type === "all" || type === "received";
+    const includeSent = (type === "all" || type === "sent") &&
+      !["unread", "read", "archived", "scheduled", "cancelled", "paused"].includes(status);
+    const includeScheduled = (type === "all" || type === "scheduled") &&
+      !["unread", "read", "archived", "delivered", "bounced"].includes(status);
 
-      const receivedConditions: any[] = [eq(structuredEmails.userId, userId)];
-
+    if (includeReceived) {
       // Time range filter
       if (timeThreshold) {
         receivedConditions.push(gte(structuredEmails.createdAt, timeThreshold));
@@ -419,7 +417,144 @@ export const listEmails = new Elysia().get(
           sql`(${structuredEmails.subject} ILIKE ${searchPattern} OR ${structuredEmails.fromData}::text ILIKE ${searchPattern} OR ${structuredEmails.toData}::text ILIKE ${searchPattern})`
         );
       }
+    }
 
+    if (includeSent) {
+      // Time range filter
+      if (timeThreshold) {
+        sentConditions.push(gte(sentEmails.createdAt, timeThreshold));
+      }
+
+      // Status filters for sent emails
+      if (status === "delivered") {
+        sentConditions.push(eq(sentEmails.status, "sent"));
+      } else if (status === "pending") {
+        sentConditions.push(eq(sentEmails.status, "pending"));
+      } else if (status === "failed") {
+        sentConditions.push(eq(sentEmails.status, "failed"));
+      } else if (status === "bounced") {
+        sentConditions.push(eq(sentEmails.status, "bounced"));
+      }
+
+      // Domain filter
+      if (resolvedDomain) {
+        sentConditions.push(eq(sentEmails.fromDomain, resolvedDomain));
+      }
+
+      // Address filter - match from address or in to addresses
+      if (resolvedAddress) {
+        sentConditions.push(
+          or(
+            eq(sentEmails.fromAddress, resolvedAddress),
+            like(sentEmails.to, `%${resolvedAddress}%`)
+          )
+        );
+      }
+
+      // Search filter
+      if (searchQuery) {
+        const searchPattern = `%${searchQuery}%`;
+        sentConditions.push(
+          sql`(${sentEmails.subject} ILIKE ${searchPattern} OR ${sentEmails.from} ILIKE ${searchPattern} OR ${sentEmails.to}::text ILIKE ${searchPattern})`
+        );
+      }
+    }
+
+    if (includeScheduled) {
+      if (timeThreshold) {
+        scheduledConditions.push(gte(scheduledEmails.createdAt, timeThreshold));
+      }
+
+      // Status filters for scheduled emails
+      if (status === "scheduled") {
+        scheduledConditions.push(eq(scheduledEmails.status, "scheduled"));
+      } else if (status === "cancelled") {
+        scheduledConditions.push(eq(scheduledEmails.status, "cancelled"));
+      } else if (status === "paused") {
+        scheduledConditions.push(eq(scheduledEmails.status, "paused"));
+      } else if (status === "pending") {
+        scheduledConditions.push(eq(scheduledEmails.status, "processing"));
+      } else if (status === "failed") {
+        scheduledConditions.push(eq(scheduledEmails.status, "failed"));
+      }
+
+      // Domain filter
+      if (resolvedDomain) {
+        scheduledConditions.push(eq(scheduledEmails.fromDomain, resolvedDomain));
+      }
+
+      // Address filter
+      if (resolvedAddress) {
+        scheduledConditions.push(
+          or(
+            eq(scheduledEmails.fromAddress, resolvedAddress),
+            like(scheduledEmails.toAddresses, `%${resolvedAddress}%`)
+          )
+        );
+      }
+
+      // Search filter
+      if (searchQuery) {
+        const searchPattern = `%${searchQuery}%`;
+        scheduledConditions.push(
+          sql`(${scheduledEmails.subject} ILIKE ${searchPattern} OR ${scheduledEmails.fromAddress} ILIKE ${searchPattern} OR ${scheduledEmails.toAddresses}::text ILIKE ${searchPattern})`
+        );
+      }
+    }
+
+    let page: { id: string; typeOrder: number }[] = [];
+    if (type === "all") {
+      const matchingEmails = db
+        .select({
+          id: structuredEmails.id,
+          typeOrder: sql<number>`0`.as("type_order"),
+          createdAt: structuredEmails.createdAt,
+        })
+        .from(structuredEmails)
+        .where(and(...receivedConditions))
+        .unionAll(
+          db.select({
+            id: sentEmails.id,
+            typeOrder: sql<number>`1`.as("type_order"),
+            createdAt: sentEmails.createdAt,
+          })
+            .from(sentEmails)
+            .where(and(...sentConditions, includeSent ? undefined : sql`false`))
+        )
+        .unionAll(
+          db.select({
+            id: scheduledEmails.id,
+            typeOrder: sql<number>`2`.as("type_order"),
+            createdAt: scheduledEmails.createdAt,
+          })
+            .from(scheduledEmails)
+            .where(and(...scheduledConditions, includeScheduled ? undefined : sql`false`))
+        )
+        .as("matching_emails");
+
+      const [{ count }] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(matchingEmails);
+      total = Number(count);
+      if (Number.isFinite(limit) && Number.isFinite(offset) && offset < total) {
+        page = await db
+          .select()
+          .from(matchingEmails)
+          .orderBy(
+            desc(sql`date_trunc('milliseconds', coalesce(${matchingEmails.createdAt}, ${fallbackCreatedAt}::timestamp))`),
+            matchingEmails.typeOrder,
+            desc(matchingEmails.createdAt)
+          )
+          .limit(limit)
+          .offset(offset);
+      }
+    }
+
+    const receivedIds = page.filter((email) => email.typeOrder === 0).map((email) => email.id);
+    const sentIds = page.filter((email) => email.typeOrder === 1).map((email) => email.id);
+    const scheduledIds = page.filter((email) => email.typeOrder === 2).map((email) => email.id);
+
+    if (includeReceived && (type !== "all" || receivedIds.length > 0)) {
       const receivedEmails = await db
         .select({
           id: structuredEmails.id,
@@ -439,16 +574,17 @@ export const listEmails = new Elysia().get(
           threadId: structuredEmails.threadId,
         })
         .from(structuredEmails)
-        .where(and(...receivedConditions))
+        .where(type === "all"
+          ? and(eq(structuredEmails.userId, userId), inArray(structuredEmails.id, receivedIds))
+          : and(...receivedConditions))
         .orderBy(desc(structuredEmails.createdAt))
-        .limit(type === "received" ? limit : allTypeFetchLimit)
-        .offset(type === "received" ? offset : 0);
+        .limit(limit)
+        .offset(type === "all" ? 0 : offset);
 
       for (const email of receivedEmails) {
         const attachments = parseJsonField(email.attachments, []);
         const fromParsed = parseFromData(email.fromData);
 
-        // Create preview from text body
         let preview: string | null = null;
         if (email.textBody) {
           preview = email.textBody.substring(0, 200).replace(/\n/g, " ").trim();
@@ -459,7 +595,7 @@ export const listEmails = new Elysia().get(
 
         emails.push({
           id: email.id,
-          type: "received" as const,
+          type: "received",
           envelope_recipient: email.recipient,
           message_id: email.messageId,
           from: fromParsed.address,
@@ -469,8 +605,7 @@ export const listEmails = new Elysia().get(
           subject: email.subject || "No Subject",
           preview,
           status: email.parseSuccess ? "delivered" : "failed",
-          created_at:
-            email.createdAt?.toISOString() || new Date().toISOString(),
+          created_at: email.createdAt?.toISOString() || (type === "all" ? fallbackCreatedAt : new Date().toISOString()),
           sent_at: null,
           scheduled_at: null,
           has_attachments: attachments.length > 0,
@@ -482,259 +617,143 @@ export const listEmails = new Elysia().get(
         });
       }
 
-      // Get count for pagination
-      const [{ count }] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(structuredEmails)
-        .where(and(...receivedConditions));
-
-      receivedTotal = Number(count);
       if (type === "received") {
-        total = receivedTotal;
+        const [{ count }] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(structuredEmails)
+          .where(and(...receivedConditions));
+        total = Number(count);
       }
     }
 
-    // Fetch sent emails (if type is 'all' or 'sent')
-    if (type === "all" || type === "sent") {
-      // Skip if status filter only applies to received or scheduled emails
-      if (
-        !["unread", "read", "archived", "scheduled", "cancelled", "paused"].includes(
-          status
-        )
-      ) {
-        console.log("🔍 Fetching sent emails...");
+    if (includeSent && (type !== "all" || sentIds.length > 0)) {
+      const sentEmailsList = await db
+        .select({
+          id: sentEmails.id,
+          messageId: sentEmails.messageId,
+          from: sentEmails.from,
+          to: sentEmails.to,
+          cc: sentEmails.cc,
+          subject: sentEmails.subject,
+          textBody: sentEmails.textBody,
+          attachments: sentEmails.attachments,
+          status: sentEmails.status,
+          createdAt: sentEmails.createdAt,
+          sentAt: sentEmails.sentAt,
+          threadId: sentEmails.threadId,
+        })
+        .from(sentEmails)
+        .where(type === "all"
+          ? and(eq(sentEmails.userId, userId), inArray(sentEmails.id, sentIds))
+          : and(...sentConditions))
+        .orderBy(desc(sentEmails.createdAt))
+        .limit(limit)
+        .offset(type === "all" ? 0 : offset);
 
-        const sentConditions: any[] = [eq(sentEmails.userId, userId)];
+      for (const email of sentEmailsList) {
+        const attachments = parseJsonField(email.attachments, []);
+        const toAddresses = parseJsonField(email.to, []);
+        const ccAddresses = parseJsonField(email.cc, []);
 
-        // Time range filter
-        if (timeThreshold) {
-          sentConditions.push(gte(sentEmails.createdAt, timeThreshold));
-        }
-
-        // Status filters for sent emails
-        if (status === "delivered") {
-          sentConditions.push(eq(sentEmails.status, "sent"));
-        } else if (status === "pending") {
-          sentConditions.push(eq(sentEmails.status, "pending"));
-        } else if (status === "failed") {
-          sentConditions.push(eq(sentEmails.status, "failed"));
-        } else if (status === "bounced") {
-          sentConditions.push(eq(sentEmails.status, "bounced"));
-        }
-
-        // Domain filter
-        if (resolvedDomain) {
-          sentConditions.push(eq(sentEmails.fromDomain, resolvedDomain));
-        }
-
-        // Address filter - match from address or in to addresses
-        if (resolvedAddress) {
-          sentConditions.push(
-            or(
-              eq(sentEmails.fromAddress, resolvedAddress),
-              like(sentEmails.to, `%${resolvedAddress}%`)
-            )
-          );
-        }
-
-        // Search filter
-        if (searchQuery) {
-          const searchPattern = `%${searchQuery}%`;
-          sentConditions.push(
-            sql`(${sentEmails.subject} ILIKE ${searchPattern} OR ${sentEmails.from} ILIKE ${searchPattern} OR ${sentEmails.to}::text ILIKE ${searchPattern})`
-          );
-        }
-
-        const sentEmailsList = await db
-          .select()
-          .from(sentEmails)
-          .where(and(...sentConditions))
-          .orderBy(desc(sentEmails.createdAt))
-          .limit(type === "sent" ? limit : allTypeFetchLimit)
-          .offset(type === "sent" ? offset : 0);
-
-        for (const email of sentEmailsList) {
-          const attachments = parseJsonField(email.attachments, []);
-          const toAddresses = parseJsonField(email.to, []);
-          const ccAddresses = parseJsonField(email.cc, []);
-
-          // Create preview from text body
-          let preview: string | null = null;
-          if (email.textBody) {
-            preview = email.textBody
-              .substring(0, 200)
-              .replace(/\n/g, " ")
-              .trim();
-            if (email.textBody.length > 200) {
-              preview += "...";
-            }
+        let preview: string | null = null;
+        if (email.textBody) {
+          preview = email.textBody.substring(0, 200).replace(/\n/g, " ").trim();
+          if (email.textBody.length > 200) {
+            preview += "...";
           }
-
-          emails.push({
-            id: email.id,
-            type: "sent" as const,
-            message_id: email.messageId,
-            from: email.from,
-            from_name: null,
-            to: toAddresses,
-            cc: ccAddresses,
-            subject: email.subject || "No Subject",
-            preview,
-            status: email.status === "sent" ? "delivered" : email.status,
-            created_at:
-              email.createdAt?.toISOString() || new Date().toISOString(),
-            sent_at: email.sentAt?.toISOString() || null,
-            scheduled_at: null,
-            has_attachments: attachments.length > 0,
-            attachment_count: attachments.length,
-            thread_id: email.threadId,
-          });
         }
 
-        // Get count for pagination
+        emails.push({
+          id: email.id,
+          type: "sent",
+          message_id: email.messageId,
+          from: email.from,
+          from_name: null,
+          to: toAddresses,
+          cc: ccAddresses,
+          subject: email.subject || "No Subject",
+          preview,
+          status: email.status === "sent" ? "delivered" : email.status,
+          created_at: email.createdAt?.toISOString() || (type === "all" ? fallbackCreatedAt : new Date().toISOString()),
+          sent_at: email.sentAt?.toISOString() || null,
+          scheduled_at: null,
+          has_attachments: attachments.length > 0,
+          attachment_count: attachments.length,
+          thread_id: email.threadId,
+        });
+      }
+
+      if (type === "sent") {
         const [{ count }] = await db
           .select({ count: sql<number>`count(*)` })
           .from(sentEmails)
           .where(and(...sentConditions));
-
-        sentTotal = Number(count);
-        if (type === "sent") {
-          total = sentTotal;
-        }
+        total = Number(count);
       }
     }
 
-    // Fetch scheduled emails (if type is 'all' or 'scheduled')
-    if (type === "all" || type === "scheduled") {
-      // Skip if status filter only applies to received emails
-      if (
-        !["unread", "read", "archived", "delivered", "bounced"].includes(status)
-      ) {
-        console.log("🔍 Fetching scheduled emails...");
+    if (includeScheduled && (type !== "all" || scheduledIds.length > 0)) {
+      const scheduledEmailsList = await db
+        .select({
+          id: scheduledEmails.id,
+          fromAddress: scheduledEmails.fromAddress,
+          toAddresses: scheduledEmails.toAddresses,
+          subject: scheduledEmails.subject,
+          status: scheduledEmails.status,
+          createdAt: scheduledEmails.createdAt,
+          sentAt: scheduledEmails.sentAt,
+          scheduledAt: scheduledEmails.scheduledAt,
+          attachments: scheduledEmails.attachments,
+        })
+        .from(scheduledEmails)
+        .where(type === "all"
+          ? and(eq(scheduledEmails.userId, userId), inArray(scheduledEmails.id, scheduledIds))
+          : and(...scheduledConditions))
+        .orderBy(desc(scheduledEmails.createdAt))
+        .limit(limit)
+        .offset(type === "all" ? 0 : offset);
 
-        const scheduledConditions: any[] = [eq(scheduledEmails.userId, userId)];
+      for (const email of scheduledEmailsList) {
+        const attachments = parseJsonField(email.attachments, []);
+        const toAddresses = parseJsonField(email.toAddresses, []);
 
-        // Time range filter (for scheduled, check scheduledAt)
-        if (timeThreshold) {
-          scheduledConditions.push(
-            gte(scheduledEmails.createdAt, timeThreshold)
-          );
-        }
+        emails.push({
+          id: email.id,
+          type: "scheduled",
+          message_id: null,
+          from: email.fromAddress,
+          from_name: null,
+          to: toAddresses,
+          cc: [],
+          subject: email.subject || "No Subject",
+          preview: null,
+          status: email.status,
+          created_at: email.createdAt?.toISOString() || (type === "all" ? fallbackCreatedAt : new Date().toISOString()),
+          sent_at: email.sentAt?.toISOString() || null,
+          scheduled_at: email.scheduledAt?.toISOString() || null,
+          has_attachments: attachments.length > 0,
+          attachment_count: attachments.length,
+        });
+      }
 
-        // Status filters for scheduled emails
-        if (status === "scheduled") {
-          scheduledConditions.push(eq(scheduledEmails.status, "scheduled"));
-        } else if (status === "cancelled") {
-          scheduledConditions.push(eq(scheduledEmails.status, "cancelled"));
-        } else if (status === "paused") {
-          scheduledConditions.push(eq(scheduledEmails.status, "paused"));
-        } else if (status === "pending") {
-          scheduledConditions.push(eq(scheduledEmails.status, "processing"));
-        } else if (status === "failed") {
-          scheduledConditions.push(eq(scheduledEmails.status, "failed"));
-        }
-
-        // Domain filter
-        if (resolvedDomain) {
-          scheduledConditions.push(
-            eq(scheduledEmails.fromDomain, resolvedDomain)
-          );
-        }
-
-        // Address filter
-        if (resolvedAddress) {
-          scheduledConditions.push(
-            or(
-              eq(scheduledEmails.fromAddress, resolvedAddress),
-              like(scheduledEmails.toAddresses, `%${resolvedAddress}%`)
-            )
-          );
-        }
-
-        // Search filter
-        if (searchQuery) {
-          const searchPattern = `%${searchQuery}%`;
-          scheduledConditions.push(
-            sql`(${scheduledEmails.subject} ILIKE ${searchPattern} OR ${scheduledEmails.fromAddress} ILIKE ${searchPattern} OR ${scheduledEmails.toAddresses}::text ILIKE ${searchPattern})`
-          );
-        }
-
-        const scheduledEmailsList = await db
-          .select()
-          .from(scheduledEmails)
-          .where(and(...scheduledConditions))
-          .orderBy(desc(scheduledEmails.createdAt))
-          .limit(type === "scheduled" ? limit : allTypeFetchLimit)
-          .offset(type === "scheduled" ? offset : 0);
-
-        for (const email of scheduledEmailsList) {
-          const attachments = parseJsonField(email.attachments, []);
-          const toAddresses = parseJsonField(email.toAddresses, []);
-
-          emails.push({
-            id: email.id,
-            type: "scheduled" as const,
-            message_id: null,
-            from: email.fromAddress,
-            from_name: null,
-            to: toAddresses,
-            cc: [],
-            subject: email.subject || "No Subject",
-            preview: null,
-            status: email.status,
-            created_at:
-              email.createdAt?.toISOString() || new Date().toISOString(),
-            sent_at: email.sentAt?.toISOString() || null,
-            scheduled_at: email.scheduledAt?.toISOString() || null,
-            has_attachments: attachments.length > 0,
-            attachment_count: attachments.length,
-          });
-        }
-
-        // Get count for pagination
+      if (type === "scheduled") {
         const [{ count }] = await db
           .select({ count: sql<number>`count(*)` })
           .from(scheduledEmails)
           .where(and(...scheduledConditions));
-
-        scheduledTotal = Number(count);
-        if (type === "scheduled") {
-          total = scheduledTotal;
-        }
+        total = Number(count);
       }
     }
 
-    // If type is 'all', sort combined results and apply pagination
     if (type === "all") {
-      emails.sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-      // Calculate true total from individual counts
-      total = receivedTotal + sentTotal + scheduledTotal;
-      const paginatedEmails = emails.slice(offset, offset + limit);
-
-      console.log(
-        `✅ Successfully retrieved ${paginatedEmails.length} emails (total: ${total})`
-      );
-
-      return {
-        data: paginatedEmails,
-        pagination: {
-          limit,
-          offset,
-          total,
-          has_more: offset + paginatedEmails.length < total,
-        },
-        filters: {
-          type,
-          status: status !== "all" ? status : undefined,
-          time_range: timeRange,
-          search: searchQuery || undefined,
-          domain: resolvedDomain || undefined,
-          address: resolvedAddress || undefined,
-        },
-      };
+      const typeNames = ["received", "sent", "scheduled"];
+      const emailsById = new Map(emails.map((email) => [
+        `${email.type}:${email.id}`, email,
+      ]));
+      emails = page.flatMap(({ id, typeOrder }) => {
+        const email = emailsById.get(`${typeNames[typeOrder]}:${id}`);
+        return email ? [email] : [];
+      });
     }
 
     console.log(

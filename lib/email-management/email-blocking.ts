@@ -1,6 +1,6 @@
 import { db } from '@/lib/db'
 import { blockedEmails, emailDomains, emailAddresses } from '@/lib/db/schema'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, inArray, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 
 /**
@@ -50,10 +50,10 @@ export async function checkRecipientsAgainstBlocklist(
       return extracted.toLowerCase().trim()
     })
 
-    // Query all blocked addresses at once
     const blockedResults = await db
       .select({ emailAddress: blockedEmails.emailAddress })
       .from(blockedEmails)
+      .where(inArray(sql`lower(${blockedEmails.emailAddress})`, normalizedRecipients))
 
     // Create a set of blocked addresses for efficient lookup
     const blockedSet = new Set(blockedResults.map(r => r.emailAddress.toLowerCase()))
