@@ -1,8 +1,8 @@
 import { Elysia, t } from "elysia";
-import { validateAndRateLimit } from "../lib/auth";
+import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
 import { db } from "@/lib/db";
 import { endpoints, emailGroups, endpointDeliveries } from "@/lib/db/schema";
-import { eq, and, desc, asc, count, ilike, or } from "drizzle-orm";
+import { eq, and, desc, asc, count, ilike, inArray, max, or } from "drizzle-orm";
 
 // Request/Response Types (OpenAPI-compatible)
 const ListEndpointsQuery = t.Object({
@@ -153,77 +153,105 @@ export const listEndpoints = new Elysia().get(
 
     // Enhance endpoints with additional data
     console.log("🔧 Enhancing endpoints with additional data");
-    const enhancedEndpoints = await Promise.all(
-      userEndpoints.map(async (endpoint) => {
-        let groupEmails: string[] | null = null;
-
-        // Add group emails for email_group endpoints
-        if (endpoint.type === "email_group") {
-          const groupEmailsResult = await db
-            .select({ emailAddress: emailGroups.emailAddress })
+    const endpointIds = userEndpoints.map((endpoint) => endpoint.id);
+    const groupEndpointIds = userEndpoints
+      .filter((endpoint) => endpoint.type === "email_group")
+      .map((endpoint) => endpoint.id);
+    const [deliveryStatsRows, groupEmailRows] = await Promise.all([
+      endpointIds.length > 0
+        ? db
+            .select({
+              endpointId: endpointDeliveries.endpointId,
+              status: endpointDeliveries.status,
+              total: count(),
+              attempted: count(endpointDeliveries.lastAttemptAt),
+              lastDelivery: max(endpointDeliveries.lastAttemptAt),
+            })
+            .from(endpointDeliveries)
+            .where(inArray(endpointDeliveries.endpointId, endpointIds))
+            .groupBy(endpointDeliveries.endpointId, endpointDeliveries.status)
+        : Promise.resolve([]),
+      groupEndpointIds.length > 0
+        ? db
+            .select({
+              endpointId: emailGroups.endpointId,
+              emailAddress: emailGroups.emailAddress,
+            })
             .from(emailGroups)
-            .where(eq(emailGroups.endpointId, endpoint.id))
-            .orderBy(emailGroups.createdAt);
+            .where(inArray(emailGroups.endpointId, groupEndpointIds))
+            .orderBy(emailGroups.createdAt)
+        : Promise.resolve([]),
+    ]);
+    const deliveryStatsByEndpoint = new Map<
+      string,
+      {
+        total: number;
+        successful: number;
+        failed: number;
+        lastDelivery: Date | null;
+        hasMissingAttempt: boolean;
+      }
+    >();
+    for (const row of deliveryStatsRows) {
+      const stats = deliveryStatsByEndpoint.get(row.endpointId) ?? {
+        total: 0,
+        successful: 0,
+        failed: 0,
+        lastDelivery: null,
+        hasMissingAttempt: false,
+      };
+      stats.total += row.total;
+      if (row.status === "success") stats.successful += row.total;
+      if (row.status === "failed") stats.failed += row.total;
+      stats.hasMissingAttempt ||= row.attempted < row.total;
+      if (
+        row.lastDelivery &&
+        (!stats.lastDelivery || row.lastDelivery > stats.lastDelivery)
+      ) {
+        stats.lastDelivery = row.lastDelivery;
+      }
+      deliveryStatsByEndpoint.set(row.endpointId, stats);
+    }
+    const groupEmailsByEndpoint = new Map<string, string[]>();
+    for (const row of groupEmailRows) {
+      const addresses = groupEmailsByEndpoint.get(row.endpointId) ?? [];
+      addresses.push(row.emailAddress);
+      groupEmailsByEndpoint.set(row.endpointId, addresses);
+    }
+    const enhancedEndpoints = userEndpoints.map((endpoint) => {
+      const groupEmails = endpoint.type === "email_group"
+        ? groupEmailsByEndpoint.get(endpoint.id) ?? []
+        : null;
+      const stats = deliveryStatsByEndpoint.get(endpoint.id);
+      const lastDeliveryDate = stats?.hasMissingAttempt
+        ? null
+        : stats?.lastDelivery;
 
-          groupEmails = groupEmailsResult.map((g) => g.emailAddress);
-        }
-
-        // Get delivery statistics
-        const deliveryStatsResult = await db
-          .select({
-            total: count(),
-            status: endpointDeliveries.status,
-          })
-          .from(endpointDeliveries)
-          .where(eq(endpointDeliveries.endpointId, endpoint.id))
-          .groupBy(endpointDeliveries.status);
-
-        let totalDeliveries = 0;
-        let successfulDeliveries = 0;
-        let failedDeliveries = 0;
-
-        for (const stat of deliveryStatsResult) {
-          totalDeliveries += stat.total;
-          if (stat.status === "success") successfulDeliveries += stat.total;
-          if (stat.status === "failed") failedDeliveries += stat.total;
-        }
-
-        // Get the most recent delivery date
-        const lastDeliveryResult = await db
-          .select({ lastDelivery: endpointDeliveries.lastAttemptAt })
-          .from(endpointDeliveries)
-          .where(eq(endpointDeliveries.endpointId, endpoint.id))
-          .orderBy(desc(endpointDeliveries.lastAttemptAt))
-          .limit(1);
-
-        const lastDeliveryDate = lastDeliveryResult[0]?.lastDelivery || null;
-
-        return {
-          id: endpoint.id,
-          name: endpoint.name,
-          type: endpoint.type as "webhook" | "email" | "email_group",
-          config: JSON.parse(endpoint.config),
-          isActive: endpoint.isActive || false,
-          description: endpoint.description,
-          userId: endpoint.userId,
-          createdAt: endpoint.createdAt
-            ? new Date(endpoint.createdAt).toISOString()
-            : new Date().toISOString(),
-          updatedAt: endpoint.updatedAt
-            ? new Date(endpoint.updatedAt).toISOString()
-            : new Date().toISOString(),
-          groupEmails,
-          deliveryStats: {
-            total: totalDeliveries,
-            successful: successfulDeliveries,
-            failed: failedDeliveries,
-            lastDelivery: lastDeliveryDate
-              ? new Date(lastDeliveryDate).toISOString()
-              : null,
-          },
-        };
-      })
-    );
+      return {
+        id: endpoint.id,
+        name: endpoint.name,
+        type: endpoint.type as "webhook" | "email" | "email_group",
+        config: JSON.parse(endpoint.config),
+        isActive: endpoint.isActive || false,
+        description: endpoint.description,
+        userId: endpoint.userId,
+        createdAt: endpoint.createdAt
+          ? new Date(endpoint.createdAt).toISOString()
+          : new Date().toISOString(),
+        updatedAt: endpoint.updatedAt
+          ? new Date(endpoint.updatedAt).toISOString()
+          : new Date().toISOString(),
+        groupEmails,
+        deliveryStats: {
+          total: stats?.total ?? 0,
+          successful: stats?.successful ?? 0,
+          failed: stats?.failed ?? 0,
+          lastDelivery: lastDeliveryDate
+            ? new Date(lastDeliveryDate).toISOString()
+            : null,
+        },
+      };
+    });
 
     console.log("✅ Successfully enhanced all endpoints");
 

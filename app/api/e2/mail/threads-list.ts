@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
-import { validateAndRateLimit } from "../lib/auth";
-import { getThreadParticipantNames } from "../lib/participants";
+import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
+import { getThreadParticipantNames } from "@/app/api/e2/lib/participants";
 import { db } from "@/lib/db";
 import {
   emailThreads,
@@ -9,7 +9,7 @@ import {
   emailDomains,
   emailAddresses,
 } from "@/lib/db/schema";
-import { eq, and, desc, sql, or, like } from "drizzle-orm";
+import { eq, and, desc, sql, or, like, inArray, count } from "drizzle-orm";
 
 // Query parameters schema with full OpenAPI descriptions
 const ListThreadsQuerySchema = t.Object({
@@ -183,127 +183,136 @@ const ListThreadsErrorResponse = t.Object({
   error: t.String({ description: "Error message describing what went wrong" }),
 });
 
-// Helper to get latest message for a thread
-async function getLatestMessageForThread(threadId: string, userId: string) {
-  // Get latest inbound message
-  const latestInbound = await db
-    .select({
-      id: structuredEmails.id,
-      subject: structuredEmails.subject,
-      fromData: structuredEmails.fromData,
-      textBody: structuredEmails.textBody,
-      isRead: structuredEmails.isRead,
-      attachments: structuredEmails.attachments,
-      date: structuredEmails.date,
-      threadPosition: structuredEmails.threadPosition,
-    })
-    .from(structuredEmails)
-    .where(
-      and(
-        eq(structuredEmails.threadId, threadId),
-        eq(structuredEmails.userId, userId)
+async function getLatestMessageResolver(threadIds: string[], userId: string) {
+  const [latestInbound, latestOutbound] = await Promise.all([
+    db
+      .selectDistinctOn([structuredEmails.threadId], {
+        threadId: structuredEmails.threadId,
+        id: structuredEmails.id,
+        subject: structuredEmails.subject,
+        fromData: structuredEmails.fromData,
+        textBody: structuredEmails.textBody,
+        isRead: structuredEmails.isRead,
+        attachments: structuredEmails.attachments,
+        date: structuredEmails.date,
+        threadPosition: structuredEmails.threadPosition,
+      })
+      .from(structuredEmails)
+      .where(
+        and(
+          inArray(structuredEmails.threadId, threadIds),
+          eq(structuredEmails.userId, userId)
+        )
       )
-    )
-    .orderBy(desc(structuredEmails.threadPosition))
-    .limit(1);
+      .orderBy(structuredEmails.threadId, desc(structuredEmails.threadPosition)),
+    db
+      .selectDistinctOn([sentEmails.threadId], {
+        threadId: sentEmails.threadId,
+        id: sentEmails.id,
+        subject: sentEmails.subject,
+        from: sentEmails.from,
+        textBody: sentEmails.textBody,
+        attachments: sentEmails.attachments,
+        sentAt: sentEmails.sentAt,
+        threadPosition: sentEmails.threadPosition,
+      })
+      .from(sentEmails)
+      .where(
+        and(
+          inArray(sentEmails.threadId, threadIds),
+          eq(sentEmails.userId, userId)
+        )
+      )
+      .orderBy(sentEmails.threadId, desc(sentEmails.threadPosition)),
+  ]);
 
-  // Get latest outbound message
-  const latestOutbound = await db
-    .select({
-      id: sentEmails.id,
-      subject: sentEmails.subject,
-      from: sentEmails.from,
-      textBody: sentEmails.textBody,
-      attachments: sentEmails.attachments,
-      sentAt: sentEmails.sentAt,
-      threadPosition: sentEmails.threadPosition,
-    })
-    .from(sentEmails)
-    .where(
-      and(eq(sentEmails.threadId, threadId), eq(sentEmails.userId, userId))
-    )
-    .orderBy(desc(sentEmails.threadPosition))
-    .limit(1);
+  const inboundByThread = new Map(
+    latestInbound.map((message) => [message.threadId, message])
+  );
+  const outboundByThread = new Map(
+    latestOutbound.map((message) => [message.threadId, message])
+  );
 
-  const inbound = latestInbound[0];
-  const outbound = latestOutbound[0];
+  function getLatestMessage(threadId: string) {
+    const inbound = inboundByThread.get(threadId);
+    const outbound = outboundByThread.get(threadId);
 
-  if (!inbound && !outbound) return null;
+    if (!inbound && !outbound) return null;
 
-  const inboundPosition = inbound?.threadPosition || 0;
-  const outboundPosition = outbound?.threadPosition || 0;
+    const inboundPosition = inbound?.threadPosition || 0;
+    const outboundPosition = outbound?.threadPosition || 0;
 
-  if (outboundPosition > inboundPosition && outbound) {
-    let attachments: any[] = [];
-    try {
-      attachments = outbound.attachments
-        ? JSON.parse(outbound.attachments)
-        : [];
-    } catch (e) {}
+    if (outboundPosition > inboundPosition && outbound) {
+      let attachments: unknown[] = [];
+      try {
+        attachments = outbound.attachments
+          ? JSON.parse(outbound.attachments)
+          : [];
+      } catch (e) {}
 
-    return {
-      id: outbound.id,
-      type: "outbound" as const,
-      subject: outbound.subject,
-      from_text: outbound.from,
-      text_preview: outbound.textBody
-        ? outbound.textBody.substring(0, 200)
-        : null,
-      is_read: true,
-      has_attachments: attachments.length > 0,
-      date: outbound.sentAt?.toISOString() || null,
-    };
-  } else if (inbound) {
-    let fromText = "Unknown Sender";
-    try {
-      if (inbound.fromData) {
-        const fromParsed = JSON.parse(inbound.fromData);
-        fromText =
-          fromParsed.text ||
-          fromParsed.addresses?.[0]?.address ||
-          "Unknown Sender";
-      }
-    } catch (e) {}
+      return {
+        id: outbound.id,
+        type: "outbound" as const,
+        subject: outbound.subject,
+        from_text: outbound.from,
+        text_preview: outbound.textBody
+          ? outbound.textBody.substring(0, 200)
+          : null,
+        is_read: true,
+        has_attachments: attachments.length > 0,
+        date: outbound.sentAt?.toISOString() || null,
+      };
+    } else if (inbound) {
+      let fromText = "Unknown Sender";
+      try {
+        if (inbound.fromData) {
+          const fromParsed = JSON.parse(inbound.fromData);
+          fromText =
+            fromParsed.text ||
+            fromParsed.addresses?.[0]?.address ||
+            "Unknown Sender";
+        }
+      } catch (e) {}
 
-    let attachments: any[] = [];
-    try {
-      attachments = inbound.attachments ? JSON.parse(inbound.attachments) : [];
-    } catch (e) {}
+      let attachments: unknown[] = [];
+      try {
+        attachments = inbound.attachments ? JSON.parse(inbound.attachments) : [];
+      } catch (e) {}
 
-    return {
-      id: inbound.id,
-      type: "inbound" as const,
-      subject: inbound.subject,
-      from_text: fromText,
-      text_preview: inbound.textBody
-        ? inbound.textBody.substring(0, 200)
-        : null,
-      is_read: inbound.isRead || false,
-      has_attachments: attachments.length > 0,
-      date: inbound.date?.toISOString() || null,
-    };
+      return {
+        id: inbound.id,
+        type: "inbound" as const,
+        subject: inbound.subject,
+        from_text: fromText,
+        text_preview: inbound.textBody
+          ? inbound.textBody.substring(0, 200)
+          : null,
+        is_read: inbound.isRead || false,
+        has_attachments: attachments.length > 0,
+        date: inbound.date?.toISOString() || null,
+      };
+    }
+
+    return null;
   }
 
-  return null;
+  return getLatestMessage;
 }
 
-// Get unread count for a thread
-async function getThreadUnreadCount(
-  threadId: string,
-  userId: string
-): Promise<number> {
+async function getThreadUnreadCounts(threadIds: string[], userId: string) {
   const result = await db
-    .select({ count: sql<number>`count(*)` })
+    .select({ threadId: structuredEmails.threadId, count: count() })
     .from(structuredEmails)
     .where(
       and(
-        eq(structuredEmails.threadId, threadId),
+        inArray(structuredEmails.threadId, threadIds),
         eq(structuredEmails.userId, userId),
         eq(structuredEmails.isRead, false)
       )
-    );
+    )
+    .groupBy(structuredEmails.threadId);
 
-  return Number(result[0]?.count || 0);
+  return new Map(result.map((row) => [row.threadId, Number(row.count || 0)]));
 }
 
 export const listThreads = new Elysia().get(
@@ -480,6 +489,12 @@ export const listThreads = new Elysia().get(
         break;
       }
 
+      const threadIds = threads.map((thread) => thread.id);
+      const [getLatestMessage, unreadCounts] = await Promise.all([
+        getLatestMessageResolver(threadIds, userId),
+        getThreadUnreadCounts(threadIds, userId),
+      ]);
+
       // Process threads
       for (const thread of threads) {
         if (threadItems.length >= limit) {
@@ -487,11 +502,8 @@ export const listThreads = new Elysia().get(
           break;
         }
 
-        const latestMessage = await getLatestMessageForThread(
-          thread.id,
-          userId
-        );
-        const unreadCount = await getThreadUnreadCount(thread.id, userId);
+        const latestMessage = getLatestMessage(thread.id);
+        const unreadCount = unreadCounts.get(thread.id) ?? 0;
         const hasUnread = unreadCount > 0;
 
         // Apply unread filter
