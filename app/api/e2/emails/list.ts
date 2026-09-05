@@ -421,7 +421,23 @@ export const listEmails = new Elysia().get(
       }
 
       const receivedEmails = await db
-        .select()
+        .select({
+          id: structuredEmails.id,
+          recipient: structuredEmails.recipient,
+          messageId: structuredEmails.messageId,
+          fromData: structuredEmails.fromData,
+          toData: structuredEmails.toData,
+          ccData: structuredEmails.ccData,
+          subject: structuredEmails.subject,
+          textBody: structuredEmails.textBody,
+          attachments: structuredEmails.attachments,
+          parseSuccess: structuredEmails.parseSuccess,
+          createdAt: structuredEmails.createdAt,
+          isRead: structuredEmails.isRead,
+          readAt: structuredEmails.readAt,
+          isArchived: structuredEmails.isArchived,
+          threadId: structuredEmails.threadId,
+        })
         .from(structuredEmails)
         .where(and(...receivedConditions))
         .orderBy(desc(structuredEmails.createdAt))
