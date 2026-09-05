@@ -1,4 +1,4 @@
-import { and, count, eq, gte, isNull, lt, or } from "drizzle-orm"
+import { and, eq, gte, isNull, lt, or, sql } from "drizzle-orm"
 import { getAwsSesStats } from "@/lib/aws-ses/aws-stats-core"
 import { user } from "@/lib/db/auth-schema"
 import { db } from "@/lib/db"
@@ -44,51 +44,6 @@ type AwsReputationSnapshot = {
 	isWarning: boolean
 	isAtRisk: boolean
 	checkedAt: string
-}
-
-async function getEmailsSentSince(userId: string, cutoffTime: Date): Promise<number> {
-	const result = await db
-		.select({ total: count() })
-		.from(sentEmails)
-		.where(
-			and(
-				eq(sentEmails.userId, userId),
-				eq(sentEmails.status, "sent"),
-				or(
-					gte(sentEmails.sentAt, cutoffTime),
-					and(isNull(sentEmails.sentAt), gte(sentEmails.createdAt, cutoffTime)),
-				),
-			),
-		)
-
-	return Number(result[0]?.total || 0)
-}
-
-async function getHistoricalDailyAverage(userId: string, days: number): Promise<number> {
-	const now = new Date()
-	const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-	const historicalStart = new Date(now.getTime() - (days + 1) * 24 * 60 * 60 * 1000)
-
-	const result = await db
-		.select({ total: count() })
-		.from(sentEmails)
-		.where(
-			and(
-				eq(sentEmails.userId, userId),
-				eq(sentEmails.status, "sent"),
-				or(
-					and(gte(sentEmails.sentAt, historicalStart), lt(sentEmails.sentAt, oneDayAgo)),
-					and(
-						isNull(sentEmails.sentAt),
-						gte(sentEmails.createdAt, historicalStart),
-						lt(sentEmails.createdAt, oneDayAgo),
-					),
-				),
-			),
-		)
-
-	const totalEmails = Number(result[0]?.total || 0)
-	return days > 0 ? totalEmails / days : 0
 }
 
 async function getUserInfo(
@@ -431,14 +386,46 @@ export async function checkSendingSpike(userId: string): Promise<SpikeDetectionR
 		const oneHourAgo = new Date(now - 60 * 60 * 1000)
 		const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000)
 
-		const [current15m, current1h, current24h, historicalAverage, userInfo] =
-			await Promise.all([
-				getEmailsSentSince(userId, fifteenMinutesAgo),
-				getEmailsSentSince(userId, oneHourAgo),
-				getEmailsSentSince(userId, oneDayAgo),
-				getHistoricalDailyAverage(userId, SPIKE_DETECTION_CONFIG.HISTORICAL_DAYS),
-				getUserInfo(userId),
-			])
+		const historicalDays = SPIKE_DETECTION_CONFIG.HISTORICAL_DAYS
+		const historicalStart = new Date(now - (historicalDays + 1) * 24 * 60 * 60 * 1000)
+
+		const [[counts], userInfo] = await Promise.all([
+			db
+				.select({
+					current15m: sql<number>`count(*) filter (where ${or(
+						gte(sentEmails.sentAt, fifteenMinutesAgo),
+						and(isNull(sentEmails.sentAt), gte(sentEmails.createdAt, fifteenMinutesAgo)),
+					)})`.mapWith(Number),
+					current1h: sql<number>`count(*) filter (where ${or(
+						gte(sentEmails.sentAt, oneHourAgo),
+						and(isNull(sentEmails.sentAt), gte(sentEmails.createdAt, oneHourAgo)),
+					)})`.mapWith(Number),
+					current24h: sql<number>`count(*) filter (where ${or(
+						gte(sentEmails.sentAt, oneDayAgo),
+						and(isNull(sentEmails.sentAt), gte(sentEmails.createdAt, oneDayAgo)),
+					)})`.mapWith(Number),
+					historicalTotal: sql<number>`count(*) filter (where ${or(
+						lt(sentEmails.sentAt, oneDayAgo),
+						and(isNull(sentEmails.sentAt), lt(sentEmails.createdAt, oneDayAgo)),
+					)})`.mapWith(Number),
+				})
+				.from(sentEmails)
+				.where(
+					and(
+						eq(sentEmails.userId, userId),
+						eq(sentEmails.status, "sent"),
+						or(
+							gte(sentEmails.sentAt, historicalStart),
+							and(isNull(sentEmails.sentAt), gte(sentEmails.createdAt, historicalStart)),
+						),
+					),
+				),
+			getUserInfo(userId),
+		])
+		const current15m = counts?.current15m || 0
+		const current1h = counts?.current1h || 0
+		const current24h = counts?.current24h || 0
+		const historicalAverage = historicalDays > 0 ? (counts?.historicalTotal || 0) / historicalDays : 0
 
 		const baselineReady =
 			historicalAverage >= SPIKE_DETECTION_CONFIG.MIN_HISTORICAL_DAILY_AVERAGE

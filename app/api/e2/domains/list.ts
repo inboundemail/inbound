@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { validateAndRateLimit } from "../lib/auth";
+import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
 import { db } from "@/lib/db";
 import {
   emailDomains,
@@ -7,7 +7,7 @@ import {
   endpoints,
   domainDnsRecords,
 } from "@/lib/db/schema";
-import { eq, and, desc, count } from "drizzle-orm";
+import { eq, and, desc, count, inArray } from "drizzle-orm";
 import { verifyDnsRecords } from "@/lib/domains-and-dns/dns";
 import {
   SESClient,
@@ -197,39 +197,34 @@ export const listDomains = new Elysia().get(
       "total"
     );
 
-    // Enhance domains with stats, catch-all endpoint info, and verification check
-    const enhancedDomains = await Promise.all(
-      domains.map(async (domain) => {
-        // Get email address count
-        const emailCountResult = await db
-          .select({ count: count() })
-          .from(emailAddresses)
-          .where(eq(emailAddresses.domainId, domain.id));
-
-        const emailCount = emailCountResult[0]?.count || 0;
-
-        // Get active email address count
-        const activeEmailCountResult = await db
-          .select({ count: count() })
-          .from(emailAddresses)
-          .where(
-            and(
-              eq(emailAddresses.domainId, domain.id),
-              eq(emailAddresses.isActive, true)
+    const domainIds = domains.map((domain) => domain.id);
+    const catchAllEndpointIds = [
+      ...new Set(
+        domains.flatMap((domain) =>
+          domain.catchAllEndpointId ? [domain.catchAllEndpointId] : []
+        )
+      ),
+    ];
+    const [emailCounts, catchAllEndpoints] = await Promise.all([
+      domainIds.length > 0
+        ? db
+            .select({
+              domainId: emailAddresses.domainId,
+              isActive: emailAddresses.isActive,
+              count: count(),
+            })
+            .from(emailAddresses)
+            .innerJoin(emailDomains, eq(emailAddresses.domainId, emailDomains.id))
+            .where(
+              and(
+                inArray(emailAddresses.domainId, domainIds),
+                eq(emailDomains.userId, userId)
+              )
             )
-          );
-
-        const activeEmailCount = activeEmailCountResult[0]?.count || 0;
-
-        // Get catch-all endpoint info if configured
-        let catchAllEndpoint: {
-          id: string;
-          name: string;
-          type: string;
-          isActive: boolean;
-        } | null = null;
-        if (domain.catchAllEndpointId) {
-          const endpointResult = await db
+            .groupBy(emailAddresses.domainId, emailAddresses.isActive)
+        : [],
+      catchAllEndpointIds.length > 0
+        ? db
             .select({
               id: endpoints.id,
               name: endpoints.name,
@@ -237,20 +232,42 @@ export const listDomains = new Elysia().get(
               isActive: endpoints.isActive,
             })
             .from(endpoints)
-            .where(eq(endpoints.id, domain.catchAllEndpointId))
-            .limit(1);
+            .where(
+              and(
+                inArray(endpoints.id, catchAllEndpointIds),
+                eq(endpoints.userId, userId)
+              )
+            )
+        : [],
+    ]);
+    const countsByDomainId = new Map<string, { total: number; active: number }>();
+    for (const emailCount of emailCounts) {
+      const stats = countsByDomainId.get(emailCount.domainId) || {
+        total: 0,
+        active: 0,
+      };
+      stats.total += emailCount.count;
+      if (emailCount.isActive === true) {
+        stats.active += emailCount.count;
+      }
+      countsByDomainId.set(emailCount.domainId, stats);
+    }
+    const endpointsById = new Map(
+      catchAllEndpoints.map((endpoint) => [endpoint.id, endpoint])
+    );
 
-          catchAllEndpoint = endpointResult[0]
-            ? {
-                id: endpointResult[0].id,
-                name: endpointResult[0].name,
-                type: endpointResult[0].type,
-                isActive: endpointResult[0].isActive || false,
-              }
-            : null;
-        }
+    // Enhance domains with stats, catch-all endpoint info, and verification check
+    const enhancedDomains = await Promise.all(
+      domains.map(async (domain) => {
+        const stats = countsByDomainId.get(domain.id);
+        const endpoint = domain.catchAllEndpointId
+          ? endpointsById.get(domain.catchAllEndpointId)
+          : undefined;
+        const catchAllEndpoint = endpoint
+          ? { ...endpoint, isActive: endpoint.isActive || false }
+          : null;
 
-        const enhancedDomain: any = {
+        const enhancedDomain: typeof DomainSchema.static = {
           ...domain,
           canReceiveEmails: domain.canReceiveEmails || false,
           hasMxRecords: domain.hasMxRecords || false,
@@ -263,8 +280,8 @@ export const listDomains = new Elysia().get(
           createdAt: (domain.createdAt || new Date()).toISOString(),
           updatedAt: (domain.updatedAt || new Date()).toISOString(),
           stats: {
-            totalEmailAddresses: emailCount,
-            activeEmailAddresses: activeEmailCount,
+            totalEmailAddresses: stats?.total || 0,
+            activeEmailAddresses: stats?.active || 0,
             hasCatchAll: !!domain.catchAllEndpointId,
           },
           catchAllEndpoint,
