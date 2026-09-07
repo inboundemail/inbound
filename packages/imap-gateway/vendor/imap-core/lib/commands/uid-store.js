@@ -34,6 +34,14 @@ module.exports = {
             });
         }
 
+        if (this.selected.readOnly) {
+            return callback(null, {
+                response: 'NO',
+                code: 'READ-ONLY',
+                message: 'Mailbox is read-only'
+            });
+        }
+
         let type = 'flags'; // currently hard coded, in the future might support other values as well, eg. X-GM-LABELS
         let range = (command.attributes[0] && command.attributes[0].value) || '';
 
@@ -51,13 +59,10 @@ module.exports = {
         let extensions = !pos ? [] : [].concat(command.attributes[pos] || []).map(val => val && val.value);
 
         if (extensions.length) {
-            if (extensions.length !== 2 || (extensions[0] || '').toString().toUpperCase() !== 'UNCHANGEDSINCE' || isNaN(extensions[1])) {
-                return callback(new Error('Invalid modifier for STORE'));
-            }
-            unchangedSince = Number(extensions[1]);
-            if (unchangedSince && !this.selected.condstoreEnabled) {
-                this.condstoreEnabled = this.selected.condstoreEnabled = true;
-            }
+            return callback(null, {
+                response: 'BAD',
+                message: 'CONDSTORE is not supported'
+            });
         }
 
         if (action.substr(-7) === '.SILENT') {

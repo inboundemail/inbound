@@ -1618,6 +1618,71 @@ describe("E2 API - Email E2E", () => {
 	);
 
 	it(
+		"prevents duplicate outbound records for concurrent idempotency-key sends",
+		async () => {
+			const token = makeToken("idem-race");
+			const subject = `[[[DEV||| E2E Idempotency Race ${token}`;
+			const idempotencyKey = `e2e-idempotency-race-${token}`;
+			const payload = {
+				from: E2E_SENDER_ADDRESS,
+				to: E2E_RECIPIENT_ADDRESS,
+				subject,
+				text: `Idempotency race text marker ${token}`,
+				html: `<p>Idempotency race html marker <strong>${token}</strong></p>`,
+			};
+			const requestOptions: RequestInit = {
+				method: "POST",
+				headers: {
+					"Idempotency-Key": idempotencyKey,
+				},
+				body: JSON.stringify(payload),
+			};
+
+			const [firstSend, secondSend] = await Promise.all([
+				apiJsonWithKey<SendEmailResponse | { error: string }>(
+					"/emails",
+					API_KEY as string,
+					requestOptions,
+				),
+				apiJsonWithKey<SendEmailResponse | { error: string }>(
+					"/emails",
+					API_KEY as string,
+					requestOptions,
+				),
+			]);
+
+			const sends = [firstSend, secondSend];
+			expect(
+				sends.every(
+					(send) => send.response.status === 200 || send.response.status === 503,
+				),
+			).toBe(true);
+
+			const successfulIds = sends.flatMap((send) =>
+				send.response.status === 200 && "id" in send.data
+					? [send.data.id]
+					: [],
+			);
+			expect(successfulIds.length).toBeGreaterThanOrEqual(1);
+			expect(new Set(successfulIds).size).toBe(1);
+
+			const sentMatches = await waitForExactSubjectEmailCount(
+				"sent",
+				subject,
+				1,
+			);
+			expect(sentMatches).toBeDefined();
+			if (!sentMatches) {
+				return;
+			}
+
+			expect(sentMatches.length).toBe(1);
+			expect(sentMatches[0]?.id).toBe(successfulIds[0]);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
 		"deduplicates repeated inbound webhook payloads for the same message",
 		async () => {
 			const token = makeToken("dedupe");

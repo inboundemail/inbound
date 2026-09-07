@@ -1,4 +1,5 @@
 import { Elysia, t } from "elysia";
+import { enforceMailboxAuthenticationRateLimit } from "@/app/api/e2/lib/auth";
 import {
 	authenticateManagedMailCredential,
 	MailboxErrorSchema,
@@ -8,7 +9,7 @@ import {
 
 const AuthenticateSmtpBody = t.Object({
 	loginAddress: t.String({ minLength: 3, maxLength: 255 }),
-	password: t.String({ minLength: 1 }),
+	password: t.String({ minLength: 1, maxLength: 1024 }),
 });
 
 const AuthenticateSmtpResponse = t.Object({
@@ -31,8 +32,13 @@ function unauthorized(set: { status?: number | string }) {
 
 export const authenticateSmtp = new Elysia().post(
 	"/mailboxes/authenticate-smtp",
-	async ({ body, set }) => {
+	async ({ request, body, set }) => {
 		const loginAddress = normalizeEmailAddress(body.loginAddress);
+		await enforceMailboxAuthenticationRateLimit(
+			request,
+			loginAddress ?? body.loginAddress.trim().toLowerCase(),
+			set,
+		);
 		if (!loginAddress) return unauthorized(set);
 
 		const credential = await authenticateManagedMailCredential(body.password, {
@@ -48,7 +54,9 @@ export const authenticateSmtp = new Elysia().post(
 			200: AuthenticateSmtpResponse,
 			400: MailboxErrorSchema,
 			401: MailboxErrorSchema,
+			429: MailboxErrorSchema,
 			500: MailboxErrorSchema,
+			503: MailboxErrorSchema,
 		},
 		detail: { tags: ["Mailboxes"], summary: "Authenticate for SMTP" },
 	},

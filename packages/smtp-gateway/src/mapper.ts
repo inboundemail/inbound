@@ -15,23 +15,26 @@ export interface MappedRawMessage {
 
 const FORWARDED_HEADERS = ["in-reply-to", "references"];
 
-function addressList(value: AddressObject | AddressObject[] | undefined): {
-	formatted: string[];
-	bare: string[];
-} {
+function addressList(
+	value: AddressObject | AddressObject[] | undefined,
+	allowed?: Set<string>,
+	seen?: Set<string>,
+): string[] {
 	const objects = value ? (Array.isArray(value) ? value : [value]) : [];
 	const formatted: string[] = [];
-	const bare: string[] = [];
 	for (const object of objects) {
 		for (const entry of object.value) {
 			if (!entry.address) continue;
-			bare.push(entry.address.toLowerCase());
+			const normalized = entry.address.toLowerCase();
+			if (allowed && !allowed.has(normalized)) continue;
+			if (seen?.has(normalized)) continue;
+			seen?.add(normalized);
 			formatted.push(
 				entry.name ? `${entry.name} <${entry.address}>` : entry.address,
 			);
 		}
 	}
-	return { formatted, bare };
+	return formatted;
 }
 
 function customHeaders(parsed: ParsedMail): Record<string, string> | undefined {
@@ -48,9 +51,25 @@ function customHeaders(parsed: ParsedMail): Record<string, string> | undefined {
 	return Object.keys(headers).length > 0 ? headers : undefined;
 }
 
-export function idempotencyKeyFor(raw: Buffer, apiKey: string): string {
+export function idempotencyKeyFor(
+	raw: Buffer,
+	credentialId: string,
+	envelope: RelayEnvelope,
+): string {
+	const recipients = [
+		...new Set(
+			envelope.rcptTo.map((recipient) => recipient.trim().toLowerCase()),
+		),
+	].sort();
 	return `smtp-${createHash("sha256")
-		.update(apiKey.slice(0, 12))
+		.update(
+			JSON.stringify({
+				credentialId,
+				mailFrom: envelope.mailFrom?.trim().toLowerCase() ?? null,
+				recipients,
+			}),
+		)
+		.update("\0")
 		.update(raw)
 		.digest("hex")
 		.slice(0, 48)}`;
@@ -74,19 +93,28 @@ export async function mapRawMessage(
 		? `${fromEntry.name} <${fromAddress}>`
 		: fromAddress;
 
-	const to = addressList(parsed.to);
-	const cc = addressList(parsed.cc);
-	const visible = new Set([...to.bare, ...cc.bare]);
-	const bcc = envelope.rcptTo.filter(
-		(recipient) => !visible.has(recipient.toLowerCase()),
-	);
-
-	if (to.formatted.length === 0 && bcc.length === 0) {
+	const envelopeRecipients = new Map<string, string>();
+	for (const recipient of envelope.rcptTo) {
+		const address = recipient.trim();
+		const normalized = address.toLowerCase();
+		if (address && !envelopeRecipients.has(normalized)) {
+			envelopeRecipients.set(normalized, address);
+		}
+	}
+	if (envelopeRecipients.size === 0) {
 		throw new SmtpRelayError({
 			responseCode: 550,
 			message: "5.1.3 No valid recipients",
 		});
 	}
+
+	const allowed = new Set(envelopeRecipients.keys());
+	const visible = new Set<string>();
+	const to = addressList(parsed.to, allowed, visible);
+	const cc = addressList(parsed.cc, allowed, visible);
+	const bcc = [...envelopeRecipients]
+		.filter(([normalized]) => !visible.has(normalized))
+		.map(([, address]) => address);
 
 	const replyTo = addressList(parsed.replyTo);
 	const html =
@@ -106,13 +134,13 @@ export async function mapRawMessage(
 		fromAddress: fromAddress.toLowerCase(),
 		payload: {
 			from,
-			to: to.formatted.length > 0 ? to.formatted : bcc,
+			to,
 			subject: parsed.subject ?? "",
 			...(html !== undefined ? { html } : {}),
 			...(text !== undefined ? { text } : {}),
-			...(cc.formatted.length > 0 ? { cc: cc.formatted } : {}),
-			...(to.formatted.length > 0 && bcc.length > 0 ? { bcc } : {}),
-			...(replyTo.formatted.length > 0 ? { reply_to: replyTo.formatted } : {}),
+			...(cc.length > 0 ? { cc } : {}),
+			...(bcc.length > 0 ? { bcc } : {}),
+			...(replyTo.length > 0 ? { reply_to: replyTo } : {}),
 			...(customHeaders(parsed) ? { headers: customHeaders(parsed) } : {}),
 			...(attachments.length > 0 ? { attachments } : {}),
 		},

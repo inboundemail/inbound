@@ -9,7 +9,7 @@ const tlsDefaults = {
     honorCipherOrder: true,
     requestOCSP: false,
     sessionIdContext: crypto.createHash('sha1').update(process.argv.join(' ')).digest('hex').slice(0, 32),
-    minVersion: 'TLSv1'
+    minVersion: 'TLSv1.2'
 };
 
 /**

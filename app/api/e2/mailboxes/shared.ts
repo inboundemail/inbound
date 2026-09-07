@@ -348,6 +348,8 @@ export async function authenticateManagedMailCredential(
 ): Promise<ManagedMailCredential | null> {
 	let verification: Awaited<ReturnType<typeof auth.api.verifyApiKey>> | null =
 		null;
+	let verificationFailed = false;
+	let verificationError: unknown;
 	const configIds = password.startsWith("imap_")
 		? (["imap", "mail"] as const)
 		: (["mail", "imap"] as const);
@@ -360,11 +362,15 @@ export async function authenticateManagedMailCredential(
 				verification = candidate;
 				break;
 			}
-		} catch {
-			continue;
+		} catch (error) {
+			verificationFailed = true;
+			verificationError = error;
 		}
 	}
-	if (!verification) return null;
+	if (!verification) {
+		if (verificationFailed) throw verificationError;
+		return null;
+	}
 
 	const apiKeyId = verification.valid ? verification.key?.id : null;
 	const apiKeyOwnerId = verification.valid

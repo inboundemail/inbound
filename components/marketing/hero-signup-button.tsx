@@ -4,7 +4,7 @@ import { authClient } from "@/lib/auth/auth-client";
 
 export function HeroSignupButton() {
 	return (
-		<div className="mt-6">
+		<div>
 			<button
 				type="button"
 				onClick={() =>
@@ -13,12 +13,12 @@ export function HeroSignupButton() {
 						callbackURL: "/logs",
 					})
 				}
-				className="inline-flex items-center gap-1.5 rounded-md border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-[#52525b] transition-colors hover:bg-[#f5f5f5] hover:text-[#1c1917]"
+				className="inline-flex min-h-12 items-center gap-2.5 rounded-lg bg-[var(--button-primary-bg)] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					viewBox="0 0 24 24"
-					className="w-3.5 h-3.5"
+					className="size-4 rounded-sm bg-white p-0.5"
 				>
 					<path
 						d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -37,7 +37,7 @@ export function HeroSignupButton() {
 						fill="#EA4335"
 					/>
 				</svg>
-				Get started with Google
+				Start with Google
 			</button>
 		</div>
 	);

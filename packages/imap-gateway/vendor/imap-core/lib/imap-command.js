@@ -16,7 +16,6 @@ const commands = new Map([
     ['STARTTLS', require('./commands/starttls')],
     ['LOGIN', require('./commands/login')],
     ['AUTHENTICATE PLAIN', require('./commands/authenticate-plain')],
-    ['AUTHENTICATE PLAIN-CLIENTTOKEN', require('./commands/authenticate-plain')],
     ['NAMESPACE', require('./commands/namespace')],
     ['LIST', require('./commands/list')],
     ['XLIST', require('./commands/list')],
@@ -123,7 +122,13 @@ class IMAPCommand {
                         // Log tagged IMAP input that names a command this server does not implement.
                         let logEntry = createCommandFailureLogEntry(this.connection, err, {
                             _command: this.command,
-                            _payload: this.payload ? (this.payload.length < 256 ? this.payload : this.payload.toString().substr(0, 150) + '...') : false
+                            _payload: this.command.startsWith('AUTHENTICATE ')
+                                ? false
+                                : this.payload
+                                  ? this.payload.length < 256
+                                      ? this.payload
+                                      : this.payload.toString().substr(0, 150) + '...'
+                                  : false
                         });
                         this.connection.loggelf(logEntry);
                     }
@@ -154,7 +159,7 @@ class IMAPCommand {
                 return callback(err);
             }
 
-            let maxAllowed = Math.max(Number(this.connection._server.options.maxMessage) || 0, MAX_MESSAGE_SIZE);
+            let maxAllowed = Number(this.connection._server.options.maxMessage) || MAX_MESSAGE_SIZE;
             if (
                 // Allow large literals for selected commands only
                 (!['APPEND'].includes(this.command) && command.expecting > 1024) ||

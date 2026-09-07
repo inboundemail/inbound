@@ -51,28 +51,17 @@ export function DemoInbox() {
 		},
 	});
 
-	const generateEmail = (forceNew = false) => {
-		if (!forceNew && typeof window !== "undefined") {
-			const stored = localStorage.getItem(INBOX_STORAGE_KEY);
-			if (stored) {
-				setEmail(stored);
-				return;
-			}
+	useEffect(() => {
+		const stored = localStorage.getItem(INBOX_STORAGE_KEY);
+		if (stored) {
+			setEmail(stored);
+			return;
 		}
 
 		const word = sonare({ minLength: 6, maxLength: 10 });
 		const newEmail = `${word}@inbox.inbound.new`;
 		setEmail(newEmail);
-		setCopied(false);
-		setEmails([]);
-
-		if (typeof window !== "undefined") {
-			localStorage.setItem(INBOX_STORAGE_KEY, newEmail);
-		}
-	};
-
-	useEffect(() => {
-		generateEmail(false);
+		localStorage.setItem(INBOX_STORAGE_KEY, newEmail);
 	}, []);
 
 	const copyToClipboard = async () => {
@@ -86,50 +75,58 @@ export function DemoInbox() {
 	};
 
 	return (
-		<div className="mt-12">
-			<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-				<div className="flex-1 bg-white border border-[#e7e5e4] rounded-lg px-3 py-2 flex items-center gap-3 min-w-0">
-					<span className="font-mono text-sm text-[#3f3f46] truncate">
-						{email}
-					</span>
-					<button
-						onClick={copyToClipboard}
-						className="ml-auto text-[#52525b] hover:text-[#1c1917] transition-colors flex-shrink-0"
-					>
-						{copied ? (
-							<Check className="w-4 h-4 text-[#8161FF]" />
-						) : (
-							<Copy className="w-4 h-4" />
-						)}
-					</button>
-				</div>
+		<div>
+			<div className="flex min-h-11 min-w-0 items-center gap-3 border-b border-border">
+				<span className="truncate font-mono text-xs tracking-normal text-[var(--text-primary)] sm:text-sm">
+					{email || "Generating your address..."}
+				</span>
+				<button
+					type="button"
+					onClick={copyToClipboard}
+					aria-label={copied ? "Email address copied" : "Copy email address"}
+					className="ml-auto shrink-0 text-[var(--text-muted)] transition-colors hover:text-primary"
+				>
+					{copied ? (
+						<Check className="size-4 text-primary" />
+					) : (
+						<Copy className="size-4" />
+					)}
+				</button>
 			</div>
-			<p className="mt-3 text-sm text-[#52525b]">
-				This is a real inbox. Send an email to this address and watch it appear
-				in real-time.
+			<p className="mt-3 text-xs leading-relaxed tracking-normal text-[var(--text-secondary)]">
+				Send an email to see it here.
 			</p>
 
 			{emails.length > 0 && (
 				<div className="mt-4 space-y-2">
 					{emails.map((mail, i) => (
 						<div
-							key={i}
-							className="bg-white border border-[#e7e5e4] rounded-xl p-4 animate-in slide-in-from-top-2 fade-in duration-300 relative group"
+							key={
+								mail.emailId ||
+								`${mail.from}-${mail.timestamp.getTime()}-${mail.subject}`
+							}
+							className="group relative animate-in border-t border-border py-4 duration-300 fade-in slide-in-from-top-2 motion-reduce:animate-none"
 						>
 							<button
+								type="button"
 								onClick={() => dismissEmail(i)}
-								className="absolute top-3 right-3 text-[#a8a29e] hover:text-[#1c1917] transition-colors opacity-0 group-hover:opacity-100"
+								aria-label="Dismiss email"
+								className="absolute right-3 top-3 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
 							>
 								<X className="w-4 h-4" />
 							</button>
 							<div className="flex items-center gap-2 mb-1">
-								<span className="text-sm font-medium text-[#1c1917]">
+								<span className="text-sm font-medium text-[var(--text-primary)]">
 									{mail.from}
 								</span>
-								<span className="text-xs text-[#a8a29e]">just now</span>
+								<span className="text-xs text-[var(--text-muted)]">
+									just now
+								</span>
 							</div>
-							<p className="text-sm text-[#3f3f46]">{mail.subject}</p>
-							<p className="text-xs text-[#78716c] mt-1 line-clamp-1">
+							<p className="text-sm text-[var(--text-secondary)]">
+								{mail.subject}
+							</p>
+							<p className="mt-1 line-clamp-1 text-xs text-[var(--text-muted)]">
 								{mail.preview}
 							</p>
 						</div>

@@ -264,10 +264,7 @@ module.exports.generateFolderListing = function (folders, skipHierarchy) {
         }
 
         item = {
-            // flags array is used to store permanentflags
-            //flags: [].concat(folder.flags || []),
-
-            flags: [],
+            flags: [].concat(folder.flags || []),
             path
         };
 
@@ -780,7 +777,6 @@ module.exports.sendCapabilityResponse = connection => {
 
     if (connection.state === 'Not Authenticated') {
         capabilities.push('AUTH=PLAIN');
-        capabilities.push('AUTH=PLAIN-CLIENTTOKEN');
         capabilities.push('SASL-IR');
         capabilities.push('ENABLE');
 
@@ -788,14 +784,12 @@ module.exports.sendCapabilityResponse = connection => {
         capabilities.push('UNSELECT');
         capabilities.push('IDLE');
         capabilities.push('NAMESPACE');
-        capabilities.push('QUOTA');
         capabilities.push('XLIST');
         capabilities.push('CHILDREN');
 
         // Advertise extended capabilities pre-auth (matches Gmail/Yahoo/Outlook behavior)
         capabilities.push('SPECIAL-USE');
         capabilities.push('UIDPLUS');
-        capabilities.push('CONDSTORE');
         capabilities.push('UTF8=ACCEPT');
         capabilities.push('WITHIN');
 
@@ -809,20 +803,18 @@ module.exports.sendCapabilityResponse = connection => {
         capabilities.push('UNSELECT');
         capabilities.push('IDLE');
         capabilities.push('NAMESPACE');
-        capabilities.push('QUOTA');
         capabilities.push('XLIST');
         capabilities.push('CHILDREN');
 
         capabilities.push('SPECIAL-USE');
         capabilities.push('UIDPLUS');
         capabilities.push('ENABLE');
-        capabilities.push('CONDSTORE');
         capabilities.push('UTF8=ACCEPT');
         capabilities.push('WITHIN');
 
         capabilities.push('MOVE');
 
-        if (connection._server.options.enableCompression) {
+        if (connection._server.options.enableCompression === true) {
             capabilities.push('COMPRESS=DEFLATE');
         }
 

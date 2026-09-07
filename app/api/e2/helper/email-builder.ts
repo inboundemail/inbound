@@ -78,7 +78,6 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
     from,
     to,
     cc,
-    bcc,
     replyTo,
     subject,
     textBody,
@@ -93,7 +92,6 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
 
   const hasText = !!textBody
   const hasHtml = !!htmlBody
-  const hasAttachments = attachments.length > 0
   
   // Separate CID attachments from regular attachments
   const cidAttachments = attachments.filter(att => att.content_id)
@@ -147,7 +145,7 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
   // Build headers
   const headers = [
     `From: ${from}`,
-    `To: ${to.join(', ')}`,
+    `To: ${to.length > 0 ? to.join(', ') : 'undisclosed-recipients:;'}`,
     cc && cc.length > 0 ? `Cc: ${cc.join(', ')}` : null,
     replyTo && replyTo.length > 0 ? `Reply-To: ${replyTo.join(', ')}` : null,
     `Subject: ${subject}`,

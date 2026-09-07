@@ -23,7 +23,7 @@ module.exports = {
         let path = Buffer.from((command.attributes[0] && command.attributes[0].value) || '', 'binary').toString();
         let query = command.attributes[1] && command.attributes[1];
 
-        let statusElements = ['MESSAGES', 'RECENT', 'UIDNEXT', 'UIDVALIDITY', 'UNSEEN', 'HIGHESTMODSEQ'];
+        let statusElements = ['MESSAGES', 'RECENT', 'UIDNEXT', 'UIDVALIDITY', 'UNSEEN'];
         let statusItem;
         let statusQuery = [];
 
@@ -74,14 +74,6 @@ module.exports = {
         }
 
         path = imapTools.normalizeMailbox(path, !this.acceptUTF8Enabled);
-
-        // mark CONDSTORE as enabled
-        if (statusQuery.indexOf('HIGHESTMODSEQ') >= 0 && !this.condstoreEnabled) {
-            this.condstoreEnabled = true;
-            if (this.selected) {
-                this.selected.condstoreEnabled = true;
-            }
-        }
 
         let logdata = {
             short_message: '[STATUS]',

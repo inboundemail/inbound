@@ -26,6 +26,14 @@ module.exports = {
     ],
 
     handler(command, callback) {
+        if (this._server.options.enableCompression !== true) {
+            return callback(null, {
+                response: 'NO',
+                code: 'CANNOT',
+                message: 'Compression is not enabled'
+            });
+        }
+
         let mechanism = ((command.attributes[0] && command.attributes[0].value) || '').toString().toUpperCase().trim();
 
         if (!mechanism) {

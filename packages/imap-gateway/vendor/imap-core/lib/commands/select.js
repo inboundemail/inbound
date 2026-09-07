@@ -27,9 +27,11 @@ module.exports = {
 
         let extensions = [].concat(command.attributes[1] || []).map(attr => ((attr && attr.value) || '').toString().toUpperCase());
 
-        // Is CONDSTORE found from the optional arguments list?
         if (extensions.indexOf('CONDSTORE') >= 0) {
-            this.condstoreEnabled = true;
+            return callback(null, {
+                response: 'BAD',
+                message: 'CONDSTORE is not supported'
+            });
         }
 
         if (typeof this._server.onOpen !== 'function') {
@@ -181,33 +183,6 @@ module.exports = {
 
             // * 0 RECENT
             this.send('* 0 RECENT');
-
-            // * OK [HIGHESTMODSEQ 123]
-            this.send(
-                imapHandler.compiler({
-                    tag: '*',
-                    command: 'OK',
-                    attributes: [
-                        {
-                            type: 'section',
-                            section: [
-                                {
-                                    type: 'atom',
-                                    value: 'HIGHESTMODSEQ'
-                                },
-                                {
-                                    type: 'atom',
-                                    value: String(Number(mailboxData.modifyIndex) || 1)
-                                }
-                            ]
-                        },
-                        {
-                            type: 'text',
-                            value: 'Highest'
-                        }
-                    ]
-                })
-            );
 
             // * OK [UIDNEXT 1] Predicted next UID
             this.send(

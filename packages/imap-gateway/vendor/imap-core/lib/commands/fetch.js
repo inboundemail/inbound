@@ -64,14 +64,10 @@ module.exports = {
         let extensions = [].concat(command.attributes[2] || []).map(val => val && val.value);
 
         if (extensions.length) {
-            if (extensions.length !== 2 || (extensions[0] || '').toString().toUpperCase() !== 'CHANGEDSINCE' || isNaN(extensions[1])) {
-                return callback(new Error('Invalid modifier for ' + command.command));
-            }
-            changedSince = Number(extensions[1]);
-            changedSinceSpecified = true;
-            if (!this.selected.condstoreEnabled) {
-                this.condstoreEnabled = this.selected.condstoreEnabled = true;
-            }
+            return callback(null, {
+                response: 'BAD',
+                message: 'CONDSTORE is not supported'
+            });
         }
 
         let macros = new Map(
@@ -118,10 +114,10 @@ module.exports = {
             }
 
             if (param.value.toUpperCase() === 'MODSEQ') {
-                modseqExist = true;
-                if (!this.selected.condstoreEnabled) {
-                    this.condstoreEnabled = this.selected.condstoreEnabled = true;
-                }
+                return callback(null, {
+                    response: 'BAD',
+                    message: 'CONDSTORE is not supported'
+                });
             }
 
             if (param.value.toUpperCase() === 'BODYSTRUCTURE') {

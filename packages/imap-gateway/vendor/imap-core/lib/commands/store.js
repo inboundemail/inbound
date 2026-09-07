@@ -39,8 +39,9 @@ module.exports = {
         // Do nothing if in read only mode
         if (this.selected.readOnly) {
             return callback(null, {
-                response: 'OK',
-                message: 'STORE ignored with read-only mailbox'
+                response: 'NO',
+                code: 'READ-ONLY',
+                message: 'Mailbox is read-only'
             });
         }
 
@@ -61,13 +62,10 @@ module.exports = {
         let extensions = !pos ? [] : [].concat(command.attributes[pos] || []).map(val => val && val.value);
 
         if (extensions.length) {
-            if (extensions.length !== 2 || (extensions[0] || '').toString().toUpperCase() !== 'UNCHANGEDSINCE' || isNaN(extensions[1])) {
-                return callback(new Error('Invalid modifier for STORE'));
-            }
-            unchangedSince = Number(extensions[1]);
-            if (unchangedSince && !this.selected.condstoreEnabled) {
-                this.condstoreEnabled = this.selected.condstoreEnabled = true;
-            }
+            return callback(null, {
+                response: 'BAD',
+                message: 'CONDSTORE is not supported'
+            });
         }
 
         if (action.substr(-7) === '.SILENT') {
