@@ -159,6 +159,19 @@ export interface DomainDetailsResponse {
 	}>;
 }
 
+export interface EnableDomainDkimResponse {
+	domainId: string;
+	domain: string;
+	dkimStatus: string;
+	dnsRecords: Array<{
+		type: "CNAME";
+		name: string;
+		value: string;
+		description: string;
+		isRequired: boolean;
+	}>;
+}
+
 // Query keys for v2 domain API
 export const domainV2Keys = {
 	all: ["v2", "domains"] as const,
@@ -332,6 +345,34 @@ export const useDomainAuthVerifyV2Mutation = () => {
 				queryKey: domainV2Keys.detail(domainId),
 			});
 			// Also invalidate the check query
+			queryClient.invalidateQueries({
+				queryKey: [...domainV2Keys.detail(domainId), "check"],
+			});
+		},
+	});
+};
+
+export const useEnableDomainDkimV2Mutation = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation<EnableDomainDkimResponse, Error, string>({
+		mutationFn: async (domainId) => {
+			const { data, error } = await client.api.e2
+				.domains({ id: domainId })
+				.dkim.post();
+
+			if (error) {
+				throw new Error(
+					getEdenErrorMessage(error, "Failed to enable Easy DKIM"),
+				);
+			}
+
+			return data as EnableDomainDkimResponse;
+		},
+		onSuccess: (_, domainId) => {
+			queryClient.invalidateQueries({
+				queryKey: domainV2Keys.detail(domainId),
+			});
 			queryClient.invalidateQueries({
 				queryKey: [...domainV2Keys.detail(domainId), "check"],
 			});

@@ -60,6 +60,7 @@ import {
 	useUpdateEmailEndpointV2Mutation,
 	useUpdateDomainCatchAllV2Mutation,
 	useDomainAuthVerifyV2Mutation,
+	useEnableDomainDkimV2Mutation,
 	useUpgradeDomainMailFromV2Mutation,
 	domainV2Keys,
 } from "@/features/domains/hooks/useDomainV2Hooks";
@@ -173,6 +174,7 @@ export default function DomainDetailPage() {
 
 	// Auth verification mutation
 	const authVerifyMutation = useDomainAuthVerifyV2Mutation();
+	const enableDkimMutation = useEnableDomainDkimV2Mutation();
 
 	// React Query mutations
 	const domainVerificationMutation = useDomainVerificationCheckV2(domainId);
@@ -410,6 +412,18 @@ export default function DomainDetailPage() {
 					? error.message
 					: "Failed to verify authentication records";
 			toast.error(errorMessage);
+		}
+	};
+
+	const handleEnableDkim = async () => {
+		try {
+			await enableDkimMutation.mutateAsync(domainId);
+			toast.success("Easy DKIM enabled. Add the CNAME records below.");
+			await refetchAuthRecommendations();
+		} catch (error) {
+			toast.error(
+				error instanceof Error ? error.message : "Failed to enable Easy DKIM",
+			);
 		}
 	};
 
@@ -851,6 +865,22 @@ export default function DomainDetailPage() {
 
 	// canReceive: Domain can receive emails if MX record is verified
 	const canReceive = mxRecordVerified;
+	const dkimStatus =
+		enableDkimMutation.data?.dkimStatus ||
+		authRecommendationsData?.verificationCheck?.dkimStatus ||
+		"NotStarted";
+	const normalizedDkimStatus = dkimStatus.replaceAll("_", "").toLowerCase();
+	const dkimVerified =
+		normalizedDkimStatus === "success" ||
+		normalizedDkimStatus === "inheritedfromparent";
+	const dkimNotStarted = normalizedDkimStatus === "notstarted";
+	const dkimFailed = normalizedDkimStatus.includes("failed");
+	const dkimRecords =
+		enableDkimMutation.data?.dnsRecords ||
+		(authRecommendationsData?.verificationCheck?.dnsRecords || []).filter(
+			(record) =>
+				record.type === "CNAME" && record.name.includes("._domainkey."),
+		);
 
 	// Determine what to show based on domain status
 	const showEmailSection = status === DOMAIN_STATUS.VERIFIED;
@@ -1145,6 +1175,133 @@ export default function DomainDetailPage() {
 						)}
 					</div>
 				)}
+
+				{!domainDetailsData?.inheritsFromParent &&
+					!isAuthRecommendationsLoading && (
+						<div className="border rounded-lg overflow-hidden">
+							<div className="flex items-center justify-between gap-4 bg-muted/30 px-4 py-3 border-b">
+								<div className="flex items-center gap-2">
+									<BoltLightning
+										width="18"
+										height="18"
+										className="text-primary"
+									/>
+									<span className="font-medium">DKIM signing</span>
+								</div>
+								{dkimVerified ? (
+									<Badge variant="default">
+										<CircleCheck width="12" height="12" className="mr-1" />
+										Verified
+									</Badge>
+								) : dkimNotStarted ? (
+									<Badge variant="secondary">Not enabled</Badge>
+								) : dkimFailed ? (
+									<Badge variant="destructive">Setup failed</Badge>
+								) : (
+									<Badge variant="secondary">
+										<Clock2 width="12" height="12" className="mr-1" />
+										Pending
+									</Badge>
+								)}
+							</div>
+
+							{dkimVerified ? (
+								<div className="px-4 py-3 text-sm text-muted-foreground">
+									Outgoing messages are signed with this domain.
+								</div>
+							) : dkimNotStarted || dkimFailed ? (
+								<div className="flex items-center justify-between gap-4 px-4 py-3">
+									<p className="text-sm text-muted-foreground">
+										Enable domain-aligned signing to improve authentication and
+										deliverability.
+									</p>
+									<Button
+										onClick={handleEnableDkim}
+										disabled={enableDkimMutation.isPending}
+										size="sm"
+										className="shrink-0"
+									>
+										{enableDkimMutation.isPending
+											? "Enabling..."
+											: dkimFailed
+												? "Retry DKIM setup"
+												: "Enable DKIM"}
+									</Button>
+								</div>
+							) : (
+								<div>
+									<div className="px-4 py-3 text-sm text-muted-foreground border-b">
+										Add these CNAME records at your DNS provider, then refresh
+										verification.
+									</div>
+									<div className="overflow-x-auto">
+										<table className="w-full min-w-[720px] text-sm">
+											<thead>
+												<tr className="bg-muted/20 text-muted-foreground">
+													<th className="w-20 px-4 py-2 text-left font-medium">
+														Type
+													</th>
+													<th className="px-4 py-2 text-left font-medium">
+														Name
+													</th>
+													<th className="px-4 py-2 text-left font-medium">
+														Value
+													</th>
+												</tr>
+											</thead>
+											<tbody className="divide-y">
+												{dkimRecords.map((record, index) => (
+													<tr key={record.name}>
+														<td className="px-4 py-3 font-mono text-xs">
+															CNAME
+														</td>
+														<td className="px-4 py-3">
+															<button
+																type="button"
+																onClick={() =>
+																	copyWithFeedback(
+																		`dkim-name-${index}`,
+																		record.name,
+																		"DKIM name",
+																	)
+																}
+																className="flex max-w-[280px] items-center gap-2 font-mono text-xs hover:text-foreground text-left"
+															>
+																<span className="truncate">{record.name}</span>
+																<CopyIcon
+																	active={copiedKey === `dkim-name-${index}`}
+																	className="shrink-0"
+																/>
+															</button>
+														</td>
+														<td className="px-4 py-3">
+															<button
+																type="button"
+																onClick={() =>
+																	copyWithFeedback(
+																		`dkim-value-${index}`,
+																		record.value,
+																		"DKIM value",
+																	)
+																}
+																className="flex max-w-[280px] items-center gap-2 font-mono text-xs hover:text-foreground text-left"
+															>
+																<span className="truncate">{record.value}</span>
+																<CopyIcon
+																	active={copiedKey === `dkim-value-${index}`}
+																	className="shrink-0"
+																/>
+															</button>
+														</td>
+													</tr>
+												))}
+											</tbody>
+										</table>
+									</div>
+								</div>
+							)}
+						</div>
+					)}
 
 				{/* Domain Capabilities Status Card - Shows send/receive status */}
 				{status === DOMAIN_STATUS.VERIFIED && (!canSend || !canReceive) && (
