@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
 import { db } from "@/lib/db";
+import { getVerifiedParentDomain } from "@/lib/db/domains";
 import { domainDnsRecords, emailDomains } from "@/lib/db/schema";
 import { enableEasyDkim } from "@/lib/domains-and-dns/domain-verification";
 
@@ -43,6 +44,14 @@ export const enableDomainDkim = new Elysia().post(
 		if (!domain) {
 			set.status = 404;
 			return { error: "Domain not found" };
+		}
+
+		const parentDomain = await getVerifiedParentDomain(domain.domain, userId);
+		if (parentDomain) {
+			set.status = 409;
+			return {
+				error: `DKIM is inherited from the verified parent domain ${parentDomain.domain}`,
+			};
 		}
 
 		try {
@@ -112,6 +121,7 @@ export const enableDomainDkim = new Elysia().post(
 			200: EnableDkimResponse,
 			401: EnableDkimErrorResponse,
 			404: EnableDkimErrorResponse,
+			409: EnableDkimErrorResponse,
 			500: EnableDkimErrorResponse,
 		},
 		detail: {

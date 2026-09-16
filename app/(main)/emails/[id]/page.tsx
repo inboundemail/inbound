@@ -866,8 +866,8 @@ export default function DomainDetailPage() {
 	// canReceive: Domain can receive emails if MX record is verified
 	const canReceive = mxRecordVerified;
 	const dkimStatus =
-		enableDkimMutation.data?.dkimStatus ||
 		authRecommendationsData?.verificationCheck?.dkimStatus ||
+		enableDkimMutation.data?.dkimStatus ||
 		"NotStarted";
 	const normalizedDkimStatus = dkimStatus.replaceAll("_", "").toLowerCase();
 	const dkimVerified =
@@ -875,12 +875,18 @@ export default function DomainDetailPage() {
 		normalizedDkimStatus === "inheritedfromparent";
 	const dkimNotStarted = normalizedDkimStatus === "notstarted";
 	const dkimFailed = normalizedDkimStatus.includes("failed");
-	const dkimRecords =
-		enableDkimMutation.data?.dnsRecords ||
-		(authRecommendationsData?.verificationCheck?.dnsRecords || []).filter(
+	const verifiedDkimRecords = (
+		authRecommendationsData?.verificationCheck?.dnsRecords || []
+	).filter(
 			(record) =>
 				record.type === "CNAME" && record.name.includes("._domainkey."),
 		);
+	const dkimRecords =
+		verifiedDkimRecords.length > 0
+			? verifiedDkimRecords
+			: enableDkimMutation.data?.dnsRecords || [];
+	const dkimNeedsSetup =
+		(dkimNotStarted || dkimFailed) && dkimRecords.length === 0;
 
 	// Determine what to show based on domain status
 	const showEmailSection = status === DOMAIN_STATUS.VERIFIED;
@@ -1209,7 +1215,7 @@ export default function DomainDetailPage() {
 								<div className="px-4 py-3 text-sm text-muted-foreground">
 									Outgoing messages are signed with this domain.
 								</div>
-							) : dkimNotStarted || dkimFailed ? (
+							) : dkimNeedsSetup ? (
 								<div className="flex items-center justify-between gap-4 px-4 py-3">
 									<p className="text-sm text-muted-foreground">
 										Enable domain-aligned signing to improve authentication and

@@ -84,7 +84,10 @@ export async function enableEasyDkim(domain: string): Promise<EasyDkimResult> {
 		new GetIdentityDkimAttributesCommand({ Identities: [domain] }),
 	);
 	const attributes = attributesResponse.DkimAttributes?.[domain];
-	const tokens = attributes?.DkimTokens || response.DkimTokens || [];
+	const tokens =
+		attributes?.DkimTokens && attributes.DkimTokens.length > 0
+			? attributes.DkimTokens
+			: response.DkimTokens || [];
 
 	if (tokens.length === 0) {
 		throw new Error("AWS SES did not return Easy DKIM tokens");
