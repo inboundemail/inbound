@@ -29,8 +29,13 @@ import { enforceOutboundSendGuard } from "@/lib/email-management/outbound-send-g
 import { checkSendingSpike } from "@/lib/email-management/sending-spike-detector";
 import {
 	attachmentsToStorageFormat,
+	type ProcessedAttachment,
 	processAttachments,
 } from "../helper/attachment-processor";
+import {
+	assertRawEmailSize,
+	buildRawEmailMessage,
+} from "../helper/email-builder";
 import { validateAndRateLimit } from "../lib/auth";
 
 // Initialize SES client
@@ -51,12 +56,21 @@ if (awsAccessKeyId && awsSecretAccessKey) {
 }
 
 // Request schema
-const AttachmentSchema = t.Object({
-	filename: t.String(),
-	content: t.String(),
-	content_type: t.Optional(t.String()),
-	path: t.Optional(t.String()),
-});
+const AttachmentSchema = t.Union([
+	t.Object({
+		attachment_id: t.String({
+			description: "ID returned by POST /attachments/uploads",
+		}),
+		content_id: t.Optional(t.String()),
+	}),
+	t.Object({
+		filename: t.String(),
+		content: t.Optional(t.String()),
+		content_type: t.Optional(t.String()),
+		path: t.Optional(t.String()),
+		content_id: t.Optional(t.String()),
+	}),
+]);
 
 const TagSchema = t.Object({
 	name: t.String(),
@@ -156,9 +170,11 @@ function extractEmailsFromParsedData(parsedData: string | null): string[] {
 	try {
 		const parsed = JSON.parse(parsedData);
 		if (parsed?.addresses && Array.isArray(parsed.addresses)) {
-			return parsed.addresses
-				.map((addr: any) => addr.address)
-				.filter((email: string) => email && typeof email === "string");
+			return (parsed.addresses as Array<{ address?: unknown }>)
+				.map((addr) => addr.address)
+				.filter(
+					(email): email is string => typeof email === "string" && !!email,
+				);
 		}
 	} catch (e) {
 		console.error("Failed to parse email data:", e);
@@ -168,7 +184,7 @@ function extractEmailsFromParsedData(parsedData: string | null): string[] {
 }
 
 // Check warmup limits for new accounts
-async function checkNewAccountWarmupLimits(userId: string): Promise<{
+async function checkNewAccountWarmupLimits(_userId: string): Promise<{
 	allowed: boolean;
 	error?: string;
 }> {
@@ -439,10 +455,12 @@ export const replyToEmail = new Elysia().post(
 
 		// Process attachments
 		console.log("📎 Processing reply attachments");
-		let processedAttachments: any[] = [];
+		let processedAttachments: ProcessedAttachment[] = [];
 		if (body.attachments && body.attachments.length > 0) {
 			try {
-				processedAttachments = await processAttachments(body.attachments);
+				processedAttachments = await processAttachments(body.attachments, {
+					userId,
+				});
 			} catch (attachmentError) {
 				console.error("❌ Reply attachment processing error:", attachmentError);
 				set.status = 400;
@@ -453,6 +471,24 @@ export const replyToEmail = new Elysia().post(
 							: "Failed to process attachments",
 				};
 			}
+		}
+		try {
+			assertRawEmailSize(
+				buildRawEmailMessage({
+					from: formattedFromAddress,
+					to: toAddresses,
+					subject,
+					textBody: body.text,
+					htmlBody: body.html,
+					customHeaders: body.headers,
+					attachments: processedAttachments,
+				}),
+			);
+		} catch (error) {
+			set.status = 400;
+			return {
+				error: error instanceof Error ? error.message : "Email is too large",
+			};
 		}
 
 		// Check Autumn for email sending limits
@@ -688,6 +724,7 @@ export const replyToEmail = new Elysia().post(
 					rawMessage += `${body.text}\r\n`;
 				}
 			}
+			assertRawEmailSize(rawMessage);
 
 			// Get tenant sending info
 			const parentDomain = isSubdomain(fromDomain)
@@ -831,7 +868,7 @@ export const replyToEmail = new Elysia().post(
 			tags: ["Emails"],
 			summary: "Reply to an email",
 			description:
-				"Reply to an email or thread. Accepts either an email ID or thread ID (replies to latest message in thread). Supports reply all functionality.",
+				"Reply to an email or thread. For large attachments, create a presigned upload with POST /attachments/uploads and provide its attachment_id.",
 		},
 	},
 );

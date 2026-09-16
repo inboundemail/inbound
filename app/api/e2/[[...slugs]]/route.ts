@@ -11,6 +11,7 @@ import { pauseTenant } from "../admin/tenants/pause";
 import { suspendTenant } from "../admin/tenants/suspend";
 import { banUser } from "../admin/users/ban";
 import { unbanUser } from "../admin/users/unban";
+import { createAttachmentUpload } from "../attachments/create-upload";
 import { getAttachment } from "../attachments/get";
 import { revokeCurrentApiKey } from "../auth/revoke-key";
 import { createDomain } from "../domains/create";
@@ -479,6 +480,7 @@ https://inbound.new/api/e2
 	.use(updateEmailAddress)
 	.use(deleteEmailAddress)
 	// Attachment routes
+	.use(createAttachmentUpload)
 	.use(getAttachment)
 	.use(revokeCurrentApiKey)
 	// Email routes (sending, listing, managing)
