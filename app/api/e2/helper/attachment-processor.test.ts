@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { processAttachments } from "@/app/api/e2/helper/attachment-processor";
+import { createOutboundAttachmentUpload } from "@/app/api/e2/helper/outbound-attachment-storage";
 
 describe("processAttachments calendar invitations", () => {
 	it("accepts an ICS attachment while preserving MIME parameters and calendar bytes", async () => {
@@ -41,5 +42,32 @@ describe("processAttachments calendar invitations", () => {
 			size: calendar.byteLength,
 		});
 		expect(Buffer.from(attachments[0].content, "base64")).toEqual(calendar);
+	});
+});
+
+describe("presigned outbound attachment validation", () => {
+	it("rejects mixing a storage reference with caller-controlled metadata", async () => {
+		expect(
+			processAttachments(
+				[
+					{
+						attachment_id: "123456789012345678901",
+						filename: "replacement.pdf",
+					},
+				],
+				{ userId: "tenant-a" },
+			),
+		).rejects.toThrow("attachment_id cannot be combined");
+	});
+
+	it("rejects an upload larger than 25 MiB before accessing storage", async () => {
+		expect(
+			createOutboundAttachmentUpload({
+				userId: "tenant-a",
+				filename: "large.pdf",
+				contentType: "application/pdf",
+				size: 25 * 1024 * 1024 + 1,
+			}),
+		).rejects.toThrow("size must be an integer");
 	});
 });

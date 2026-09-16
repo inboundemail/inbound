@@ -21,6 +21,10 @@
     {
       "path": "/api/cron/verify-pending-domains",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-outbound-attachments",
+      "schedule": "0 * * * *"
     }
   ]
 }

@@ -39,7 +39,10 @@ import {
 	type ProcessedAttachment,
 	processAttachments,
 } from "../helper/attachment-processor";
-import { buildRawEmailMessage } from "../helper/email-builder";
+import {
+	assertRawEmailSize,
+	buildRawEmailMessage,
+} from "../helper/email-builder";
 import {
 	authenticateEmailSend,
 	senderPolicyAllowsAddress,
@@ -63,14 +66,25 @@ if (awsAccessKeyId && awsSecretAccessKey) {
 }
 
 // Request schema
-const AttachmentSchema = t.Object({
-	filename: t.String({ description: "Filename shown to the recipient" }),
-	content: t.Optional(t.String({ description: "Base64-encoded file content" })),
-	content_type: t.Optional(t.String()),
-	path: t.Optional(
-		t.String({ description: "Public or signed URL for Inbound to fetch" }),
-	),
-});
+const AttachmentSchema = t.Union([
+	t.Object({
+		attachment_id: t.String({
+			description: "ID returned by POST /attachments/uploads",
+		}),
+		content_id: t.Optional(t.String({ maxLength: 128 })),
+	}),
+	t.Object({
+		filename: t.String({ description: "Filename shown to the recipient" }),
+		content: t.Optional(
+			t.String({ description: "Base64-encoded file content" }),
+		),
+		content_type: t.Optional(t.String()),
+		path: t.Optional(
+			t.String({ description: "Public or signed URL for Inbound to fetch" }),
+		),
+		content_id: t.Optional(t.String({ maxLength: 128 })),
+	}),
+]);
 
 const TagSchema = t.Object({
 	name: t.String(),
@@ -328,7 +342,9 @@ export const sendEmail = new Elysia().post(
 		let processedAttachments: ProcessedAttachment[] = [];
 		if (body.attachments && body.attachments.length > 0) {
 			try {
-				processedAttachments = await processAttachments(body.attachments);
+				processedAttachments = await processAttachments(body.attachments, {
+					userId,
+				});
 				console.log(
 					"✅ Attachments processed successfully:",
 					processedAttachments.length,
@@ -343,6 +359,27 @@ export const sendEmail = new Elysia().post(
 							: "Failed to process attachments",
 				};
 			}
+		}
+		try {
+			assertRawEmailSize(
+				buildRawEmailMessage({
+					from: body.from,
+					to: toAddresses,
+					cc: ccAddresses.length > 0 ? ccAddresses : undefined,
+					bcc: bccAddresses.length > 0 ? bccAddresses : undefined,
+					replyTo: replyToAddresses.length > 0 ? replyToAddresses : undefined,
+					subject: body.subject,
+					textBody: body.text,
+					htmlBody: body.html,
+					customHeaders: body.headers,
+					attachments: processedAttachments,
+				}),
+			);
+		} catch (error) {
+			set.status = 400;
+			return {
+				error: error instanceof Error ? error.message : "Email is too large",
+			};
 		}
 
 		// Check Autumn for email sending limits
@@ -575,6 +612,7 @@ export const sendEmail = new Elysia().post(
 				attachments: processedAttachments,
 				date: new Date(),
 			});
+			assertRawEmailSize(rawMessage);
 
 			const rawCommand = new SendEmailCommand({
 				FromEmailAddress: formattedFromAddress,
@@ -689,7 +727,7 @@ export const sendEmail = new Elysia().post(
 			tags: ["Emails"],
 			summary: "Send an email",
 			description:
-				"Send an email immediately or schedule it for later using the scheduled_at parameter. Supports HTML/text content, attachments, and custom headers.",
+				"Send an email immediately or schedule it for later using the scheduled_at parameter. For large attachments, create a presigned upload with POST /attachments/uploads and provide its attachment_id.",
 		},
 	},
 );

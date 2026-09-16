@@ -26,7 +26,10 @@ import {
 import { evaluateSending } from "@/lib/email-management/email-evaluation";
 import { enforceOutboundSendGuard } from "@/lib/email-management/outbound-send-guard";
 import { checkSendingSpike } from "@/lib/email-management/sending-spike-detector";
-import { buildRawEmailMessage } from "../../e2/helper/email-builder";
+import {
+	assertRawEmailSize,
+	buildRawEmailMessage,
+} from "../../e2/helper/email-builder";
 
 /**
  * POST /api/webhooks/send-email
@@ -374,6 +377,7 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			attachments: attachments,
 			date: new Date(),
 		});
+		assertRawEmailSize(rawMessage);
 
 		// Get the tenant sending info (identity ARN, configuration set, and tenant name) for tenant-level tracking
 		const fromDomain = scheduledEmail.fromDomain;

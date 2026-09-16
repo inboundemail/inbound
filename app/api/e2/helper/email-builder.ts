@@ -7,6 +7,15 @@
 import { nanoid } from 'nanoid'
 import type { ProcessedAttachment } from './attachment-processor'
 
+export const MAX_RAW_EMAIL_SIZE = 40 * 1024 * 1024
+
+export function assertRawEmailSize(rawMessage: string): void {
+  const size = Buffer.byteLength(rawMessage)
+  if (size > MAX_RAW_EMAIL_SIZE) {
+    throw new Error(`Final email size is ${size} bytes (max: ${MAX_RAW_EMAIL_SIZE} bytes)`)
+  }
+}
+
 export interface EmailMessageParams {
   from: string
   to: string[]
@@ -78,7 +87,6 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
     from,
     to,
     cc,
-    bcc,
     replyTo,
     subject,
     textBody,
@@ -93,7 +101,6 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
 
   const hasText = !!textBody
   const hasHtml = !!htmlBody
-  const hasAttachments = attachments.length > 0
   
   // Separate CID attachments from regular attachments
   const cidAttachments = attachments.filter(att => att.content_id)

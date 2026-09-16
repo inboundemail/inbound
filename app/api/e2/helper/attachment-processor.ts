@@ -4,11 +4,14 @@
  * Maintains backward compatibility with existing attachment format
  */
 
+import { readOutboundAttachment } from "@/app/api/e2/helper/outbound-attachment-storage";
+
 export interface AttachmentInput {
   // Resend-compatible: either path OR content
   path?: string        // Remote file URL
   content?: string     // Base64 encoded content
-  filename: string     // Required display name
+  filename?: string     // Required display name for inline content and remote URLs
+  attachment_id?: string // Inbound-owned presigned upload reference
   
   // Support both formats for backward compatibility
   contentType?: string   // camelCase (Resend-compatible)
@@ -291,7 +294,7 @@ function detectContentTypeFromBase64(base64: string): string | null {
     }
     
     return null
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -374,7 +377,10 @@ function validateContentIds(attachments: AttachmentInput[]): void {
  * Supports both remote URLs (path) and base64 content
  * Maintains backward compatibility
  */
-export async function processAttachments(attachments: AttachmentInput[]): Promise<ProcessedAttachment[]> {
+export async function processAttachments(
+  attachments: AttachmentInput[],
+  options?: { userId: string },
+): Promise<ProcessedAttachment[]> {
   console.log('📎 Processing attachments:', attachments.length)
   
   if (!attachments || attachments.length === 0) {
@@ -394,7 +400,28 @@ export async function processAttachments(attachments: AttachmentInput[]): Promis
   
   for (let i = 0; i < attachments.length; i++) {
     const attachment = attachments[i]
-    console.log(`📎 Processing attachment ${i + 1}/${attachments.length}:`, attachment.filename)
+    console.log(`📎 Processing attachment ${i + 1}/${attachments.length}:`, attachment.filename || attachment.attachment_id)
+
+    if (attachment.attachment_id) {
+      if (attachment.path || attachment.content || attachment.filename || attachment.contentType || attachment.content_type) {
+        throw new Error(`Attachment ${i + 1}: attachment_id cannot be combined with content, path, filename, or content type`)
+      }
+      if (!options?.userId) {
+        throw new Error(`Attachment ${i + 1}: user context is required for attachment_id`)
+      }
+
+      const uploaded = await readOutboundAttachment(options.userId, attachment.attachment_id)
+      const fileValidation = validateFileType(uploaded.contentType, uploaded.filename)
+      if (!fileValidation.valid) {
+        throw new Error(`Attachment ${i + 1}: ${fileValidation.reason}`)
+      }
+      totalSize += uploaded.size
+      if (totalSize > MAX_TOTAL_EMAIL_SIZE) {
+        throw new Error(`Total email size too large (max: ${MAX_TOTAL_EMAIL_SIZE} bytes including all attachments)`)
+      }
+      processed.push({ ...uploaded, content_id: attachment.content_id })
+      continue
+    }
     
     // Validate required fields
     if (!attachment.filename) {
@@ -476,11 +503,13 @@ export function attachmentsToStorageFormat(attachments: ProcessedAttachment[]): 
   filename: string
   content_type: string
   size?: number
+  content_id?: string
 }> {
   return attachments.map(att => ({
     content: att.content,
     filename: att.filename,
     content_type: att.contentType,
-    size: att.size
+    size: att.size,
+    content_id: att.content_id
   }))
 }
