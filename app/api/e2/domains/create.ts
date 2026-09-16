@@ -69,6 +69,7 @@ const CreateDomainResponse = t.Object({
 	providerConfidence: t.Nullable(t.String()),
 	mailFromDomain: t.Optional(t.String()),
 	mailFromDomainStatus: t.Optional(t.String()),
+	dkimStatus: t.Optional(t.String()),
 	dnsRecords: t.Array(DnsRecordSchema),
 	dnsConflict: t.Optional(DnsConflictSchema),
 	createdAt: t.String({ format: "date-time" }),
@@ -507,6 +508,7 @@ export const createDomain = new Elysia().post(
 			providerConfidence: domainRecord.providerConfidence,
 			mailFromDomain: verificationResult.mailFromDomain,
 			mailFromDomainStatus: verificationResult.mailFromDomainStatus,
+			dkimStatus: verificationResult.dkimStatus,
 			dnsRecords: verificationResult.dnsRecords.map((record) => ({
 				type: record.type,
 				name: record.name,

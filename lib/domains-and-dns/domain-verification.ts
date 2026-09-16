@@ -1,9 +1,11 @@
 import {
 	DeleteIdentityCommand,
+	GetIdentityDkimAttributesCommand,
 	GetIdentityMailFromDomainAttributesCommand,
 	GetIdentityVerificationAttributesCommand,
 	SESClient,
 	SetIdentityMailFromDomainCommand,
+	VerifyDomainDkimCommand,
 	VerifyDomainIdentityCommand,
 } from "@aws-sdk/client-ses";
 import {
@@ -46,6 +48,7 @@ export interface DomainVerificationResult {
 	sesStatus?: string;
 	mailFromDomain?: string;
 	mailFromDomainStatus?: string;
+	dkimStatus?: string;
 	dnsRecords: Array<{
 		type: string;
 		name: string;
@@ -57,6 +60,48 @@ export interface DomainVerificationResult {
 	error?: string;
 	parentDomain?: string;
 	isSubdomain?: boolean;
+}
+
+export interface EasyDkimResult {
+	status: string;
+	dnsRecords: Array<{
+		type: "CNAME";
+		name: string;
+		value: string;
+		description: string;
+	}>;
+}
+
+export async function enableEasyDkim(domain: string): Promise<EasyDkimResult> {
+	if (!sesClient) {
+		throw new Error("AWS SES not configured");
+	}
+
+	const response = await sesClient.send(
+		new VerifyDomainDkimCommand({ Domain: domain }),
+	);
+	const attributesResponse = await sesClient.send(
+		new GetIdentityDkimAttributesCommand({ Identities: [domain] }),
+	);
+	const attributes = attributesResponse.DkimAttributes?.[domain];
+	const tokens =
+		attributes?.DkimTokens && attributes.DkimTokens.length > 0
+			? attributes.DkimTokens
+			: response.DkimTokens || [];
+
+	if (tokens.length === 0) {
+		throw new Error("AWS SES did not return Easy DKIM tokens");
+	}
+
+	return {
+		status: attributes?.DkimVerificationStatus || "Pending",
+		dnsRecords: tokens.map((token) => ({
+			type: "CNAME",
+			name: `${token}._domainkey.${domain}`,
+			value: `${token}.dkim.amazonses.com`,
+			description: "Easy DKIM signing record",
+		})),
+	};
 }
 
 /**
@@ -219,6 +264,16 @@ export async function initiateDomainVerification(
 			}
 		}
 
+		let easyDkim: EasyDkimResult | null = null;
+		try {
+			easyDkim = await enableEasyDkim(domain);
+			console.log(
+				`✅ Easy DKIM initialized for ${domain} (${easyDkim.status})`,
+			);
+		} catch (dkimError) {
+			console.error(`Failed to initialize Easy DKIM for ${domain}:`, dkimError);
+		}
+
 		// Set up MAIL FROM domain automatically to remove "via amazonses.com"
 		const mailFromDomain = `mail.${domain}`;
 		let mailFromDomainStatus = "pending";
@@ -300,6 +355,7 @@ export async function initiateDomainVerification(
 				value: "v=spf1 include:amazonses.com ~all",
 				description: "SPF record for MAIL FROM domain",
 			},
+			...(easyDkim?.dnsRecords || []),
 		];
 
 		// Update domain record in database with SES information, MAIL FROM domain, and tenant ID
@@ -330,6 +386,7 @@ export async function initiateDomainVerification(
 			verificationToken: verificationToken || "",
 			status,
 			sesStatus,
+			dkimStatus: easyDkim?.status,
 			mailFromDomain,
 			mailFromDomainStatus,
 			dnsRecords,
