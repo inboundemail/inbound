@@ -52,10 +52,12 @@ if (awsAccessKeyId && awsSecretAccessKey) {
 
 // Request schema
 const AttachmentSchema = t.Object({
-	filename: t.String(),
-	content: t.String(),
+	filename: t.String({ description: "Filename shown to the recipient" }),
+	content: t.Optional(t.String({ description: "Base64-encoded file content" })),
 	content_type: t.Optional(t.String()),
-	path: t.Optional(t.String()),
+	path: t.Optional(
+		t.String({ description: "Public or signed URL for Inbound to fetch" }),
+	),
 });
 
 const TagSchema = t.Object({
