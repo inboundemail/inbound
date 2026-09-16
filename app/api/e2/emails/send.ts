@@ -71,14 +71,18 @@ const AttachmentSchema = t.Union([
 		attachment_id: t.String({
 			description: "ID returned by POST /attachments/uploads",
 		}),
-		content_id: t.Optional(t.String()),
+		content_id: t.Optional(t.String({ maxLength: 128 })),
 	}),
 	t.Object({
-		filename: t.String(),
-		content: t.Optional(t.String()),
+		filename: t.String({ description: "Filename shown to the recipient" }),
+		content: t.Optional(
+			t.String({ description: "Base64-encoded file content" }),
+		),
 		content_type: t.Optional(t.String()),
-		path: t.Optional(t.String()),
-		content_id: t.Optional(t.String()),
+		path: t.Optional(
+			t.String({ description: "Public or signed URL for Inbound to fetch" }),
+		),
+		content_id: t.Optional(t.String({ maxLength: 128 })),
 	}),
 ]);
 
