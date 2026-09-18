@@ -505,6 +505,13 @@
       "when": 1786220537623,
       "tag": "0071_add_sent_email_open_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1786740000000,
+      "tag": "0072_batch_email_api",
+      "breakpoints": true
     }
   ]
 }
