@@ -610,6 +610,9 @@ export const sentEmails = pgTable(
 			table.userId,
 			table.firstOpenedAt,
 		),
+		uniqueUserIdempotencyKey: unique(
+			"sent_emails_user_idempotency_key_unique",
+		).on(table.userId, table.idempotencyKey),
 	}),
 );
 
