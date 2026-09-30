@@ -57,7 +57,7 @@ export function loadConfig(): GatewayConfig {
 		hostname: envString("SMTP_HOSTNAME", "smtp.inboundemail.com"),
 		starttlsPort: envNumber("SMTP_STARTTLS_PORT", 587, 0, 65_535),
 		implicitTlsPort: envNumber("SMTP_IMPLICIT_TLS_PORT", 465, 0, 65_535),
-		maxMessageBytes: envNumber("SMTP_MAX_MESSAGE_BYTES", 25 * 1024 * 1024),
+		maxMessageBytes: envNumber("SMTP_MAX_MESSAGE_BYTES", 3 * 1024 * 1024),
 		maxRecipients: envNumber("SMTP_MAX_RECIPIENTS", 50, 1, 50),
 		tlsKeyPath: process.env.SMTP_TLS_KEY_PATH || null,
 		tlsCertPath: process.env.SMTP_TLS_CERT_PATH || null,

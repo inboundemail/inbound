@@ -20,7 +20,7 @@ const DEFAULT_QUOTES = [
     'Everything small is just a smaller version of something big.',
     "I'm doing so awesome on my own. Like, right now, I found this can of beans.",
     'This does compute!',
-    'Oh, my Glob, you guys, drama bomb!',
+    'LOGOUT completed',
     'Melissa, I have to go, they got into my toilet paper! Melissa, I have to go!',
     'Also, I think the Lemongrabs are getting weirder.'
 ];

@@ -44,7 +44,7 @@ Advertised extensions: PIPELINING, 8BITMIME, SIZE, STARTTLS (587), AUTH (after T
 | `SMTP_IMPLICIT_TLS_PORT` | `465` | `0` disables; always requires both TLS paths |
 | `SMTP_TLS_KEY_PATH` / `SMTP_TLS_CERT_PATH` | — | Both paths are required unless insecure development mode is explicitly enabled; minimum TLS 1.2 |
 | `SMTP_TLS_HANDSHAKE_TIMEOUT_MS` | `10000` | Implicit TLS handshake timeout (STARTTLS upgrades are bounded by the socket timeout) |
-| `SMTP_MAX_MESSAGE_BYTES` | `26214400` (25 MB) | Maximum accepted DATA size |
+| `SMTP_MAX_MESSAGE_BYTES` | `3145728` (3 MiB) | Maximum accepted DATA size; keeps the JSON submission under the API's 4.5 MB request limit |
 | `SMTP_MAX_RECIPIENTS` | `50` | Maximum distinct accepted envelope recipients; cannot exceed the SES limit of 50 |
 | `SMTP_ALLOW_INSECURE_AUTH` | `false` | Explicit plaintext local-development override only |
 | `SMTP_AUTH_FAILURE_LIMIT` / `SMTP_AUTH_FAILURE_WINDOW_MS` | `10` / `900000` | Per-login/IP failure threshold and window |
