@@ -14,28 +14,29 @@ export const metadata: Metadata = {
 const plans = [
 	{ name: "Default", price: 4, description: "5,000 emails/mo · Basic support" },
 	{ name: "Pro", price: 15, description: "50,000 emails/mo · 50 domains" },
-	{ name: "Growth", price: 39, description: "100,000 emails/mo · 200 domains" },
-	{ name: "Scale", price: 79, description: "200,000 emails/mo · 500 domains" },
+	{ name: "Growth", price: 39, description: "100,000 emails/mo · 300 domains" },
+	{ name: "Scale", price: 79, description: "200,000 emails/mo · unlimited domains" },
 ];
 
 const steps = [
 	{
 		label: "RECEIVE",
-		title: "Point your MX, get JSON",
+		title: "Add your domain, get JSON",
 		description:
-			"Every address on your domain works the moment MX resolves. No per-mailbox setup.",
+			"Every address on your domain receives mail once DNS verifies. No per-mailbox setup.",
 		code: [
-			["#a8a29e", "// webhook payload"],
-			["#1c1917", '{ from: "maya@acme.com",'],
-			["#1c1917", '  subject: "move my demo?",'],
-			["#1c1917", '  thread_id: "thr_8f2c" }'],
+			["#a8a29e", "// email.received webhook"],
+			["#1c1917", "{ email: {"],
+			["#1c1917", '    from: { text: "maya@acme.com" },'],
+			["#1c1917", '    subject: "move my demo?",'],
+			["#1c1917", '    threadId: "V1StGXR8_Z5j" } }'],
 		],
 	},
 	{
 		label: "ROUTE",
 		title: "Any address, any endpoint",
 		description:
-			"Change routes from the dashboard, the API, or let your agent edit them with inboundctl.",
+			"Point specific addresses at their own endpoint, or turn on catch-all for the rest. From the dashboard or the API.",
 		code: [
 			["#52525b", "support@  →  /api/agent"],
 			["#52525b", "billing@  →  /api/billing"],
@@ -48,8 +49,8 @@ const steps = [
 		description:
 			"We set In-Reply-To and References, so the answer lands in the customer's existing thread.",
 		code: [
-			["#6b4fd9", "await inbound.reply({"],
-			["#1c1917", '  thread_id: "thr_8f2c",'],
+			["#6b4fd9", "await inbound.emails.reply(threadId, {"],
+			["#1c1917", '  from: "support@acme.com",'],
 			["#1c1917", '  text: "Moved to Friday."'],
 			["#6b4fd9", "})"],
 		],
@@ -275,7 +276,7 @@ export default async function Page() {
 							unlimited mailboxes on every plan.
 						</h2>
 						<p className="text-[15px] tracking-[-0.01em] text-[#78716c]">
-							Extra domains $3.50/mo · extra capacity $16 per 50k
+							Extra domains $3.50/mo · +50k received and sent $16/mo
 						</p>
 					</div>
 					<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
