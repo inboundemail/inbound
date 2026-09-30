@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { eq } from "drizzle-orm";
@@ -273,6 +274,36 @@ export async function enforceAuthenticatedUserAndRateLimit(
 	}
 }
 
+export const MAILBOX_GATEWAY_SECRET_HEADER = "x-inbound-gateway-secret";
+
+export function enforceMailboxGatewayAuthorization(
+	request: Request,
+	set: { status?: number | string; headers?: unknown },
+): void {
+	const secret = process.env.MAILBOX_GATEWAY_AUTH_SECRET;
+	if (!secret) return;
+
+	const provided = request.headers.get(MAILBOX_GATEWAY_SECRET_HEADER) ?? "";
+	const expectedDigest = createHash("sha256").update(secret).digest();
+	const providedDigest = createHash("sha256").update(provided).digest();
+	if (provided && timingSafeEqual(expectedDigest, providedDigest)) return;
+
+	set.status = 403;
+	const headers = {
+		...getHeaderRecord(set.headers),
+		"Content-Type": "application/json; charset=utf-8",
+	};
+	set.headers = headers;
+	throw new AuthError(
+		{
+			error: "Forbidden",
+			message: "Gateway authorization required.",
+			statusCode: 403,
+		},
+		headers,
+	);
+}
+
 export async function enforceMailboxAuthenticationRateLimit(
 	request: Request,
 	loginAddress: string,
@@ -307,7 +338,10 @@ export async function enforceMailboxAuthenticationRateLimit(
 			mailboxIpRatelimit.limit(clientIp),
 		]);
 	} catch (error) {
-		console.error("Mailbox authentication rate limiting service failure:", error);
+		console.error(
+			"Mailbox authentication rate limiting service failure:",
+			error,
+		);
 		set.status = 503;
 		const headers = {
 			"Content-Type": "application/json; charset=utf-8",

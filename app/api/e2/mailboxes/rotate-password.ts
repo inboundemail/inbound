@@ -43,14 +43,46 @@ export const rotateMailboxPassword = new Elysia().post(
 				)
 				.returning({ id: imapCredentials.id });
 		} catch (error) {
-			await deleteMailApiKey(replacement.id, userId);
 			console.error("Failed to update rotated mail API key:", error);
-			set.status = 500;
-			return { error: "Failed to rotate mailbox password" };
+			let current: Awaited<ReturnType<typeof getOwnedCredential>>;
+			try {
+				current = await getOwnedCredential(userId, params.id);
+			} catch (readError) {
+				console.error(
+					"Failed to verify rotation state; keeping replacement API key:",
+					readError,
+				);
+				set.status = 500;
+				return { error: "Failed to rotate mailbox password" };
+			}
+			if (current?.apiKeyId !== replacement.id) {
+				try {
+					await deleteMailApiKey(replacement.id, userId);
+				} catch (cleanupError) {
+					console.error(
+						"Failed to delete unused replacement API key:",
+						cleanupError,
+					);
+				}
+				set.status = 500;
+				return { error: "Failed to rotate mailbox password" };
+			}
+			updated = { id: current.id };
 		}
 
 		if (!updated) {
-			await deleteMailApiKey(replacement.id, userId);
+			try {
+				await deleteMailApiKey(replacement.id, userId);
+			} catch (error) {
+				console.error("Failed to delete unused replacement API key:", error);
+			}
+			const stillExists = await getOwnedCredential(userId, params.id);
+			if (stillExists) {
+				set.status = 409;
+				return {
+					error: "Mailbox changed concurrently. Retry password rotation.",
+				};
+			}
 			set.status = 404;
 			return { error: "Mailbox not found" };
 		}
@@ -70,6 +102,7 @@ export const rotateMailboxPassword = new Elysia().post(
 			401: MailboxErrorSchema,
 			403: MailboxErrorSchema,
 			404: MailboxErrorSchema,
+			409: MailboxErrorSchema,
 			429: MailboxErrorSchema,
 			500: MailboxErrorSchema,
 		},

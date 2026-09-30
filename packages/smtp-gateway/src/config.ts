@@ -1,5 +1,6 @@
 export interface GatewayConfig {
 	apiBaseUrl: string;
+	gatewayAuthSecret: string | null;
 	sendPath: string;
 	hostname: string;
 	starttlsPort: number;
@@ -50,6 +51,7 @@ export function loadConfig(): GatewayConfig {
 			"INBOUND_API_BASE_URL",
 			"https://inbound.new/api/e2",
 		).replace(/\/$/, ""),
+		gatewayAuthSecret: process.env.MAILBOX_GATEWAY_AUTH_SECRET || null,
 		sendPath: envString("INBOUND_SEND_PATH", "/emails"),
 		hostname: envString("SMTP_HOSTNAME", "smtp.inboundemail.com"),
 		starttlsPort: envNumber("SMTP_STARTTLS_PORT", 587, 0, 65_535),

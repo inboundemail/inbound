@@ -7,6 +7,7 @@ export interface ImapConfig {
 	allowPlaintext: boolean;
 	databaseUrl: string;
 	apiBaseUrl: string;
+	gatewayAuthSecret: string | null;
 	maxConnections: number;
 	maxConnectionsPerIp: number;
 	authFailureLimit: number;
@@ -56,6 +57,7 @@ export function loadConfig(): ImapConfig {
 		apiBaseUrl: (
 			process.env.INBOUND_API_BASE_URL ?? "https://inbound.new/api/e2"
 		).replace(/\/$/, ""),
+		gatewayAuthSecret: process.env.MAILBOX_GATEWAY_AUTH_SECRET || null,
 		maxConnections: envNumber("IMAP_MAX_CONNECTIONS", 200),
 		maxConnectionsPerIp: envNumber("IMAP_MAX_CONNECTIONS_PER_IP", 20),
 		authFailureLimit: envNumber("IMAP_AUTH_FAILURE_LIMIT", 10),

@@ -93,6 +93,13 @@ resources:
     methods:
       list: get /api/e2/mail/threads
       retrieve: get /api/e2/mail/threads/{id}
+  mailboxes:
+    methods:
+      list: get /api/e2/mailboxes
+      create: post /api/e2/mailboxes
+      update: put /api/e2/mailboxes/{id}
+      delete: delete /api/e2/mailboxes/{id}
+      rotate_password: post /api/e2/mailboxes/{id}/rotate-password
 
 settings:
   # All generated integration tests that hit the prism mock http server are marked

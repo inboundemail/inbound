@@ -13,6 +13,7 @@ const config: ImapConfig = {
 	allowPlaintext: true,
 	databaseUrl: "postgres://localhost/inbound",
 	apiBaseUrl: "https://example.com/api/e2",
+	gatewayAuthSecret: null,
 	maxConnections: 200,
 	maxConnectionsPerIp: 20,
 	authFailureLimit: 10,
@@ -44,6 +45,37 @@ describe("ApiAuth", () => {
 
 		expect(result).toBeNull();
 		expect(signal).toBeInstanceOf(AbortSignal);
+	});
+
+	it("omits the gateway secret header when not configured", async () => {
+		let headers: Record<string, string> | undefined;
+		globalThis.fetch = mock(
+			async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+				headers = init?.headers as Record<string, string> | undefined;
+				return new Response(null, { status: 401 });
+			},
+		) as unknown as typeof fetch;
+
+		await new ApiAuth(config).authenticate("user@example.com", "password");
+
+		expect(headers?.["x-inbound-gateway-secret"]).toBeUndefined();
+	});
+
+	it("sends the shared gateway secret when configured", async () => {
+		let headers: Record<string, string> | undefined;
+		globalThis.fetch = mock(
+			async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+				headers = init?.headers as Record<string, string> | undefined;
+				return new Response(null, { status: 401 });
+			},
+		) as unknown as typeof fetch;
+
+		await new ApiAuth({
+			...config,
+			gatewayAuthSecret: "gateway-secret",
+		}).authenticate("user@example.com", "password");
+
+		expect(headers?.["x-inbound-gateway-secret"]).toBe("gateway-secret");
 	});
 
 	it("aborts an authentication request that exceeds its configured timeout", async () => {

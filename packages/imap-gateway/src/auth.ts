@@ -27,11 +27,17 @@ export class ApiAuth {
 		address: string,
 		password: string,
 	): Promise<AuthenticatedMailbox | null> {
+		const headers: Record<string, string> = {
+			"Content-Type": "application/json",
+		};
+		if (this.config.gatewayAuthSecret) {
+			headers["x-inbound-gateway-secret"] = this.config.gatewayAuthSecret;
+		}
 		const response = await fetch(
 			`${this.config.apiBaseUrl}/mailboxes/authenticate`,
 			{
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers,
 				body: JSON.stringify({ loginAddress: address, password }),
 				signal: AbortSignal.timeout(this.config.apiTimeoutMs),
 			},

@@ -1,0 +1,80 @@
+---
+title: "Mailboxes & SMTP"
+description: "Connect to Inbound with scoped, managed IMAP and SMTP credentials"
+---
+
+Inbound gives your email clients and applications direct access to email through standard IMAP and SMTP. Create managed credentials in the [Mailboxes & SMTP dashboard](https://inbound.new/mailboxes), choose which verified domains or addresses they can access, and connect using the generated login email and password.
+
+## Connection settings
+
+| Protocol | Host | Port | Security |
+| --- | --- | --- | --- |
+| IMAP | `imap.inboundemail.com` | `993` | TLS |
+| SMTP | `smtp.inboundemail.com` | `465` | TLS |
+| SMTP | `smtp.inboundemail.com` | `587` | STARTTLS |
+
+Use the credential's **Login email** and generated password. IMAP requires a **Mailbox + SMTP** credential; either credential type can send with SMTP. Connections require TLS 1.2 or later, and port `587` must upgrade with STARTTLS before authentication.
+
+## How it works
+
+A managed credential combines three things:
+
+1. **An identity** - A login email and generated password used to authenticate.
+2. **Access scopes** - One or more verified domains or exact email addresses the credential can access.
+3. **Permissions** - The available protocols, IMAP access level, and authorized SMTP sender addresses.
+
+For IMAP-enabled credentials, Inbound provides `INBOX`, `Sent`, `Drafts`, `Trash`, and `Junk`, plus read-only folders for individual scopes. The combined `INBOX` contains received mail covered by the credential's scopes. SMTP uses the same login email and password and enforces the credential's sender policy.
+
+<Note>
+  The login email must use an exact domain you own and have verified when you create or edit the credential. It is an authentication username and does not need to match the receiving or sending addresses, which are controlled separately by scopes and sender policy.
+</Note>
+
+## Choose a credential type
+
+| Credential type | IMAP | SMTP | Best for |
+| --- | --- | --- | --- |
+| **Mailbox + SMTP** | Read-only or read/write access | Send using the configured sender policy | Email clients and applications that receive and send mail |
+| **SMTP only** | Not available | Send using the configured sender policy | Applications and services that only send mail |
+
+For **Mailbox + SMTP**, select **Read and write** if your client needs to save messages in `Sent` or `Drafts` or change message flags. **Read only** still allows SMTP sending. Scope-specific folders remain read-only with either setting.
+
+For send-only applications, create an **SMTP only** credential and use either SMTP configuration above. The same scope and sender-policy rules still apply.
+
+Both credential types require at least one scope covering a whole verified domain, such as `*@example.com`, or one exact address, such as `support@example.com`.
+
+<Warning>
+  **Any scoped domain** permits sending from every address on a represented domain, even when the receiving scope covers only one address. For example, a scope for `support@example.com` also permits SMTP sending from `billing@example.com`. Select **Exact identity** to restrict sending to one address.
+</Warning>
+
+<Note>
+  [Add and verify a domain](https://inbound.new/emails) before creating a credential. Only verified domains appear in the scope selector. Receiving mail also requires the domain's receiving MX records to be configured and verified.
+</Note>
+
+## Mail-scoped API keys and security
+
+The generated credential password is itself a mail-scoped API key, typically beginning with `mail_`; older credentials can begin with `imap_`. It authenticates IMAP and SMTP alongside the login email and can also authorize HTTP email sending under the same sender policy. It cannot manage account resources.
+
+Ordinary account API keys, often stored as `INBOUND_API_KEY`, are a separate credential type. They can access permitted HTTP API resources but cannot authenticate to IMAP or SMTP.
+
+When you create or rotate a credential, its password is shown exactly once. Save it in a password manager or secret manager. If it is lost or exposed, use **Rotate password** immediately; the previous password stops working at once.
+
+<Warning>
+  Anyone with the managed password can send mail allowed by its sender policy. Never expose it in source code, commit it to version control, or disable TLS certificate verification. Disabling or deleting a credential prevents further use.
+</Warning>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Connect with IMAP" icon="plug" href="/mailboxes/connect-imap">
+    Create a credential and configure an email client or application
+  </Card>
+  <Card title="Scopes and Permissions" icon="shield" href="/mailboxes/scopes-and-permissions">
+    Understand domain scopes, address scopes, sender policies, and IMAP access
+  </Card>
+  <Card title="Manage Credentials" icon="key" href="/mailboxes/manage-credentials">
+    Edit, rotate, disable, enable, or delete managed credentials
+  </Card>
+  <Card title="IMAP Behavior" icon="inbox" href="/mailboxes/imap-behavior">
+    Learn how the combined inbox and scope-specific folders behave
+  </Card>
+</CardGroup>
