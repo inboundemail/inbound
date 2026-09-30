@@ -11,6 +11,7 @@
  * to provide consistent navigation experience across the application.
  */
 import { guardAccessFlag } from "@/app/actions/feature-flags";
+import ChartTrendUp from "@/components/icons/chart-trend-up";
 import EmailFlow from "@/components/icons/email-flow";
 import EnvelopeOpen from "@/components/icons/envelope-open";
 import Gear2 from "@/components/icons/gear-2";
@@ -88,7 +89,14 @@ export const navigationConfig: NavigationConfig = {
 	],
 	secondary: [],
 	features: [],
-	admin: [],
+	admin: [
+		{
+			title: "Analytics",
+			url: "/admin/analytics",
+			icon: ChartTrendUp,
+			description: "Visitors, signups, clicks and heatmaps",
+		},
+	],
 };
 
 // Helper function to get page title from URL
