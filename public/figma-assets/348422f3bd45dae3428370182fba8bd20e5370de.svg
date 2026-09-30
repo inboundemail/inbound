@@ -1,8 +1,0 @@
-<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g id="Group">
-<path id="Vector" d="M2.75 0C1.23079 0 0 1.23079 0 2.75V11.25C0 12.7692 1.23079 14 2.75 14H11.25C12.7692 14 14 12.7692 14 11.25V2.75C14 1.23079 12.7692 0 11.25 0H2.75Z" fill="var(--fill-0, white)" fill-opacity="0.4"/>
-<path id="Vector_2" fill-rule="evenodd" clip-rule="evenodd" d="M3.75 5.25C4.16421 5.25 4.5 5.58579 4.5 6V10.25C4.5 10.6642 4.16421 11 3.75 11C3.33579 11 3 10.6642 3 10.25V6C3 5.58579 3.33579 5.25 3.75 5.25Z" fill="var(--fill-0, white)"/>
-<path id="Vector_3" fill-rule="evenodd" clip-rule="evenodd" d="M10.25 7.5C10.6642 7.5 11 7.83579 11 8.25V10.25C11 10.6642 10.6642 11 10.25 11C9.8358 11 9.5 10.6642 9.5 10.25V8.25C9.5 7.83579 9.8358 7.5 10.25 7.5Z" fill="var(--fill-0, white)"/>
-<path id="Vector_4" fill-rule="evenodd" clip-rule="evenodd" d="M7 3C7.41421 3 7.75 3.33579 7.75 3.75V10.25C7.75 10.6642 7.41421 11 7 11C6.58579 11 6.25 10.6642 6.25 10.25V3.75C6.25 3.33579 6.58579 3 7 3Z" fill="var(--fill-0, white)"/>
-</g>
-</svg>
