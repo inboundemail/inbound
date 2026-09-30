@@ -113,11 +113,21 @@ const nextConfig: NextConfig = {
 	async redirects() {
 		return [
 			// Retired landing pages, mapped to the closest current page
-			{ source: "/email-as-webhook", destination: "/email-webhook-api", permanent: true },
+			{
+				source: "/email-as-webhook",
+				destination: "/email-webhook-api",
+				permanent: true,
+			},
 			{ source: "/email-api", destination: "/", permanent: true },
 			{ source: "/examples", destination: "/docs", permanent: true },
-			{ source: "/improvmx-alternative", destination: "/catch-all-email-api", permanent: true },
+			{
+				source: "/improvmx-alternative",
+				destination: "/catch-all-email-api",
+				permanent: true,
+			},
 			{ source: "/vercel-oss-program", destination: "/", permanent: true },
+			{ source: "/changelog", destination: "/blog", permanent: true },
+			{ source: "/changelog/:slug*", destination: "/blog", permanent: true },
 			// Disable v1 API - return 410 Gone
 			{
 				source: "/api/v1/:path*",
