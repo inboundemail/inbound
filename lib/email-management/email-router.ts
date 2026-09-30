@@ -5,6 +5,7 @@
  * Used by the webhook API route after email ingestion to deliver emails to their configured destinations.
  */
 
+import { readTextLimited, safeFetch } from "@/lib/security/safe-fetch";
 import { Autumn as autumn } from "autumn-js";
 import { and, asc, eq, gte, ilike, isNull, lt, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
@@ -1301,7 +1302,7 @@ async function handleWebhookEndpoint(
 		console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
 		try {
-			const response = await fetch(webhookUrl, {
+			const response = await safeFetch(webhookUrl, {
 				method: "POST",
 				headers,
 				body: finalPayloadString, // Use finalPayloadString after stripping
@@ -1310,8 +1311,7 @@ async function handleWebhookEndpoint(
 
 			deliveryTime = Date.now() - startTime;
 			responseCode = response.status;
-			responseBody = await response
-				.text()
+			responseBody = await readTextLimited(response)
 				.catch(() => "Unable to read response body");
 			deliverySuccess = response.ok;
 

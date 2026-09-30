@@ -4,6 +4,8 @@
  * Maintains backward compatibility with existing attachment format
  */
 
+import { readBytesLimited, safeFetch } from '@/lib/security/safe-fetch'
+
 export interface AttachmentInput {
   // Resend-compatible: either path OR content
   path?: string        // Remote file URL
@@ -145,7 +147,7 @@ async function fetchRemoteFile(url: string): Promise<{ content: string; contentT
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
     
-    const response = await fetch(url, {
+    const response = await safeFetch(parsedUrl, {
       signal: controller.signal,
       headers: {
         'User-Agent': 'InboundEmail-AttachmentFetcher/1.0'
@@ -167,13 +169,8 @@ async function fetchRemoteFile(url: string): Promise<{ content: string; contentT
     // Get content type
     const contentType = response.headers.get('content-type') || 'application/octet-stream'
     
-    // Read response as array buffer
-    const arrayBuffer = await response.arrayBuffer()
-    
-    // Check actual size
-    if (arrayBuffer.byteLength > MAX_ATTACHMENT_SIZE) {
-      throw new Error(`File too large: ${arrayBuffer.byteLength} bytes (max: ${MAX_ATTACHMENT_SIZE} bytes)`)
-    }
+    // Stops downloading once the limit is exceeded (Content-Length may be absent or wrong)
+    const arrayBuffer = await readBytesLimited(response, MAX_ATTACHMENT_SIZE)
     
     // Convert to base64
     const buffer = Buffer.from(arrayBuffer)

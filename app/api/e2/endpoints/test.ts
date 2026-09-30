@@ -1,3 +1,4 @@
+import { readTextLimited, safeFetch } from "@/lib/security/safe-fetch";
 import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { nanoid } from "nanoid";
@@ -397,7 +398,7 @@ export const testEndpoint = new Elysia().post(
 							(Number.isFinite(Number(config.timeout))
 								? Math.max(1, Math.min(120, Number(config.timeout)))
 								: 30) * 1000;
-						const response = await fetch(effectiveUrl, {
+						const response = await safeFetch(effectiveUrl, {
 							method: "POST",
 							headers: requestHeaders,
 							body: JSON.stringify(testPayload),
@@ -409,7 +410,7 @@ export const testEndpoint = new Elysia().post(
 						const responseTime = Date.now() - startTime;
 						let responseBody = "";
 						try {
-							responseBody = await response.text();
+							responseBody = await readTextLimited(response);
 						} catch {
 							responseBody = "Unable to read response body";
 						}
@@ -477,7 +478,7 @@ export const testEndpoint = new Elysia().post(
 							(Number.isFinite(Number(config.timeout))
 								? Math.max(1, Math.min(120, Number(config.timeout)))
 								: 30) * 1000;
-						const response = await fetch(effectiveUrl, {
+						const response = await safeFetch(effectiveUrl, {
 							method: "POST",
 							headers: requestHeaders,
 							body: JSON.stringify(testPayload),
@@ -489,7 +490,7 @@ export const testEndpoint = new Elysia().post(
 						const responseTime = Date.now() - startTime;
 						let responseBody = "";
 						try {
-							responseBody = await response.text();
+							responseBody = await readTextLimited(response);
 						} catch {
 							responseBody = "Unable to read response body";
 						}

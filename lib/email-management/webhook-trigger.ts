@@ -4,6 +4,7 @@
  * and provide a clean interface for triggering email actions.
  */
 
+import { readTextLimited, safeFetch } from "@/lib/security/safe-fetch";
 import { createHash, createHmac } from "crypto";
 import { and, eq, gte, ilike, isNull, lt } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -435,7 +436,7 @@ export async function triggerEmailAction(
 		let deliveryTime = 0;
 
 		try {
-			const response = await fetch(webhook.url, {
+			const response = await safeFetch(webhook.url, {
 				method: "POST",
 				headers,
 				body: payloadString,
@@ -444,8 +445,7 @@ export async function triggerEmailAction(
 
 			deliveryTime = Date.now() - startTime;
 			responseCode = response.status;
-			responseBody = await response
-				.text()
+			responseBody = await readTextLimited(response)
 				.catch(() => "Unable to read response body");
 			deliverySuccess = response.ok;
 
