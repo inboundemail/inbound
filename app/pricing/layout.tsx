@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'Pricing - Affordable Email Infrastructure for Developers | inbound',
-  description: 'Transparent pricing for email infrastructure. Start free with 5,000 emails/month. Pro plans from $15/month with unlimited aliases, advanced features, and priority support.',
+  description: 'Simple pricing for email infrastructure. Plans start at $4/month for 5,000 emails; Pro is $15/month for 50,000 emails and 50 domains.',
   keywords: [
     'email pricing',
     'email API pricing',
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     title: 'Pricing - Affordable Email Infrastructure for Developers',
-    description: 'Transparent pricing for email infrastructure. Start free with 5,000 emails/month. Pro plans from $15/month with unlimited aliases, advanced features, and priority support.',
+    description: 'Simple pricing for email infrastructure. Plans start at $4/month for 5,000 emails; Pro is $15/month for 50,000 emails and 50 domains.',
     url: 'https://inbound.new/pricing',
     siteName: 'inbound',
     images: [
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Pricing - Affordable Email Infrastructure for Developers',
-    description: 'Transparent pricing for email infrastructure. Start free with 5,000 emails/month. Pro plans from $15/month.',
+    description: 'Simple pricing for email infrastructure. Plans start at $4/month for 5,000 emails; Pro is $15/month for 50,000 emails and 50 domains.',
     images: ['/twitter-image.png']
   },
   alternates: {

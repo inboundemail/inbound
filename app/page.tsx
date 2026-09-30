@@ -73,7 +73,7 @@ export default async function Page() {
 						</Link>
 						<span className="text-[#a8a29e]">or</span>
 						<a
-							href="https://github.com/inbound-org"
+							href="https://github.com/inboundemail/inbound"
 							target="_blank"
 							rel="noopener noreferrer"
 							className="text-[#1c1917] hover:underline flex items-center gap-1.5"
@@ -203,8 +203,9 @@ export default async function Page() {
 						<div>
 							<p className="text-[#1c1917]">How fast are webhooks delivered?</p>
 							<p className="text-sm text-[#52525b] mt-1">
-								Typically under 100ms from when we receive the email. We retry
-								failed webhooks with exponential backoff.
+								Right after the email is received and parsed. Failed deliveries
+								show up in your logs with the error, and you can retry them from
+								the dashboard or the API.
 							</p>
 						</div>
 						<div>

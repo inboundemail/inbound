@@ -24,24 +24,23 @@ export default function FeaturesPage() {
     },
     {
       title: "Webhooks & retries",
-      description: "Deliver events to your services with robust retry logic and delivery logs.",
+      description: "Deliver received email to your services, with delivery logs and one-click retries.",
     },
     {
       title: "Security by default",
-      description: "Protect your integration with API keys, HMAC signatures, and rate limits.",
+      description: "Protect your integration with API keys, webhook verification tokens, and rate limits.",
     },
     {
-      title: "AI-assisted workflows",
-      description: "Use AI to classify, summarize, and draft replies with full thread context.",
+      title: "Guard rules",
+      description: "Filter and route incoming email with rules, including AI-evaluated rules on Pro plans and above.",
     },
   ]
 
   const everythingIncluded = [
     "TypeScript SDK and REST API",
-    "Open/click tracking (via dub.co)",
     "Configurable endpoints and routing",
-    "Spam filtering and suppression list",
-    "Domain setup with DKIM/SPF helpers",
+    "Spam verdicts and a bounce suppression list",
+    "Guided domain and DNS setup",
     "Detailed logs and metrics",
     "Modern dashboard with search",
     "Examples and guides to get started",
@@ -91,7 +90,7 @@ export default function FeaturesPage() {
         <section className="py-12 border-t border-[#e7e5e4]">
           <div className="text-center">
             <h2 className="font-heading text-xl font-semibold tracking-tight mb-2">Build better email experiences</h2>
-            <p className="text-[#52525b] mb-6">Start free, integrate in minutes, and scale with confidence.</p>
+            <p className="text-[#52525b] mb-6">Plans start at $4/month. Integrate in minutes and scale as you grow.</p>
             <div className="flex items-center justify-center gap-3">
               <Link
                 href="/login"

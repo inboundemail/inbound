@@ -217,7 +217,7 @@ export default function RootLayout({
 								"Complete email infrastructure for modern applications. Send transactional emails, receive inbound messages, and build AI email agents with our TypeScript SDK and webhook API.",
 							sameAs: [
 								"https://twitter.com/inboundemail",
-								"https://github.com/inbound-org",
+								"https://github.com/inboundemail/inbound",
 							],
 							contactPoint: {
 								"@type": "ContactPoint",

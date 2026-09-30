@@ -54,7 +54,13 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
   "mcpServers": {
     "inbound": {
       "command": "npx",
-      "args": ["-y", "@inbound/mcp"],
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://mcp.inbound.new/mcp",
+        "--header",
+        "x-inbound-api-key:${INBOUND_API_KEY}"
+      ],
       "env": {
         "INBOUND_API_KEY": "your-api-key"
       }
@@ -64,7 +70,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 ```
 
 <Note>
-Claude Desktop uses STDIO transport and runs the MCP server locally via npx.
+Claude Desktop connects over STDIO, so `mcp-remote` bridges it to the hosted inbound MCP server.
 </Note>
 
 ## Authentication
@@ -136,32 +142,6 @@ Once configured, you can ask your AI assistant to:
 ## Available Prompts
 
 The MCP server includes a `getting-started` prompt that teaches the AI assistant how to use Inbound effectively. Most AI assistants will automatically discover and use this prompt.
-
-## Self-Hosting
-
-You can also run the MCP server locally:
-
-### Installation
-
-```bash
-npm install @inbound/mcp
-# or
-pnpm add @inbound/mcp
-# or
-bun add @inbound/mcp
-```
-
-### Running
-
-```bash
-# HTTP server (for Cursor, OpenCode, etc.)
-INBOUND_API_KEY=your-api-key npx @inbound/mcp start:http
-
-# STDIO server (for Claude Desktop)
-npx @inbound/mcp
-```
-
-The HTTP server runs on port 3002 by default. Configure your client to use `http://localhost:3002/mcp`.
 
 ## Troubleshooting
 
