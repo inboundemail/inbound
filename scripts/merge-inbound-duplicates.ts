@@ -170,7 +170,7 @@ async function mergeGroup(userId: string, key: string, totals: Totals) {
 		db
 			.update(structuredEmails)
 			.set({
-				envelopeRecipients: recipients,
+				envelopeRecipients: recipients.length > 0 ? recipients : null,
 				isRead: rows.some((row) => row.isRead),
 				updatedAt: new Date(),
 			})
