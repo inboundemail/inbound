@@ -46,7 +46,7 @@ echo "==> install + restart"
 set -euo pipefail
 cd /opt/inbound/packages
 rm -rf smtp-gateway.prev
-[ -d smtp-gateway ] && cp -a smtp-gateway smtp-gateway.prev
+[ -d smtp-gateway ] && mv smtp-gateway smtp-gateway.prev
 tar xzf /tmp/smtp-gateway.tgz -C /opt/inbound/packages/
 rm -f /tmp/smtp-gateway.tgz
 cd smtp-gateway

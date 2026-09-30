@@ -46,7 +46,7 @@ echo "==> install + restart"
 set -euo pipefail
 cd /opt/inbound/packages
 rm -rf imap-gateway.prev
-[ -d imap-gateway ] && cp -a imap-gateway imap-gateway.prev
+[ -d imap-gateway ] && mv imap-gateway imap-gateway.prev
 tar xzf /tmp/imap-gateway.tgz -C /opt/inbound/packages/
 rm -f /tmp/imap-gateway.tgz
 cd imap-gateway
