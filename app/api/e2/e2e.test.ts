@@ -1917,6 +1917,96 @@ describe("E2 API - Email E2E", () => {
 	);
 
 	it(
+		"delivers only to the real address when a display name contains angle brackets",
+		async () => {
+			const token = makeToken("redirect");
+			const subject = `E2E Recipient Redirect ${token}`;
+			const sent = await apiJson<SendEmailResponse>("/emails", {
+				method: "POST",
+				body: JSON.stringify({
+					from: E2E_SENDER_ADDRESS,
+					to: `"x <attacker@evil.example>" <${E2E_RECIPIENT_ADDRESS}>`,
+					subject,
+					text: `Redirect check ${token}`,
+				}),
+			});
+			expect(sent.response.status).toBe(200);
+
+			await sleep(1000);
+			const message = (mailServer?.messages ?? []).find((item) =>
+				item.raw.includes(subject),
+			);
+			expect(message?.recipients).toEqual([E2E_RECIPIENT_ADDRESS]);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"rejects header injection and reserved headers on send and reply",
+		async () => {
+			const base = {
+				from: E2E_SENDER_ADDRESS,
+				to: E2E_RECIPIENT_ADDRESS,
+				text: "header safety",
+			};
+			const cases: Array<Record<string, unknown>> = [
+				{ ...base, subject: "Hello\r\nBcc: attacker@evil.example" },
+				{ ...base, subject: "ok", headers: { From: "ceo@another-customer.example" } },
+				{ ...base, subject: "ok", headers: { "X-SES-CONFIGURATION-SET": "other" } },
+				{ ...base, subject: "ok", headers: { "X-Custom": "a\r\nBcc: attacker@evil.example" } },
+				{
+					...base,
+					subject: "ok",
+					attachments: [
+						{
+							filename: "a.txt\r\nContent-Type: text/html",
+							content: Buffer.from("x").toString("base64"),
+						},
+					],
+				},
+			];
+			for (const body of cases) {
+				const response = await apiRequest("/emails", {
+					method: "POST",
+					body: JSON.stringify(body),
+				});
+				expect(response.status).toBe(400);
+			}
+
+			const allowed = await apiRequest("/emails", {
+				method: "POST",
+				body: JSON.stringify({
+					...base,
+					subject: `E2E Allowed Header ${makeToken("hdr")}`,
+					headers: { "X-Entity-Ref-ID": "ref-123" },
+				}),
+			});
+			expect(allowed.status).toBe(200);
+
+			const inboundToken = makeToken("reply-safety");
+			const inboundSubject = `E2E Reply Safety ${inboundToken}`;
+			await postSyntheticInboundRecord({
+				subject: inboundSubject,
+				messageId: `${inboundToken}@example.test`,
+				recipient: E2E_RECIPIENT_ADDRESS,
+				text: "reply target",
+			});
+			const [target] = await listExactSubjectEmails("received", inboundSubject);
+			expect(target).toBeDefined();
+			const reply = await apiRequest(`/emails/${target.id}/reply`, {
+				method: "POST",
+				body: JSON.stringify({
+					from: E2E_SENDER_ADDRESS,
+					text: "reply",
+					subject: "Re\r\nBcc: attacker@evil.example",
+				}),
+			});
+			expect(reply.status).toBe(400);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
 		"returns 429 responses when burst traffic exceeds rate limits",
 		async () => {
 			let sawRateLimit = false;

@@ -31,7 +31,8 @@ export function extractDomain(email: string): string {
  */
 export function extractEmailAddress(email: string): string {
   // Handle "Name <email@domain.com>" format
-  const emailMatch = email.match(/<([^>]+)>/)
+  // The address is the last angle-bracket group; a quoted display name may contain "<...>"
+  const emailMatch = email.match(/<([^<>]+)>\s*$/)
   if (emailMatch) {
     return emailMatch[1]
   }

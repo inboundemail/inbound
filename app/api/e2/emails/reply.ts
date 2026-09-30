@@ -8,6 +8,7 @@ import {
 	checkIdempotencyKey,
 	readIdempotencyKey,
 } from "@/app/api/e2/helper/idempotency";
+import { findUnsafeHeaderInput } from "@/app/api/e2/helper/header-safety";
 import { buildSentEmailTags } from "@/app/api/e2/helper/ses-email-tags";
 import {
 	getTenantSendingInfoForDomainOrParent,
@@ -192,6 +193,12 @@ export const replyToEmail = new Elysia().post(
 
 		// Auth & rate limit validation
 		const userId = await validateAndRateLimit(request, set);
+
+		const unsafeHeaderInput = findUnsafeHeaderInput(body);
+		if (unsafeHeaderInput) {
+			set.status = 400;
+			return { error: unsafeHeaderInput };
+		}
 		console.log("✅ Authentication successful for userId:", userId);
 
 		// Check new account warmup limits

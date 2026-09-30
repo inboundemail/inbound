@@ -5,6 +5,7 @@ import { Autumn as autumn } from "autumn-js";
 import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { nanoid } from "nanoid";
+import { findUnsafeHeaderInput } from "@/app/api/e2/helper/header-safety";
 import { buildSentEmailTags } from "@/app/api/e2/helper/ses-email-tags";
 import {
 	getAgentIdentityArn,
@@ -213,6 +214,12 @@ export const sendEmail = new Elysia().post(
 			return {
 				error: "Missing required fields: from, to, and subject are required",
 			};
+		}
+
+		const unsafeHeaderInput = findUnsafeHeaderInput(body);
+		if (unsafeHeaderInput) {
+			set.status = 400;
+			return { error: unsafeHeaderInput };
 		}
 
 		// Validate email content
