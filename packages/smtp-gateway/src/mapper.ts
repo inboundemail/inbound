@@ -15,6 +15,25 @@ export interface MappedRawMessage {
 
 const FORWARDED_HEADERS = ["in-reply-to", "references"];
 
+// The API writes these values into message headers verbatim, so decoded line breaks (e.g. from
+// RFC 2047 encoded-words) would inject headers.
+function headerText(value: string): string {
+	return value.replace(/[\x00-\x1f\x7f]+/g, " ").trim();
+}
+
+// Also used inside quotes or next to <address>: the API takes the first <...> as the address.
+function phrase(value: string | undefined): string {
+	return headerText((value ?? "").replace(/["\\<>]/g, " "));
+}
+
+function mailbox(name: string | undefined, address: string): string {
+	const display = phrase(name);
+	if (!display) return address;
+	// RFC 5322 phrase: quote unless it consists of atoms only.
+	const atoms = /^[\w!#$%&'*+\-/=?^`{|}~ ]+$/.test(display);
+	return `${atoms ? display : `"${display}"`} <${address}>`;
+}
+
 function addressList(
 	value: AddressObject | AddressObject[] | undefined,
 	allowed?: Set<string>,
@@ -29,9 +48,7 @@ function addressList(
 			if (allowed && !allowed.has(normalized)) continue;
 			if (seen?.has(normalized)) continue;
 			seen?.add(normalized);
-			formatted.push(
-				entry.name ? `${entry.name} <${entry.address}>` : entry.address,
-			);
+			formatted.push(mailbox(entry.name, entry.address));
 		}
 	}
 	return formatted;
@@ -41,12 +58,14 @@ function customHeaders(parsed: ParsedMail): Record<string, string> | undefined {
 	const headers: Record<string, string> = {};
 	for (const [name, value] of parsed.headers) {
 		const lower = name.toLowerCase();
+		// SES acts on X-SES-* headers (e.g. configuration set), so never forward them.
 		const shouldForward =
-			FORWARDED_HEADERS.includes(lower) || lower.startsWith("x-");
+			FORWARDED_HEADERS.includes(lower) ||
+			(lower.startsWith("x-") && !lower.startsWith("x-ses-"));
 		if (!shouldForward) continue;
-		if (typeof value === "string") headers[name] = value;
+		if (typeof value === "string") headers[name] = headerText(value);
 		else if (Array.isArray(value) && value.every((v) => typeof v === "string"))
-			headers[name] = value.join(" ");
+			headers[name] = headerText(value.join(" "));
 	}
 	return Object.keys(headers).length > 0 ? headers : undefined;
 }
@@ -89,9 +108,7 @@ export async function mapRawMessage(
 			message: "5.1.7 Missing sender address",
 		});
 	}
-	const from = fromEntry?.name
-		? `${fromEntry.name} <${fromAddress}>`
-		: fromAddress;
+	const from = mailbox(fromEntry?.name, fromAddress);
 
 	const envelopeRecipients = new Map<string, string>();
 	for (const recipient of envelope.rcptTo) {
@@ -124,24 +141,25 @@ export async function mapRawMessage(
 	const text = parsed.text ?? (html ? undefined : "");
 
 	const attachments = (parsed.attachments ?? []).map((attachment, index) => ({
-		filename: attachment.filename ?? `attachment-${index + 1}`,
+		filename: phrase(attachment.filename) || `attachment-${index + 1}`,
 		content: attachment.content.toString("base64"),
-		content_type: attachment.contentType,
-		...(attachment.cid ? { content_id: attachment.cid } : {}),
+		content_type: phrase(attachment.contentType) || undefined,
+		...(attachment.cid ? { content_id: phrase(attachment.cid) } : {}),
 	}));
+	const headers = customHeaders(parsed);
 
 	return {
 		fromAddress: fromAddress.toLowerCase(),
 		payload: {
 			from,
 			to,
-			subject: parsed.subject ?? "",
+			subject: headerText(parsed.subject ?? ""),
 			...(html !== undefined ? { html } : {}),
 			...(text !== undefined ? { text } : {}),
 			...(cc.length > 0 ? { cc } : {}),
 			...(bcc.length > 0 ? { bcc } : {}),
 			...(replyTo.length > 0 ? { reply_to: replyTo } : {}),
-			...(customHeaders(parsed) ? { headers: customHeaders(parsed) } : {}),
+			...(headers ? { headers } : {}),
 			...(attachments.length > 0 ? { attachments } : {}),
 		},
 	};

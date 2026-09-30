@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import type { Socket } from "node:net";
+import { createServer as createTlsServer } from "node:tls";
 import {
 	SMTPServer,
+	type SMTPServerAddress,
 	type SMTPServerAuthentication,
 	type SMTPServerAuthenticationResponse,
 	type SMTPServerDataStream,
@@ -15,6 +18,54 @@ import {
 } from "./api-client.ts";
 import type { GatewayConfig } from "./config.ts";
 import { idempotencyKeyFor, mapRawMessage } from "./mapper.ts";
+
+interface ConnectionInternals {
+	secure: boolean;
+	hostNameAppearsAs: string | false;
+	openingCommand: string | false;
+	_server: { options: { allowInsecureAuth?: boolean; authMethods: string[] } };
+	_resetSession(): void;
+}
+type Handler = (this: ConnectionInternals, ...args: unknown[]) => void;
+const connectionPrototype: Record<string, Handler> = createRequire(
+	import.meta.url,
+)("smtp-server/lib/smtp-connection.js").SMTPConnection.prototype;
+
+// smtp-server offers AUTH before STARTTLS even when it will refuse it (538), inviting clients to
+// send AUTH PLAIN credentials in cleartext. Hide it until TLS unless insecure auth is allowed.
+const handleEhlo = connectionPrototype.handler_EHLO;
+connectionPrototype.handler_EHLO = function (command, callback) {
+	const options = this._server.options;
+	if (this.secure || options.allowInsecureAuth) {
+		return handleEhlo.call(this, command, callback);
+	}
+	const authMethods = options.authMethods;
+	const restore = () => {
+		options.authMethods = authMethods;
+	};
+	options.authMethods = [];
+	try {
+		handleEhlo.call(this, command, () => {
+			restore();
+			(callback as () => void)();
+		});
+	} finally {
+		restore();
+	}
+};
+
+// RFC 3207 4.2: after STARTTLS, discard the pre-TLS EHLO so the client must greet again.
+const upgrade = connectionPrototype.upgrade;
+connectionPrototype.upgrade = function (callback, secureCallback) {
+	return upgrade.call(this, callback, () => {
+		this.hostNameAppearsAs = false;
+		this.openingCommand = false;
+		this._resetSession();
+		if (typeof secureCallback === "function") secureCallback();
+	});
+};
+
+type TlsOptions = { key: Buffer; cert: Buffer; minVersion: "TLSv1.2" };
 
 interface AuthenticatedUser {
 	apiKey: string;
@@ -40,7 +91,8 @@ export class SmtpGateway {
 	private client: InboundApiClient;
 	private authFailures = new Map<string, FailureRecord>();
 	private successfulAuth = new Map<string, number>();
-	private tlsHandshakeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	private connectionsByIp = new Map<string, number>();
+	private countedSessions = new WeakSet<SMTPServerSession>();
 	private sessionDataStreams = new Map<string, SMTPServerDataStream>();
 	private servers: SMTPServer[] = [];
 	private activeData = 0;
@@ -67,15 +119,13 @@ export class SmtpGateway {
 			);
 		}
 		if (this.config.starttlsPort > 0) {
-			this.listen(
-				new SMTPServer({ ...this.baseOptions(tls), secure: false }),
-				this.config.starttlsPort,
-				"STARTTLS",
-			);
+			const smtp = new SMTPServer({ ...this.baseOptions(tls), secure: false });
+			smtp.server.on("connection", destroyAfterEnd);
+			this.listen(smtp, this.config.starttlsPort, "STARTTLS");
 		}
-		if (this.config.implicitTlsPort > 0) {
+		if (tls && this.config.implicitTlsPort > 0) {
 			this.listen(
-				new SMTPServer({ ...this.baseOptions(tls), secure: true }),
+				this.implicitTlsServer(tls),
 				this.config.implicitTlsPort,
 				"implicit TLS",
 			);
@@ -93,11 +143,7 @@ export class SmtpGateway {
 		);
 	}
 
-	private tlsOptions(): {
-		key: Buffer;
-		cert: Buffer;
-		minVersion: "TLSv1.2";
-	} | null {
+	private tlsOptions(): TlsOptions | null {
 		if (Boolean(this.config.tlsKeyPath) !== Boolean(this.config.tlsCertPath)) {
 			throw new Error(
 				"SMTP_TLS_KEY_PATH and SMTP_TLS_CERT_PATH must both be configured",
@@ -111,9 +157,7 @@ export class SmtpGateway {
 		};
 	}
 
-	private baseOptions(
-		tls: { key: Buffer; cert: Buffer; minVersion: "TLSv1.2" } | null,
-	): SMTPServerOptions {
+	private baseOptions(tls: TlsOptions | null): SMTPServerOptions {
 		return {
 			name: this.config.hostname,
 			banner: "inbound SMTP gateway",
@@ -121,21 +165,27 @@ export class SmtpGateway {
 			authMethods: ["PLAIN", "LOGIN"],
 			allowInsecureAuth: this.config.allowInsecureAuth,
 			disabledCommands: tls ? [] : ["STARTTLS"],
+			// Addresses are relayed to SES, which does not support SMTPUTF8 (RFC 6531).
+			hideSMTPUTF8: true,
+			disableReverseLookup: true,
 			socketTimeout: this.config.socketTimeoutMs,
 			maxClients: this.config.maxConnections,
 			...(tls ?? {}),
-			onSecure: (socket, session, callback) => {
-				const key = this.handshakeKey(
-					socket.remoteAddress ?? session.remoteAddress,
-					socket.remotePort ?? session.remotePort,
-					socket.localPort ?? session.localPort,
-				);
-				const timer = this.tlsHandshakeTimers.get(key);
-				if (timer) {
-					clearTimeout(timer);
-					this.tlsHandshakeTimers.delete(key);
+			onConnect: (session, callback) => {
+				const ip = session.remoteAddress;
+				const count = this.connectionsByIp.get(ip) ?? 0;
+				if (count >= this.config.maxConnectionsPerIp) {
+					callback(
+						smtpError(421, "4.7.0 Too many connections from your address"),
+					);
+					return;
 				}
-				socket.setTimeout(this.config.socketTimeoutMs);
+				this.connectionsByIp.set(ip, count + 1);
+				this.countedSessions.add(session);
+				callback();
+			},
+			onSecure: (socket, _session, callback) => {
+				destroyAfterEnd(socket);
 				callback();
 			},
 			onAuth: (auth, session, callback) => {
@@ -152,7 +202,9 @@ export class SmtpGateway {
 							message: "5.7.0 Authentication required",
 						});
 					}
+					assertSupportedParameters(address, ["SIZE", "BODY", "AUTH"]);
 					if (address.address) {
+						assertAsciiAddress(address.address);
 						this.assertSenderAllowed(user.identity, address.address);
 					}
 					callback();
@@ -161,6 +213,13 @@ export class SmtpGateway {
 				}
 			},
 			onRcptTo: (address, session, callback) => {
+				try {
+					assertSupportedParameters(address, []);
+					assertAsciiAddress(address.address);
+				} catch (error: unknown) {
+					callback(toSmtpError(error));
+					return;
+				}
 				const duplicate = session.envelope.rcptTo.some(
 					(recipient) =>
 						recipient.address.toLowerCase() === address.address.toLowerCase(),
@@ -170,14 +229,7 @@ export class SmtpGateway {
 					session.envelope.rcptTo.length >=
 						Math.min(this.config.maxRecipients, 50)
 				) {
-					callback(
-						toSmtpError(
-							new SmtpRelayError({
-								responseCode: 452,
-								message: "4.5.3 Too many recipients",
-							}),
-						),
-					);
+					callback(smtpError(452, "4.5.3 Too many recipients"));
 					return;
 				}
 				callback();
@@ -202,32 +254,39 @@ export class SmtpGateway {
 					this.sessionDataStreams.delete(session.id);
 					stream.destroy();
 				}
-				const key = this.handshakeKey(
-					session.remoteAddress,
-					session.remotePort,
-					session.localPort,
-				);
-				const timer = this.tlsHandshakeTimers.get(key);
-				if (timer) {
-					clearTimeout(timer);
-					this.tlsHandshakeTimers.delete(key);
+				if (this.countedSessions.delete(session)) {
+					const count =
+						(this.connectionsByIp.get(session.remoteAddress) ?? 1) - 1;
+					if (count > 0) this.connectionsByIp.set(session.remoteAddress, count);
+					else this.connectionsByIp.delete(session.remoteAddress);
 				}
 				callback?.();
 			},
 		};
 	}
 
+	// smtp-server's own implicit TLS has no handshake deadline, and destroying the raw socket it
+	// wraps crashes Node. Terminate TLS in a tls.Server, which enforces handshakeTimeout itself,
+	// and hand secured sockets to smtp-server.
+	private implicitTlsServer(tls: TlsOptions): SMTPServer {
+		const smtp = new SMTPServer({
+			...this.baseOptions(tls),
+			secure: true,
+			secured: true,
+		});
+		const accept = smtp.server;
+		smtp.server = createTlsServer(
+			{ ...tls, handshakeTimeout: this.config.tlsHandshakeTimeoutMs },
+			(socket) => {
+				destroyAfterEnd(socket);
+				accept.emit("connection", socket);
+			},
+		).on("tlsClientError", (_error, socket) => socket.destroy());
+		return smtp;
+	}
+
 	private listen(server: SMTPServer, port: number, label: string): void {
 		server.server.maxConnections = this.config.maxConnections;
-		if (server.options.secure) {
-			server.server.on("connection", (socket) => {
-				this.startHandshakeTimer(socket);
-			});
-		} else if (!server.options.disabledCommands?.includes("STARTTLS")) {
-			server.server.on("connection", (socket) => {
-				this.monitorStartTls(socket);
-			});
-		}
 		server.on("error", (error) => {
 			console.error(`[smtp-gateway] ${label} listener error`, error);
 		});
@@ -237,55 +296,6 @@ export class SmtpGateway {
 			);
 		});
 		this.servers.push(server);
-	}
-
-	private monitorStartTls(socket: Socket): void {
-		let command = "";
-		let overflow = false;
-		const onData = (chunk: Buffer | string) => {
-			const bytes = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
-			for (const byte of bytes) {
-				if (byte === 10) {
-					if (!overflow && command.trim().toUpperCase() === "STARTTLS") {
-						socket.removeListener("data", onData);
-						this.startHandshakeTimer(socket);
-						return;
-					}
-					command = "";
-					overflow = false;
-					continue;
-				}
-				if (command.length < 512) {
-					command += String.fromCharCode(byte);
-				} else {
-					overflow = true;
-				}
-			}
-		};
-		socket.on("data", onData);
-		socket.once("close", () => socket.removeListener("data", onData));
-	}
-
-	private startHandshakeTimer(socket: Socket): void {
-		const key = this.handshakeKey(
-			socket.remoteAddress ?? "",
-			socket.remotePort ?? 0,
-			socket.localPort ?? 0,
-		);
-		const previous = this.tlsHandshakeTimers.get(key);
-		if (previous) clearTimeout(previous);
-		const timer = setTimeout(() => {
-			this.tlsHandshakeTimers.delete(key);
-			socket.destroy();
-		}, this.config.tlsHandshakeTimeoutMs);
-		timer.unref();
-		this.tlsHandshakeTimers.set(key, timer);
-		socket.once("close", () => {
-			if (this.tlsHandshakeTimers.get(key) === timer) {
-				clearTimeout(timer);
-				this.tlsHandshakeTimers.delete(key);
-			}
-		});
 	}
 
 	private async handleAuth(
@@ -301,9 +311,17 @@ export class SmtpGateway {
 		const ip = session.remoteAddress;
 		const username = (auth.username ?? "").trim().toLowerCase();
 		const password = (auth.password ?? "").trim();
+		// RFC 4616: acting as a different authorization identity is not supported.
+		const authzid = ((auth as { authzid?: string }).authzid ?? "")
+			.trim()
+			.toLowerCase();
 		this.assertNotThrottled(ip, username);
 
-		if (!username.includes("@") || password.length === 0) {
+		if (
+			!username.includes("@") ||
+			password.length === 0 ||
+			(authzid && authzid !== username)
+		) {
 			this.recordFailure(ip, username);
 			throw new SmtpRelayError({
 				responseCode: 535,
@@ -557,14 +575,6 @@ export class SmtpGateway {
 		}
 	}
 
-	private handshakeKey(
-		remoteAddress: string,
-		remotePort: number,
-		localPort: number,
-	): string {
-		return `${remoteAddress.replace(/^::ffff:/, "")}\0${remotePort}\0${localPort}`;
-	}
-
 	private authKey(ip: string, username: string): string {
 		return `user:${ip}\0${username}`;
 	}
@@ -598,6 +608,47 @@ function collectStream(
 			}
 		});
 	});
+}
+
+// smtp-server only half-closes (end()) on QUIT, timeouts and errors; a peer that never closes its
+// side would hold a connection slot forever.
+function destroyAfterEnd(socket: Socket): void {
+	socket.once("finish", () => {
+		setTimeout(() => socket.destroy(), 5_000).unref();
+	});
+}
+
+function assertSupportedParameters(
+	address: SMTPServerAddress,
+	supported: string[],
+): void {
+	const args = (address.args || {}) as Record<string, string | true>;
+	if (Object.keys(args).some((key) => !supported.includes(key))) {
+		throw new SmtpRelayError({
+			responseCode: 555,
+			message: "5.5.4 Unsupported parameter",
+		});
+	}
+	if (args.SIZE !== undefined && !/^\d+$/.test(String(args.SIZE))) {
+		throw new SmtpRelayError({
+			responseCode: 501,
+			message: "5.5.4 Invalid SIZE parameter",
+		});
+	}
+}
+
+function assertAsciiAddress(address: string): void {
+	// RFC 6531 3.5: without SMTPUTF8, non-ASCII mailbox names are not permitted.
+	if (/[^\x21-\x7e]/.test(address.slice(0, address.lastIndexOf("@")))) {
+		throw new SmtpRelayError({
+			responseCode: 553,
+			message: "5.6.7 Non-ASCII addresses are not supported",
+		});
+	}
+}
+
+function smtpError(responseCode: number, message: string) {
+	return toSmtpError(new SmtpRelayError({ responseCode, message }));
 }
 
 function toSmtpError(error: unknown): Error & { responseCode?: number } {

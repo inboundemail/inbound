@@ -24,12 +24,14 @@ const transporter = nodemailer.createTransport({
 
 ## How it works
 
-1. AUTH PLAIN/LOGIN (TLS required) — the username is the managed login address and the password is its managed credential. Both are verified through `POST /mailboxes/authenticate-smtp`; successful credentials retain their authorized sending identity or scoped domains.
+1. AUTH PLAIN/LOGIN (TLS required; not advertised before STARTTLS) — the username is the managed login address and the password is its managed credential. Both are verified through `POST /mailboxes/authenticate-smtp`; successful credentials retain their authorized sending identity or scoped domains.
 2. MAIL FROM / RCPT TO — sender authorization and the per-message recipient limit are enforced before DATA. Accepted envelope recipients are the sole delivery authority; MIME To/Cc addresses outside that envelope are discarded and remaining envelope recipients stay Bcc.
 3. DATA — raw MIME is parsed (mailparser), mapped to the send-API JSON shape, and POSTed with the credential as the Bearer token and an idempotency key derived from its stable credential ID, message, normalized sender, and normalized recipient set.
-4. API errors map to SMTP responses: 429 → 451 (retry), 413 → 552, other 4xx → 550, 5xx/network timeouts → 451. Domain-ownership, blocklist, ban, and billing enforcement all happen in the API.
+4. API errors map to SMTP responses: 409/429 → 451 (retry), 413 → 552, other 4xx → 550, 5xx/network timeouts → 451; an unreachable auth backend → 454. Messages are rebuilt by the API, so header values are stripped of line breaks, display names of `<>"\`, and `X-SES-*` headers are dropped. Domain-ownership, blocklist, ban, and billing enforcement all happen in the API.
 
 AUTH failures are throttled per login/IP pair and at a higher aggregate per-IP threshold; recently successful users remain exempt from the aggregate threshold.
+
+Advertised extensions: PIPELINING, 8BITMIME, SIZE, STARTTLS (587), AUTH (after TLS). SMTPUTF8, DSN and ENHANCEDSTATUSCODES are not offered; unsupported MAIL/RCPT parameters are rejected with 555 and non-ASCII mailboxes with 553.
 
 ## Configuration (env)
 
@@ -41,7 +43,7 @@ AUTH failures are throttled per login/IP pair and at a higher aggregate per-IP t
 | `SMTP_STARTTLS_PORT` | `587` | `0` disables |
 | `SMTP_IMPLICIT_TLS_PORT` | `465` | `0` disables; always requires both TLS paths |
 | `SMTP_TLS_KEY_PATH` / `SMTP_TLS_CERT_PATH` | — | Both paths are required unless insecure development mode is explicitly enabled; minimum TLS 1.2 |
-| `SMTP_TLS_HANDSHAKE_TIMEOUT_MS` | `10000` | Handshake timeout for implicit TLS and accepted STARTTLS upgrades |
+| `SMTP_TLS_HANDSHAKE_TIMEOUT_MS` | `10000` | Implicit TLS handshake timeout (STARTTLS upgrades are bounded by the socket timeout) |
 | `SMTP_MAX_MESSAGE_BYTES` | `26214400` (25 MB) | Maximum accepted DATA size |
 | `SMTP_MAX_RECIPIENTS` | `50` | Maximum distinct accepted envelope recipients; cannot exceed the SES limit of 50 |
 | `SMTP_ALLOW_INSECURE_AUTH` | `false` | Explicit plaintext local-development override only |
@@ -51,6 +53,7 @@ AUTH failures are throttled per login/IP pair and at a higher aggregate per-IP t
 | `SMTP_AUTH_REQUEST_TIMEOUT_MS` / `SMTP_SEND_REQUEST_TIMEOUT_MS` | `10000` / `30000` | Independent upstream authentication and send timeouts |
 | `SMTP_SOCKET_TIMEOUT_MS` | `60000` | SMTP socket inactivity timeout |
 | `SMTP_MAX_CONNECTIONS` | `50` | Maximum simultaneous TCP and SMTP connections per listener |
+| `SMTP_MAX_CONNECTIONS_PER_IP` | `10` | Maximum simultaneous SMTP sessions per client address (across both listeners) |
 | `SMTP_MAX_CONCURRENT_DATA` / `SMTP_MAX_DATA_QUEUE` | `2` / `20` | Concurrent message-processing slots and pending queue limit |
 
 ## Local dev
