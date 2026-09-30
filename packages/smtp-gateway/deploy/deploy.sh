@@ -5,7 +5,6 @@ HOST="${SMTPGW_HOST:-18.221.244.100}"
 SSH_KEY="${SMTPGW_SSH_KEY:-$HOME/.ssh/inbound-smtp-gateway.pem}"
 SSH_USER="${SMTPGW_SSH_USER:-ubuntu}"
 SMTP_HOSTNAME="${SMTPGW_SMTP_HOSTNAME:-smtp.inboundemail.com}"
-REMOTE_DIR="/opt/inbound/packages"
 
 PKG_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SSH=(ssh -i "$SSH_KEY" -o ConnectTimeout=10 "$SSH_USER@$HOST")
@@ -14,13 +13,33 @@ echo "==> typecheck"
 (cd "$PKG_DIR" && bunx tsc --noEmit)
 
 echo "==> package"
-TARBALL="$(mktemp -t smtp-gateway).tgz"
+TARBALL="$(mktemp "${TMPDIR:-/tmp}/smtp-gateway.XXXXXX")"
 COPYFILE_DISABLE=1 tar czf "$TARBALL" --no-xattrs -C "$PKG_DIR/.." \
   --exclude node_modules --exclude '.DS_Store' smtp-gateway
 
 echo "==> upload to $HOST"
 scp -q -i "$SSH_KEY" "$TARBALL" "$SSH_USER@$HOST:/tmp/smtp-gateway.tgz"
 rm -f "$TARBALL"
+
+deployed=0
+rollback() {
+  echo "==> deploy failed, restoring the previous version"
+  "${SSH[@]}" sudo bash -s << 'REMOTE'
+set -euo pipefail
+cd /opt/inbound/packages
+[ -d smtp-gateway.prev ] || { echo "no previous version to restore"; exit 1; }
+rm -rf smtp-gateway
+mv smtp-gateway.prev smtp-gateway
+if ! cmp -s smtp-gateway/deploy/smtp-gateway.service /etc/systemd/system/smtp-gateway.service; then
+  cp smtp-gateway/deploy/smtp-gateway.service /etc/systemd/system/
+  systemctl daemon-reload
+fi
+systemctl restart smtp-gateway
+sleep 2
+systemctl is-active smtp-gateway
+REMOTE
+}
+trap '[ "$deployed" = 1 ] || rollback' EXIT
 
 echo "==> install + restart"
 "${SSH[@]}" sudo bash -s << 'REMOTE'
@@ -61,4 +80,5 @@ for check in "smtp://$SMTP_HOSTNAME:587 --ssl-reqd" "smtps://$SMTP_HOSTNAME:465"
   fi
 done
 
+deployed=1
 echo "==> deployed"

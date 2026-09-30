@@ -13,13 +13,33 @@ echo "==> typecheck"
 (cd "$PKG_DIR" && bunx tsc --noEmit)
 
 echo "==> package"
-TARBALL="$(mktemp -t imap-gateway).tgz"
+TARBALL="$(mktemp "${TMPDIR:-/tmp}/imap-gateway.XXXXXX")"
 COPYFILE_DISABLE=1 tar czf "$TARBALL" --no-xattrs -C "$PKG_DIR/.." \
   --exclude node_modules --exclude '.DS_Store' imap-gateway
 
 echo "==> upload to $HOST"
 scp -q -i "$SSH_KEY" "$TARBALL" "$SSH_USER@$HOST:/tmp/imap-gateway.tgz"
 rm -f "$TARBALL"
+
+deployed=0
+rollback() {
+  echo "==> deploy failed, restoring the previous version"
+  "${SSH[@]}" sudo bash -s << 'REMOTE'
+set -euo pipefail
+cd /opt/inbound/packages
+[ -d imap-gateway.prev ] || { echo "no previous version to restore"; exit 1; }
+rm -rf imap-gateway
+mv imap-gateway.prev imap-gateway
+if ! cmp -s imap-gateway/deploy/imap-gateway.service /etc/systemd/system/imap-gateway.service; then
+  cp imap-gateway/deploy/imap-gateway.service /etc/systemd/system/
+  systemctl daemon-reload
+fi
+systemctl restart imap-gateway
+sleep 2
+systemctl is-active imap-gateway
+REMOTE
+}
+trap '[ "$deployed" = 1 ] || rollback' EXIT
 
 echo "==> install + restart"
 "${SSH[@]}" sudo bash -s << 'REMOTE'
@@ -55,4 +75,5 @@ else
   exit 1
 fi
 
+deployed=1
 echo "==> deployed"
