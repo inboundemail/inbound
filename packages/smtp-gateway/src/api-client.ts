@@ -44,7 +44,12 @@ export function smtpFailureForApiStatus(
 	status: number,
 	apiMessage: string | null,
 ): SmtpFailure {
-	const detail = apiMessage ? `: ${apiMessage}` : "";
+	// API messages end up in an SMTP reply line: strip line breaks and bound their length.
+	const safeMessage = apiMessage
+		?.replace(/[\x00-\x1f\x7f]+/g, " ")
+		.trim()
+		.slice(0, 200);
+	const detail = safeMessage ? `: ${safeMessage}` : "";
 	if (status === 401 || status === 403) {
 		return {
 			responseCode: 550,
@@ -57,10 +62,10 @@ export function smtpFailureForApiStatus(
 			message: "5.3.4 Message size exceeds fixed maximum message size",
 		};
 	}
-	if (status === 429) {
+	if (status === 409 || status === 429) {
 		return {
 			responseCode: 451,
-			message: "4.7.0 Rate limit exceeded, try again later",
+			message: "4.7.0 Rate limited or already in progress, try again later",
 		};
 	}
 	if (status >= 400 && status < 500) {
@@ -107,7 +112,7 @@ export class InboundApiClient {
 		loginAddress: string,
 		password: string,
 	): Promise<SmtpIdentity | null> {
-		const failure = "4.3.0 Authentication backend unavailable, try again later";
+		const failure = "4.7.0 Authentication backend unavailable, try again later";
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
 		};
@@ -122,11 +127,13 @@ export class InboundApiClient {
 				body: JSON.stringify({ loginAddress, password }),
 			},
 			this.config.authRequestTimeoutMs,
-			failure,
+			{ responseCode: 454, message: failure },
 		);
 		if (response.ok) return (await response.json()) as SmtpIdentity;
-		if (response.status === 401 || response.status === 403) return null;
-		throw new SmtpRelayError({ responseCode: 451, message: failure });
+		// 400 means malformed (e.g. over-long) credentials; 403 is a gateway-secret misconfiguration,
+		// which must not look like, or be throttled as, a wrong password.
+		if (response.status === 400 || response.status === 401) return null;
+		throw new SmtpRelayError({ responseCode: 454, message: failure });
 	}
 
 	async sendEmail(
@@ -146,7 +153,10 @@ export class InboundApiClient {
 				body: JSON.stringify(payload),
 			},
 			this.config.sendRequestTimeoutMs,
-			"4.3.0 Temporary upstream failure, try again later",
+			{
+				responseCode: 451,
+				message: "4.3.0 Temporary upstream failure, try again later",
+			},
 		);
 		if (!response.ok) {
 			const apiMessage = await readErrorMessage(response);
@@ -161,7 +171,7 @@ export class InboundApiClient {
 		url: string,
 		options: RequestInit,
 		timeoutMs: number,
-		failure: string,
+		failure: SmtpFailure,
 	): Promise<Response> {
 		try {
 			return await fetch(url, {
@@ -169,7 +179,7 @@ export class InboundApiClient {
 				signal: AbortSignal.timeout(timeoutMs),
 			});
 		} catch {
-			throw new SmtpRelayError({ responseCode: 451, message: failure });
+			throw new SmtpRelayError(failure);
 		}
 	}
 }

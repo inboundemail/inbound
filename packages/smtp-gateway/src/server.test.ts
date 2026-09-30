@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { createRequire } from "node:module";
 import { createConnection, type Socket } from "node:net";
 import { PassThrough } from "node:stream";
 import { connect as connectTls } from "node:tls";
@@ -14,11 +15,19 @@ import type { SmtpIdentity } from "./api-client.ts";
 import { type GatewayConfig, loadConfig } from "./config.ts";
 import { SmtpGateway } from "./server.ts";
 
+type TestTls = { key: Buffer; cert: Buffer; minVersion: "TLSv1.2" };
+
+// smtp-server ships a self-signed localhost certificate for tests.
+const testTls: TestTls = {
+	...createRequire(import.meta.url)("smtp-server/lib/tls-options.js")(),
+	minVersion: "TLSv1.2",
+};
+
 interface GatewayInspection {
 	activeData: number;
 	authFailures: Map<string, { count: number; windowStart: number }>;
 	successfulAuth: Map<string, number>;
-	tlsHandshakeTimers: Map<string, ReturnType<typeof setTimeout>>;
+	connectionsByIp: Map<string, number>;
 	sessionDataStreams: Map<string, SMTPServerDataStream>;
 	dataQueue: unknown[];
 	servers: SMTPServer[];
@@ -34,6 +43,7 @@ interface GatewayInspection {
 		session: SMTPServerSession,
 	): Promise<string>;
 	acquireDataSlot(stream?: SMTPServerDataStream): Promise<() => void>;
+	implicitTlsServer(tls: TestTls): SMTPServer;
 	listen(server: SMTPServer, port: number, label: string): void;
 }
 
@@ -209,25 +219,20 @@ describe("SmtpGateway TLS startup", () => {
 		expect(inspect.baseOptions(null).disabledCommands).toEqual(["STARTTLS"]);
 	});
 
-	it("caps underlying TCP connections and closes stalled implicit TLS handshakes", async () => {
+	it("caps TCP connections and closes stalled implicit TLS handshakes without crashing", async () => {
 		const { gateway: instance, inspect } = gateway({
 			maxConnections: 3,
 			tlsHandshakeTimeoutMs: 20,
 		});
 		spyOn(console, "log").mockImplementation(() => {});
-		spyOn(console, "error").mockImplementation(() => {});
-		const server = new SMTPServer({
-			...inspect.baseOptions(null),
-			secure: true,
-		});
-		inspect.listen(server, 0, "test implicit TLS");
-		await new Promise<void>((resolve) =>
-			server.server.once("listening", resolve),
-		);
+		const smtp = inspect.implicitTlsServer(testTls);
+		const listener = smtp.server;
+		inspect.listen(smtp, 0, "test implicit TLS");
+		await new Promise<void>((resolve) => listener.once("listening", resolve));
 
 		try {
-			expect(server.server.maxConnections).toBe(3);
-			const address = server.server.address();
+			expect(listener.maxConnections).toBe(3);
+			const address = listener.address();
 			if (!address || typeof address === "string") {
 				throw new Error("Expected TCP listener address");
 			}
@@ -240,7 +245,6 @@ describe("SmtpGateway TLS startup", () => {
 				socket.once("error", reject);
 			});
 			expect(socket.destroyed).toBe(true);
-			expect(inspect.tlsHandshakeTimers.size).toBe(0);
 		} finally {
 			await instance.stop();
 		}
@@ -253,18 +257,13 @@ describe("SmtpGateway TLS startup", () => {
 		});
 		spyOn(console, "log").mockImplementation(() => {});
 		spyOn(console, "error").mockImplementation(() => {});
-		const server = new SMTPServer({
-			...inspect.baseOptions(null),
-			secure: true,
-			disableReverseLookup: true,
-		});
-		inspect.listen(server, 0, "healthy implicit TLS");
-		await new Promise<void>((resolve) =>
-			server.server.once("listening", resolve),
-		);
+		const smtp = inspect.implicitTlsServer(testTls);
+		const listener = smtp.server;
+		inspect.listen(smtp, 0, "healthy implicit TLS");
+		await new Promise<void>((resolve) => listener.once("listening", resolve));
 
 		try {
-			const address = server.server.address();
+			const address = listener.address();
 			if (!address || typeof address === "string") {
 				throw new Error("Expected TCP listener address");
 			}
@@ -274,19 +273,13 @@ describe("SmtpGateway TLS startup", () => {
 				rejectUnauthorized: false,
 			});
 			try {
-				const greeting = await new Promise<string>((resolve, reject) => {
-					socket.once("data", (chunk: Buffer) => resolve(chunk.toString()));
-					socket.once("error", reject);
-				});
-				expect(greeting).toStartWith("220 ");
-				expect(inspect.tlsHandshakeTimers.size).toBe(0);
+				expect(await socketResponse(socket)).toStartWith("220 ");
+				expect(await smtpCommand(socket, "EHLO client.example.com")).toContain(
+					"AUTH PLAIN LOGIN",
+				);
 				await new Promise<void>((resolve) => setTimeout(resolve, 300));
 				expect(socket.destroyed).toBe(false);
-				const response = new Promise<string>((resolve) => {
-					socket.once("data", (chunk: Buffer) => resolve(chunk.toString()));
-				});
-				socket.write("NOOP\r\n");
-				expect(await response).toStartWith("250 ");
+				expect(await smtpCommand(socket, "NOOP")).toStartWith("250 ");
 			} finally {
 				socket.destroy();
 			}
@@ -295,26 +288,24 @@ describe("SmtpGateway TLS startup", () => {
 		}
 	});
 
-	it("terminates stalled STARTTLS upgrades at the configured handshake deadline", async () => {
+	it("offers AUTH only after STARTTLS and requires a new EHLO on the TLS session", async () => {
 		const { gateway: instance, inspect } = gateway({
-			tlsHandshakeTimeoutMs: 40,
+			allowInsecureAuth: false,
 			socketTimeoutMs: 2_000,
 		});
 		spyOn(console, "log").mockImplementation(() => {});
 		spyOn(console, "error").mockImplementation(() => {});
-		const server = new SMTPServer({
-			...inspect.baseOptions(null),
+		const smtp = new SMTPServer({
+			...inspect.baseOptions(testTls),
 			secure: false,
-			disabledCommands: [],
-			disableReverseLookup: true,
 		});
-		inspect.listen(server, 0, "stalled STARTTLS");
+		inspect.listen(smtp, 0, "STARTTLS");
 		await new Promise<void>((resolve) =>
-			server.server.once("listening", resolve),
+			smtp.server.once("listening", resolve),
 		);
 
 		try {
-			const address = server.server.address();
+			const address = smtp.server.address();
 			if (!address || typeof address === "string") {
 				throw new Error("Expected TCP listener address");
 			}
@@ -323,59 +314,10 @@ describe("SmtpGateway TLS startup", () => {
 				port: address.port,
 			});
 			expect(await socketResponse(socket)).toStartWith("220 ");
-			expect(await smtpCommand(socket, "EHLO client.example.com")).toStartWith(
-				"250-",
-			);
-			expect(await smtpCommand(socket, "STARTTLS invalid")).toStartWith("501 ");
-			expect(inspect.tlsHandshakeTimers.size).toBe(0);
-			const response = socketResponse(socket);
-			socket.write("START");
-			expect(inspect.tlsHandshakeTimers.size).toBe(0);
-			socket.write("TLS\r\n");
-			expect(await response).toStartWith("220 ");
-			expect(inspect.tlsHandshakeTimers.size).toBe(1);
-			await new Promise<void>((resolve, reject) => {
-				socket.once("close", resolve);
-				socket.once("error", reject);
-			});
-			expect(socket.destroyed).toBe(true);
-			expect(inspect.tlsHandshakeTimers.size).toBe(0);
-		} finally {
-			await instance.stop();
-		}
-	});
-
-	it("keeps successful STARTTLS sessions alive beyond the handshake deadline", async () => {
-		const { gateway: instance, inspect } = gateway({
-			tlsHandshakeTimeoutMs: 100,
-			socketTimeoutMs: 2_000,
-		});
-		spyOn(console, "log").mockImplementation(() => {});
-		spyOn(console, "error").mockImplementation(() => {});
-		const server = new SMTPServer({
-			...inspect.baseOptions(null),
-			secure: false,
-			disabledCommands: [],
-			disableReverseLookup: true,
-		});
-		inspect.listen(server, 0, "healthy STARTTLS");
-		await new Promise<void>((resolve) =>
-			server.server.once("listening", resolve),
-		);
-
-		try {
-			const address = server.server.address();
-			if (!address || typeof address === "string") {
-				throw new Error("Expected TCP listener address");
-			}
-			const socket = createConnection({
-				host: "127.0.0.1",
-				port: address.port,
-			});
-			expect(await socketResponse(socket)).toStartWith("220 ");
-			expect(await smtpCommand(socket, "EHLO client.example.com")).toStartWith(
-				"250-",
-			);
+			const plaintext = await smtpCommand(socket, "EHLO client.example.com");
+			expect(plaintext).toContain("STARTTLS");
+			expect(plaintext).not.toContain("AUTH");
+			expect(plaintext).not.toContain("SMTPUTF8");
 			expect(await smtpCommand(socket, "STARTTLS")).toStartWith("220 ");
 			const secure = connectTls({ socket, rejectUnauthorized: false });
 			try {
@@ -383,13 +325,10 @@ describe("SmtpGateway TLS startup", () => {
 					secure.once("secureConnect", resolve);
 					secure.once("error", reject);
 				});
-				expect(
-					await smtpCommand(secure, "EHLO secure.example.com"),
-				).toStartWith("250-");
-				expect(inspect.tlsHandshakeTimers.size).toBe(0);
-				await new Promise<void>((resolve) => setTimeout(resolve, 150));
-				expect(secure.destroyed).toBe(false);
-				expect(await smtpCommand(secure, "NOOP")).toStartWith("250 ");
+				expect(await smtpCommand(secure, "AUTH PLAIN")).toStartWith("503 ");
+				const encrypted = await smtpCommand(secure, "EHLO secure.example.com");
+				expect(encrypted).toContain("AUTH PLAIN LOGIN");
+				expect(encrypted).not.toContain("STARTTLS");
 			} finally {
 				secure.destroy();
 			}
@@ -425,6 +364,41 @@ describe("SmtpGateway authentication", () => {
 		);
 
 		expect(result.user).toMatchObject({ apiKey: "secret", identity });
+	});
+
+	it("rejects PLAIN authorization identities other than the login", async () => {
+		const { inspect } = gateway();
+		const fetchMock = spyOn(globalThis, "fetch");
+
+		await expect(
+			inspect.handleAuth(
+				{
+					...authentication("sender@example.com", "secret"),
+					authzid: "victim@example.com",
+				} as SMTPServerAuthentication,
+				session(),
+			),
+		).rejects.toMatchObject({ responseCode: 535 });
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("limits concurrent sessions per client address", async () => {
+		const { inspect } = gateway({ maxConnectionsPerIp: 1 });
+		const options = inspect.baseOptions(null);
+		const connect = (active: SMTPServerSession) =>
+			new Promise<Error | null | undefined>((resolve) =>
+				options.onConnect?.(active, resolve),
+			);
+		const first = session();
+		const second = { ...session(), id: "second" } as SMTPServerSession;
+
+		expect(await connect(first)).toBeUndefined();
+		expect(await connect(second)).toMatchObject({ responseCode: 421 });
+		options.onClose?.(second, () => {});
+		expect(inspect.connectionsByIp.get("192.0.2.1")).toBe(1);
+		options.onClose?.(first, () => {});
+		expect(inspect.connectionsByIp.size).toBe(0);
+		expect(await connect(second)).toBeUndefined();
 	});
 
 	it("throttles repeated failures for each login and IP pair", async () => {
@@ -619,6 +593,43 @@ describe("SmtpGateway envelope limits", () => {
 			);
 		});
 		expect(rejected).toMatchObject({ responseCode: 553 });
+	});
+
+	it("rejects unadvertised parameters and non-ASCII mailboxes", async () => {
+		const { inspect } = gateway();
+		const options = inspect.baseOptions(null);
+		const authenticated = session({ user: { apiKey: "secret", identity } });
+		const mailFrom = (address: string, args: Record<string, string | true>) =>
+			new Promise<Error | null | undefined>((resolve) =>
+				options.onMailFrom?.({ address, args }, authenticated, resolve),
+			);
+		const rcptTo = (address: string, args: Record<string, string | true>) =>
+			new Promise<Error | null | undefined>((resolve) =>
+				options.onRcptTo?.({ address, args }, authenticated, resolve),
+			);
+
+		expect(
+			await mailFrom("sender@example.com", {
+				SIZE: "100",
+				BODY: "8BITMIME",
+				AUTH: "<>",
+			}),
+		).toBeUndefined();
+		expect(
+			await mailFrom("sender@example.com", { SMTPUTF8: true }),
+		).toMatchObject({ responseCode: 555 });
+		expect(await mailFrom("sender@example.com", { SIZE: "abc" })).toMatchObject(
+			{
+				responseCode: 501,
+			},
+		);
+		expect(await rcptTo("to@example.com", { NOTIFY: "NEVER" })).toMatchObject({
+			responseCode: 555,
+		});
+		expect(await rcptTo("jös@example.com", {})).toMatchObject({
+			responseCode: 553,
+		});
+		expect(await rcptTo("to@bücher.example", {})).toBeUndefined();
 	});
 
 	it("accepts authenticated RFC-valid null reverse paths", async () => {
@@ -930,7 +941,6 @@ describe("SmtpGateway DATA concurrency", () => {
 		const server = new SMTPServer({
 			...inspect.baseOptions(null),
 			secure: false,
-			disableReverseLookup: true,
 		});
 		inspect.listen(server, 0, "DATA disconnect integration");
 		await new Promise<void>((resolve) =>

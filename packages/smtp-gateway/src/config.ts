@@ -19,6 +19,7 @@ export interface GatewayConfig {
 	sendRequestTimeoutMs: number;
 	socketTimeoutMs: number;
 	maxConnections: number;
+	maxConnectionsPerIp: number;
 	maxConcurrentData: number;
 	maxDataQueue: number;
 }
@@ -70,6 +71,7 @@ export function loadConfig(): GatewayConfig {
 		sendRequestTimeoutMs: envNumber("SMTP_SEND_REQUEST_TIMEOUT_MS", 30_000),
 		socketTimeoutMs: envNumber("SMTP_SOCKET_TIMEOUT_MS", 60_000),
 		maxConnections: envNumber("SMTP_MAX_CONNECTIONS", 50),
+		maxConnectionsPerIp: envNumber("SMTP_MAX_CONNECTIONS_PER_IP", 10),
 		maxConcurrentData: envNumber("SMTP_MAX_CONCURRENT_DATA", 2),
 		maxDataQueue: envNumber("SMTP_MAX_DATA_QUEUE", 20, 0),
 	};

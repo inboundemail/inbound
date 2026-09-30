@@ -52,6 +52,16 @@ describe("smtpFailureForApiStatus", () => {
 			"invalid",
 		);
 		expect(smtpFailureForApiStatus(500, null).responseCode).toBe(451);
+		expect(smtpFailureForApiStatus(409, "in progress").responseCode).toBe(451);
+	});
+
+	it("keeps upstream messages on a single bounded SMTP reply line", () => {
+		const { message } = smtpFailureForApiStatus(
+			422,
+			`Bad\r\n250 2.0.0 OK${"x".repeat(500)}`,
+		);
+		expect(message).not.toMatch(/[\r\n]/);
+		expect(message.length).toBeLessThan(250);
 	});
 });
 
@@ -115,14 +125,24 @@ describe("InboundApiClient.authenticateSmtp", () => {
 		).toBeNull();
 	});
 
-	it("maps authentication backend failures to temporary SMTP failures", async () => {
+	it("treats credentials the API rejects as malformed as invalid", async () => {
 		spyOn(globalThis, "fetch").mockResolvedValue(
-			new Response(null, { status: 503 }),
+			new Response(null, { status: 400 }),
 		);
+		expect(
+			await client().authenticateSmtp("sender@example.com", "x".repeat(2000)),
+		).toBeNull();
+	});
 
-		await expect(
-			client().authenticateSmtp("sender@example.com", "secret"),
-		).rejects.toMatchObject({ responseCode: 451 });
+	it("maps authentication backend and gateway-secret failures to RFC 4954 temporary failures", async () => {
+		for (const status of [403, 503]) {
+			spyOn(globalThis, "fetch").mockResolvedValue(
+				new Response(null, { status }),
+			);
+			await expect(
+				client().authenticateSmtp("sender@example.com", "secret"),
+			).rejects.toMatchObject({ responseCode: 454 });
+		}
 	});
 
 	it("aborts authentication requests at their configured timeout", async () => {
@@ -133,7 +153,7 @@ describe("InboundApiClient.authenticateSmtp", () => {
 				"sender@example.com",
 				"secret",
 			),
-		).rejects.toMatchObject({ responseCode: 451 });
+		).rejects.toMatchObject({ responseCode: 454 });
 	});
 });
 

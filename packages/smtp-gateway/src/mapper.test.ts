@@ -149,6 +149,32 @@ describe("mapRawMessage", () => {
 			"in-reply-to": "<parent@example.com>",
 		});
 	});
+
+	it("keeps decoded header values from injecting headers or redirecting recipients", async () => {
+		const mapped = await mapRawMessage(
+			message([
+				"From: =?UTF-8?Q?Evil=0D=0ABcc=3A_leak@example.com?= <sender@example.com>",
+				'To: "Name <attacker@example.net>" <to@example.com>, "Doe, John" <cc@example.com>',
+				"Subject: =?UTF-8?Q?Hi=0D=0AContent-Type=3A_text/html?=",
+				"X-Custom: value",
+				"X-SES-CONFIGURATION-SET: other-tenant",
+			]),
+			{
+				mailFrom: "sender@example.com",
+				rcptTo: ["to@example.com", "cc@example.com"],
+			},
+		);
+
+		expect(mapped.payload.from).toBe(
+			'"Evil Bcc: leak@example.com" <sender@example.com>',
+		);
+		expect(mapped.payload.to).toEqual([
+			'"Name  attacker@example.net" <to@example.com>',
+			'"Doe, John" <cc@example.com>',
+		]);
+		expect(mapped.payload.subject).toBe("Hi Content-Type: text/html");
+		expect(mapped.payload.headers).toEqual({ "x-custom": "value" });
+	});
 });
 
 describe("idempotencyKeyFor", () => {
