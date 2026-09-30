@@ -125,7 +125,6 @@
     "recharts": "^2.15.3",
     "sonare": "^0.0.1",
     "sonner": "^2.0.3",
-    "svix": "^1.81.0",
     "tailwind-merge": "^3.3.0",
     "tailwindcss-animate": "^1.0.7",
     "undici": "^7",

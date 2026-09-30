@@ -62,12 +62,6 @@ export const navigationConfig: NavigationConfig = {
 			icon: StrokeProjectingCap,
 			description: "Manage webhook and email forwarding endpoints",
 		},
-		// {
-		//   title: "Events",
-		//   url: "/events",
-		//   icon: Webhook,
-		//   description: "View bounces, complaints, and delivery events"
-		// },
 		{
 			title: "API Keys",
 			url: "/api-keys",
