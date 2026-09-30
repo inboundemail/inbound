@@ -5,6 +5,7 @@ const metrics = require('../../lib/metrics');
 const imapHandler = require('./handler/imap-handler');
 const MAX_MESSAGE_SIZE = 1 * 1024 * 1024;
 const MAX_BAD_COMMANDS = 50;
+const MAX_COMMAND_OVERHEAD = 64 * 1024;
 
 const commands = new Map([
     /*eslint-disable global-require*/
@@ -18,7 +19,6 @@ const commands = new Map([
     ['AUTHENTICATE PLAIN', require('./commands/authenticate-plain')],
     ['NAMESPACE', require('./commands/namespace')],
     ['LIST', require('./commands/list')],
-    ['XLIST', require('./commands/list')],
     ['LSUB', require('./commands/lsub')],
     ['SUBSCRIBE', require('./commands/subscribe')],
     ['UNSUBSCRIBE', require('./commands/unsubscribe')],
@@ -160,11 +160,15 @@ class IMAPCommand {
             }
 
             let maxAllowed = Number(this.connection._server.options.maxMessage) || MAX_MESSAGE_SIZE;
+            let largeLiteralAllowed = this.command === 'APPEND' && this.connection.state !== 'Not Authenticated';
+            let commandBytes = this.payload.length + this.literals.reduce((total, literal) => total + literal.length, 0) + command.expecting;
             if (
-                // Allow large literals for selected commands only
-                (!['APPEND'].includes(this.command) && command.expecting > 1024) ||
+                // Allow large literals for authenticated APPEND only
+                (!largeLiteralAllowed && command.expecting > 1024) ||
                 // Deny all literals bigger than maxMessage
-                command.expecting > maxAllowed
+                command.expecting > maxAllowed ||
+                // Bound the total size of a command built from many literals
+                commandBytes > MAX_COMMAND_OVERHEAD + (largeLiteralAllowed ? maxAllowed : 0)
             ) {
                 this.connection.logger.debug(
                     {

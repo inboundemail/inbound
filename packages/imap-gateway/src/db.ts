@@ -58,6 +58,30 @@ interface MailStoreOptions {
 
 export class AppendQuotaError extends Error {}
 
+function visibleToScopes(
+	sql: postgres.Sql | postgres.TransactionSql,
+	scopes: MailboxScope[],
+) {
+	const addresses = scopes
+		.filter((scope) => scope.type === "address" && scope.address)
+		.map((scope) => scope.address?.toLowerCase() ?? "");
+	const domains = scopes
+		.filter((scope) => scope.type === "domain")
+		.map((scope) => scope.domain.toLowerCase());
+	return sql`(se.guard_blocked IS NOT TRUE AND coalesce(
+		lower(se.recipient) = ANY(${addresses})
+		OR (
+			split_part(lower(se.recipient), '@', 2) = ANY(${domains})
+			AND split_part(lower(se.recipient), '@', 1) <> 'dmarc'
+		)
+		OR coalesce(se.envelope_recipients, '{}') && ${addresses}::text[]
+		OR EXISTS (
+			SELECT 1 FROM unnest(se.envelope_recipients) AS envelope(address)
+			WHERE split_part(envelope.address, '@', 2) = ANY(${domains})
+			  AND split_part(envelope.address, '@', 1) <> 'dmarc'
+		), FALSE))`;
+}
+
 function parseFlags(raw: string): string[] {
 	try {
 		const parsed = JSON.parse(raw) as unknown;
@@ -141,12 +165,6 @@ export class MailStore {
 		principal: AuthenticatedMailbox,
 	): Promise<MailboxRow[]> {
 		const scopeIds = principal.scopes.map((scope) => scope.id);
-		const addresses = principal.scopes
-			.filter((scope) => scope.type === "address" && scope.address)
-			.map((scope) => scope.address?.toLowerCase() ?? "");
-		const domains = principal.scopes
-			.filter((scope) => scope.type === "domain")
-			.map((scope) => scope.domain.toLowerCase());
 		await this.sql.begin(async (sql) => {
 			const stale = await sql<{ id: string }[]>`
 				SELECT id FROM imap_mailboxes
@@ -171,16 +189,7 @@ export class MailStore {
 				  AND mb.user_id = ${principal.userId}
 				  AND mm.raw_source = 'structured'
 				  AND se.id = mm.structured_email_id
-				  AND (
-					se.guard_blocked IS TRUE
-					OR NOT (
-						lower(se.recipient) = ANY(${addresses})
-						OR (
-							split_part(lower(se.recipient), '@', 2) = ANY(${domains})
-							AND split_part(lower(se.recipient), '@', 1) <> 'dmarc'
-						)
-					)
-				  )`;
+				  AND NOT ${visibleToScopes(sql, principal.scopes)}`;
 		});
 		const result: MailboxRow[] = [];
 		for (const scope of principal.scopes) {
@@ -278,10 +287,13 @@ export class MailStore {
 		newPath: string,
 	): Promise<boolean> {
 		const rows = await this.sql<{ id: string }[]>`
-				UPDATE imap_mailboxes SET path = ${newPath}, updated_at = now()
+				UPDATE imap_mailboxes
+				SET path = ${newPath} || substr(path, char_length(${path}) + 1),
+				    updated_at = now()
 				WHERE user_id = ${principal.userId}
 				  AND credential_id = ${principal.credentialId}
-				  AND path = ${path}
+				  AND (path = ${path} OR left(path, char_length(${path}) + 1) = ${`${path}/`})
+				  AND scope_id IS NULL
 				RETURNING id`;
 		return rows.length > 0;
 	}
@@ -428,14 +440,14 @@ export class MailStore {
 		});
 	}
 
-	async deleteMessages(mailboxId: string, uids: number[]): Promise<void> {
-		await this.sql.begin(async (sql) => {
+	async deleteMessages(mailboxId: string, uids: number[]): Promise<number[]> {
+		return this.sql.begin(async (sql) => {
 			const deleted = await sql<
-				{ structured_email_id: string; raw_source: string }[]
+				{ uid: number; structured_email_id: string; raw_source: string }[]
 			>`
 				DELETE FROM imap_mailbox_messages
 				WHERE mailbox_id = ${mailboxId} AND uid = ANY(${uids})
-				RETURNING structured_email_id, raw_source`;
+				RETURNING uid, structured_email_id, raw_source`;
 			const appendedIds = deleted
 				.filter((row) => row.raw_source === "appended")
 				.map((row) => row.structured_email_id);
@@ -448,6 +460,7 @@ export class MailStore {
 						WHERE mm.raw_source = 'appended'
 						  AND mm.structured_email_id = am.id)`;
 			}
+			return deleted.map((row) => row.uid).sort((a, b) => a - b);
 		});
 	}
 
@@ -461,67 +474,22 @@ export class MailStore {
 		if (mailbox.path !== "INBOX" && !scope) return 0;
 
 		const scopes = scope ? [scope] : principal.scopes;
-		const addresses = scopes
-			.filter((item) => item.type === "address" && item.address)
-			.map((item) => item.address?.toLowerCase() ?? "");
-		const domains = scopes
-			.filter((item) => item.type === "domain")
-			.map((item) => item.domain.toLowerCase());
-		if (addresses.length === 0 && domains.length === 0) return 0;
+		if (scopes.length === 0) return 0;
 
 		return this.sql.begin(async (sql) => {
 			const locked = await sql<{ uid_next: number; modseq: number }[]>`
 				SELECT uid_next, modseq FROM imap_mailboxes WHERE id = ${mailbox.id} FOR UPDATE`;
 			const uidNext = locked[0]?.uid_next ?? 1;
 			const modseq = locked[0]?.modseq ?? 0;
-			const inserted = principal.credentialId
-				? await sql<{ uid: number }[]>`
-					WITH new_msgs AS (
-						SELECT se.id AS seid, se.created_at,
-						       octet_length(se.raw_content) AS size,
-						       row_number() OVER (ORDER BY se.created_at ASC, se.id ASC) AS rn
-						FROM structured_emails se
-						WHERE se.user_id = ${principal.userId}
-						  AND se.guard_blocked IS NOT TRUE
-						  AND se.raw_content IS NOT NULL
-						  AND (
-							lower(se.recipient) = ANY(${addresses})
-							OR (
-								split_part(lower(se.recipient), '@', 2) = ANY(${domains})
-								AND split_part(lower(se.recipient), '@', 1) <> 'dmarc'
-							)
-							OR se.envelope_recipients && ${addresses}::text[]
-							OR EXISTS (
-								SELECT 1 FROM unnest(se.envelope_recipients) AS envelope(address)
-								WHERE split_part(envelope.address, '@', 2) = ANY(${domains})
-								  AND split_part(envelope.address, '@', 1) <> 'dmarc'
-							)
-						  )
-						  AND NOT EXISTS (
-							SELECT 1 FROM imap_mailbox_messages mm
-							WHERE mm.mailbox_id = ${mailbox.id}
-							  AND mm.structured_email_id = se.id)
-					)
-					INSERT INTO imap_mailbox_messages
-						(id, mailbox_id, structured_email_id, uid, internal_date, size, modseq)
-					SELECT ${mailbox.id} || ':' || (${uidNext} + rn - 1),
-					       ${mailbox.id}, seid, ${uidNext} + rn - 1, created_at, size,
-					       ${modseq} + rn
-					FROM new_msgs
-					RETURNING uid`
-				: await sql<{ uid: number }[]>`
+			const inserted = await sql<{ uid: number }[]>`
 				WITH new_msgs AS (
 					SELECT se.id AS seid, se.created_at,
 					       octet_length(se.raw_content) AS size,
 					       row_number() OVER (ORDER BY se.created_at ASC, se.id ASC) AS rn
 					FROM structured_emails se
 					WHERE se.user_id = ${principal.userId}
-					  AND se.guard_blocked IS NOT TRUE
-					  AND (
-						lower(se.recipient) = ${principal.loginAddress.toLowerCase()}
-						OR ${principal.loginAddress.toLowerCase()} = ANY(se.envelope_recipients)
-					  )
 					  AND se.raw_content IS NOT NULL
+					  AND ${visibleToScopes(sql, scopes)}
 					  AND NOT EXISTS (
 						SELECT 1 FROM imap_mailbox_messages mm
 						WHERE mm.mailbox_id = ${mailbox.id}
@@ -569,6 +537,8 @@ export class MailStore {
 			FROM imap_mailbox_messages mm
 			LEFT JOIN structured_emails se
 				ON mm.raw_source = 'structured' AND se.id = mm.structured_email_id
+			LEFT JOIN imap_appended_messages am
+				ON mm.raw_source = 'appended' AND am.id = mm.structured_email_id
 			WHERE mm.mailbox_id = ${mailboxId} AND (${where})
 			ORDER BY mm.uid ASC`;
 		return rows.map((row) => row.uid);
@@ -669,33 +639,12 @@ export class MailStore {
 			return rows[0]?.raw_content ?? null;
 		}
 
-		const addresses = principal.scopes
-			.filter((scope) => scope.type === "address" && scope.address)
-			.map((scope) => scope.address?.toLowerCase() ?? "");
-		const domains = principal.scopes
-			.filter((scope) => scope.type === "domain")
-			.map((scope) => scope.domain.toLowerCase());
-		const rows = principal.credentialId
-			? await this.sql<{ raw_content: string | null }[]>`
-				SELECT raw_content FROM structured_emails
-				WHERE id = ${messageId}
-				  AND user_id = ${principal.userId}
-				  AND guard_blocked IS NOT TRUE
-				  AND (
-					lower(recipient) = ANY(${addresses})
-					OR (
-						split_part(lower(recipient), '@', 2) = ANY(${domains})
-						AND split_part(lower(recipient), '@', 1) <> 'dmarc'
-					)
-				  )
-				LIMIT 1`
-			: await this.sql<{ raw_content: string | null }[]>`
-				SELECT raw_content FROM structured_emails
-				WHERE id = ${messageId}
-				  AND user_id = ${principal.userId}
-				  AND guard_blocked IS NOT TRUE
-				  AND lower(recipient) = ${principal.loginAddress.toLowerCase()}
-				LIMIT 1`;
+		const rows = await this.sql<{ raw_content: string | null }[]>`
+			SELECT se.raw_content FROM structured_emails se
+			WHERE se.id = ${messageId}
+			  AND se.user_id = ${principal.userId}
+			  AND ${visibleToScopes(this.sql, principal.scopes)}
+			LIMIT 1`;
 		return rows[0]?.raw_content ?? null;
 	}
 
@@ -704,25 +653,32 @@ export class MailStore {
 		uids: number[],
 		action: FlagAction,
 		flags: string[],
-	): Promise<number[]> {
+	): Promise<Array<{ uid: number; flags: string[] }>> {
 		const rows = await this.listMessages(mailboxId, uids);
 		const mailbox = await this.sql<
-			{ credential_id: string | null }[]
-		>`SELECT credential_id FROM imap_mailboxes WHERE id = ${mailboxId}`;
-		const modified: number[] = [];
+			{ credential_id: string | null; mirrored: boolean }[]
+		>`SELECT credential_id, (path = 'INBOX' OR scope_id IS NOT NULL) AS mirrored
+			FROM imap_mailboxes WHERE id = ${mailboxId}`;
+		const result: Array<{ uid: number; flags: string[] }> = [];
 		for (const row of rows) {
 			let next: string[];
 			if (action === "set") next = [...flags];
 			else if (action === "add") next = [...new Set([...row.flags, ...flags])];
 			else next = row.flags.filter((flag) => !flags.includes(flag));
+			result.push({ uid: row.uid, flags: next });
 			if (JSON.stringify(next) === JSON.stringify(row.flags)) continue;
-			if (mailbox[0]?.credential_id && row.rawSource === "structured") {
+			if (
+				mailbox[0]?.credential_id &&
+				mailbox[0].mirrored &&
+				row.rawSource === "structured"
+			) {
 				await this.sql`
 					UPDATE imap_mailbox_messages mm
 					SET flags = ${JSON.stringify(next)}
 					FROM imap_mailboxes mb
 					WHERE mm.mailbox_id = mb.id
 					  AND mb.credential_id = ${mailbox[0].credential_id}
+					  AND (mb.path = 'INBOX' OR mb.scope_id IS NOT NULL)
 					  AND mm.raw_source = ${row.rawSource}
 					  AND mm.structured_email_id = ${row.structuredEmailId}`;
 			} else {
@@ -731,9 +687,8 @@ export class MailStore {
 					SET flags = ${JSON.stringify(next)}
 					WHERE mailbox_id = ${mailboxId} AND uid = ${row.uid}`;
 			}
-			modified.push(row.uid);
 		}
-		return modified;
+		return result;
 	}
 
 	async addFlag(mailboxId: string, uid: number, flag: string): Promise<void> {
@@ -773,7 +728,7 @@ export class MailStore {
 						WHERE mm.raw_source = 'appended'
 						  AND mm.structured_email_id = am.id)`;
 			}
-			return deleted.map((row) => row.uid);
+			return deleted.map((row) => row.uid).sort((a, b) => a - b);
 		});
 	}
 

@@ -256,6 +256,32 @@ describe("IMAP protocol hardening", () => {
 		expect(response).toContain("APPENDLIMIT=512");
 	});
 
+	it("hides plaintext SASL mechanisms until STARTTLS has completed", () => {
+		let response = "";
+		imapTools.sendCapabilityResponse({
+			secure: false,
+			state: "Not Authenticated",
+			_server: { options: {} },
+			send: (value: string) => {
+				response = value;
+			},
+		});
+		expect(response).toContain("STARTTLS");
+		expect(response).toContain("LOGINDISABLED");
+		expect(response).not.toContain("AUTH=PLAIN");
+		expect(response).not.toContain("SASL-IR");
+	});
+
+	it("rejects zero in sequence sets", () => {
+		const tools = imapTools as unknown as {
+			validateSequence: (range: string) => boolean;
+		};
+		expect(tools.validateSequence("1:*")).toBe(true);
+		expect(tools.validateSequence("0")).toBe(false);
+		expect(tools.validateSequence("0:*")).toBe(false);
+		expect(tools.validateSequence("1,0")).toBe(false);
+	});
+
 	it("ignores ENABLE CONDSTORE while preserving ENABLE UTF8=ACCEPT", () => {
 		const enable =
 			require("../vendor/imap-core/lib/commands/enable.js") as CommandModule;

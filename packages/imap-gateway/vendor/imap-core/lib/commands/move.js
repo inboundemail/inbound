@@ -98,15 +98,27 @@ module.exports = {
                 let code =
                     typeof success === 'string'
                         ? success.toUpperCase()
-                        : 'COPYUID ' +
-                          info.uidValidity +
-                          ' ' +
-                          imapTools.packMessageRange(info.sourceUid) +
-                          ' ' +
-                          imapTools.packMessageRange(info.destinationUid);
+                        : info && info.sourceUid && info.sourceUid.length
+                          ? 'COPYUID ' +
+                            info.uidValidity +
+                            ' ' +
+                            imapTools.packMessageRange(info.sourceUid) +
+                            ' ' +
+                            imapTools.packMessageRange(info.destinationUid)
+                          : false;
+
+                if (success === true) {
+                    // RFC 6851: COPYUID goes in an untagged OK sent before the EXPUNGE responses
+                    if (code) {
+                        this.send('* OK [' + code + '] Moved UIDs');
+                    }
+                    return callback(null, {
+                        response: 'OK'
+                    });
+                }
 
                 callback(null, {
-                    response: success === true ? 'OK' : 'NO',
+                    response: 'NO',
                     code
                 });
             }

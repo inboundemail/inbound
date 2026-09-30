@@ -204,7 +204,7 @@ module.exports.searchMapping = {
  * @returns {Boolean} True if the string looks like a sequence range
  */
 module.exports.validateSequence = function (range) {
-    return !!(range.length && /^(\d+|\*)(:\d+|:\*)?(,(\d+|\*)(:\d+|:\*)?)*$/.test(range));
+    return !!(range.length && /^([1-9]\d*|\*)(:[1-9]\d*|:\*)?(,([1-9]\d*|\*)(:[1-9]\d*|:\*)?)*$/.test(range));
 };
 
 module.exports.normalizeMailbox = function (mailbox, utf7Encoded) {
@@ -765,26 +765,29 @@ module.exports.getQueryResponse = function (query, message, options) {
  */
 module.exports.sendCapabilityResponse = connection => {
     let capabilities = [];
+    let loginDisabled = false;
 
     if (!connection.secure) {
         if (!connection._server.options.disableSTARTTLS) {
             capabilities.push('STARTTLS');
             if (!connection._server.options.ignoreSTARTTLS) {
                 capabilities.push('LOGINDISABLED');
+                loginDisabled = true;
             }
         }
     }
 
     if (connection.state === 'Not Authenticated') {
-        capabilities.push('AUTH=PLAIN');
-        capabilities.push('SASL-IR');
+        if (!loginDisabled) {
+            capabilities.push('AUTH=PLAIN');
+            capabilities.push('SASL-IR');
+        }
         capabilities.push('ENABLE');
 
         capabilities.push('ID');
         capabilities.push('UNSELECT');
         capabilities.push('IDLE');
         capabilities.push('NAMESPACE');
-        capabilities.push('XLIST');
         capabilities.push('CHILDREN');
 
         // Advertise extended capabilities pre-auth (matches Gmail/Yahoo/Outlook behavior)
@@ -803,7 +806,6 @@ module.exports.sendCapabilityResponse = connection => {
         capabilities.push('UNSELECT');
         capabilities.push('IDLE');
         capabilities.push('NAMESPACE');
-        capabilities.push('XLIST');
         capabilities.push('CHILDREN');
 
         capabilities.push('SPECIAL-USE');

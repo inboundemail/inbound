@@ -26,7 +26,8 @@ module.exports = {
         if (!this.secure && !this._server.options.disableSTARTTLS && !this._server.options.ignoreSTARTTLS) {
             // Only allow authentication using TLS
             return callback(null, {
-                response: 'BAD',
+                response: 'NO',
+                code: 'PRIVACYREQUIRED',
                 message: 'Run STARTTLS first'
             });
         }
@@ -65,6 +66,14 @@ function authenticate(connection, token, callback) {
 
     let username = (data[1] || '').toString().trim();
     let password = (data[2] || '').toString().trim();
+
+    if (data[0] && data[0] !== username) {
+        return callback(null, {
+            response: 'NO',
+            code: 'AUTHORIZATIONFAILED',
+            message: 'Authorization identity not permitted'
+        });
+    }
 
     // Do auth
     connection._server.onAuth(
