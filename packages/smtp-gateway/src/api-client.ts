@@ -111,6 +111,7 @@ export class InboundApiClient {
 	async authenticateSmtp(
 		loginAddress: string,
 		password: string,
+		clientIp: string,
 	): Promise<SmtpIdentity | null> {
 		const failure = "4.7.0 Authentication backend unavailable, try again later";
 		const headers: Record<string, string> = {
@@ -118,6 +119,7 @@ export class InboundApiClient {
 		};
 		if (this.config.gatewayAuthSecret) {
 			headers["x-inbound-gateway-secret"] = this.config.gatewayAuthSecret;
+			headers["x-inbound-client-ip"] = clientIp;
 		}
 		const response = await this.request(
 			`${this.config.apiBaseUrl}/mailboxes/authenticate-smtp`,

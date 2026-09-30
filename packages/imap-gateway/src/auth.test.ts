@@ -41,6 +41,7 @@ describe("ApiAuth", () => {
 		const result = await new ApiAuth(config).authenticate(
 			"user@example.com",
 			"password",
+			"203.0.113.7",
 		);
 
 		expect(result).toBeNull();
@@ -56,9 +57,10 @@ describe("ApiAuth", () => {
 			},
 		) as unknown as typeof fetch;
 
-		await new ApiAuth(config).authenticate("user@example.com", "password");
+		await new ApiAuth(config).authenticate("user@example.com", "password", "203.0.113.7");
 
 		expect(headers?.["x-inbound-gateway-secret"]).toBeUndefined();
+		expect(headers?.["x-inbound-client-ip"]).toBeUndefined();
 	});
 
 	it("sends the shared gateway secret when configured", async () => {
@@ -73,9 +75,10 @@ describe("ApiAuth", () => {
 		await new ApiAuth({
 			...config,
 			gatewayAuthSecret: "gateway-secret",
-		}).authenticate("user@example.com", "password");
+		}).authenticate("user@example.com", "password", "203.0.113.7");
 
 		expect(headers?.["x-inbound-gateway-secret"]).toBe("gateway-secret");
+		expect(headers?.["x-inbound-client-ip"]).toBe("203.0.113.7");
 	});
 
 	it("aborts an authentication request that exceeds its configured timeout", async () => {
@@ -89,7 +92,7 @@ describe("ApiAuth", () => {
 		) as unknown as typeof fetch;
 
 		await expect(
-			new ApiAuth(config).authenticate("user@example.com", "password"),
+			new ApiAuth(config).authenticate("user@example.com", "password", "203.0.113.7"),
 		).rejects.toThrow();
 	});
 });

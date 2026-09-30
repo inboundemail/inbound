@@ -72,7 +72,7 @@ describe("InboundApiClient.authenticateSmtp", () => {
 		);
 
 		expect(
-			await client().authenticateSmtp("sender@example.com", "secret"),
+			await client().authenticateSmtp("sender@example.com", "secret", "203.0.113.7"),
 		).toEqual(identity);
 		const [url, options] = fetchMock.mock.calls[0] ?? [];
 		expect(url).toBe("https://example.com/api/e2/mailboxes/authenticate-smtp");
@@ -94,10 +94,14 @@ describe("InboundApiClient.authenticateSmtp", () => {
 		await client({ gatewayAuthSecret: null }).authenticateSmtp(
 			"sender@example.com",
 			"secret",
+			"203.0.113.7",
 		);
 		const [, options] = fetchMock.mock.calls[0] ?? [];
 		expect(
 			(options?.headers as Record<string, string>)["x-inbound-gateway-secret"],
+		).toBeUndefined();
+		expect(
+			(options?.headers as Record<string, string>)["x-inbound-client-ip"],
 		).toBeUndefined();
 	});
 
@@ -109,11 +113,15 @@ describe("InboundApiClient.authenticateSmtp", () => {
 		await client({ gatewayAuthSecret: "gateway-secret" }).authenticateSmtp(
 			"sender@example.com",
 			"secret",
+			"203.0.113.7",
 		);
 		const [, options] = fetchMock.mock.calls[0] ?? [];
 		expect(
 			(options?.headers as Record<string, string>)["x-inbound-gateway-secret"],
 		).toBe("gateway-secret");
+		expect(
+			(options?.headers as Record<string, string>)["x-inbound-client-ip"],
+		).toBe("203.0.113.7");
 	});
 
 	it("treats unauthorized managed credentials as invalid", async () => {
@@ -121,7 +129,7 @@ describe("InboundApiClient.authenticateSmtp", () => {
 			new Response(null, { status: 401 }),
 		);
 		expect(
-			await client().authenticateSmtp("sender@example.com", "bad"),
+			await client().authenticateSmtp("sender@example.com", "bad", "203.0.113.7"),
 		).toBeNull();
 	});
 
@@ -130,7 +138,7 @@ describe("InboundApiClient.authenticateSmtp", () => {
 			new Response(null, { status: 400 }),
 		);
 		expect(
-			await client().authenticateSmtp("sender@example.com", "x".repeat(2000)),
+			await client().authenticateSmtp("sender@example.com", "x".repeat(2000), "203.0.113.7"),
 		).toBeNull();
 	});
 
@@ -140,7 +148,7 @@ describe("InboundApiClient.authenticateSmtp", () => {
 				new Response(null, { status }),
 			);
 			await expect(
-				client().authenticateSmtp("sender@example.com", "secret"),
+				client().authenticateSmtp("sender@example.com", "secret", "203.0.113.7"),
 			).rejects.toMatchObject({ responseCode: 454 });
 		}
 	});
@@ -152,6 +160,7 @@ describe("InboundApiClient.authenticateSmtp", () => {
 			client({ authRequestTimeoutMs: 5 }).authenticateSmtp(
 				"sender@example.com",
 				"secret",
+				"203.0.113.7",
 			),
 		).rejects.toMatchObject({ responseCode: 454 });
 	});

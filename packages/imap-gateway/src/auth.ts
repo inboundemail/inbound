@@ -26,12 +26,14 @@ export class ApiAuth {
 	async authenticate(
 		address: string,
 		password: string,
+		clientIp: string,
 	): Promise<AuthenticatedMailbox | null> {
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
 		};
 		if (this.config.gatewayAuthSecret) {
 			headers["x-inbound-gateway-secret"] = this.config.gatewayAuthSecret;
+			headers["x-inbound-client-ip"] = clientIp;
 		}
 		const response = await fetch(
 			`${this.config.apiBaseUrl}/mailboxes/authenticate`,
