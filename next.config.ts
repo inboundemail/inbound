@@ -128,6 +128,10 @@ const nextConfig: NextConfig = {
 			{ source: "/vercel-oss-program", destination: "/", permanent: true },
 			{ source: "/changelog", destination: "/blog", permanent: true },
 			{ source: "/changelog/:slug*", destination: "/blog", permanent: true },
+			// Removed dashboard pages
+			{ source: "/webhooks", destination: "/endpoints", permanent: true },
+			{ source: "/settings/billing", destination: "/settings", permanent: true },
+			{ source: "/onboarding-demo", destination: "/logs", permanent: true },
 			// Disable v1 API - return 410 Gone
 			{
 				source: "/api/v1/:path*",

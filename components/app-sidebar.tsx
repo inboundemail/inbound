@@ -302,15 +302,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 							<SidebarMenuItem>
 								<FeedbackDialog />
 							</SidebarMenuItem>
-
-							<SidebarMenuItem>
-								<SidebarMenuButton tooltip="Show Onboarding" asChild>
-									<Link href="/onboarding-demo">
-										<Envelope2 className="h-4 w-4" />
-										<span>Show Onboarding</span>
-									</Link>
-								</SidebarMenuButton>
-							</SidebarMenuItem>
 						</SidebarMenu>
 					</SidebarGroupContent>
 				</SidebarGroup>
