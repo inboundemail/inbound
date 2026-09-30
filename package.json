@@ -18,7 +18,7 @@
     "test:e2": "bun test app/api/e2/**/*.test.ts",
     "test:e2:domains": "bun test app/api/e2/domains/domains.test.ts",
     "test:e2e": "bun test app/api/e2/e2e.test.ts",
-    "test:unit": "bun test app/api/e2/domains/list-query.test.ts app/api/e2/emails app/api/e2/helper app/api/e2/lib app/api/e2/mailboxes app/api/inbound features lib",
+    "test:unit": "bun test app/api/e2/domains/list-query.test.ts app/api/e2/emails/list.test.ts app/api/e2/helper app/api/e2/lib app/api/e2/mailboxes app/api/inbound features lib && bun test app/api/e2/emails/retry.test.ts",
     "start": "next start",
     "lint": "biome lint .",
     "lint:noany": "biome lint . --diagnostic-level=error",
