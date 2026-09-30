@@ -1,0 +1,4 @@
+export const AGENT_PROMPT =
+	"Set up Inbound (https://inbound.new) email for this project. There are two ways to use it — ask me which one fits, then proceed. 1) Agent-controlled email: you operate a mailbox yourself. Install the inboundctl CLI and the inboundctl skill from the inboundemail/inbound repo (npx skills add inboundemail/inbound), run `inboundctl login` to start the browser device flow, and after I authenticate help me create a mailbox scope so you can read, triage, send, and reply. 2) Product integration: email built into our own system. Install the inboundemail SDK (bun add inboundemail), use an API key from the inbound.new dashboard, wire up sending, and route incoming email to a webhook endpoint in our app. Full docs: https://inbound.new/docs.";
+
+export const INSTALL_COMMAND = "bun add inboundemail";

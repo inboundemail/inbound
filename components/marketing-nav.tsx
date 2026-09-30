@@ -75,7 +75,7 @@ export function MarketingNav({ isLoggedIn = false }: MarketingNavProps) {
 	);
 }
 
-const footerGroups = [
+export const footerGroups = [
 	{
 		heading: "Product",
 		links: [
