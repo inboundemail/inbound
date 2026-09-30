@@ -57,6 +57,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -71,6 +74,22 @@ jobs:
         run: |
           bun install --frozen-lockfile
           bun test
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::375612485665:role/github-gateway-deploy
+          aws-region: us-east-2
+      - name: Open SSH for this runner
+        id: ssh-ingress
+        run: |
+          case "${{ matrix.gateway }}" in
+            imap-gateway) sg=sg-050924ef2d471c8cd ;;
+            smtp-gateway) sg=sg-08f184ab834042662 ;;
+          esac
+          ip="$(curl -fsS https://checkip.amazonaws.com)"
+          echo "sg=$sg" >> "$GITHUB_OUTPUT"
+          echo "cidr=$ip/32" >> "$GITHUB_OUTPUT"
+          aws ec2 authorize-security-group-ingress --group-id "$sg" \
+            --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=$ip/32,Description=github-actions-deploy-$GITHUB_RUN_ID}]"
       - name: Configure SSH
         env:
           DEPLOY_KEY: ${{ secrets.GATEWAY_DEPLOY_SSH_KEY }}
@@ -84,3 +103,8 @@ jobs:
         run: |
           export IMAPGW_SSH_KEY="$HOME/.ssh/gateway_deploy" SMTPGW_SSH_KEY="$HOME/.ssh/gateway_deploy"
           bash packages/${{ matrix.gateway }}/deploy/deploy.sh
+      - name: Close SSH
+        if: always() && steps.ssh-ingress.outputs.sg != ''
+        run: |
+          aws ec2 revoke-security-group-ingress --group-id "${{ steps.ssh-ingress.outputs.sg }}" \
+            --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=${{ steps.ssh-ingress.outputs.cidr }}}]"
