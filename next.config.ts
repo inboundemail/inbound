@@ -132,6 +132,7 @@ const nextConfig: NextConfig = {
 			{ source: "/webhooks", destination: "/endpoints", permanent: true },
 			{ source: "/settings/billing", destination: "/settings", permanent: true },
 			{ source: "/onboarding-demo", destination: "/logs", permanent: true },
+			{ source: "/events", destination: "/logs", permanent: true },
 			// Disable v1 API - return 410 Gone
 			{
 				source: "/api/v1/:path*",

@@ -26,7 +26,7 @@ export const user = pgTable("user", {
 	// Feature flags - array of enabled feature flags
 	featureFlags: text('feature_flags'), // JSON array of feature flag strings
 	// SVIX webhook service integration
-	svixAppId: text('svix_app_id'), // SVIX application ID for sent email event webhooks
+	svixAppId: text('svix_app_id'), // Unused since the Svix integration was removed; drop in a future migration
 });
 
 export const session = pgTable("session", {

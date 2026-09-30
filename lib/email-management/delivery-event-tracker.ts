@@ -22,7 +22,6 @@ import {
 	emailDeliveryEvents,
 	type NewEmailDeliveryEvent,
 } from "@/lib/db/schema";
-import { dispatchEmailBouncedEvent } from "@/lib/svix/event-dispatcher";
 import {
 	insertDeliveryEventOnce,
 	normalizeDeliveryEventRecipient,
@@ -55,8 +54,6 @@ export interface RecordDeliveryEventResult {
 	userId?: string;
 	domainName?: string;
 	tenantName?: string;
-	// SVIX webhook dispatch (async)
-	svixDispatchTriggered?: boolean;
 }
 
 /**
@@ -288,19 +285,6 @@ export async function recordDeliveryEventFromDsn(
 				console.error("Error adding to blocklist:", blocklistError);
 				// Don't fail the whole operation if blocklist fails
 			}
-		}
-
-		// Dispatch SVIX webhook event for the bounce (async, don't block)
-		// Only dispatch if we have a userId (can send to their webhook endpoints)
-		if (source?.userId) {
-			result.svixDispatchTriggered = true;
-			dispatchEmailBouncedEvent(eventId).catch((svixError) => {
-				console.error(
-					"[Delivery Event Tracker] Error dispatching SVIX bounce event:",
-					svixError,
-				);
-				// Don't fail the whole operation if SVIX dispatch fails
-			});
 		}
 
 		return result;
