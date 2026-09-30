@@ -15,6 +15,11 @@ import {
 	getVerifiedParentDomain,
 	updateDomainSesVerification,
 } from "@/lib/db/domains";
+import {
+	type DkimDnsRecord,
+	enableEasyDkim,
+	saveDkimRecords,
+} from "@/lib/domains-and-dns/dkim";
 import { isSubdomain } from "@/lib/domains-and-dns/domain-utils";
 
 // Check if AWS credentials are available
@@ -51,6 +56,7 @@ export interface DomainVerificationResult {
 		name: string;
 		value: string;
 		isVerified: boolean;
+		isRequired: boolean;
 		description?: string;
 	}>;
 	canProceed: boolean;
@@ -111,6 +117,7 @@ export async function initiateDomainVerification(
 						name: domain,
 						value: `10 inbound-smtp.${awsRegion}.amazonaws.com`,
 						isVerified: false,
+						isRequired: true,
 						description:
 							"Inbound email routing (parent domain already verified for sending)",
 					},
@@ -253,6 +260,15 @@ export async function initiateDomainVerification(
 			// Continue with verification even if MAIL FROM setup fails
 		}
 
+		// Start Easy DKIM so mail is signed as the customer's domain. The CNAMEs
+		// are optional: the domain verifies and sends without them.
+		let dkimRecords: DkimDnsRecord[] = [];
+		try {
+			dkimRecords = (await enableEasyDkim(domain)).records;
+		} catch (dkimError) {
+			console.error("Failed to start Easy DKIM:", dkimError);
+		}
+
 		// Get current verification status from AWS
 		const getAttributesCommand = new GetIdentityVerificationAttributesCommand({
 			Identities: [domain],
@@ -315,12 +331,22 @@ export async function initiateDomainVerification(
 			);
 		}
 
+		try {
+			await saveDkimRecords(domainRecord.id, dkimRecords);
+		} catch (dkimError) {
+			console.error("Failed to save DKIM records:", dkimError);
+		}
+
 		// Return the DNS records that need to be added
-		const dnsRecords = requiredDnsRecords.map((record) => ({
+		const dnsRecords = [
+			...requiredDnsRecords.map((record) => ({ ...record, isRequired: true })),
+			...dkimRecords,
+		].map((record) => ({
 			type: record.type,
 			name: record.name,
 			value: record.value,
 			isVerified: false, // New domains won't have verified DNS records yet
+			isRequired: record.isRequired,
 			description: record.description,
 		}));
 

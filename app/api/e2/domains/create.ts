@@ -512,7 +512,7 @@ export const createDomain = new Elysia().post(
 				name: record.name,
 				value: record.value,
 				description: record.description,
-				isRequired: true,
+				isRequired: record.isRequired,
 			})),
 			dnsConflict,
 			createdAt: (domainRecord.createdAt || new Date()).toISOString(),

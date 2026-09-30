@@ -646,3 +646,35 @@ export const useUpgradeDomainMailFromV2Mutation = () => {
 		},
 	});
 };
+
+// Starts SES Easy DKIM for a domain; the CNAME records are saved as optional DNS records
+export const useEnableDomainDkimV2Mutation = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation<
+		{ domain: string; dkimStatus: string; dnsRecords: unknown[] },
+		Error,
+		{ domainId: string }
+	>({
+		mutationFn: async ({ domainId }) => {
+			const { data, error } = await client.api.e2
+				.domains({ id: domainId })
+				.dkim.post();
+
+			if (error) {
+				throw new Error(getEdenErrorMessage(error, "Failed to enable DKIM"));
+			}
+			if (!data || !("dkimStatus" in data)) {
+				throw new Error("Failed to enable DKIM");
+			}
+
+			return data;
+		},
+		onSuccess: (_, { domainId }) => {
+			queryClient.invalidateQueries({
+				queryKey: domainV2Keys.detail(domainId),
+			});
+			queryClient.invalidateQueries({ queryKey: ["dnsRecords", domainId] });
+		},
+	});
+};

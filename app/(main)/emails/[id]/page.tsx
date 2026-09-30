@@ -60,6 +60,7 @@ import {
 	useUpdateEmailEndpointV2Mutation,
 	useUpdateDomainCatchAllV2Mutation,
 	useDomainAuthVerifyV2Mutation,
+	useEnableDomainDkimV2Mutation,
 	useUpgradeDomainMailFromV2Mutation,
 	domainV2Keys,
 } from "@/features/domains/hooks/useDomainV2Hooks";
@@ -182,6 +183,7 @@ export default function DomainDetailPage() {
 	const updateEmailWebhookMutation = useUpdateEmailEndpointV2Mutation();
 	const updateCatchAllMutation = useUpdateDomainCatchAllV2Mutation();
 	const upgradeMailFromMutation = useUpgradeDomainMailFromV2Mutation();
+	const enableDkimMutation = useEnableDomainDkimV2Mutation();
 
 	// Local state for UI interactions
 	const [newEmailAddress, setNewEmailAddress] = useState("");
@@ -681,6 +683,21 @@ export default function DomainDetailPage() {
 		} catch (error) {
 			toast.error(
 				error instanceof Error ? error.message : "Failed to upgrade domain",
+			);
+		}
+	};
+
+	const handleEnableDkim = async () => {
+		try {
+			await enableDkimMutation.mutateAsync({ domainId });
+			await refetchAuthRecommendations();
+			toast.success(
+				"DKIM started. Add the three CNAME records below to your DNS.",
+				{ duration: 6000 },
+			);
+		} catch (error) {
+			toast.error(
+				error instanceof Error ? error.message : "Failed to enable DKIM",
 			);
 		}
 	};
@@ -1524,6 +1541,41 @@ export default function DomainDetailPage() {
 									{upgradeMailFromMutation.isPending
 										? "Upgrading..."
 										: "Upgrade Identity"}
+								</Button>
+							</div>
+						</div>
+					)}
+
+				{/* DKIM - shown until Easy DKIM has been started (or after it failed) */}
+				{status === DOMAIN_STATUS.VERIFIED &&
+					!domainDetailsData?.inheritsFromParent &&
+					["NotStarted", "Failed"].includes(
+						authRecommendationsData?.verificationCheck?.dkimStatus ?? "",
+					) && (
+						<div className="p-2">
+							<div className="flex items-center justify-between">
+								<div className="flex-1">
+									<div className="text-foreground text-lg font-medium mb-2">
+										Sign with your domain (DKIM)
+									</div>
+									<div className="text-sm text-muted-foreground">
+										{authRecommendationsData?.verificationCheck?.dkimStatus ===
+										"Failed"
+											? "The DKIM records weren't found in time. Restart setup to get new records."
+											: "Sign outgoing mail as your own domain instead of amazonses.com, so it keeps passing DMARC when forwarded."}
+									</div>
+								</div>
+								<Button
+									onClick={handleEnableDkim}
+									disabled={enableDkimMutation.isPending}
+									className="ml-4"
+								>
+									{enableDkimMutation.isPending
+										? "Enabling..."
+										: authRecommendationsData?.verificationCheck?.dkimStatus ===
+												"Failed"
+											? "Restart DKIM"
+											: "Enable DKIM"}
 								</Button>
 							</div>
 						</div>

@@ -121,7 +121,10 @@ export async function checkDomainVerification(domain: string, domainId: string) 
       }
     })
 
-    const dnsVerified = dnsChecks.every(check => check.isVerified)
+    // Optional records (e.g. DKIM CNAMEs) don't gate verification
+    const dnsVerified = dnsChecks.every(
+      (check, index) => domainRecord.dnsRecords[index]?.isRequired === false || check.isVerified
+    )
     const allVerified = sesVerified && dnsVerified
 
     console.log(`📈 Check Verification - Verification summary for ${domain}:`, {

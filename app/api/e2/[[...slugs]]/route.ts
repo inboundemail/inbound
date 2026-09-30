@@ -15,6 +15,7 @@ import { getAttachment } from "../attachments/get";
 import { revokeCurrentApiKey } from "../auth/revoke-key";
 import { createDomain } from "../domains/create";
 import { deleteDomain } from "../domains/delete";
+import { enableDomainDkim } from "../domains/enable-dkim";
 import { getDomain } from "../domains/get";
 import { listDomains } from "../domains/list";
 import { updateDomain } from "../domains/update";
@@ -464,6 +465,7 @@ https://inbound.new/api/e2
 	.use(createDomain)
 	.use(getDomain)
 	.use(updateDomain)
+	.use(enableDomainDkim)
 	.use(deleteDomain)
 	// Endpoint routes
 	.use(listEndpoints)

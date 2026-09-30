@@ -58,7 +58,7 @@
     "@aws-sdk/client-lambda": "^3.840.0",
     "@aws-sdk/client-s3": "^3.817.0",
     "@aws-sdk/client-ses": "^3.817.0",
-    "@aws-sdk/client-sesv2": "^3.883.0",
+    "@aws-sdk/client-sesv2": "^3.1144.0",
     "@aws-sdk/client-sns": "^3.940.0",
     "@better-auth/api-key": "1.6.25",
     "@better-auth/core": "1.6.25",
