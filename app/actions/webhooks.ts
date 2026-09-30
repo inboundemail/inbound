@@ -1,5 +1,7 @@
 "use server"
 
+import { readTextLimited, safeFetch } from "@/lib/security/safe-fetch";
+import { validateWebhookUrl } from "@/app/api/e2/endpoints/url-validation";
 import { auth } from "@/lib/auth/auth"
 import { headers } from "next/headers"
 import { db } from '@/lib/db'
@@ -89,11 +91,10 @@ export async function createWebhook(data: {
       return { error: 'Name and URL are required' }
     }
 
-    // Validate URL format
     try {
-      new URL(url)
-    } catch {
-      return { error: 'Invalid URL format' }
+      validateWebhookUrl(url)
+    } catch (error) {
+      return { error: (error as Error).message }
     }
 
     // Check if name already exists for this user
@@ -165,9 +166,9 @@ export async function updateWebhook(id: string, data: {
     // Validate URL format if provided
     if (url) {
       try {
-        new URL(url)
-      } catch {
-        return { error: 'Invalid URL format' }
+        validateWebhookUrl(url)
+      } catch (error) {
+        return { error: (error as Error).message }
       }
     }
 
@@ -344,7 +345,7 @@ export async function testWebhook(id: string) {
       console.log(`📤 Test payload:`, JSON.stringify(testPayload, null, 2))
       console.log(`📋 Request headers:`, JSON.stringify(requestHeaders, null, 2))
       
-      const response = await fetch(webhook.url, {
+      const response = await safeFetch(webhook.url, {
         method: 'POST',
         headers: requestHeaders,
         body: JSON.stringify(testPayload),
@@ -360,7 +361,7 @@ export async function testWebhook(id: string) {
       
       // Capture response body
       try {
-        responseBody = await response.text()
+        responseBody = await readTextLimited(response)
       } catch (bodyError) {
         responseBody = 'Unable to read response body'
         console.error(`❌ Error reading response body:`, bodyError)

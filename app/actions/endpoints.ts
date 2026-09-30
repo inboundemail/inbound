@@ -1,5 +1,7 @@
 "use server";
 
+import { readTextLimited, safeFetch } from "@/lib/security/safe-fetch";
+import { validateWebhookUrl } from "@/app/api/e2/endpoints/url-validation";
 import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { headers } from "next/headers";
@@ -95,6 +97,14 @@ export async function createEndpoint(data: CreateEndpointData) {
 			return { success: false, error: loopCheck.error };
 		}
 
+		if (data.type === "webhook" && "url" in data.config) {
+			try {
+				validateWebhookUrl(data.config.url);
+			} catch (error) {
+				return { success: false, error: (error as Error).message };
+			}
+		}
+
 		// For webhook endpoints, generate a verificationToken at creation time
 		// so it's immediately available via the API
 		const configToStore = { ...data.config };
@@ -185,6 +195,14 @@ export async function updateEndpoint(id: string, data: UpdateEndpointData) {
 		if (!loopCheck.valid) {
 			console.error(`🚫 updateEndpoint - Loop detected: ${loopCheck.error}`);
 			return { success: false, error: loopCheck.error };
+		}
+
+		if (effectiveType === "webhook" && data.config && "url" in data.config) {
+			try {
+				validateWebhookUrl(data.config.url);
+			} catch (error) {
+				return { success: false, error: (error as Error).message };
+			}
 		}
 
 		// Prepare update data
@@ -524,7 +542,7 @@ export async function testEndpoint(id: string) {
 			case "webhook":
 				// Test webhook by sending a test payload
 				try {
-					const response = await fetch(config.url, {
+					const response = await safeFetch(config.url, {
 						method: "POST",
 						headers: {
 							"Content-Type": "application/json",

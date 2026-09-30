@@ -3,6 +3,8 @@
  * Consolidates validation logic from v2 endpoint routes
  */
 
+import { validateWebhookUrl } from "./url-validation";
+
 export interface ValidationResult {
   valid: boolean;
   error?: string;
@@ -51,9 +53,9 @@ function validateWebhookConfig(config: any): ValidationResult {
   }
 
   try {
-    new URL(config.url);
-  } catch {
-    return { valid: false, error: "Invalid webhook URL format" };
+    validateWebhookUrl(config.url);
+  } catch (error) {
+    return { valid: false, error: (error as Error).message };
   }
 
   if (
