@@ -1,0 +1,86 @@
+name: Deploy gateways
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - packages/imap-gateway/**
+      - packages/smtp-gateway/**
+  workflow_dispatch:
+    inputs:
+      gateway:
+        description: Gateway to deploy
+        type: choice
+        options: [imap-gateway, smtp-gateway, both]
+        default: both
+
+concurrency:
+  group: deploy-gateways
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      gateways: ${{ steps.pick.outputs.gateways }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: pick
+        env:
+          INPUT: ${{ inputs.gateway }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            case "$INPUT" in
+              both) list='["imap-gateway","smtp-gateway"]' ;;
+              *) list="[\"$INPUT\"]" ;;
+            esac
+          else
+            if git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+              changed=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+            else
+              changed=$'packages/imap-gateway/\npackages/smtp-gateway/'
+            fi
+            list=$(printf '%s\n' "$changed" | sed -nE 's#^packages/(imap-gateway|smtp-gateway)/.*#\1#p' | sort -u | jq -R . | jq -sc .)
+          fi
+          echo "gateways=$list" >> "$GITHUB_OUTPUT"
+          echo "Deploying: $list"
+
+  deploy:
+    needs: plan
+    if: needs.plan.outputs.gateways != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        gateway: ${{ fromJSON(needs.plan.outputs.gateways) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Test
+        working-directory: packages/${{ matrix.gateway }}
+        run: |
+          bun install --frozen-lockfile
+          bun test
+      - name: Configure SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.GATEWAY_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.GATEWAY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/gateway_deploy
+          chmod 600 ~/.ssh/gateway_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Deploy
+        run: |
+          export IMAPGW_SSH_KEY="$HOME/.ssh/gateway_deploy" SMTPGW_SSH_KEY="$HOME/.ssh/gateway_deploy"
+          bash packages/${{ matrix.gateway }}/deploy/deploy.sh
