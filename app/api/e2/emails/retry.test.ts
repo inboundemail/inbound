@@ -228,6 +228,13 @@ mock.module("@/app/api/e2/lib/auth", () => ({
 	},
 }));
 
+// These tests stub the network via globalThis.fetch. The real safeFetch would
+// first resolve the .test hostnames (and refuse them), so pass straight through.
+mock.module("@/lib/security/safe-fetch", () => ({
+	safeFetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
+	readTextLimited: (response: Response) => response.text(),
+}));
+
 const fetchTarget: {
 	fetch: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>;
 } = globalThis;
