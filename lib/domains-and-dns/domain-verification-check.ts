@@ -131,7 +131,11 @@ export async function runDomainVerificationCheck(
 				),
 			);
 
-			allDnsVerified = verifyResults.every((r) => r.isVerified);
+			// Optional records (e.g. DKIM CNAMEs) don't gate verification.
+			allDnsVerified = dnsRecordsResult.every(
+				(record, index) =>
+					record.isRequired === false || verifyResults[index]?.isVerified,
+			);
 		}
 		result.allDnsVerified = allDnsVerified;
 
