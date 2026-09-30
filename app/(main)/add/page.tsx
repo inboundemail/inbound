@@ -18,7 +18,6 @@ import {
 	validateDomain,
 } from "@/lib/domains-and-dns/validate-domain";
 import { cn } from "@/lib/utils";
-import { trackEvent } from "@/lib/utils/visitors";
 
 type ValidationState = "idle" | "checking" | "valid" | "invalid";
 

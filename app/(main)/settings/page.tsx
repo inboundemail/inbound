@@ -34,7 +34,6 @@ import {
 	useWarmupStatusQuery,
 } from "@/features/settings/hooks";
 import { authClient, signOut, useSession } from "@/lib/auth/auth-client";
-import { trackEvent } from "@/lib/utils/visitors";
 
 // Passkey type from better-auth
 interface Passkey {
@@ -285,7 +284,6 @@ export default function SettingsPage() {
 			}
 
 			// If no redirect needed (e.g., already has payment method), close dialog and refresh
-			trackEvent("Purchase", { productId: plan.autumn_id });
 			toast.success(`Successfully upgraded to ${plan.name} plan!`);
 			setIsUpgradeDialogOpen(false);
 			refetchCustomer();
@@ -366,16 +364,11 @@ export default function SettingsPage() {
 	// Check for upgrade/addon success parameter
 	useEffect(() => {
 		const upgradeParam = searchParams.get("upgrade");
-		const productParam = searchParams.get("product");
 		const addonParam = searchParams.get("addon");
 		const quantityParam = searchParams.get("quantity");
 
 		if (upgradeParam === "true") {
 			setIsUpgradeSuccessOpen(true);
-
-			trackEvent("Purchase", {
-				productId: productParam || "pro",
-			});
 
 			const newUrl = new URL(window.location.href);
 			newUrl.searchParams.delete("upgrade");

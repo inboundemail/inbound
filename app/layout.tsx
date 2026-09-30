@@ -155,13 +155,6 @@ export default function RootLayout({
 					/>
 				)}
 
-				{/* Visitors.now Analytics */}
-				<Script
-					src="https://cdn.visitors.now/v.js"
-					data-token="4c65b3f6-144c-4be7-87c1-e938d9c630f3"
-					data-persist=""
-				/>
-
 				{/* Google Analytics */}
 				<Script
 					src="https://www.googletagmanager.com/gtag/js?id=G-0H8QD9DFB4"
