@@ -1,27 +1,29 @@
 ---
 title: "IMAP Behavior"
-description: "Understand mailbox folders, supported IMAP features, synchronization, message limits, and known limitations"
+description: "Folders, supported IMAP features, synchronization, limits, and known limitations"
 ---
 
-Inbound presents received email through a managed IMAP mailbox rather than operating as a conventional standalone mail store. Understanding how folders, scopes, and synchronization interact helps avoid surprises in email clients.
+Inbound presents received email through a managed IMAP mailbox rather than a conventional standalone mail store. `INBOX` and scope folders are views of the mail Inbound has received, so some operations behave differently than on a traditional IMAP server.
 
 ## Default folders
 
-Each mailbox credential includes these canonical folders:
+Each mailbox credential includes these folders:
 
-| Folder | IMAP special-use attribute | Behavior |
+| Folder | Special-use attribute | Behavior |
 | --- | --- | --- |
-| `INBOX` | None | Combined incoming mail from every configured scope |
-| `Sent` | `\Sent` | Available for client-saved sent messages; not populated automatically |
-| `Drafts` | `\Drafts` | Available for client-saved drafts |
-| `Trash` | `\Trash` | Available for client-organized messages |
-| `Junk` | `\Junk` | Available for client-organized messages |
+| `INBOX` | None | Incoming mail from every configured scope |
+| `Sent` | `\Sent` | For client-saved sent messages; not populated automatically |
+| `Drafts` | `\Drafts` | For client-saved drafts |
+| `Trash` | `\Trash` | For client-organized messages |
+| `Junk` | `\Junk` | For client-organized messages; incoming mail is not filtered into it |
 
-The hierarchy separator is `/`. `INBOX` and the default special-use folders cannot be deleted. Custom folders can be created, renamed, and deleted with a `read_write` credential. Incoming messages appear only when their original raw message content is available for IMAP retrieval.
+The personal namespace is `""` and the hierarchy separator is `/`. `INBOX` and the special-use folders cannot be deleted, and `INBOX` cannot be renamed. With a `read_write` credential you can create, rename, and delete other folders. Renaming a folder also renames its subfolders. Creating or renaming onto an existing name returns `NO [ALREADYEXISTS]`.
+
+Folders, flags, and appended messages belong to one credential. Other credentials on the same account don't see them.
 
 ### Scope folders
 
-Every configured scope also appears as an individual folder:
+Every configured scope also appears as a folder under `Scopes`:
 
 ```text
 INBOX
@@ -33,124 +35,127 @@ Scopes/*@example.com
 Scopes/support@another-example.com
 ```
 
-`Scopes` is a non-selectable container. A domain scope appears as `Scopes/*@example.com`; an address scope appears as `Scopes/support@example.com`.
+`Scopes` is a non-selectable container (`\Noselect`), and its name is reserved. A domain scope appears as `Scopes/*@example.com`; an address scope appears as `Scopes/support@example.com`.
 
-These folders are filtered views of the same incoming messages available in `INBOX`, not independent writable mailboxes. They always open read-only, even when the credential has `read_write` access. You cannot append, move, or copy messages into a scope folder, or change its flags directly.
+Scope folders are filtered views of the same messages as `INBOX`. They always open read-only, even for `read_write` credentials. You cannot append, move, or copy messages into a scope folder, change flags in it, or expunge from it. A `read_write` credential can copy messages from a scope folder into a writable folder.
 
-A `read_write` credential can copy messages from a read-only scope folder into a writable destination. A `read` credential cannot modify any folder.
+## Capabilities
 
-## Supported IMAP features
+The server advertises exactly these capabilities:
 
-The server supports `IMAP4rev1` and common operations used by desktop and mobile email clients:
+```text
+IMAP4rev1 APPENDLIMIT=1048576 AUTH=PLAIN CHILDREN ENABLE ID IDLE MOVE NAMESPACE SASL-IR SPECIAL-USE UIDPLUS UNSELECT UTF8=ACCEPT WITHIN
+```
 
-- Authentication with `LOGIN` or `AUTHENTICATE PLAIN` over TLS.
-- Folder discovery and selection with `LIST`, `LSUB`, `NAMESPACE`, `SELECT`, `EXAMINE`, `STATUS`, and special-use folders.
-- Message retrieval and search with `FETCH`, `UID FETCH`, `SEARCH`, and `UID SEARCH`.
-- Writable-folder operations with `STORE`, `COPY`, `MOVE`, `EXPUNGE`, `APPEND`, and applicable `UID` variants when the credential has `read_write` access.
-- Folder management with `CREATE`, `RENAME`, and `DELETE`, subject to folder protections and access mode.
-- Live message notifications with `IDLE`, plus `UIDPLUS`, `SPECIAL-USE`, `MOVE`, `ENABLE`, `UTF8=ACCEPT`, and `APPENDLIMIT` capabilities.
+Supported commands:
 
-`SUBSCRIBE` and `UNSUBSCRIBE` are accepted for client compatibility, but subscription preferences are not persisted. `LSUB` returns all available folders rather than a separately maintained subscription list.
+- Authentication: `LOGIN` and `AUTHENTICATE PLAIN` (with `SASL-IR`). A `PLAIN` authorization identity different from the login email is rejected.
+- Folders: `LIST`, `LSUB`, `NAMESPACE`, `SELECT`, `EXAMINE`, `STATUS`, `CREATE`, `RENAME`, `DELETE`, `SUBSCRIBE`, `UNSUBSCRIBE`.
+- Messages: `FETCH`, `SEARCH`, `STORE`, `COPY`, `MOVE`, and their `UID` forms, plus `EXPUNGE`, `UID EXPUNGE`, `APPEND`, `CLOSE`, `UNSELECT`, `CHECK`, `NOOP`, and `IDLE`.
+- `ENABLE UTF8=ACCEPT`. Other `ENABLE` arguments are ignored.
 
-Capabilities are advertised through the standard `CAPABILITY` response. The default append-size capability is `APPENDLIMIT=1048576`. Although `WITHIN` may also be advertised, relative-age searches such as `OLDER` are not consistently implemented and should not be relied on.
+`COPY` and `APPEND` return `COPYUID` and `APPENDUID`. `MOVE` returns `COPYUID` followed by an untagged `EXPUNGE` for every moved message, and moving a message into the folder it's already in returns `NO`. `EXPUNGE` and `UID EXPUNGE` send an untagged `EXPUNGE` for each removed message.
 
-<Note>
-  `CONDSTORE`, `QRESYNC`, `HIGHESTMODSEQ`, `QUOTA` commands, and `COMPRESS=DEFLATE` are not available. `SORT`, `THREAD`, mailbox ACL extensions, and OAuth-based IMAP authentication are also not advertised or supported. Use a normal IMAP client configured for password authentication rather than requiring these extensions.
-</Note>
+`SUBSCRIBE` and `UNSUBSCRIBE` succeed but aren't stored; `LSUB` returns every folder.
 
-The absence of the `QUOTA` extension does not mean appended messages are unlimited. Server-side append limits still apply.
+Extensions that aren't advertised are not supported, including `STARTTLS` (use implicit TLS on port `993`), `CONDSTORE`, `QRESYNC`, `QUOTA`, `COMPRESS=DEFLATE`, `SORT`, `THREAD`, `ACL`, OAuth (`XOAUTH2` or `OAUTHBEARER`), and the Gmail-only `XLIST`. Requests that would enable `CONDSTORE`, such as `SELECT (CONDSTORE)` or `SEARCH MODSEQ`, are rejected.
 
-### Search limitations
+### Search
 
-Searches by UID, flags, message size, and internal date operate on IMAP mailbox data. Header, subject, body, and other content-based searches depend on received-message metadata and may not find drafts or sent copies created through `APPEND`.
+`SEARCH` supports sequence sets, `UID`, flag and keyword keys (such as `SEEN`, `UNSEEN`, `DELETED`, `FLAGGED`, `KEYWORD`), `BEFORE`/`ON`/`SINCE`, `SENTBEFORE`/`SENTON`/`SENTSINCE`, `LARGER`/`SMALLER`, `OLDER`/`YOUNGER` (`WITHIN`), `HEADER`, `FROM`, `TO`, `CC`, `BCC`, `SUBJECT`, `BODY`, `TEXT`, `OR`, and `NOT`.
 
-Unsupported search terms or headers can be ignored rather than rejected, which can produce broader results than requested. Treat advanced or relative-age searches as best-effort, and filter results in your application when exact matching matters.
+- Text searches are case-insensitive substring matches. For received mail they match Inbound's parsed fields: `SUBJECT`, the address headers, and the plain-text body. `TEXT` checks the subject and plain-text body, so text that exists only in an HTML part may not match. For appended messages they match the raw message.
+- `HEADER` searches on other header names match the raw message.
+- `SENTBEFORE`, `SENTON`, and `SENTSINCE` use the parsed `Date` header of received mail and don't match appended messages. `BEFORE`, `ON`, `SINCE`, `OLDER`, and `YOUNGER` use the internal date, which is when Inbound received the message.
+- `\Recent` is never set, so `RECENT` and `NEW` match nothing.
+- Search keys the server doesn't implement are ignored instead of rejected, which can return more messages than requested. Filter results in your application when exact matching matters.
 
 ## New-message notifications
 
-`IDLE` is supported for near-real-time notification of new messages. The server also performs a periodic fallback refresh approximately every 60 seconds for active notification listeners.
+During `IDLE`, the server sends `EXISTS` as soon as new mail is synchronized into the selected folder. Outside `IDLE`, new messages are reported on the next command, such as `NOOP`. Active sessions are also refreshed about every 60 seconds, which catches messages that don't trigger an immediate notification, such as mail where the scoped address was a secondary envelope recipient.
 
-An individual `IDLE` command can remain open for up to 30 minutes before the server ends the connection. Email clients should terminate and reissue `IDLE` periodically, or reconnect automatically after the server closes an expired idle session.
+An `IDLE` command ends after 30 minutes: the server sends `* BYE IDLE terminated` and closes the connection. Reissue `IDLE` before then (most clients restart it every 29 minutes) or reconnect automatically.
 
 ## Flags and read state
 
-Writable credentials can update standard IMAP flags such as `\Seen`, `\Answered`, `\Flagged`, `\Deleted`, and `\Draft` through writable folders. Reading message content from a writable selected folder can automatically set `\Seen`; read-only credentials and read-only scope folders do not mark messages as seen.
+Writable credentials can set standard flags (`\Seen`, `\Answered`, `\Flagged`, `\Deleted`, `\Draft`) and keywords in writable folders. Fetching message content from a writable folder sets `\Seen` unless the client uses `BODY.PEEK`. Read-only credentials, `EXAMINE`, and scope folders never set `\Seen`. `STORE` without `.SILENT` returns the updated flags.
 
-For a given credential, flag changes on a received message are reflected across that credential's `INBOX` and corresponding scope views. Different credentials maintain their own IMAP flag state.
-
-<Note>
-  IMAP read and unread flags are independent of the dashboard's read state. Marking a message read in an IMAP client does not mark it read in the dashboard, and dashboard actions do not update the IMAP `\Seen` flag.
-</Note>
-
-## Scope changes and revoked access
-
-When scopes or other credential permissions change, active IMAP sessions for that credential are logged out and must reconnect. On the next mailbox reconciliation, folders for removed scopes disappear, and received-message mappings that no longer match the remaining scopes are removed from the credential's folders.
-
-This reconciliation applies to received messages throughout the credential's IMAP folders, not only `INBOX`. Messages created through IMAP `APPEND` are separate from received-message scope filtering.
-
-New login attempts recheck both the login address's own verified domain and which scoped domain records remain verified. If the login domain is no longer verified, no verified scope remains, or an exact sender identity is no longer covered by a verified scope, authentication fails.
+Flags set on a received message in `INBOX` also apply to the same message in the credential's scope folders. Flags on copies in other folders, such as a custom folder, are independent.
 
 <Note>
-  Changing a domain's verification status does not automatically disconnect an already-established IMAP session. To end current access, disable the credential, change its scopes or permissions, rotate its password, or delete it.
+  IMAP flags are separate from the dashboard's read state. Marking a message read in an email client does not mark it read in the dashboard, and the reverse is also true.
 </Note>
 
-## Message and storage limits
+## Known limitations
 
-| Limit | Default |
-| --- | --- |
-| Maximum single IMAP `APPEND` | 1 MiB (`1,048,576` bytes) |
-| Maximum SMTP message | 25 MiB (`26,214,400` bytes) |
-| Total IMAP-appended storage per account | 250 MiB |
-| Total IMAP-appended messages per account | 5,000 |
-| Maximum SMTP recipients per message | 50 distinct envelope recipients |
+### Other sessions don't see changes immediately
 
-The 250 MiB and 5,000-message limits are shared across the account's appended IMAP messages, not allocated separately to each folder or credential. Exceeding an append-storage limit results in an IMAP `OVERQUOTA` response.
-
-The SMTP recipient limit applies to the combined distinct SMTP envelope recipients for a message, including recipients delivered as To, Cc, or Bcc.
-
-### Sent mail is not saved automatically
-
-Sending through SMTP does not automatically create a message in the IMAP `Sent` folder. Many email clients can save their own sent copy by issuing IMAP `APPEND` to `Sent`, which requires a `read_write` mailbox credential.
-
-<Warning>
-  SMTP accepts messages up to 25 MiB, but IMAP `APPEND` defaults to 1 MiB. A larger email can send successfully while the client's attempt to save its sent copy fails. Appended sent copies also consume the account-wide IMAP append quota. SMTP-only credentials cannot save an IMAP sent copy.
-</Warning>
+Only new messages are pushed to other open sessions. If one session expunges, moves, or changes flags, other sessions on the same folder see the change only after they select the folder again. Clients that keep several connections open, or several devices using the same credential, can briefly show stale messages or flags.
 
 ### Received-message deletion and moves
 
 <Warning>
-  IMAP deletion, `EXPUNGE`, and `MOVE` do not delete the underlying received email. Because `INBOX` and scope folders are rebuilt from the received-message source, a received message removed or moved out of `INBOX` can reappear during a later synchronization. Do not rely on IMAP deletion or moves as permanent deletion or durable removal from the incoming view.
+  `EXPUNGE` and `MOVE` do not delete the underlying received email. `INBOX` and scope folders are rebuilt from received mail, so a received message expunged or moved out of `INBOX` reappears there, with a new UID, the next time the folder is synchronized (for example, on the next `SELECT` or when new mail arrives). Don't use IMAP deletion as permanent deletion.
 </Warning>
 
-This limitation concerns received messages synchronized from Inbound. Messages created only through `APPEND` are stored separately and are not re-created from the incoming-mail source after they are removed.
+Moving a received message into a custom folder, `Trash`, or `Junk` does create a copy there that stays until you expunge it. Messages created with `APPEND`, such as sent copies and drafts, are stored separately and are permanently removed when their last copy is expunged.
 
-## Guard-filtered messages
+### Sent mail is not saved automatically
 
-Messages already marked as blocked by Guard are excluded from new IMAP synchronization, and fetching their raw message content is denied. If a previously visible message is later blocked, its existing server-side folder metadata can remain until the mailbox is listed or reopened and reconciliation runs.
+Sending through SMTP does not create a message in `Sent`. Many email clients save their own copy with `APPEND`, which needs a `read_write` mailbox credential.
+
+<Warning>
+  SMTP accepts messages up to 3 MiB, but `APPEND` accepts at most 1 MiB. A larger email can send successfully while saving its sent copy fails with `NO [TOOBIG]`. SMTP-only credentials cannot save a sent copy.
+</Warning>
+
+### Guard-filtered messages
+
+Messages blocked by Guard are not synchronized, and their content cannot be fetched. If a message is blocked after it was already synchronized, it is removed from the credential's folders the next time the client lists or opens a folder. Email clients may still show content they cached earlier.
+
+## Scope changes and revoked access
+
+When a credential's scopes, permissions, sender settings, enabled state, or password change, its active IMAP sessions receive `* BYE Mailbox credentials or scopes changed` and must reconnect. On the next folder listing or selection, folders for removed scopes disappear, and received messages that no longer match any remaining scope are removed from all of the credential's folders. Appended messages are not affected.
+
+Each login rechecks that the login email's domain is verified, that at least one scope domain is verified, and that an exact sender identity is still covered by a verified scope. If not, authentication fails.
 
 <Note>
-  Reopen or refresh the mailbox to reconcile newly blocked messages. An email client can also retain metadata or content it previously cached, so disappearance from every client view is not necessarily instantaneous.
+  A domain losing its verified status does not disconnect an established IMAP session. To end current access, disable the credential, change its scopes or permissions, rotate its password, or delete it.
 </Note>
 
-## Connection and authentication limits
+## Message and storage limits
 
-IMAP permits up to 20 simultaneous connections from the same IP address by default. Repeated failed IMAP or SMTP logins are throttled after 10 failures for the same login and IP address within a 15-minute window; additional IP-wide failure protections also apply.
+| Limit | Value |
+| --- | --- |
+| Maximum `APPEND` size | 1 MiB (`1,048,576` bytes), advertised as `APPENDLIMIT` |
+| Appended storage per account | 250 MiB |
+| Appended messages per account | 5,000 |
 
-Separate authentication-request limits apply to successful and unsuccessful attempts alike: 60 attempts per minute for the same source IP and login address, and 3,000 attempts per minute per source IP. Avoid reconnect loops and retry with backoff.
+An `APPEND` over 1 MiB is rejected with `NO [TOOBIG]`. The storage and message-count limits are shared by all of the account's credentials and folders; exceeding them returns `NO [OVERQUOTA]`. For SMTP limits, see [Send with SMTP](/mailboxes/connect-smtp#limits).
 
-SMTP submission also remains subject to account sending limits and the shared API rate limit. Temporary SMTP rate-limit or upstream failures can return `451`; clients should retry with backoff. See [API rate limits](/api-reference/rate-limits).
+## Connection limits and timeouts
+
+| Limit | Value |
+| --- | --- |
+| TLS | Implicit TLS on port `993`, TLS 1.2 or later |
+| Simultaneous connections per client IP address | 20 |
+| Inactivity timeout before login | 60 seconds |
+| Inactivity timeout after login | About 30 minutes |
+| Maximum `IDLE` duration | 30 minutes |
+| Failed logins | 10 per login address and IP address, and 50 per IP address, in a 15-minute window |
+
+Connections over the per-IP limit receive `* BYE Too many connections from this address`. Once a login is throttled, attempts return `NO [AUTHENTICATIONFAILED]` until the window ends, even with the correct password. Authentication requests are also rate-limited by the API, so avoid reconnect loops and retry with backoff.
 
 ## Troubleshooting
 
 | Symptom | Likely cause | What to check |
 | --- | --- | --- |
-| Authentication fails | Wrong login, rotated password, disabled credential, SMTP-only credential used for IMAP, or unverified scope | Confirm the exact login address, current generated password, credential type, enabled state, and verified domains |
-| An expected message is missing | Recipient is outside the exact scopes, the message is Guard-blocked, its raw content is unavailable, or the client has not refreshed | Check the recipient, verified scope domains, Guard status, raw-message availability, and folder refresh |
-| A scope folder rejects changes | `Scopes/*` folders are always read-only | Modify the message in `INBOX` or copy it to a writable folder |
-| A received message returns after deletion or moving | Incoming folders synchronize from the underlying received-message source | Do not use IMAP deletion or moving as permanent deletion of received email |
-| Sending succeeds but no sent copy appears | SMTP does not populate `Sent`, or the client's `APPEND` exceeded 1 MiB or the append quota | Enable client-side sent-copy saving, use a `read_write` mailbox, and check append size and storage limits |
-| The connection closes after a credential edit | Credential or scope changes invalidate active IMAP sessions | Reconnect using the latest permissions and password |
-| Repeated login attempts stop working | Authentication failure throttling is active | Correct the credentials and allow the rate-limit window to clear |
+| Authentication fails | Wrong login, rotated password, disabled credential, SMTP-only credential, unverified domain, or login throttling | Confirm the login email, current password, credential type, enabled state, and verified domains. Wait 15 minutes after repeated failures. |
+| An expected message is missing | Recipient is outside the scopes, the message is Guard-blocked, or the folder hasn't been refreshed | Check the recipient, scope domains, and Guard status, then reselect the folder |
+| A scope folder rejects changes | `Scopes/*` folders are always read-only | Change the message in `INBOX` or copy it to a writable folder |
+| A received message returns after deletion or moving | `INBOX` is rebuilt from received mail | Don't use IMAP deletion as permanent deletion |
+| No sent copy appears | SMTP doesn't populate `Sent`, or the client's `APPEND` exceeded 1 MiB or the storage limit | Enable sent-copy saving in the client, use a `read_write` credential, and check message size |
+| Another device shows stale flags or deleted messages | Other sessions only see changes after reselecting the folder | Reselect the folder or restart the client's sync |
+| The connection closes after a credential edit | Credential changes end active sessions | Reconnect with the current password and permissions |
 
 <CardGroup cols={2}>
   <Card title="Scopes and Permissions" icon="shield" href="/mailboxes/scopes-and-permissions">

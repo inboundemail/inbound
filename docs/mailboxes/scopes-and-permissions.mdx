@@ -56,6 +56,8 @@ IMAP access mode does not control whether SMTP sending is available. A read-only
 
 ## SMTP sender policies
 
+The sender policy applies to SMTP and to HTTP sends authorized with the credential's password. A disallowed SMTP sender is rejected with `553`; see [Send with SMTP](/mailboxes/connect-smtp#allowed-senders).
+
 ### Exact identity
 
 With `sendingMode: "identity"`, the credential can send only from its configured `sendingAddress`.

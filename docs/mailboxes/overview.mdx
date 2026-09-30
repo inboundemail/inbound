@@ -13,7 +13,7 @@ Inbound gives your email clients and applications direct access to email through
 | SMTP | `smtp.inboundemail.com` | `465` | TLS |
 | SMTP | `smtp.inboundemail.com` | `587` | STARTTLS |
 
-Use the credential's **Login email** and generated password. IMAP requires a **Mailbox + SMTP** credential; either credential type can send with SMTP. Connections require TLS 1.2 or later, and port `587` must upgrade with STARTTLS before authentication.
+Use the credential's **Login email** and generated password. IMAP requires a **Mailbox + SMTP** credential; either credential type can send with SMTP. All connections require TLS 1.2 or later: IMAP uses implicit TLS only, and SMTP on port `587` must upgrade with STARTTLS before authentication. See [Connect with IMAP](/mailboxes/connect-imap) and [Send with SMTP](/mailboxes/connect-smtp) for client settings.
 
 ## How it works
 
@@ -68,6 +68,9 @@ When you create or rotate a credential, its password is shown exactly once. Save
   <Card title="Connect with IMAP" icon="plug" href="/mailboxes/connect-imap">
     Create a credential and configure an email client or application
   </Card>
+  <Card title="Send with SMTP" icon="paper-plane" href="/mailboxes/connect-smtp">
+    Send from any SMTP client, with limits and reply codes
+  </Card>
   <Card title="Scopes and Permissions" icon="shield" href="/mailboxes/scopes-and-permissions">
     Understand domain scopes, address scopes, sender policies, and IMAP access
   </Card>
@@ -75,6 +78,6 @@ When you create or rotate a credential, its password is shown exactly once. Save
     Edit, rotate, disable, enable, or delete managed credentials
   </Card>
   <Card title="IMAP Behavior" icon="inbox" href="/mailboxes/imap-behavior">
-    Learn how the combined inbox and scope-specific folders behave
+    Folders, supported IMAP features, limits, and known limitations
   </Card>
 </CardGroup>

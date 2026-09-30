@@ -1,22 +1,25 @@
 ---
 title: "Connect with IMAP"
-description: "Create a managed mailbox credential and connect securely with IMAP or SMTP"
+description: "Create a managed mailbox credential and read mail over IMAP"
 ---
 
-Connect an email client or application to Inbound using a managed **Mailbox + SMTP** credential. The same login email and generated password work for receiving over IMAP and sending over SMTP.
+Connect an email client or application to Inbound using a managed **Mailbox + SMTP** credential. The same login email and generated password also work for [sending with SMTP](/mailboxes/connect-smtp).
 
 ## Connection settings
 
-| Protocol | Host | Port | Security |
-| --- | --- | --- | --- |
-| IMAP | `imap.inboundemail.com` | `993` | TLS |
-| SMTP | `smtp.inboundemail.com` | `465` | TLS |
-| SMTP | `smtp.inboundemail.com` | `587` | STARTTLS |
+| Setting | Value |
+| --- | --- |
+| Host | `imap.inboundemail.com` |
+| Port | `993` |
+| Security | Implicit TLS (SSL/TLS), TLS 1.2 or later |
+| Username | The credential's **Login email** |
+| Password | The credential's generated password |
+| Authentication | Normal password (`LOGIN` or `AUTHENTICATE PLAIN`) |
 
-Use your managed **Login email** and generated **Password** for both protocols. Require TLS 1.2 or later and keep certificate verification enabled. SMTP on port `587` must upgrade with STARTTLS before authentication. Ordinary account API keys cannot authenticate to IMAP or SMTP.
+Port `143` and IMAP `STARTTLS` are not offered. Keep certificate verification enabled. Ordinary account API keys and **SMTP only** credentials cannot authenticate to IMAP.
 
 <Note>
-  SMTP does not automatically save messages to IMAP `Sent`, and received messages removed from `INBOX` can reappear. Review [IMAP behavior and limits](/mailboxes/imap-behavior) before configuring a traditional email client.
+  SMTP does not automatically save messages to IMAP `Sent`, and received messages removed from `INBOX` reappear. Review [IMAP behavior and limits](/mailboxes/imap-behavior) before configuring a traditional email client.
 </Note>
 
 ## Create a mailbox credential
@@ -164,67 +167,17 @@ with imaplib.IMAP4_SSL(
   `BODY.PEEK` reads the requested headers without marking a message as seen. Opening `INBOX` in read-only mode also works with both **Read only** and **Read and write** credentials.
 </Note>
 
-## Send with SMTP
-
-Both **Mailbox + SMTP** and **SMTP only** credentials can authenticate to `smtp.inboundemail.com`. Use the generated login email and password, and choose a From address permitted by your sender policy.
-
-```bash
-bun add nodemailer
-bun add -d @types/nodemailer
-```
-
-<CodeGroup>
-```typescript SMTP over TLS (port 465)
-import nodemailer from "nodemailer";
-
-const transport = nodemailer.createTransport({
-  host: "smtp.inboundemail.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.INBOUND_MAILBOX_LOGIN,
-    pass: process.env.INBOUND_MAILBOX_PASSWORD,
-  },
-});
-
-await transport.sendMail({
-  from: "Support <support@example.com>",
-  to: "recipient@example.com",
-  subject: "Hello from Inbound",
-  text: "Sent with a managed mailbox credential.",
-});
-```
-
-```typescript SMTP with STARTTLS (port 587)
-import nodemailer from "nodemailer";
-
-const transport = nodemailer.createTransport({
-  host: "smtp.inboundemail.com",
-  port: 587,
-  secure: false,
-  requireTLS: true,
-  auth: {
-    user: process.env.INBOUND_MAILBOX_LOGIN,
-    pass: process.env.INBOUND_MAILBOX_PASSWORD,
-  },
-});
-
-await transport.sendMail({
-  from: "Support <support@example.com>",
-  to: "recipient@example.com",
-  subject: "Hello from Inbound",
-  text: "Sent with a managed mailbox credential.",
-});
-```
-</CodeGroup>
-
-Set the sender's display name in `from`, as shown above; the dashboard's optional **Display name** does not populate outgoing messages. Both the visible From address and any nonempty SMTP envelope `MAIL FROM` address must satisfy the credential's sender policy.
-
 ## Troubleshooting
 
 ### Authentication fails
 
-Use the managed **Login email** and generated `mail_` or legacy `imap_` password, not an ordinary account API key or your dashboard password. Confirm that the credential is active and has not been deleted or rotated. IMAP requires **Mailbox + SMTP**; **SMTP only** credentials cannot authenticate to IMAP.
+Use the managed **Login email** and generated `mail_` or legacy `imap_` password, not an ordinary account API key or your dashboard password. Confirm that the credential is enabled and that its password hasn't been rotated. **SMTP only** credentials cannot authenticate to IMAP.
+
+Authentication also fails when the login email's domain, or every scope domain, is no longer verified. After 10 failed attempts for the same login from the same IP address within 15 minutes, further attempts are rejected, even with the correct password, until the window ends. A `NO [TEMPFAIL]` response means the authentication service was unavailable; retry later.
+
+### The connection closes right away
+
+The server allows 20 simultaneous connections per client IP address and replies `* BYE Too many connections from this address` above that. Close unused sessions or lower your client's connection count. Connections that stay idle for 60 seconds before logging in are closed. See [connection limits and timeouts](/mailboxes/imap-behavior#connection-limits-and-timeouts).
 
 ### The inbox is empty
 
@@ -232,27 +185,19 @@ Check that the receiving domain is verified and its receiving MX records are con
 
 ### TLS or certificate validation fails
 
-Confirm the hostname, port, TLS mode, and TLS 1.2 support match the connection settings. Keep hostname and certificate validation enabled. Test the TLS handshake without providing a username or password:
+Use port `993` with implicit TLS (often labeled SSL/TLS), not STARTTLS, and make sure the client supports TLS 1.2 or later. Keep hostname and certificate validation enabled. Test the TLS handshake without providing a username or password:
 
 ```bash
 openssl s_client -connect imap.inboundemail.com:993 \
   -servername imap.inboundemail.com \
   -verify_hostname imap.inboundemail.com \
   -verify_return_error
-
-openssl s_client -connect smtp.inboundemail.com:587 \
-  -starttls smtp \
-  -servername smtp.inboundemail.com \
-  -verify_hostname smtp.inboundemail.com \
-  -verify_return_error
 ```
 
-These commands inspect the connection and certificate without placing credentials in shell history.
+After the handshake, type `a CAPABILITY` to see the advertised capabilities and `b LOGOUT` to close the connection.
 
-### A domain is missing or SMTP rejects the sender
+### A domain is missing from the scope selector
 
 [Add and verify the domain](https://inbound.new/emails) before creating or editing a credential, and use an exact owned, verified domain for the login email. Select **Add** after configuring each scope.
 
-For **Exact identity**, both the visible From address and any nonempty envelope sender must match the configured address. For **Any scoped domain**, both must use an exact represented domain, even when the receiving scope names only one address. Parent-domain scopes do not authorize subdomains.
-
-Learn more about [scopes and permissions](/mailboxes/scopes-and-permissions), [managing credentials](/mailboxes/manage-credentials), and [IMAP behavior](/mailboxes/imap-behavior).
+Learn more about [scopes and permissions](/mailboxes/scopes-and-permissions), [managing credentials](/mailboxes/manage-credentials), and [IMAP behavior](/mailboxes/imap-behavior). For sending problems, see [Send with SMTP](/mailboxes/connect-smtp#reply-codes).
