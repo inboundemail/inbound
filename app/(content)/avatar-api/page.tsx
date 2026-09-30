@@ -17,7 +17,7 @@ import Globe2 from "@/components/icons/globe-2"
 import Image2 from "@/components/icons/image-2"
 
 export const metadata: Metadata = {
-  title: 'Free Avatar API - BIMI, Gravatar & Smart Fallbacks | inbound',
+  title: 'Free Avatar API - BIMI, Gravatar & Smart Fallbacks',
   description: 'Free avatar API with cascading sources: BIMI company logos, Gravatar, unavatar.io, and generated initials. Fast, cached, and completely free. No API key required.',
   keywords: [
     'avatar API',

@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { DeviceAuthorization } from "@/components/device-authorization";
 
 export const metadata: Metadata = {
-	title: "Authorize inboundctl | Inbound",
+	title: "Authorize inboundctl",
 	referrer: "no-referrer",
 };
 

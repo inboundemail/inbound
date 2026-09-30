@@ -75,9 +75,55 @@ export function MarketingNav({ isLoggedIn = false }: MarketingNavProps) {
 	);
 }
 
+const footerGroups = [
+	{
+		heading: "Product",
+		links: [
+			["Inbound email API", "/inbound-email-service"],
+			["Email to webhook", "/email-webhook-api"],
+			["Email parsing", "/email-parsing-api"],
+			["Email for AI agents", "/email-api-for-ai-agents"],
+			["Catch-all routing", "/catch-all-email-api"],
+		],
+	},
+	{
+		heading: "Guides",
+		links: [
+			["Receive email in Node.js", "/guides/receive-email-nodejs"],
+			["Receive email in Next.js", "/guides/receive-email-nextjs"],
+			["Receive email in Python", "/guides/receive-email-python"],
+		],
+	},
+	{
+		heading: "Compare",
+		links: [
+			["Mailgun inbound", "/mailgun-inbound-alternative"],
+			["SendGrid Inbound Parse", "/sendgrid-inbound-alternative"],
+			["Postmark inbound", "/postmark-inbound-alternative"],
+			["Resend Inbound", "/resend-inbound-alternative"],
+		],
+	},
+];
+
 export function MarketingFooter() {
 	return (
 		<footer className="py-12 border-t border-[#e7e5e4] mt-8">
+			<div className="grid grid-cols-2 sm:grid-cols-3 gap-8 text-sm mb-10">
+				{footerGroups.map((group) => (
+					<div key={group.heading}>
+						<p className="font-medium text-[#1c1917] mb-3">{group.heading}</p>
+						<ul className="space-y-2">
+							{group.links.map(([label, href]) => (
+								<li key={href}>
+									<Link href={href} className="text-[#52525b] hover:text-[#1c1917]">
+										{label}
+									</Link>
+								</li>
+							))}
+						</ul>
+					</div>
+				))}
+			</div>
 			<div className="flex items-center justify-between text-sm text-[#52525b]">
 				<div className="flex items-center gap-4">
 					<span>© {new Date().getFullYear()} Inbound</span>

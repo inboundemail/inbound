@@ -19,11 +19,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   
   if (!entry) {
     return {
-      title: 'Entry Not Found - Changelog - Inbound',
+      title: 'Entry Not Found - Changelog',
     }
   }
   
-  const title = `${entry.title} - Changelog - Inbound`
+  const title = `${entry.title} - Changelog`
   const description = entry.summary || `${entry.title} - Version ${entry.version}`
   
   return {

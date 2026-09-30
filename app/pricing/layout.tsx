@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Pricing - Affordable Email Infrastructure for Developers | inbound',
+  title: 'Pricing: Email API Plans from $4/month',
   description: 'Simple pricing for email infrastructure. Plans start at $4/month for 5,000 emails; Pro is $15/month for 50,000 emails and 50 domains.',
   keywords: [
     'email pricing',

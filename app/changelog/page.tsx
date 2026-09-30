@@ -15,7 +15,7 @@ interface ChangelogEntry {
 }
 
 export const metadata: Metadata = {
-  title: 'Changelog - Inbound',
+  title: 'Changelog',
   description: 'All the latest updates, improvements, and fixes to Inbound',
   alternates: { canonical: '/changelog' },
   openGraph: {
