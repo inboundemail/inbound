@@ -123,12 +123,13 @@ git clone https://github.com/R44VC0RP/inbound
 cd inbound
 bun install
 
-# Start the dev server
-bun run dev
-
-# Test email webhooks locally (no AWS needed)
-bun run inbound-webhook-test test@yourdomain.com
+# Start Postgres in Docker and run next dev against it
+bun run dev:local
 ```
+
+`dev:local` blanks sending, AWS, QStash, Svix, Redis, and OAuth credentials for the dev server, so nothing reaches production. Sign in at `http://localhost:3000/login` with any email; the magic link is printed in the terminal. Then add demo data with `bun run dev:local seed you@example.com`. Run `bun run dev:local reset` to wipe the local database (for example after `lib/db/schema.ts` changes).
+
+Plain `bun run dev` refuses to connect to a remote database unless `ALLOW_REMOTE_DB=true` is set.
 
 ## API Features
 

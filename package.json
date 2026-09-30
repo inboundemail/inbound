@@ -5,6 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "next dev",
+    "dev:local": "bun run scripts/local-dev.ts",
     "inbound": "bun run packages/inbound-cli/src/bin/inbound.ts",
     "inboundctl": "bun run packages/inboundctl/src/inboundctl.ts",
     "generate:openapi": "bun run scripts/generate-openapi.ts",

@@ -311,6 +311,11 @@ export const auth = betterAuth({
 			expiresIn: 300, // 5 minutes
 			disableSignUp: process.env.NODE_ENV === "development" ? false : true, // Only allow magic link for existing accounts - new users must use Google OAuth
 			sendMagicLink: async ({ email, url }, _request) => {
+				if (process.env.INBOUND_LOCAL_DEV === "true") {
+					console.log(`🔗 [local dev] Magic link for ${email}: ${url}`);
+					return;
+				}
+
 				console.log(`📧 Sending magic link to ${email}`);
 
 				try {
@@ -336,6 +341,7 @@ export const auth = betterAuth({
 		user: {
 			create: {
 				after: async (user) => {
+					if (process.env.INBOUND_LOCAL_DEV === "true") return;
 					// Personal welcome email from Ryan on every new signup.
 					// Fire-and-forget: never block or fail the signup flow.
 					try {

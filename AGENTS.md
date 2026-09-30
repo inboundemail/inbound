@@ -6,6 +6,7 @@
 
 | Task | Command |
 |------|---------|
+| Local dev (Docker Postgres, no prod services) | `bun run dev:local` |
 | Single test | `bun test path/to/file.test.ts` |
 | All E2 API tests | `bun run test:e2` |
 | Legacy API tests | `bun run test-api` |
