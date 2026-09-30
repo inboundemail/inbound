@@ -23,7 +23,8 @@ module.exports = {
         if (!this.secure && !this._server.options.disableSTARTTLS && !this._server.options.ignoreSTARTTLS) {
             // Only allow authentication using TLS
             return callback(null, {
-                response: 'BAD',
+                response: 'NO',
+                code: 'PRIVACYREQUIRED',
                 message: 'Run STARTTLS first'
             });
         }

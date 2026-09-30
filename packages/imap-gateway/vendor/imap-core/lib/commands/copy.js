@@ -93,12 +93,14 @@ module.exports = {
                 let code =
                     typeof success === 'string'
                         ? success.toUpperCase()
-                        : 'COPYUID ' +
-                          info.uidValidity +
-                          ' ' +
-                          imapTools.packMessageRange(info.sourceUid) +
-                          ' ' +
-                          imapTools.packMessageRange(info.destinationUid);
+                        : info && info.sourceUid && info.sourceUid.length
+                          ? 'COPYUID ' +
+                            info.uidValidity +
+                            ' ' +
+                            imapTools.packMessageRange(info.sourceUid) +
+                            ' ' +
+                            imapTools.packMessageRange(info.destinationUid)
+                          : false;
 
                 callback(null, {
                     response: success === true ? 'OK' : 'NO',

@@ -132,15 +132,17 @@ module.exports = {
                                     type: 'atom',
                                     value: 'PERMANENTFLAGS'
                                 },
-                                flagList
-                                    .map(flag => ({
-                                        type: 'atom',
-                                        value: flag
-                                    }))
-                                    .concat({
-                                        type: 'text',
-                                        value: '\\*'
-                                    })
+                                this.selected.readOnly
+                                    ? []
+                                    : flagList
+                                          .map(flag => ({
+                                              type: 'atom',
+                                              value: flag
+                                          }))
+                                          .concat({
+                                              type: 'text',
+                                              value: '\\*'
+                                          })
                             ]
                         },
                         {

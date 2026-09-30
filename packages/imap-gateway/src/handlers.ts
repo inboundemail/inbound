@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { format } from "node:util";
 import type { ApiAuth, AuthenticatedMailbox } from "./auth.ts";
 import type { FlagAction, MailStore } from "./db.ts";
 import { AppendQuotaError, SPECIAL_USE } from "./db.ts";
@@ -40,6 +41,7 @@ interface ImapSession {
 				mailbox?: string;
 				path?: string;
 				readOnly?: boolean;
+				notifications?: unknown[];
 		  }
 		| false;
 	formatResponse: (command: string, uid: number, data: unknown) => unknown;
@@ -75,10 +77,16 @@ interface StoreUpdate {
 	unchangedSince: number;
 }
 
+function formatLog(args: unknown[]): string {
+	return typeof args[0] === "object" && args[0] !== null
+		? format(...args.slice(1))
+		: format(...args);
+}
+
 const logger = {
 	debug: () => undefined,
-	info: (...args: unknown[]) => console.log("[imap]", ...args),
-	error: (...args: unknown[]) => console.error("[imap]", ...args),
+	info: (...args: unknown[]) => console.log("[imap]", formatLog(args)),
+	error: (...args: unknown[]) => console.error("[imap]", formatLog(args)),
 };
 
 export function buildHandlers(
@@ -113,6 +121,17 @@ export function buildHandlers(
 		);
 	}
 
+	function notifySelected(
+		session: ImapSession,
+		mailboxId: string,
+		updates: unknown[],
+	): void {
+		const selected = session.selected;
+		if (selected && selected.mailbox === mailboxId) {
+			selected.notifications?.push(...updates);
+		}
+	}
+
 	return {
 		logger,
 
@@ -121,7 +140,12 @@ export function buildHandlers(
 			const address = authData.username.trim().toLowerCase();
 			const limited = limits.assertAuthAllowed(ip, address);
 			if (limited) return callback(null);
-			if (!address.includes("@") || !authData.password) {
+			if (
+				!address.includes("@") ||
+				address.length > 255 ||
+				!authData.password ||
+				authData.password.length > 1024
+			) {
 				limits.recordAuthFailure(ip, address);
 				return callback(null);
 			}
@@ -160,7 +184,7 @@ export function buildHandlers(
 					flags: mailbox.scopeId ? ["\\NoInferiors"] : [],
 					specialUse: SPECIAL_USE[mailbox.path] ?? false,
 				}));
-				if (user.credentialId && user.scopes.length > 0) {
+				if (user.scopes.length > 0) {
 					folders.push({
 						path: "Scopes",
 						flags: ["\\Noselect", "\\HasChildren"],
@@ -183,7 +207,7 @@ export function buildHandlers(
 						flags: [],
 					}),
 				);
-				if (user.credentialId && user.scopes.length > 0) {
+				if (user.scopes.length > 0) {
 					folders.push({ path: "Scopes", flags: ["\\Noselect"] });
 				}
 				return folders;
@@ -204,16 +228,18 @@ export function buildHandlers(
 			openMailbox(session, path)
 				.then(async (mailbox) => {
 					if (!mailbox) return callback(null, "NONEXISTENT");
-					const [uidList, fresh] = await Promise.all([
-						store.listUids(mailbox.id),
-						store.getMailboxByPath(requireUser(session), path),
-					]);
+					const fresh =
+						(await store.getMailboxByPath(requireUser(session), path)) ??
+						mailbox;
+					const uidList = (await store.listUids(mailbox.id)).filter(
+						(uid) => uid < fresh.uidNext,
+					);
 					callback(null, {
 						_id: mailbox.id,
 						path,
 						uidValidity: mailbox.uidValidity,
-						uidNext: fresh?.uidNext ?? mailbox.uidNext,
-						modifyIndex: fresh?.modseq ?? mailbox.modseq,
+						uidNext: fresh.uidNext,
+						modifyIndex: fresh.modseq,
 						uidList,
 						flags: [],
 						readOnly:
@@ -238,7 +264,6 @@ export function buildHandlers(
 						uidNext: fresh?.uidNext ?? mailbox.uidNext,
 						uidValidity: mailbox.uidValidity,
 						unseen,
-						highestModseq: 0,
 					});
 				})
 				.catch((err: Error) => callback(err));
@@ -247,11 +272,16 @@ export function buildHandlers(
 		onCreate(path: string, session: ImapSession, callback: Callback) {
 			(async () => {
 				const user = requireUser(session);
-				if (user.accessMode !== "read_write" || path.startsWith("Scopes/")) {
+				if (
+					user.accessMode !== "read_write" ||
+					path === "Scopes" ||
+					path.startsWith("Scopes/")
+				) {
 					return "CANNOT";
 				}
-				await store.createMailbox(user, path);
-				return true;
+				return (await store.createMailbox(user, path))
+					? true
+					: "ALREADYEXISTS";
 			})()
 				.then((ok) => callback(null, ok))
 				.catch((err: Error) => callback(err));
@@ -269,9 +299,13 @@ export function buildHandlers(
 					user.accessMode !== "read_write" ||
 					path === "INBOX" ||
 					path.startsWith("Scopes/") ||
+					newPath === "Scopes" ||
 					newPath.startsWith("Scopes/")
 				)
 					return "CANNOT";
+				if (await store.getMailboxByPath(user, newPath)) {
+					return "ALREADYEXISTS";
+				}
 				const ok = await store.renameMailbox(user, path, newPath);
 				return ok ? true : "NONEXISTENT";
 			})()
@@ -389,12 +423,20 @@ export function buildHandlers(
 				if (destination.scopeId) {
 					return { success: "READ-ONLY" as const, info: null };
 				}
+				if (destination.id === mailboxId) {
+					return { success: "CANNOT" as const, info: null };
+				}
 				const info = await store.copyMessages(
 					mailboxId,
 					destination,
 					update.messages,
 				);
-				await store.deleteMessages(mailboxId, info.sourceUid);
+				const moved = await store.deleteMessages(mailboxId, update.messages);
+				notifySelected(
+					session,
+					mailboxId,
+					moved.map((uid) => ({ command: "EXPUNGE", uid })),
+				);
 				return { success: true as const, info };
 			})()
 				.then(({ success, info }) => callback(null, success, info))
@@ -478,7 +520,7 @@ export function buildHandlers(
 					(options.query ?? []) as import("./search.ts").SearchNode[],
 				)
 				.then((uidList) => {
-					callback(null, { uidList, highestModseq: 0 });
+					callback(null, { uidList });
 				})
 				.catch((err: Error) => callback(err));
 		},
@@ -497,7 +539,18 @@ export function buildHandlers(
 			}
 			store
 				.updateFlags(mailboxId, update.messages, update.action, update.value)
-				.then(() => callback(null, true, []))
+				.then((updated) => {
+					if (!update.silent) {
+						for (const { uid, flags } of updated) {
+							const response = _session.formatResponse("FETCH", uid, {
+								uid,
+								flags,
+							});
+							if (response) _session.writeStream.write(response);
+						}
+					}
+					callback(null, true, []);
+				})
 				.catch((err: Error) => callback(err));
 		},
 
@@ -524,10 +577,17 @@ export function buildHandlers(
 						return "READ-ONLY";
 					}
 				}
-				await store.expunge(
+				const expunged = await store.expunge(
 					mailboxId,
 					update.isUid ? (update.messages ?? []) : undefined,
 				);
+				if (!update.silent) {
+					notifySelected(
+						_session,
+						mailboxId,
+						expunged.map((uid) => ({ command: "EXPUNGE", uid })),
+					);
+				}
 				return true;
 			})()
 				.then((result) => callback(null, result))

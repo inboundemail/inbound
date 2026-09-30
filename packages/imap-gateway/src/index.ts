@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { createSecureContext } from "node:tls";
 import { ApiAuth } from "./auth.ts";
 import { loadConfig } from "./config.ts";
 import { MailStore } from "./db.ts";
@@ -36,14 +35,17 @@ const orphanCleanup = setInterval(() => {
 orphanCleanup.unref();
 await store.cleanupOrphanedAppendedMessages();
 
-const tls =
-	config.tlsKeyPath && config.tlsCertPath
+function readTls() {
+	return config.tlsKeyPath && config.tlsCertPath
 		? {
 				key: readFileSync(config.tlsKeyPath),
 				cert: readFileSync(config.tlsCertPath),
 				minVersion: "TLSv1.2" as const,
 			}
 		: null;
+}
+
+const tls = readTls();
 
 if (!tls && !config.allowPlaintext) {
 	throw new Error(
@@ -54,7 +56,7 @@ if (!tls && !config.allowPlaintext) {
 function startServer(secure: boolean, port: number) {
 	const server = new IMAPServer({
 		name: config.hostname,
-		version: "0.1.0",
+		id: { name: "Inbound IMAP" },
 		secure,
 		disableSTARTTLS: !tls,
 		ignoreSTARTTLS: !tls,
@@ -62,14 +64,8 @@ function startServer(secure: boolean, port: number) {
 		maxConnections: config.maxConnections,
 		maxMessage: config.maxMessageBytes,
 		...(tls ?? {}),
-		...(tls
-			? {
-					SNICallback: (
-						_servername: string,
-						cb: (err: Error | null, ctx?: unknown) => void,
-					) => cb(null, createSecureContext(tls)),
-				}
-			: {}),
+		SNICallback: (_servername: unknown, cb: (err: Error | null) => void) =>
+			cb(null),
 	});
 
 	server.logger = handlers.logger;
@@ -116,15 +112,32 @@ function startServer(secure: boolean, port: number) {
 	return server;
 }
 
-const servers: Array<{ close: (callback: () => void) => void }> = [];
+const servers: Array<{
+	close: (callback: () => void) => void;
+	updateSecureContext: (options: object) => void;
+}> = [];
 if (tls) servers.push(startServer(true, config.securePort));
 if (config.allowPlaintext) servers.push(startServer(false, config.port));
+
+const tlsReload = setInterval(() => {
+	try {
+		const next = readTls();
+		if (next) for (const server of servers) server.updateSecureContext(next);
+	} catch (err) {
+		console.error(
+			"[imap-gateway] TLS certificate reload failed",
+			(err as Error).message,
+		);
+	}
+}, 12 * 60 * 60_000);
+tlsReload.unref();
 
 let shuttingDown = false;
 function shutdown(): void {
 	if (shuttingDown) return;
 	shuttingDown = true;
 	clearInterval(orphanCleanup);
+	clearInterval(tlsReload);
 	const shutdownTimeout = setTimeout(() => {
 		console.error("[imap-gateway] graceful shutdown timed out");
 		process.exit(1);

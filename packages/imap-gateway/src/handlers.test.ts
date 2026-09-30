@@ -47,14 +47,14 @@ function createHarness(
 			},
 		]),
 		addFlag: mock(async () => undefined),
-		updateFlags: mock(async () => []),
-		expunge: mock(async () => []),
+		updateFlags: mock(async () => [] as Array<{ uid: number; flags: string[] }>),
+		expunge: mock(async () => [] as number[]),
 		copyMessages: mock(async () => ({
 			uidValidity: 1,
 			sourceUid: [1],
 			destinationUid: [1],
 		})),
-		deleteMessages: mock(async () => undefined),
+		deleteMessages: mock(async () => [] as number[]),
 		appendMessage: mock(async () => ({ uidValidity: 1, uid: 1 })),
 	};
 	const handlers = buildHandlers(
@@ -323,6 +323,88 @@ describe("IMAP backend authorization", () => {
 
 		expect(success).toBe(true);
 		expect(store.appendMessage).toHaveBeenCalledTimes(1);
+	});
+
+	it("reports EXPUNGE for every message removed by EXPUNGE and MOVE", async () => {
+		const { handlers, mailbox, session, store } = createHarness("read_write");
+		const notifications: unknown[] = [];
+		session.selected = {
+			mailbox: mailbox.id,
+			path: mailbox.path,
+			readOnly: false,
+			notifications,
+		};
+		store.expunge.mockImplementation(async () => [2, 5]);
+		store.deleteMessages.mockImplementation(async () => [1]);
+		store.copyMessages.mockImplementation(async () => ({
+			uidValidity: 1,
+			sourceUid: [],
+			destinationUid: [],
+		}));
+		await callbackResult((callback) => {
+			handlers.onExpunge(mailbox.id, { isUid: false }, session, callback);
+		});
+		const [moved] = await callbackResult((callback) => {
+			handlers.onMove(
+				mailbox.id,
+				{ destination: "Archive", messages: [1] },
+				session,
+				callback,
+			);
+		});
+
+		expect(moved).toBe(true);
+		expect(store.deleteMessages).toHaveBeenCalledWith(mailbox.id, [1]);
+		expect(notifications).toEqual([
+			{ command: "EXPUNGE", uid: 2 },
+			{ command: "EXPUNGE", uid: 5 },
+			{ command: "EXPUNGE", uid: 1 },
+		]);
+	});
+
+	it("refuses MOVE into the source mailbox", async () => {
+		const { handlers, mailbox, session, store } = createHarness("read_write");
+		const [result] = await callbackResult((callback) => {
+			handlers.onMove(
+				mailbox.id,
+				{ destination: mailbox.path, messages: [1] },
+				session,
+				callback,
+			);
+		});
+
+		expect(result).toBe("CANNOT");
+		expect(store.deleteMessages).not.toHaveBeenCalled();
+	});
+
+	it("returns updated flags for non-silent STORE only", async () => {
+		const { handlers, mailbox, session, store } = createHarness("read_write");
+		const written: unknown[] = [];
+		session.formatResponse = (_command, uid, data) => ({ uid, data });
+		session.writeStream = { write: (chunk) => written.push(chunk) };
+		store.updateFlags.mockImplementation(async () => [
+			{ uid: 1, flags: ["\\Seen"] },
+		]);
+		for (const silent of [true, false]) {
+			await callbackResult((callback) => {
+				handlers.onStore(
+					mailbox.id,
+					{
+						value: ["\\Seen"],
+						action: "add",
+						silent,
+						messages: [1],
+						unchangedSince: 0,
+					},
+					session,
+					callback,
+				);
+			});
+		}
+
+		expect(written).toEqual([
+			{ uid: 1, data: { uid: 1, flags: ["\\Seen"] } },
+		]);
 	});
 
 	it.each([
