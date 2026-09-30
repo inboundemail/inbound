@@ -28,13 +28,13 @@ const plans = [
 	{
 		name: "Growth",
 		price: 39,
-		description: "100,000 emails/mo · 200 domains",
+		description: "100,000 emails/mo · 300 domains",
 		autumn_id: "growth",
 	},
 	{
 		name: "Scale",
 		price: 79,
-		description: "200,000 emails/mo · 500 domains",
+		description: "200,000 emails/mo · unlimited domains",
 		autumn_id: "scale",
 	},
 ];
@@ -159,7 +159,7 @@ export function PricingTable({
 					</div>
 					<div className="flex justify-between py-3">
 						<span className="text-[#3f3f46]">Additional email capacity</span>
-						<span className="text-[#1c1917]">$16/50k emails/mo</span>
+						<span className="text-[#1c1917]">$16/50k received + 50k sent/mo</span>
 					</div>
 				</div>
 			</section>

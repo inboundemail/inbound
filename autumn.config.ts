@@ -67,6 +67,12 @@ export const inboundGuard = feature({
 	type: "boolean",
 });
 
+export const workspaceConnectorAccess = feature({
+	id: "workspace_connector_access",
+	name: "Workspace Connector Access",
+	type: "boolean",
+});
+
 // Products
 export const freeTier = product({
 	id: "free_tier",
@@ -80,7 +86,6 @@ export const freeTier = product({
 		featureItem({
 			feature_id: inboundTriggers.id,
 			included_usage: 10,
-			reset_usage_when_enabled: false,
 		}),
 
 		featureItem({
@@ -118,7 +123,6 @@ export const inboundDefaultTest = product({
 			feature_id: inboundTriggers.id,
 			included_usage: 5000,
 			interval: "month",
-			reset_usage_when_enabled: false,
 		}),
 
 		featureItem({
@@ -127,6 +131,28 @@ export const inboundDefaultTest = product({
 			interval: "month",
 		}),
 	],
+});
+
+export const workspaceConnector = product({
+	id: "workspace_connector",
+	name: "Workspace Connector",
+	items: [
+		priceItem({
+			price: 5,
+			interval: "month",
+		}),
+
+		featureItem({
+			feature_id: workspaceConnectorAccess.id,
+			included_usage: 0,
+		}),
+	],
+	free_trial: {
+		duration: "day",
+		length: 30,
+		unique_fingerprint: true,
+		card_required: true,
+	},
 });
 
 export const pro = product({
@@ -205,7 +231,6 @@ export const growth = product({
 			feature_id: inboundTriggers.id,
 			included_usage: 100000,
 			interval: "month",
-			reset_usage_when_enabled: false,
 		}),
 
 		featureItem({
@@ -274,17 +299,6 @@ export const scale = product({
 	],
 });
 
-export const defaultPlan = product({
-	id: "default_plan",
-	name: "Default Plan (Monthly)",
-	items: [
-		priceItem({
-			price: 4,
-			interval: "month",
-		}),
-	],
-});
-
 export const extraDomains = product({
 	id: "extra_domains",
 	name: "Extra Domains",
@@ -296,6 +310,28 @@ export const extraDomains = product({
 			included_usage: 1,
 			billing_units: 1,
 			usage_model: "prepaid",
+		}),
+	],
+});
+
+export const defaultPlanYearly = product({
+	id: "default_plan_yearly",
+	name: "Default Plan (Yearly)",
+	items: [
+		priceItem({
+			price: 26,
+			interval: "year",
+		}),
+	],
+});
+
+export const defaultPlan = product({
+	id: "default_plan",
+	name: "Default Plan (Monthly)",
+	items: [
+		priceItem({
+			price: 4,
+			interval: "month",
 		}),
 	],
 });
@@ -336,17 +372,6 @@ export const inboundVip = product({
 		featureItem({
 			feature_id: vipByok.id,
 			included_usage: 0,
-		}),
-	],
-});
-
-export const defaultPlanYearly = product({
-	id: "default_plan_yearly",
-	name: "Default Plan (Yearly)",
-	items: [
-		priceItem({
-			price: 26,
-			interval: "year",
 		}),
 	],
 });
