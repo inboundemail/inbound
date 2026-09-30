@@ -461,6 +461,11 @@ export class MailStore {
 						  AND (
 							lower(se.recipient) = ANY(${addresses})
 							OR split_part(lower(se.recipient), '@', 2) = ANY(${domains})
+							OR se.envelope_recipients && ${addresses}::text[]
+							OR EXISTS (
+								SELECT 1 FROM unnest(se.envelope_recipients) AS envelope(address)
+								WHERE split_part(envelope.address, '@', 2) = ANY(${domains})
+							)
 						  )
 						  AND NOT EXISTS (
 							SELECT 1 FROM imap_mailbox_messages mm
@@ -481,7 +486,10 @@ export class MailStore {
 					       row_number() OVER (ORDER BY se.created_at ASC, se.id ASC) AS rn
 					FROM structured_emails se
 					WHERE se.user_id = ${principal.userId}
-					  AND lower(se.recipient) = ${principal.loginAddress.toLowerCase()}
+					  AND (
+						lower(se.recipient) = ${principal.loginAddress.toLowerCase()}
+						OR ${principal.loginAddress.toLowerCase()} = ANY(se.envelope_recipients)
+					  )
 					  AND se.raw_content IS NOT NULL
 					  AND NOT EXISTS (
 						SELECT 1 FROM imap_mailbox_messages mm

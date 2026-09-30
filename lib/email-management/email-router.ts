@@ -23,6 +23,7 @@ import {
 import { getOrCreateVerificationToken } from "@/lib/webhooks/verification";
 import { evaluateGuardRules } from "../guard/rule-matcher";
 import { isDsn } from "@/lib/email-management/dsn-parser";
+import { envelopeRecipientsOf } from "@/lib/email-management/inbound-dedupe";
 import {
 	checkRecipientsAgainstBlocklist,
 	isEmailBlocked,
@@ -85,13 +86,24 @@ export async function retryEmailDelivery(
 	return routeEmailWithResult(emailId, { ...target, userId });
 }
 
-export async function routeEmail(emailId: string): Promise<void> {
-	await routeEmailWithResult(emailId);
+export type RouteEmailOptions = {
+	/** Envelope recipients to route for. Defaults to all of the email's envelope recipients. */
+	recipients?: string[];
+	/** Skip threading when the email was already threaded (e.g. recipients merged in later). */
+	skipThreading?: boolean;
+};
+
+export async function routeEmail(
+	emailId: string,
+	options: RouteEmailOptions = {},
+): Promise<void> {
+	await routeEmailWithResult(emailId, undefined, options);
 }
 
 async function routeEmailWithResult(
 	emailId: string,
 	retry?: RetryOptions,
+	options: RouteEmailOptions = {},
 ): Promise<DeliveryResult> {
 	console.log(`🎯 routeEmail - Processing email ID: ${emailId}`);
 
@@ -201,7 +213,8 @@ async function routeEmailWithResult(
 		// 🧵 NEW: Process threading before routing
 		let threadingResult: ThreadingResult | null = null;
 		try {
-			threadingResult = retry
+			threadingResult =
+				retry || options.skipThreading
 				? emailData.threadId && emailData.threadPosition
 					? {
 							threadId: emailData.threadId,
@@ -222,25 +235,30 @@ async function routeEmailWithResult(
 			console.error(`⚠️ Threading failed for email ${emailId}:`, threadingError);
 		}
 
-		// Find associated endpoint for this email
-		if (!emailData.recipient) {
+		const candidateRecipients =
+			options.recipients ?? envelopeRecipientsOf(emailData);
+		if (candidateRecipients.length === 0) {
 			throw new Error("Email recipient not found");
 		}
 
-		// Check if this is a DMARC email and handle according to domain settings
-		const isDmarcEmail = await checkIfDmarcEmail(
-			emailData.recipient,
-			emailData.userId,
-		);
-		if (isDmarcEmail) {
-			console.log(
-				`📊 routeEmail - DMARC email detected for ${emailData.recipient}, checking domain settings`,
-			);
+		// Drop DMARC report recipients whose domain has DMARC delivery disabled
+		const recipients: string[] = [];
+		for (const candidate of candidateRecipients) {
+			if (await checkIfDmarcEmail(candidate, emailData.userId)) {
+				console.log(
+					`📊 routeEmail - DMARC delivery disabled for ${candidate}, not routing it`,
+				);
+				continue;
+			}
+			recipients.push(candidate);
+		}
+		if (recipients.length === 0) {
 			return {
 				success: false,
 				message: "DMARC delivery is disabled by domain settings",
 			};
 		}
+		const primaryRecipient = recipients[0];
 
 		// 🛡️ GUARD: Check feature flag before evaluating Guard rules
 		let guardFeatureEnabled = false;
@@ -418,7 +436,7 @@ async function routeEmailWithResult(
 			const rootEndpoint = await getThreadRootEndpoint(
 				threadingResult.threadId,
 				emailData.userId,
-				emailData.recipient,
+				primaryRecipient,
 			);
 			if (rootEndpoint) {
 				endpoint = rootEndpoint;
@@ -432,17 +450,21 @@ async function routeEmailWithResult(
 			}
 		}
 
-		// If thread routing didn't find an endpoint, use normal endpoint lookup
-		if (!endpoint) {
-			// Pass userId to findEndpointForEmail to ensure proper filtering
-			endpoint = await findEndpointForEmail(
-				emailData.recipient,
-				emailData.userId,
-			);
+		// Resolve one delivery per distinct endpoint across all envelope recipients
+		const targets = new Map<string, { endpoint: Endpoint; recipient: string }>();
+		if (endpoint) {
+			targets.set(endpoint.id, { endpoint, recipient: primaryRecipient });
+		} else {
+			for (const recipient of recipients) {
+				const found = await findEndpointForEmail(recipient, emailData.userId);
+				if (found && !targets.has(found.id)) {
+					targets.set(found.id, { endpoint: found, recipient });
+				}
+			}
 		}
-		if (!endpoint) {
+		if (targets.size === 0) {
 			console.warn(
-				`⚠️ routeEmail - No endpoint configured for ${emailData.recipient}, falling back to legacy webhook lookup`,
+				`⚠️ routeEmail - No endpoint configured for ${recipients.join(", ")}, falling back to legacy webhook lookup`,
 			);
 			// Fallback to existing webhook logic for backward compatibility
 			const result = await triggerEmailAction(
@@ -482,7 +504,7 @@ async function routeEmailWithResult(
 			if (!result.success) {
 				// Log the error but don't throw - this allows the email to be processed even without a webhook
 				console.warn(
-					`⚠️ routeEmail - No webhook configured for ${emailData.recipient}: ${result.error || "Legacy webhook processing failed"}`,
+					`⚠️ routeEmail - No webhook configured for ${primaryRecipient}: ${result.error || "Legacy webhook processing failed"}`,
 				);
 				console.log(
 					`📧 routeEmail - Email ${emailId} processed but not routed (no webhook/endpoint configured)`,
@@ -500,22 +522,44 @@ async function routeEmailWithResult(
 			};
 		}
 
-		console.log(
-			`📍 routeEmail - Found endpoint: ${endpoint.name} (type: ${endpoint.type}) for ${emailData.recipient}`,
-		);
-
-		switch (endpoint.type) {
-			case "webhook":
-				return handleWebhookEndpoint(emailId, endpoint, retry);
-			case "email":
-			case "email_group":
-				return handleEmailForwardEndpoint(emailId, endpoint, emailData, retry);
-			default:
-				throw new EmailRetryError(
-					`Unsupported endpoint type: ${endpoint.type}`,
-					400,
-				);
+		const results: DeliveryResult[] = [];
+		for (const target of targets.values()) {
+			console.log(
+				`📍 routeEmail - Found endpoint: ${target.endpoint.name} (type: ${target.endpoint.type}) for ${target.recipient}`,
+			);
+			switch (target.endpoint.type) {
+				case "webhook":
+					results.push(
+						await handleWebhookEndpoint(
+							emailId,
+							target.endpoint,
+							retry,
+							target.recipient,
+						),
+					);
+					break;
+				case "email":
+				case "email_group":
+					results.push(
+						await handleEmailForwardEndpoint(
+							emailId,
+							target.endpoint,
+							{ ...emailData, recipient: target.recipient },
+							retry,
+						),
+					);
+					break;
+				default:
+					throw new EmailRetryError(
+						`Unsupported endpoint type: ${target.endpoint.type}`,
+						400,
+					);
+			}
 		}
+		return (
+			results.find((result) => !result.success) ??
+			(results[0] as DeliveryResult)
+		);
 	} catch (error) {
 		console.error(`❌ routeEmail - Error processing email ${emailId}:`, error);
 		throw error;
@@ -540,6 +584,7 @@ async function getEmailWithStructuredData(emailId: string, userId?: string) {
 			date: structuredEmails.date,
 			subject: structuredEmails.subject,
 			recipient: structuredEmails.recipient,
+			envelopeRecipients: structuredEmails.envelopeRecipients,
 			fromData: structuredEmails.fromData,
 			toData: structuredEmails.toData,
 			ccData: structuredEmails.ccData,
@@ -1020,6 +1065,7 @@ async function handleWebhookEndpoint(
 	emailId: string,
 	endpoint: Endpoint,
 	retry?: RetryOptions,
+	routedRecipient?: string,
 ): Promise<DeliveryResult> {
 	const claim = await claimEndpointDelivery(emailId, endpoint, retry);
 	if (!("id" in claim)) {
@@ -1098,7 +1144,8 @@ async function handleWebhookEndpoint(
 				messageId: emailData.messageId,
 				from: emailData.fromData ? JSON.parse(emailData.fromData) : null,
 				to: emailData.toData ? JSON.parse(emailData.toData) : null,
-				recipient: emailData.recipient,
+				recipient: routedRecipient ?? emailData.recipient,
+				envelopeRecipients: envelopeRecipientsOf(emailData),
 				subject: emailData.subject,
 				receivedAt: emailData.date,
 

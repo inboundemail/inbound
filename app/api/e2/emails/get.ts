@@ -1,6 +1,8 @@
 import { Elysia, t } from "elysia";
 import { validateAndRateLimit } from "../lib/auth";
 import { db } from "@/lib/db";
+import { resolveStructuredEmailId } from "@/lib/email-management/email-aliases";
+import { envelopeRecipientsOf } from "@/lib/email-management/inbound-dedupe";
 import { sentEmails, structuredEmails, scheduledEmails } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 
@@ -16,7 +18,14 @@ const EmailDetailSchema = t.Object({
   from: t.String(),
   to: t.Array(t.String()),
   envelope_recipient: t.Optional(
-    t.Nullable(t.String({ description: "Stored delivery recipient for received emails, independent of message headers" }))
+    t.Nullable(t.String({ description: "Primary envelope recipient (first of envelope_recipients). Deprecated: use envelope_recipients" }))
+  ),
+  envelope_recipients: t.Optional(
+    t.Nullable(
+      t.Array(t.String(), {
+        description: "All envelope recipients this email was delivered to on your domains, including BCC recipients, independent of message headers",
+      })
+    )
   ),
   cc: t.Optional(t.Nullable(t.Array(t.String()))),
   bcc: t.Optional(t.Nullable(t.Array(t.String()))),
@@ -80,7 +89,7 @@ export const getEmail = new Elysia().get(
     const userId = await validateAndRateLimit(request, set);
     console.log("✅ Authentication successful for userId:", userId);
 
-    const emailId = params.id;
+    const emailId = await resolveStructuredEmailId(params.id, userId);
 
     // Try to find in received emails (structuredEmails) first
     console.log("🔍 Searching received emails...");
@@ -106,6 +115,7 @@ export const getEmail = new Elysia().get(
         id: email.id,
         type: "received" as const,
         envelope_recipient: email.recipient,
+          envelope_recipients: envelopeRecipientsOf(email),
         from: parseFromData(email.fromData),
         to: parseAddressesFromData(email.toData),
         cc: parseAddressesFromData(email.ccData),

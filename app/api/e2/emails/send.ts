@@ -27,6 +27,10 @@ import {
 import { checkRecipientsAgainstBlocklist } from "@/lib/email-management/email-blocking";
 import { evaluateSending } from "@/lib/email-management/email-evaluation";
 import { enforceOutboundSendGuard } from "@/lib/email-management/outbound-send-guard";
+import {
+	checkIdempotencyKey,
+	readIdempotencyKey,
+} from "@/app/api/e2/helper/idempotency";
 import { checkSendingSpike } from "@/lib/email-management/sending-spike-detector";
 import {
 	formatScheduledDate,
@@ -184,28 +188,21 @@ export const sendEmail = new Elysia().post(
 			};
 		}
 
-		// Check for idempotency key
-		const idempotencyKey = request.headers.get("Idempotency-Key");
+		const idempotency = readIdempotencyKey(request.headers);
+		if ("error" in idempotency) {
+			set.status = 400;
+			return { error: idempotency.error };
+		}
+		const idempotencyKey = idempotency.key;
 		if (idempotencyKey) {
-			console.log("🔑 Idempotency key provided:", idempotencyKey);
-
-			const existingEmail = await db
-				.select()
-				.from(sentEmails)
-				.where(
-					and(
-						eq(sentEmails.userId, userId),
-						eq(sentEmails.idempotencyKey, idempotencyKey),
-					),
-				)
-				.limit(1);
-
-			if (existingEmail.length > 0) {
-				console.log(
-					"♻️ Idempotent request - returning existing email:",
-					existingEmail[0].id,
-				);
-				return { id: existingEmail[0].id };
+			const decision = await checkIdempotencyKey(userId, idempotencyKey);
+			if (decision.kind === "replay") {
+				const messageId = decision.email.sesMessageId || decision.email.messageId;
+				return { id: decision.email.id, ...(messageId ? { message_id: messageId } : {}) };
+			}
+			if (decision.kind === "in_progress") {
+				set.status = 409;
+				return decision.body;
 			}
 		}
 
@@ -477,7 +474,9 @@ export const sendEmail = new Elysia().post(
 		const emailId = nanoid();
 		console.log("💾 Creating sent email record:", emailId);
 
-		await db.insert(sentEmails).values({
+		const inserted = await db
+			.insert(sentEmails)
+			.values({
 			id: emailId,
 			from: body.from,
 			fromAddress,
@@ -501,7 +500,25 @@ export const sendEmail = new Elysia().post(
 			idempotencyKey,
 			createdAt: new Date(),
 			updatedAt: new Date(),
-		});
+			})
+			.onConflictDoNothing(
+				idempotencyKey
+					? { target: [sentEmails.userId, sentEmails.idempotencyKey] }
+					: undefined,
+			)
+			.returning({ id: sentEmails.id });
+
+		if (inserted.length === 0 && idempotencyKey) {
+			const decision = await checkIdempotencyKey(userId, idempotencyKey);
+			if (decision.kind === "replay") {
+				const messageId = decision.email.sesMessageId || decision.email.messageId;
+				return { id: decision.email.id, ...(messageId ? { message_id: messageId } : {}) };
+			}
+			set.status = 409;
+			return decision.kind === "in_progress"
+				? decision.body
+				: { error: "A request with this Idempotency-Key is still being processed. Retry shortly." };
+		}
 
 		// Check if SES is configured
 		if (!sesClient) {
@@ -682,6 +699,7 @@ export const sendEmail = new Elysia().post(
 			400: ErrorResponse,
 			401: ErrorResponse,
 			403: ErrorResponse,
+			409: ErrorResponse,
 			429: ErrorResponse,
 			500: ErrorResponse,
 		},

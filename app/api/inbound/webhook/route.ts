@@ -3,7 +3,7 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Autumn as autumn } from "autumn-js";
 import { timingSafeEqual } from "crypto";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import type { SESEvent, SESRecord } from "@/lib/aws-ses/aws-ses";
 import { db } from "@/lib/db";
@@ -20,7 +20,8 @@ import {
 import { routeEmail } from "@/lib/email-management/email-router";
 import {
 	buildInboundDedupeFingerprint,
-	buildInboundDeterministicId,
+	envelopeRecipientsOf,
+	buildInboundMessageRowId,
 	normalizeMessageIdForDedupe,
 	normalizeRecipientForDedupe,
 } from "@/lib/email-management/inbound-dedupe";
@@ -220,10 +221,98 @@ function isDuplicateKeyError(error: unknown): boolean {
 		return false;
 	}
 
-	const errorWithCode = error as Error & { code?: string };
+	const errorWithCode = error as Error & { code?: string; cause?: unknown };
+	const cause = errorWithCode.cause as { code?: string; message?: string } | undefined;
 	return (
-		errorWithCode.code === "23505" || error.message.includes("duplicate key")
+		errorWithCode.code === "23505" ||
+		cause?.code === "23505" ||
+		error.message.includes("duplicate key") ||
+		!!cause?.message?.includes("duplicate key")
 	);
+}
+
+type ExistingInboundEmail = {
+	id: string;
+	recipients: string[];
+	guardBlocked: boolean;
+};
+
+/**
+ * Finds the stored email for this message and user, whether it is a new
+ * one-row-per-message email or legacy per-recipient rows.
+ */
+async function findExistingInboundEmail(
+	userId: string,
+	normalizedHeaderMessageId: string | null,
+	sesMessageId: string,
+): Promise<ExistingInboundEmail | null> {
+	const columns = {
+		id: structuredEmails.id,
+		recipient: structuredEmails.recipient,
+		envelopeRecipients: structuredEmails.envelopeRecipients,
+		guardBlocked: structuredEmails.guardBlocked,
+	};
+	const rows = normalizedHeaderMessageId
+		? await db
+				.select(columns)
+				.from(structuredEmails)
+				.where(
+					and(
+						eq(structuredEmails.userId, userId),
+						eq(structuredEmails.messageId, normalizedHeaderMessageId),
+					),
+				)
+				.orderBy(asc(structuredEmails.createdAt))
+		: await db
+				.select(columns)
+				.from(structuredEmails)
+				.innerJoin(sesEvents, eq(sesEvents.id, structuredEmails.sesEventId))
+				.where(
+					and(
+						eq(structuredEmails.userId, userId),
+						eq(sesEvents.messageId, sesMessageId),
+					),
+				)
+				.orderBy(asc(structuredEmails.createdAt));
+
+	if (rows.length === 0) return null;
+	const canonical = rows.find((row) => row.envelopeRecipients) ?? rows[0];
+	const recipients = [
+		...new Set(
+			rows.flatMap((row) =>
+				envelopeRecipientsOf(row).map(normalizeRecipientForDedupe),
+			),
+		),
+	];
+	return {
+		id: canonical.id,
+		recipients,
+		guardBlocked: !!canonical.guardBlocked,
+	};
+}
+
+/**
+ * Adds envelope recipients to an existing email and returns the ones that were new.
+ */
+async function mergeEnvelopeRecipients(
+	existing: ExistingInboundEmail,
+	incoming: string[],
+): Promise<string[]> {
+	const added = incoming.filter(
+		(recipient) => !existing.recipients.includes(recipient),
+	);
+	const recipientArray = sql`array[${sql.join(
+		[...existing.recipients, ...added].map((recipient) => sql`${recipient}`),
+		sql`, `,
+	)}]::text[]`;
+	await db
+		.update(structuredEmails)
+		.set({
+			envelopeRecipients: sql`(select array_agg(distinct r) from unnest(coalesce(${structuredEmails.envelopeRecipients}, array[]::text[]) || ${recipientArray}) as r)`,
+			updatedAt: new Date(),
+		})
+		.where(eq(structuredEmails.id, existing.id));
+	return added;
 }
 
 /**
@@ -233,9 +322,10 @@ async function createStructuredEmailRecord(
 	sesEventId: string,
 	parsedEmailData: ParsedEmailData,
 	userId: string,
-	recipient: string,
+	envelopeRecipients: string[],
 	normalizedHeaderMessageId: string | null,
-): Promise<string> {
+): Promise<{ id: string; created: boolean }> {
+	const recipient = envelopeRecipients[0];
 	try {
 		const normalizedRecipient = normalizeRecipientForDedupe(recipient);
 		const normalizedParsedMessageId = normalizeMessageIdForDedupe(
@@ -249,10 +339,10 @@ async function createStructuredEmailRecord(
 
 		// Use hash-based deterministic ID to prevent race condition duplicates AND ID collisions
 		// Primary seed is normalized Message-ID + recipient, fallback is SES event + recipient
-		const structuredEmailId = buildInboundDeterministicId(
+		const structuredEmailId = buildInboundMessageRowId(
 			"inbnd",
 			sesEventId,
-			normalizedRecipient,
+			userId,
 			effectiveMessageId,
 		);
 		const structuredEmailRecord = {
@@ -260,6 +350,7 @@ async function createStructuredEmailRecord(
 			emailId: structuredEmailId, // Self-referencing for backward compatibility
 			sesEventId: sesEventId,
 			recipient: normalizedRecipient,
+			envelopeRecipients,
 
 			// Core email fields matching ParsedEmailData exactly
 			messageId: effectiveMessageId || null,
@@ -331,16 +422,16 @@ async function createStructuredEmailRecord(
 					effectiveMessageId,
 				);
 				console.log(
-					`⏭️  Webhook - DEDUPE decision=duplicate_skip scope=insert source=db_unique_constraint fingerprint=${fingerprint} existing=${structuredEmailId}`,
+					`⏭️  Webhook - DEDUPE decision=merge scope=insert source=db_unique_constraint fingerprint=${fingerprint} existing=${structuredEmailId}`,
 				);
-				return structuredEmailId;
+				return { id: structuredEmailId, created: false };
 			}
 
 			// Re-throw if it's a different error
 			throw insertError;
 		}
 
-		return structuredEmailId;
+		return { id: structuredEmailId, created: true };
 	} catch (error) {
 		console.error(
 			`❌ Webhook - Error creating structured email record for recipient ${recipient}:`,
@@ -352,10 +443,10 @@ async function createStructuredEmailRecord(
 		// This is intentional - we log the error above and return the existing ID
 		try {
 			const normalizedRecipient = normalizeRecipientForDedupe(recipient);
-			const failedStructuredId = buildInboundDeterministicId(
+			const failedStructuredId = buildInboundMessageRowId(
 				"inbnd_failed",
 				sesEventId,
-				normalizedRecipient,
+				userId,
 				normalizedHeaderMessageId,
 			);
 			const failedStructuredRecord = {
@@ -363,6 +454,7 @@ async function createStructuredEmailRecord(
 				emailId: failedStructuredId, // Self-referencing
 				sesEventId: sesEventId,
 				recipient: normalizedRecipient,
+				envelopeRecipients,
 				messageId: normalizedHeaderMessageId,
 				parseSuccess: false,
 				parseError:
@@ -385,14 +477,14 @@ async function createStructuredEmailRecord(
 						normalizedHeaderMessageId,
 					);
 					console.warn(
-						`⏭️  Webhook - DEDUPE decision=duplicate_skip scope=failed_insert source=db_unique_constraint fingerprint=${failedFingerprint} existing=${failedStructuredId} error=${error instanceof Error ? error.message : "Unknown"}`,
+						`⏭️  Webhook - DEDUPE decision=merge scope=failed_insert source=db_unique_constraint fingerprint=${failedFingerprint} existing=${failedStructuredId} error=${error instanceof Error ? error.message : "Unknown"}`,
 					);
-					return failedStructuredId;
+					return { id: failedStructuredId, created: false };
 				}
 
 				throw failedInsertError;
 			}
-			return failedStructuredId;
+			return { id: failedStructuredId, created: true };
 		} catch (insertError) {
 			console.error(
 				`❌ Webhook - Failed to create failed structured parse record for recipient ${recipient}:`,
@@ -501,105 +593,6 @@ export async function POST(request: NextRequest) {
 					(entry) => entry.recipient,
 				);
 
-				// EARLY IDEMPOTENCY CHECK 1: Check using email's Message-ID header
-				// This catches duplicates when SES triggers Lambda multiple times for the same email
-				// (e.g., when both catch-all and specific address rules match the same incoming email)
-				if (normalizedEmailMessageId) {
-					const existingByEmailMessageId = await db
-						.select({
-							id: structuredEmails.id,
-							recipient: structuredEmails.recipient,
-							userId: structuredEmails.userId,
-						})
-						.from(structuredEmails)
-						.where(eq(structuredEmails.messageId, normalizedEmailMessageId));
-
-					if (existingByEmailMessageId.length > 0) {
-						const existingRecipientOwners = existingByEmailMessageId
-							.map((e) => {
-								if (!e.recipient || !e.userId) return null;
-								return {
-									recipient: normalizeRecipientForDedupe(e.recipient),
-									userId: e.userId,
-								};
-							})
-							.filter(
-								(value): value is { recipient: string; userId: string } =>
-									!!value,
-							);
-						const hasOverlap = recipientEntries.some((entry) =>
-							existingRecipientOwners.some(
-								(existing) =>
-									existing.recipient === entry.recipient &&
-									existing.userId === entry.userId,
-							),
-						);
-
-						if (hasOverlap) {
-							console.log(
-								`⏭️  Webhook - DEDUPE decision=duplicate_skip scope=record reason=message_id_overlap_same_owner messageId=${normalizedEmailMessageId} recipients=${normalizedRecipients.join(",")}`,
-							);
-							continue; // Skip this entire record
-						} else {
-							const existingRecipients = existingRecipientOwners.map(
-								(existing) => existing.recipient,
-							);
-							console.log(
-								`🔍 Webhook - Same Email Message-ID but different recipient-owner pairs. Existing recipients: ${existingRecipients.join(", ")}, Current recipients: ${normalizedRecipients.join(", ")}`,
-							);
-						}
-					}
-				}
-
-				// EARLY IDEMPOTENCY CHECK 2: Check using SES message ID
-				// This prevents processing the exact same Lambda invocation twice
-				const existingSesEvent = await db
-					.select({
-						recipient: structuredEmails.recipient,
-						userId: structuredEmails.userId,
-					})
-					.from(structuredEmails)
-					.innerJoin(sesEvents, eq(sesEvents.id, structuredEmails.sesEventId))
-					.where(eq(sesEvents.messageId, mail.messageId));
-
-				if (existingSesEvent.length > 0) {
-					const existingRecipientOwners = existingSesEvent
-						.map((e) => {
-							if (!e.recipient || !e.userId) return null;
-							return {
-								recipient: normalizeRecipientForDedupe(e.recipient),
-								userId: e.userId,
-							};
-						})
-						.filter(
-							(value): value is { recipient: string; userId: string } =>
-								!!value,
-						);
-
-					// Check if ANY current recipient-owner pair was already processed
-					const hasOverlap = recipientEntries.some((entry) =>
-						existingRecipientOwners.some(
-							(existing) =>
-								existing.recipient === entry.recipient &&
-								existing.userId === entry.userId,
-						),
-					);
-
-					if (hasOverlap) {
-						console.log(
-							`⏭️  Webhook - DEDUPE decision=duplicate_skip scope=record reason=ses_message_id_overlap_same_owner sesMessageId=${mail.messageId} recipients=${normalizedRecipients.join(",")}`,
-						);
-						continue; // Skip this entire record
-					} else {
-						const existingRecipients = existingRecipientOwners.map(
-							(existing) => existing.recipient,
-						);
-						console.log(
-							`🔍 Webhook - Same SES messageId but different recipients. Existing: ${existingRecipients.join(", ")}, Current: ${normalizedRecipients.join(", ")}`,
-						);
-					}
-				}
-
 				// First, store the SES event with race-condition handling
 				// Use a deterministic ID based on messageId to prevent duplicates
 				const sesEventId = `ses_${mail.messageId}`;
@@ -652,97 +645,167 @@ export async function POST(request: NextRequest) {
 					}
 				}
 
-				// Then, create a receivedEmail record for each recipient
+				// One structured email per message per user. All of a user's envelope
+				// recipients (including BCC) are kept on that single row.
+				const recipientsByUser = new Map<string, string[]>();
 				for (const { recipient, userId } of recipientEntries) {
-					// IDEMPOTENCY CHECK: Skip if we've already processed this email for this recipient
-					// Use the email's Message-ID header (from commonHeaders) for deduplication
-					// This catches duplicates when SES triggers Lambda multiple times for the same email
-					// (e.g., when both catch-all and specific address rules match)
-					if (normalizedEmailMessageId) {
-						const existingEmail = await db
-							.select({ id: structuredEmails.id })
-							.from(structuredEmails)
-							.where(
-								and(
-									eq(structuredEmails.messageId, normalizedEmailMessageId), // Normalized Message-ID header
-									eq(structuredEmails.recipient, recipient),
-									eq(structuredEmails.userId, userId),
-								),
-							)
-							.limit(1);
+					const userRecipients = recipientsByUser.get(userId) ?? [];
+					if (!userRecipients.includes(recipient)) userRecipients.push(recipient);
+					recipientsByUser.set(userId, userRecipients);
+				}
 
-						if (existingEmail[0]) {
-							const fingerprint = buildInboundDedupeFingerprint(
-								userId,
-								recipient,
-								normalizedEmailMessageId,
-							);
-							console.log(
-								`⏭️  Webhook - DEDUPE decision=duplicate_skip scope=recipient reason=message_id_match fingerprint=${fingerprint} existing=${existingEmail[0].id}`,
-							);
-							continue; // Skip this duplicate
-						}
-					} else {
-						// Fallback: If no Message-ID header, use SES messageId (less reliable for duplicates)
-						const existingEmail = await db
-							.select({ id: structuredEmails.id })
-							.from(structuredEmails)
-							.innerJoin(
-								sesEvents,
-								eq(sesEvents.id, structuredEmails.sesEventId),
-							)
-							.where(
-								and(
-									eq(sesEvents.messageId, mail.messageId), // AWS SES messageId
-									eq(structuredEmails.recipient, recipient),
-									eq(structuredEmails.userId, userId),
-								),
-							)
-							.limit(1);
+				const senderBlocked = await isEmailBlocked(mail.source);
+				if (senderBlocked) {
+					console.warn(
+						`🚫 Webhook - Email from blocked sender ${mail.source} to ${normalizedRecipients.join(", ")}`,
+					);
+				}
 
-						if (existingEmail[0]) {
-							const fingerprint = buildInboundDedupeFingerprint(
-								userId,
-								recipient,
-								null,
+				let contentLoaded = false;
+				let emailContent: string | null | undefined = record.emailContent;
+				let parsedEmailData: ParsedEmailData | null = null;
+				const loadContent = async () => {
+					if (contentLoaded) return;
+					contentLoaded = true;
+					if (
+						!emailContent &&
+						record.s3Location?.bucket &&
+						record.s3Location?.key
+					) {
+						console.log(
+							`📥 Webhook - Content not in payload, fetching from S3 (${record.s3Location.bucket}/${record.s3Location.key})`,
+						);
+						try {
+							const s3Client = new S3Client({
+								region: process.env.AWS_REGION || "us-east-1",
+							});
+							const response = await s3Client.send(
+								new GetObjectCommand({
+									Bucket: record.s3Location.bucket,
+									Key: record.s3Location.key,
+								}),
 							);
-							console.log(
-								`⏭️  Webhook - DEDUPE decision=duplicate_skip scope=recipient reason=ses_message_id_fallback fingerprint=${fingerprint} existing=${existingEmail[0].id}`,
+							if (response.Body) {
+								const chunks: Uint8Array[] = [];
+								const reader = response.Body.transformToWebStream().getReader();
+								while (true) {
+									const { done, value } = await reader.read();
+									if (done) break;
+									chunks.push(value);
+								}
+								emailContent = Buffer.concat(chunks).toString("utf-8");
+								console.log(
+									`✅ Webhook - S3 fetch successful (${emailContent.length} bytes)`,
+								);
+							} else {
+								console.error(`❌ Webhook - S3 fetch failed: no response body`);
+							}
+						} catch (s3Error) {
+							console.error(
+								`❌ Webhook - S3 fetch error: ${s3Error instanceof Error ? s3Error.message : "Unknown error"}`,
 							);
-							continue; // Skip this duplicate
 						}
 					}
 
-					const fingerprint = buildInboundDedupeFingerprint(
-						userId,
-						recipient,
-						normalizedEmailMessageId,
-					);
+					if (emailContent) {
+						try {
+							parsedEmailData = await parseEmail(emailContent);
+							console.log(`✅ Webhook - Parse successful`);
+						} catch (parseError) {
+							console.error(
+								`❌ Webhook - Parse failed: ${parseError instanceof Error ? parseError.message : "Unknown error"}`,
+							);
+						}
+					} else {
+						console.warn(`⚠️ Webhook - No content available for parsing`);
+					}
+				};
+
+				const mergeIntoExisting = async (
+					existing: ExistingInboundEmail,
+					userRecipients: string[],
+				) => {
+					const added = await mergeEnvelopeRecipients(existing, userRecipients);
+					if (added.length === 0) {
+						console.log(
+							`⏭️  Webhook - DEDUPE decision=duplicate_skip scope=message existing=${existing.id} recipients=${userRecipients.join(",")}`,
+						);
+						return;
+					}
 					console.log(
-						`✅ Webhook - DEDUPE decision=accepted scope=recipient fingerprint=${fingerprint}`,
+						`🔗 Webhook - DEDUPE decision=merge scope=message existing=${existing.id} added=${added.join(",")}`,
+					);
+					let webhookDelivery: { success: boolean; error?: string } | null =
+						null;
+					if (senderBlocked || existing.guardBlocked) {
+						webhookDelivery = {
+							success: false,
+							error: senderBlocked
+								? "Email blocked - sender is on the blocklist"
+								: "Email is blocked by Guard",
+						};
+					} else {
+						try {
+							await routeEmail(existing.id, {
+								recipients: added,
+								skipThreading: true,
+							});
+							webhookDelivery = { success: true };
+						} catch (routingError) {
+							webhookDelivery = {
+								success: false,
+								error:
+									routingError instanceof Error
+										? routingError.message
+										: "Unknown routing error",
+							};
+						}
+					}
+					processedEmails.push({
+						emailId: existing.id,
+						sesEventId,
+						messageId: mail.messageId,
+						recipient: added.join(", "),
+						subject: mail.commonHeaders.subject,
+						webhookDelivery,
+					});
+				};
+
+				for (const [userId, userRecipients] of recipientsByUser) {
+					const primaryRecipient = userRecipients[0];
+					const existing = await findExistingInboundEmail(
+						userId,
+						normalizedEmailMessageId,
+						mail.messageId,
+					);
+					if (existing) {
+						await mergeIntoExisting(existing, userRecipients);
+						continue;
+					}
+
+					console.log(
+						`✅ Webhook - DEDUPE decision=accepted scope=message fingerprint=${buildInboundDedupeFingerprint(userId, primaryRecipient, normalizedEmailMessageId)} recipients=${userRecipients.join(",")}`,
 					);
 
-					// Check and track inbound trigger usage
+					// Inbound usage is counted once per message, not per recipient
 					const triggerResult = await checkAndTrackInboundTrigger(
 						userId,
-						recipient,
+						primaryRecipient,
 					);
 
 					if (!triggerResult.allowed) {
 						console.warn(
-							`⚠️ Webhook - Rejected email for ${recipient} due to inbound trigger limits: ${triggerResult.error}`,
+							`⚠️ Webhook - Rejected email for ${userRecipients.join(", ")} due to inbound trigger limits: ${triggerResult.error}`,
 						);
 						rejectedEmails.push({
 							messageId: mail.messageId,
-							recipient: recipient,
+							recipient: userRecipients.join(", "),
 							userId: userId,
 							reason: triggerResult.error || "Inbound trigger limit reached",
 							subject: mail.commonHeaders.subject,
 						});
 
-						// Send limit reached notification to user (async, don't wait)
-						// Look up user details first
-						const domain = extractDomain(recipient);
+						const domain = extractDomain(primaryRecipient);
 						db.select({ email: user.email, name: user.name })
 							.from(user)
 							.where(eq(user.id, userId))
@@ -756,7 +819,7 @@ export async function POST(request: NextRequest) {
 											userId: userId,
 											limitType: "inbound_triggers",
 											rejectedEmailCount: 1,
-											rejectedRecipient: recipient,
+											rejectedRecipient: primaryRecipient,
 											domain: domain,
 											triggeredAt: new Date(),
 										});
@@ -775,147 +838,72 @@ export async function POST(request: NextRequest) {
 								);
 							});
 
-						continue; // Skip processing this recipient
+						continue;
 					}
 
-					// Check if the sender email is blocked
-					const senderBlocked = await isEmailBlocked(mail.source);
-					let emailStatus: "received" | "blocked" = "received";
+					await loadContent();
 
-					if (senderBlocked) {
-						console.warn(
-							`🚫 Webhook - Email from blocked sender ${mail.source} to ${recipient}`,
-						);
-						emailStatus = "blocked";
-					}
-
-					// Fetch email content from S3 if not included in payload (for large emails)
-					let emailContent = record.emailContent;
-					if (
-						!emailContent &&
-						record.s3Location?.bucket &&
-						record.s3Location?.key
-					) {
-						console.log(
-							`📥 Webhook - Content not in payload, fetching from S3 (${record.s3Location.bucket}/${record.s3Location.key})`,
-						);
-						try {
-							const s3Client = new S3Client({
-								region: process.env.AWS_REGION || "us-east-1",
-							});
-
-							const command = new GetObjectCommand({
-								Bucket: record.s3Location.bucket,
-								Key: record.s3Location.key,
-							});
-
-							const response = await s3Client.send(command);
-
-							if (response.Body) {
-								// Convert stream to string
-								const chunks: Uint8Array[] = [];
-								const reader = response.Body.transformToWebStream().getReader();
-
-								while (true) {
-									const { done, value } = await reader.read();
-									if (done) break;
-									chunks.push(value);
-								}
-
-								const buffer = Buffer.concat(chunks);
-								emailContent = buffer.toString("utf-8");
-								console.log(
-									`✅ Webhook - S3 fetch successful (${emailContent.length} bytes)`,
-								);
-							} else {
-								console.error(`❌ Webhook - S3 fetch failed: no response body`);
-							}
-						} catch (s3Error) {
-							console.error(
-								`❌ Webhook - S3 fetch error: ${s3Error instanceof Error ? s3Error.message : "Unknown error"}`,
-							);
-						}
-					} else if (emailContent) {
-						console.log(
-							`✅ Webhook - Content in payload (${emailContent.length} bytes)`,
-						);
-					}
-
-					// Parse the email content using the new parseEmail function
-					let parsedEmailData: ParsedEmailData | null = null;
-					if (emailContent) {
-						console.log(`📧 Webhook - Parsing email...`);
-						try {
-							parsedEmailData = await parseEmail(emailContent);
-							console.log(`✅ Webhook - Parse successful`);
-						} catch (parseError) {
-							console.error(
-								`❌ Webhook - Parse failed: ${parseError instanceof Error ? parseError.message : "Unknown error"}`,
-							);
-						}
-					} else {
-						console.warn(`⚠️ Webhook - No content available for parsing`);
-					}
-
-					// Create structured email record - this is now the PRIMARY and ONLY record
 					let structuredEmailId: string;
+					let created: boolean;
 					if (parsedEmailData) {
-						structuredEmailId = await createStructuredEmailRecord(
-							sesEventId,
-							parsedEmailData,
-							userId,
-							recipient,
-							normalizedEmailMessageId,
-						);
+						({ id: structuredEmailId, created } =
+							await createStructuredEmailRecord(
+								sesEventId,
+								parsedEmailData,
+								userId,
+								userRecipients,
+								normalizedEmailMessageId,
+							));
 					} else {
-						// Create minimal record for unparseable emails with hash-based deterministic ID
 						console.warn(
 							`⚠️ Webhook - No parsed data for ${mail.messageId}, creating minimal record`,
 						);
-						structuredEmailId = buildInboundDeterministicId(
+						structuredEmailId = buildInboundMessageRowId(
 							"inbnd_minimal",
 							sesEventId,
-							recipient,
+							userId,
 							normalizedEmailMessageId,
 						);
-						const minimalRecord = {
-							id: structuredEmailId,
-							emailId: structuredEmailId,
-							sesEventId: sesEventId,
-							recipient: recipient,
-							messageId: normalizedEmailMessageId,
-							subject: mail.commonHeaders.subject || "No Subject",
-							parseSuccess: false,
-							parseError: "Failed to parse email content",
-							userId: userId,
-							createdAt: new Date(),
-							updatedAt: new Date(),
-						};
-
+						created = true;
 						try {
-							await db.insert(structuredEmails).values(minimalRecord);
+							await db.insert(structuredEmails).values({
+								id: structuredEmailId,
+								emailId: structuredEmailId,
+								sesEventId: sesEventId,
+								recipient: primaryRecipient,
+								envelopeRecipients: userRecipients,
+								messageId: normalizedEmailMessageId,
+								subject: mail.commonHeaders.subject || "No Subject",
+								parseSuccess: false,
+								parseError: "Failed to parse email content",
+								userId: userId,
+								createdAt: new Date(),
+								updatedAt: new Date(),
+							});
 						} catch (minimalInsertError) {
-							if (isDuplicateKeyError(minimalInsertError)) {
-								const minimalFingerprint = buildInboundDedupeFingerprint(
-									userId,
-									recipient,
-									normalizedEmailMessageId,
-								);
-								console.log(
-									`⏭️  Webhook - DEDUPE decision=duplicate_skip scope=insert source=db_unique_constraint fingerprint=${minimalFingerprint} existing=${structuredEmailId}`,
-								);
-							} else {
+							if (!isDuplicateKeyError(minimalInsertError)) {
 								throw minimalInsertError;
 							}
+							created = false;
 						}
 					}
 
-					// Initialize email processing record
+					if (!created) {
+						// Another invocation stored this message first; merge our recipients into it
+						const raced = await findExistingInboundEmail(
+							userId,
+							normalizedEmailMessageId,
+							mail.messageId,
+						);
+						if (raced) await mergeIntoExisting(raced, userRecipients);
+						continue;
+					}
+
 					const emailProcessingRecord = {
 						emailId: structuredEmailId,
 						sesEventId: sesEventId,
 						messageId: mail.messageId,
-						recipient: recipient,
+						recipient: userRecipients.join(", "),
 						subject: mail.commonHeaders.subject,
 						webhookDelivery: null as {
 							success: boolean;
@@ -925,26 +913,24 @@ export async function POST(request: NextRequest) {
 					};
 
 					console.log(
-						`✅ Webhook - Stored email ${mail.messageId} for ${recipient} with ID ${structuredEmailId}`,
+						`✅ Webhook - Stored email ${mail.messageId} for ${userRecipients.join(", ")} with ID ${structuredEmailId}`,
 					);
 
 					// ========== DSN DETECTION AND BOUNCE TRACKING ==========
-					// Check if this is a Delivery Status Notification (bounce/failure notification)
-					// These come from MAILER-DAEMON and contain bounce information
-					// DSN emails should be processed for bounce tracking but NOT forwarded/delivered to users
+					// DSN emails are recorded for bounce tracking but not delivered to users
 					let isDsnEmail = false;
 					if (emailContent && isDsn(emailContent)) {
 						isDsnEmail = true;
 						console.log(
-							`📬 Webhook - DSN detected for ${recipient}, recording delivery event...`,
+							`📬 Webhook - DSN detected for ${primaryRecipient}, recording delivery event...`,
 						);
 
 						try {
 							const dsnResult = await recordDeliveryEventFromDsn({
 								rawDsnContent: emailContent,
 								dsnEmailId: structuredEmailId,
-								autoBlocklist: true, // Auto-add hard bounces to blocklist
-								storeRawContent: false, // Don't store raw content to save space
+								autoBlocklist: true,
+								storeRawContent: false,
 							});
 
 							if (dsnResult.success) {
@@ -956,15 +942,6 @@ export async function POST(request: NextRequest) {
 										`🚫 Webhook - Hard bounce auto-added to blocklist: ${dsnResult.failedRecipient}`,
 									);
 								}
-								if (dsnResult.sourceFound) {
-									console.log(
-										`🔗 Webhook - DSN source found: user=${dsnResult.userId}, domain=${dsnResult.domainName}, tenant=${dsnResult.tenantName}`,
-									);
-								} else {
-									console.log(
-										`⚠️ Webhook - DSN source not found (original email not in sent_emails)`,
-									);
-								}
 							} else {
 								console.warn(
 									`⚠️ Webhook - Failed to record DSN: ${dsnResult.error}`,
@@ -972,57 +949,38 @@ export async function POST(request: NextRequest) {
 							}
 						} catch (dsnError) {
 							console.error(`❌ Webhook - Error processing DSN:`, dsnError);
-							// Don't fail the whole webhook for DSN processing errors
 						}
-					} else {
-						console.log(`📬 Webhook - No DSN detected for ${mail.messageId}`);
 					}
 					// ========== END DSN DETECTION ==========
 
-					// Route email using the new unified routing system
-					// Skip routing for:
-					// 1. Blocked emails (sender is on blocklist)
-					// 2. DSN emails (bounce notifications should be recorded but not delivered to users)
 					if (isDsnEmail) {
-						console.log(
-							`📬 Webhook - Skipping routing for DSN email ${structuredEmailId} - bounce already recorded`,
-						);
-
-						// Update processing record to indicate DSN was processed
 						emailProcessingRecord.webhookDelivery = {
 							success: true,
 							error:
 								"DSN processed - bounce notification not forwarded to user",
 						};
-					} else if (emailStatus === "blocked") {
-						console.log(
-							`🚫 Webhook - Skipping routing for blocked email ${structuredEmailId} from ${mail.source}`,
-						);
-
-						// Update processing record to indicate blocked
+					} else if (senderBlocked) {
 						emailProcessingRecord.webhookDelivery = {
 							success: false,
 							error: "Email blocked - sender is on the blocklist",
 						};
 					} else {
 						try {
-							await routeEmail(structuredEmailId);
+							await routeEmail(structuredEmailId, {
+								recipients: userRecipients,
+							});
 							console.log(
 								`✅ Webhook - Successfully routed email ${structuredEmailId}`,
 							);
-
-							// Update processing record with success
 							emailProcessingRecord.webhookDelivery = {
 								success: true,
-								deliveryId: undefined, // Will be tracked in endpointDeliveries table
+								deliveryId: undefined,
 							};
 						} catch (routingError) {
 							console.error(
 								`❌ Webhook - Failed to route email ${structuredEmailId}:`,
 								routingError,
 							);
-
-							// Update processing record with failure
 							emailProcessingRecord.webhookDelivery = {
 								success: false,
 								error:
@@ -1032,8 +990,6 @@ export async function POST(request: NextRequest) {
 							};
 						}
 					}
-
-					// Processing record already updated above in the try/catch block
 
 					processedEmails.push(emailProcessingRecord);
 				}

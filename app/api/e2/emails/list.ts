@@ -115,7 +115,14 @@ const EmailItemSchema = t.Object({
     description: "Array of recipient email addresses",
   }),
   envelope_recipient: t.Optional(
-    t.Nullable(t.String({ description: "Stored delivery recipient for received emails, independent of message headers" }))
+    t.Nullable(t.String({ description: "Primary envelope recipient (first of envelope_recipients). Deprecated: use envelope_recipients" }))
+  ),
+  envelope_recipients: t.Optional(
+    t.Nullable(
+      t.Array(t.String(), {
+        description: "All envelope recipients this email was delivered to on your domains, including BCC recipients, independent of message headers",
+      })
+    )
   ),
   cc: t.Optional(
     t.Array(t.String(), {
@@ -559,6 +566,7 @@ export const listEmails = new Elysia().get(
         .select({
           id: structuredEmails.id,
           recipient: structuredEmails.recipient,
+          envelopeRecipients: structuredEmails.envelopeRecipients,
           messageId: structuredEmails.messageId,
           fromData: structuredEmails.fromData,
           toData: structuredEmails.toData,
@@ -597,6 +605,11 @@ export const listEmails = new Elysia().get(
           id: email.id,
           type: "received",
           envelope_recipient: email.recipient,
+          envelope_recipients: email.envelopeRecipients?.length
+            ? email.envelopeRecipients
+            : email.recipient
+              ? [email.recipient]
+              : null,
           message_id: email.messageId,
           from: fromParsed.address,
           from_name: fromParsed.name,

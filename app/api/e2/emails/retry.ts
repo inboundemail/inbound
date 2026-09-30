@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
 import { db } from "@/lib/db";
+import { resolveStructuredEmailId } from "@/lib/email-management/email-aliases";
 import { sentEmails, structuredEmails } from "@/lib/db/schema";
 import {
 	EmailRetryError,
@@ -37,12 +38,13 @@ export const retryEmail = new Elysia().post(
 	"/emails/:id/retry",
 	async ({ request, params, body, set }) => {
 		const userId = await validateAndRateLimit(request, set);
+		const receivedEmailId = await resolveStructuredEmailId(params.id, userId);
 		const [email] = await db
 			.select({ emailId: structuredEmails.emailId })
 			.from(structuredEmails)
 			.where(
 				and(
-					eq(structuredEmails.id, params.id),
+					eq(structuredEmails.id, receivedEmailId),
 					eq(structuredEmails.userId, userId),
 				),
 			)

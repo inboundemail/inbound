@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
 	boolean,
 	index,
@@ -6,6 +7,7 @@ import {
 	text,
 	timestamp,
 	unique,
+	uniqueIndex,
 	varchar,
 } from "drizzle-orm/pg-core";
 import {
@@ -367,7 +369,8 @@ export const structuredEmails = pgTable(
 		messageId: varchar("message_id", { length: 255 }), // string | undefined
 		date: timestamp("date"), // Date | undefined
 		subject: text("subject"), // string | undefined
-		recipient: varchar("recipient", { length: 255 }), // Specific recipient for this email record
+		recipient: varchar("recipient", { length: 255 }), // Primary envelope recipient (first of envelopeRecipients)
+		envelopeRecipients: text("envelope_recipients").array(), // All of this user's envelope recipients (includes BCC); null on legacy per-recipient rows
 
 		// Address fields - stored as JSON matching ParsedEmailAddress structure
 		fromData: text("from_data"), // ParsedEmailAddress | null - JSON: { text: string, addresses: Array<{name: string|null, address: string|null}> }
@@ -421,6 +424,9 @@ export const structuredEmails = pgTable(
 		uniqueUserMessageRecipient: unique(
 			"structured_emails_user_message_recipient_unique",
 		).on(table.userId, table.messageId, table.recipient),
+		uniqueUserMessage: uniqueIndex("structured_emails_user_message_unique")
+			.on(table.userId, table.messageId)
+			.where(sql`${table.envelopeRecipients} is not null`),
 		messageIdIdx: index("structured_emails_message_id_idx").on(table.messageId),
 		threadIdIdx: index("structured_emails_thread_id_idx").on(table.threadId),
 		userCreatedIdx: index("structured_emails_user_created_idx").on(
@@ -430,6 +436,24 @@ export const structuredEmails = pgTable(
 		userIdIdx: index("structured_emails_user_id_idx").on(table.userId),
 		guardBlockedIdx: index("structured_emails_guard_blocked_idx").on(
 			table.guardBlocked,
+		),
+	}),
+);
+
+// Old structured_emails IDs that were merged into one row per message.
+// Lets API lookups by a previously delivered ID resolve to the kept email.
+export const structuredEmailAliases = pgTable(
+	"structured_email_aliases",
+	{
+		id: varchar("id", { length: 255 }).primaryKey(),
+		canonicalId: varchar("canonical_id", { length: 255 }).notNull(),
+		userId: varchar("user_id", { length: 255 }).notNull(),
+		recipient: varchar("recipient", { length: 255 }),
+		createdAt: timestamp("created_at").defaultNow(),
+	},
+	(table) => ({
+		canonicalIdx: index("structured_email_aliases_canonical_idx").on(
+			table.canonicalId,
 		),
 	}),
 );
@@ -610,6 +634,9 @@ export const sentEmails = pgTable(
 			table.userId,
 			table.firstOpenedAt,
 		),
+		uniqueUserIdempotencyKey: unique(
+			"sent_emails_user_idempotency_key_unique",
+		).on(table.userId, table.idempotencyKey),
 	}),
 );
 

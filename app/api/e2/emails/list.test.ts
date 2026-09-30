@@ -71,7 +71,7 @@ if (process.env.EMAIL_LIST_TEST_WORKER !== "1") {
   let queries: { params: unknown[]; rows: number }[];
 
   function received(id: string, createdAt: string | null = timestamp): Value[] {
-    return [id, "in@example.com", "message", '{"addresses":[{"address":"from@example.com","name":"Sender"}]}', '{"addresses":[{"address":"in@example.com"}]}', "broken", "", `${"x".repeat(199)}\ny`, "broken", true, createdAt, null, null, null, "thread"];
+    return [id, "in@example.com", null, "message", '{"addresses":[{"address":"from@example.com","name":"Sender"}]}', '{"addresses":[{"address":"in@example.com"}]}', "broken", "", `${"x".repeat(199)}\ny`, "broken", true, createdAt, null, null, null, "thread"];
   }
 
   function sent(id: string, createdAt: string | null = timestamp): Value[] {

@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { validateAndRateLimit } from "../lib/auth";
 import { getThreadParticipantNames } from "../lib/participants";
 import { db } from "@/lib/db";
+import { envelopeRecipientsOf } from "@/lib/email-management/inbound-dedupe";
 import { emailThreads, structuredEmails, sentEmails } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 
@@ -67,7 +68,14 @@ const ThreadMessageSchema = t.Object({
     description: "Array of recipient email addresses",
   }),
   envelope_recipient: t.Optional(
-    t.Nullable(t.String({ description: "Stored delivery recipient for inbound messages, independent of message headers" }))
+    t.Nullable(t.String({ description: "Primary envelope recipient (first of envelope_recipients). Deprecated: use envelope_recipients" }))
+  ),
+  envelope_recipients: t.Optional(
+    t.Nullable(
+      t.Array(t.String(), {
+        description: "All envelope recipients this email was delivered to on your domains, including BCC recipients, independent of message headers",
+      })
+    )
   ),
   cc: t.Array(t.String(), {
     description: "Array of CC recipient email addresses",
@@ -308,6 +316,7 @@ export const getThread = new Elysia().get(
         message_id: email.messageId,
         type: "inbound" as const,
         envelope_recipient: email.recipient,
+          envelope_recipients: envelopeRecipientsOf(email),
         thread_position: email.threadPosition || 0,
 
         // Content

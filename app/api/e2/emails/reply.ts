@@ -4,12 +4,17 @@ import { Autumn as autumn } from "autumn-js";
 import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { nanoid } from "nanoid";
+import {
+	checkIdempotencyKey,
+	readIdempotencyKey,
+} from "@/app/api/e2/helper/idempotency";
 import { buildSentEmailTags } from "@/app/api/e2/helper/ses-email-tags";
 import {
 	getTenantSendingInfoForDomainOrParent,
 	type TenantSendingInfo,
 } from "@/lib/aws-ses/identity-arn-helper";
 import { db } from "@/lib/db";
+import { resolveStructuredEmailId } from "@/lib/email-management/email-aliases";
 import {
 	SENT_EMAIL_STATUS,
 	sentEmails,
@@ -209,7 +214,10 @@ export const replyToEmail = new Elysia().post(
 
 		// Resolve whether this is an email ID or thread ID
 		console.log("🔍 Resolving ID type...");
-		const resolvedId = await EmailThreader.resolveEmailId(id, userId);
+		const resolvedId = await EmailThreader.resolveEmailId(
+			await resolveStructuredEmailId(id, userId),
+			userId,
+		);
 
 		if (!resolvedId) {
 			console.log("📭 ID not found in emails or threads");
@@ -224,35 +232,30 @@ export const replyToEmail = new Elysia().post(
 			`📧 Resolved to email ID: ${emailId} ${isThreadReply ? "(from thread ID)" : "(direct email ID)"}`,
 		);
 
-		// Idempotency Key Check
-		const idempotencyKey = request.headers.get("Idempotency-Key");
+		const idempotency = readIdempotencyKey(request.headers);
+		if ("error" in idempotency) {
+			set.status = 400;
+			return { error: idempotency.error };
+		}
+		const idempotencyKey = idempotency.key;
+		const replayReply = (replay: {
+			id: string;
+			messageId: string | null;
+			sesMessageId: string | null;
+		}) => ({
+			id: replay.id,
+			message_id: replay.messageId || "",
+			aws_message_id: replay.sesMessageId || "",
+			replied_to_email_id: emailId,
+			replied_to_thread_id: resolvedId.threadId,
+			is_thread_reply: isThreadReply,
+		});
 		if (idempotencyKey) {
-			console.log("🔑 Idempotency key provided:", idempotencyKey);
-
-			const existingEmail = await db
-				.select()
-				.from(sentEmails)
-				.where(
-					and(
-						eq(sentEmails.userId, userId),
-						eq(sentEmails.idempotencyKey, idempotencyKey),
-					),
-				)
-				.limit(1);
-
-			if (existingEmail.length > 0) {
-				console.log(
-					"♻️ Idempotent request - returning existing email:",
-					existingEmail[0].id,
-				);
-				return {
-					id: existingEmail[0].id,
-					message_id: existingEmail[0].messageId || "",
-					aws_message_id: existingEmail[0].sesMessageId || "",
-					replied_to_email_id: emailId,
-					replied_to_thread_id: resolvedId.threadId,
-					is_thread_reply: isThreadReply,
-				};
+			const decision = await checkIdempotencyKey(userId, idempotencyKey);
+			if (decision.kind === "replay") return replayReply(decision.email);
+			if (decision.kind === "in_progress") {
+				set.status = 409;
+				return decision.body;
 			}
 		}
 
@@ -521,7 +524,9 @@ export const replyToEmail = new Elysia().post(
 
 		console.log("💾 Creating email record:", replyEmailId);
 
-		await db.insert(sentEmails).values({
+		const inserted = await db
+			.insert(sentEmails)
+			.values({
 			id: replyEmailId,
 			from: formattedFromAddress,
 			fromAddress,
@@ -549,7 +554,22 @@ export const replyToEmail = new Elysia().post(
 			idempotencyKey,
 			createdAt: new Date(),
 			updatedAt: new Date(),
-		});
+			})
+			.onConflictDoNothing(
+				idempotencyKey
+					? { target: [sentEmails.userId, sentEmails.idempotencyKey] }
+					: undefined,
+			)
+			.returning({ id: sentEmails.id });
+
+		if (inserted.length === 0 && idempotencyKey) {
+			const decision = await checkIdempotencyKey(userId, idempotencyKey);
+			if (decision.kind === "replay") return replayReply(decision.email);
+			set.status = 409;
+			return decision.kind === "in_progress"
+				? decision.body
+				: { error: "A request with this Idempotency-Key is still being processed. Retry shortly." };
+		}
 
 		// Process threading for sent email
 		try {
@@ -826,6 +846,7 @@ export const replyToEmail = new Elysia().post(
 			401: ReplyEmailErrorResponse,
 			403: ReplyEmailErrorResponse,
 			404: ReplyEmailErrorResponse,
+			409: ReplyEmailErrorResponse,
 			429: ReplyEmailErrorResponse,
 			500: ReplyEmailErrorResponse,
 		},

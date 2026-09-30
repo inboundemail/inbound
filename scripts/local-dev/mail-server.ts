@@ -6,7 +6,7 @@ export type LocalSentMessage = {
 	recipients: string[];
 	raw: string;
 	sentAt: string;
-	deliveries: Array<{ recipient: string; status: number; body: string }>;
+	deliveries: Array<{ recipients: string[]; status: number; body: string }>;
 };
 
 type SendEmailRequest = {
@@ -39,7 +39,7 @@ function simpleToRaw(from: string, recipients: string[], simple: NonNullable<Sen
 
 export function buildSesInboundPayload(options: {
 	raw: string;
-	recipient: string;
+	recipients: string[];
 	sesMessageId: string;
 	source?: string;
 }) {
@@ -47,7 +47,7 @@ export function buildSesInboundPayload(options: {
 	const from = headerValue(options.raw, "From") ?? options.source ?? "unknown@localhost";
 	const subject = headerValue(options.raw, "Subject") ?? "";
 	const messageId = headerValue(options.raw, "Message-ID") ?? `<${options.sesMessageId}@local.test>`;
-	const to = headerValue(options.raw, "To") ?? options.recipient;
+	const to = headerValue(options.raw, "To") ?? options.recipients.join(", ");
 	const sender = options.source ?? from;
 
 	return {
@@ -63,7 +63,7 @@ export function buildSesInboundPayload(options: {
 						timestamp: nowIso,
 						source: sender,
 						messageId: options.sesMessageId,
-						destination: [options.recipient],
+						destination: options.recipients,
 						headers: [
 							{ name: "From", value: from },
 							{ name: "To", value: to },
@@ -81,7 +81,7 @@ export function buildSesInboundPayload(options: {
 					receipt: {
 						timestamp: nowIso,
 						processingTimeMillis: 50,
-						recipients: [options.recipient],
+						recipients: options.recipients,
 						spamVerdict: { status: "PASS" },
 						virusVerdict: { status: "PASS" },
 						spfVerdict: { status: "PASS" },
@@ -105,13 +105,13 @@ export async function deliverInbound(options: {
 	inboundWebhookUrl: string;
 	serviceApiKey: string;
 	raw: string;
-	recipient: string;
+	recipients: string[];
 	sesMessageId?: string;
 	source?: string;
 }) {
 	const payload = buildSesInboundPayload({
 		raw: options.raw,
-		recipient: options.recipient,
+		recipients: options.recipients,
 		sesMessageId: options.sesMessageId ?? `local-${randomUUID()}`,
 		source: options.source,
 	});
@@ -134,6 +134,7 @@ export function startLocalMailServer(options: {
 }) {
 	const messages: LocalSentMessage[] = [];
 	const log = options.log ?? (() => {});
+	let failNextSends = 0;
 
 	const server = Bun.serve({
 		port: options.port,
@@ -145,7 +146,19 @@ export function startLocalMailServer(options: {
 				return Response.json(messages);
 			}
 
+			if (request.method === "POST" && url.pathname === "/_local/fail-next") {
+				failNextSends += Number(url.searchParams.get("count") ?? "1");
+				return Response.json({ failNextSends });
+			}
+
 			if (request.method === "POST" && url.pathname === "/v2/email/outbound-emails") {
+				if (failNextSends > 0) {
+					failNextSends -= 1;
+					return Response.json(
+						{ __type: "MessageRejected", message: "Local SES stub rejected this send (fail-next)" },
+						{ status: 400, headers: { "x-amzn-ErrorType": "MessageRejected" } },
+					);
+				}
 				const body = (await request.json()) as SendEmailRequest;
 				const from = body.FromEmailAddress ?? "unknown@localhost";
 				const recipients = [
@@ -173,23 +186,21 @@ export function startLocalMailServer(options: {
 				log(`📨 [local mail] ${from} -> ${recipients.join(", ")} (${messageId})`);
 
 				queueMicrotask(async () => {
-					for (const recipient of recipients) {
-						try {
-							const delivery = await deliverInbound({
-								inboundWebhookUrl: options.inboundWebhookUrl,
-								serviceApiKey: options.serviceApiKey,
-								raw,
-								recipient,
-								source: from,
-							});
-							message.deliveries.push({ recipient, ...delivery });
-						} catch (error) {
-							message.deliveries.push({
-								recipient,
-								status: 0,
-								body: error instanceof Error ? error.message : String(error),
-							});
-						}
+					try {
+						const delivery = await deliverInbound({
+							inboundWebhookUrl: options.inboundWebhookUrl,
+							serviceApiKey: options.serviceApiKey,
+							raw,
+							recipients,
+							source: from,
+						});
+						message.deliveries.push({ recipients, ...delivery });
+					} catch (error) {
+						message.deliveries.push({
+							recipients,
+							status: 0,
+							body: error instanceof Error ? error.message : String(error),
+						});
 					}
 				});
 

@@ -19,6 +19,7 @@ import {
 import { deliverInbound, startLocalMailServer } from "@/scripts/local-dev/mail-server";
 import {
 	flushRedis,
+	psql,
 	recreateDatabase,
 	runSeed,
 	startServices,
@@ -42,6 +43,7 @@ const E2E_RATE_LIMIT_PER_SECOND = 20;
 
 let API_KEY = "";
 let ALT_API_KEY = "";
+let PRIMARY_USER_ID = "";
 
 type E2ESeed = {
 	domain: string;
@@ -144,6 +146,7 @@ type EmailDetailResponse = {
 	has_attachments: boolean;
 	attachments?: EmailAttachment[];
 	thread_id?: string | null;
+	envelope_recipients?: string[] | null;
 };
 
 type ThreadSummary = {
@@ -442,6 +445,7 @@ async function postSyntheticInboundRecord(options: {
 	subject: string;
 	messageId: string;
 	recipient: string;
+	recipients?: string[];
 	text: string;
 	html?: string;
 	inReplyTo?: string;
@@ -453,7 +457,7 @@ async function postSyntheticInboundRecord(options: {
 	const response = await deliverInbound({
 		inboundWebhookUrl: `${LOCAL_BASE_URL}/api/inbound/webhook`,
 		serviceApiKey: LOCAL_SERVICE_API_KEY,
-		recipient: options.recipient,
+		recipients: options.recipients ?? [options.recipient],
 		sesMessageId: options.sesMessageId || `ses-${makeToken("inbound")}`,
 		source: sender,
 		raw: buildRawEmailContent({
@@ -980,6 +984,7 @@ describe("E2 API - Email E2E", () => {
 		const seed = runSeed<E2ESeed>(["e2e"], e2eServerEnv());
 		API_KEY = seed.primary.apiKey;
 		ALT_API_KEY = seed.secondary.apiKey;
+		PRIMARY_USER_ID = seed.primary.userId;
 
 		mailServer = startLocalMailServer({
 			port: MAIL_PORT,
@@ -1632,6 +1637,281 @@ describe("E2 API - Email E2E", () => {
 					}
 				}
 			}
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"sends at most once for concurrent requests sharing an idempotency key",
+		async () => {
+			const token = makeToken("idem-race");
+			const subject = `E2E Idempotency Race ${token}`;
+			const idempotencyKey = `e2e-idem-race-${token}`;
+			const payload = JSON.stringify({
+				from: E2E_SENDER_ADDRESS,
+				to: E2E_RECIPIENT_ADDRESS,
+				subject,
+				text: `Idempotency race ${token}`,
+			});
+
+			const results = await Promise.all(
+				Array.from({ length: 4 }, () =>
+					apiJsonWithKey<SendEmailResponse | { error: string }>(
+						"/emails",
+						API_KEY,
+						{
+							method: "POST",
+							headers: { "Idempotency-Key": idempotencyKey },
+							body: payload,
+						},
+					),
+				),
+			);
+
+			for (const result of results) {
+				expect([200, 409]).toContain(result.response.status);
+			}
+			const ids = new Set(
+				results
+					.filter((result) => result.response.status === 200)
+					.map((result) => (result.data as SendEmailResponse).id),
+			);
+			expect(ids.size).toBe(1);
+
+			await sleep(2000);
+			const stubSends = (mailServer?.messages ?? []).filter((message) =>
+				message.raw.includes(subject),
+			);
+			expect(stubSends.length).toBe(1);
+			expect((await listExactSubjectEmails("sent", subject)).length).toBe(1);
+
+			const replay = await apiJson<SendEmailResponse>("/emails", {
+				method: "POST",
+				headers: { "Idempotency-Key": idempotencyKey },
+				body: payload,
+			});
+			expect(replay.response.status).toBe(200);
+			expect(ids.has(replay.data.id)).toBe(true);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"lets a client retry with the same idempotency key after a failed send",
+		async () => {
+			const token = makeToken("idem-failed");
+			const subject = `E2E Idempotency Failed ${token}`;
+			const idempotencyKey = `e2e-idem-failed-${token}`;
+			const payload = JSON.stringify({
+				from: E2E_SENDER_ADDRESS,
+				to: E2E_RECIPIENT_ADDRESS,
+				subject,
+				text: `Idempotency failed ${token}`,
+			});
+
+			await fetch(`http://127.0.0.1:${MAIL_PORT}/_local/fail-next`, {
+				method: "POST",
+			});
+			const failed = await apiRequest("/emails", {
+				method: "POST",
+				headers: { "Idempotency-Key": idempotencyKey },
+				body: payload,
+			});
+			expect(failed.status).toBe(500);
+
+			const retried = await apiJson<SendEmailResponse>("/emails", {
+				method: "POST",
+				headers: { "Idempotency-Key": idempotencyKey },
+				body: payload,
+			});
+			expect(retried.response.status).toBe(200);
+			expect(retried.data.id).toBeDefined();
+
+			const replay = await apiJson<SendEmailResponse>("/emails", {
+				method: "POST",
+				headers: { "Idempotency-Key": idempotencyKey },
+				body: payload,
+			});
+			expect(replay.data.id).toBe(retried.data.id);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"rejects idempotency keys longer than 256 characters",
+		async () => {
+			const response = await apiRequest("/emails", {
+				method: "POST",
+				headers: { "Idempotency-Key": "k".repeat(257) },
+				body: JSON.stringify({
+					from: E2E_SENDER_ADDRESS,
+					to: E2E_RECIPIENT_ADDRESS,
+					subject: "E2E long idempotency key",
+					text: "long key",
+				}),
+			});
+			expect(response.status).toBe(400);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"stores one email per message with every envelope recipient and one delivery per endpoint",
+		async () => {
+			const token = makeToken("envelope");
+			const ccAddress = `e2e-cc-${token}@${E2E_DOMAIN}`;
+			const bccAddress = `e2e-bcc-${token}@${E2E_DOMAIN}`;
+			const bccWebhookPath = `/api/development/bcc-${token}`;
+			const subject = `E2E Envelope Recipients ${token}`;
+			const domainId = await findDomainIdByAddress(E2E_RECIPIENT_ADDRESS);
+
+			const bccEndpoint = await apiJson<EndpointMutationResponse>("/endpoints", {
+				method: "POST",
+				body: JSON.stringify({
+					name: `e2e-bcc-endpoint-${token}`,
+					type: "webhook",
+					config: {
+						url: `http://hooks.localtest.me:${WEBHOOK_PORT}${bccWebhookPath}`,
+						timeout: 30,
+						retryAttempts: 1,
+					},
+				}),
+			});
+			expect(bccEndpoint.response.status).toBe(201);
+
+			for (const [address, endpointId] of [
+				[ccAddress, managedEndpointId],
+				[bccAddress, bccEndpoint.data.id],
+			]) {
+				const created = await apiJson<EmailAddressUpdateResponse>(
+					"/email-addresses",
+					{
+						method: "POST",
+						body: JSON.stringify({ address, domainId, endpointId, isActive: true }),
+					},
+				);
+				expect(created.response.status).toBe(201);
+			}
+
+			const sent = await apiJson<SendEmailResponse>("/emails", {
+				method: "POST",
+				body: JSON.stringify({
+					from: E2E_SENDER_ADDRESS,
+					to: E2E_RECIPIENT_ADDRESS,
+					cc: ccAddress,
+					bcc: bccAddress,
+					subject,
+					text: `Envelope recipients ${token}`,
+				}),
+			});
+			expect(sent.response.status).toBe(200);
+
+			const received = await waitForExactSubjectEmailCount("received", subject, 1);
+			expect(received).toBeDefined();
+			await sleep(2000);
+			const rows = await listExactSubjectEmails("received", subject);
+			expect(rows.length).toBe(1);
+
+			const detail = await apiJson<EmailDetailResponse>(`/emails/${rows[0].id}`);
+			expect(detail.response.status).toBe(200);
+			expect([...(detail.data.envelope_recipients ?? [])].sort()).toEqual(
+				[E2E_RECIPIENT_ADDRESS, ccAddress, bccAddress].sort(),
+			);
+			expect(detail.data.to).not.toContain(bccAddress);
+
+			const deliveriesFor = (path: string) =>
+				receivedWebhooks.filter(
+					(webhook) => webhook.path === path && webhook.body.includes(rows[0].id),
+				);
+			const mainDeliveries = await pollFor(
+				"webhook deliveries for envelope test",
+				POLL_CONFIG.inboundTimeoutMs,
+				async () =>
+					deliveriesFor(TEST_WEBHOOK_PATH).length > 0 &&
+					deliveriesFor(bccWebhookPath).length > 0
+						? deliveriesFor(TEST_WEBHOOK_PATH)
+						: null,
+			);
+			expect(mainDeliveries?.length).toBe(1);
+			expect(deliveriesFor(bccWebhookPath).length).toBe(1);
+
+			const payload = JSON.parse(deliveriesFor(bccWebhookPath)[0].body) as {
+				email: { recipient: string; envelopeRecipients: string[] };
+			};
+			expect(payload.email.recipient).toBe(bccAddress);
+			expect([...payload.email.envelopeRecipients].sort()).toEqual(
+				[E2E_RECIPIENT_ADDRESS, ccAddress, bccAddress].sort(),
+			);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"merges a later SES event for the same message into the existing email",
+		async () => {
+			const token = makeToken("merge");
+			const subject = `E2E Envelope Merge ${token}`;
+			const messageId = `${token}@example.test`;
+			const secondRecipient = `e2e-merge-${token}@${E2E_DOMAIN}`;
+
+			const first = await postSyntheticInboundRecord({
+				subject,
+				messageId,
+				sesMessageId: `${token}-ses-1`,
+				recipient: E2E_RECIPIENT_ADDRESS,
+				text: `Merge test ${token}`,
+			});
+			expect(first.success).toBe(true);
+
+			const second = await postSyntheticInboundRecord({
+				subject,
+				messageId,
+				sesMessageId: `${token}-ses-2`,
+				recipient: E2E_RECIPIENT_ADDRESS,
+				recipients: [E2E_RECIPIENT_ADDRESS, secondRecipient],
+				text: `Merge test ${token}`,
+			});
+			expect(second.success).toBe(true);
+
+			const rows = await listExactSubjectEmails("received", subject);
+			expect(rows.length).toBe(1);
+			const detail = await apiJson<EmailDetailResponse>(`/emails/${rows[0].id}`);
+			expect([...(detail.data.envelope_recipients ?? [])].sort()).toEqual(
+				[E2E_RECIPIENT_ADDRESS, secondRecipient].sort(),
+			);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"merges legacy per-recipient rows and keeps old IDs resolvable",
+		async () => {
+			const token = makeToken("legacy").replace(/[^a-z0-9-]/gi, "");
+			const subject = `E2E Legacy Merge ${token}`;
+			const ids = ["a", "b"].map((suffix) => `inbnd_legacy_${token}_${suffix}`);
+			psql(
+				`insert into structured_emails (id, email_id, ses_event_id, user_id, message_id, recipient, subject, raw_content, parse_success, created_at) values
+				('${ids[0]}', '${ids[0]}', 'ses_${token}', '${PRIMARY_USER_ID}', '${token}@legacy.test', 'first-${token}@${E2E_DOMAIN}', '${subject}', 'Subject: x', true, now() - interval '2 minutes'),
+				('${ids[1]}', '${ids[1]}', 'ses_${token}', '${PRIMARY_USER_ID}', '${token}@legacy.test', 'second-${token}@${E2E_DOMAIN}', '${subject}', 'Subject: x', true, now() - interval '1 minute');`,
+				E2E_DATABASE,
+			);
+
+			const merge = Bun.spawnSync(
+				["bun", "scripts/merge-inbound-duplicates.ts", "--apply", "--user", PRIMARY_USER_ID],
+				{ env: e2eServerEnv(), stdout: "pipe", stderr: "pipe" },
+			);
+			expect(merge.exitCode).toBe(0);
+
+			expect((await listExactSubjectEmails("received", subject)).length).toBe(1);
+			const viaOldId = await apiJson<EmailDetailResponse>(`/emails/${ids[1]}`);
+			expect(viaOldId.response.status).toBe(200);
+			expect(viaOldId.data.id).toBe(ids[0]);
+			expect([...(viaOldId.data.envelope_recipients ?? [])].sort()).toEqual(
+				[`first-${token}@${E2E_DOMAIN}`, `second-${token}@${E2E_DOMAIN}`].sort(),
+			);
+
+			const otherTenant = await apiRequestWithKey(`/emails/${ids[1]}`, ALT_API_KEY);
+			expect(otherTenant.status).toBe(404);
 		},
 		TEST_TIMEOUT_MS,
 	);

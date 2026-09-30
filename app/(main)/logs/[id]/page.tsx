@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { auth } from "@/lib/auth/auth";
 import { db } from "@/lib/db";
+import { resolveStructuredEmailId } from "@/lib/email-management/email-aliases";
 import {
 	structuredEmails,
 	sentEmails,
@@ -58,13 +59,14 @@ export default async function LogDetailPage({
 }: {
 	params: Promise<{ id: string }>;
 }) {
-	const { id } = await params;
+	const { id: requestedId } = await params;
 	const session = await auth.api.getSession({ headers: await headers() });
 	if (!session?.user?.id) {
 		redirect("/login");
 	}
 
 	const userId = session.user.id;
+	const id = await resolveStructuredEmailId(requestedId, userId);
 
 	// Determine if this ID corresponds to an inbound (structuredEmails) or outbound (sentEmails) record
 	const [inbound] = await db

@@ -5,6 +5,7 @@ import { structuredEmails, sesEvents } from "@/lib/db/schema"
 import { eq, and } from "drizzle-orm"
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3"
 import { simpleParser } from "mailparser"
+import { resolveStructuredEmailId } from "@/lib/email-management/email-aliases"
 
 // Error Response schema for OpenAPI
 const ErrorResponse = t.Object({
@@ -24,7 +25,8 @@ export const getAttachment = new Elysia().get(
     const userId = await validateAndRateLimit(request, set)
     console.log(`🔐 Attachment download - Authenticated userId: ${userId}`)
 
-    const { id: emailId, filename: attachmentFilename } = params
+    const { filename: attachmentFilename } = params
+    const emailId = await resolveStructuredEmailId(params.id, userId)
 
     if (!emailId || !attachmentFilename) {
       set.status = 400

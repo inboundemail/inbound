@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { db } from "@/lib/db";
+import { resolveStructuredEmailId } from "@/lib/email-management/email-aliases";
 import { structuredEmails } from "@/lib/db/schema";
 import { validateAndRateLimit } from "../lib/auth";
 
@@ -29,7 +30,7 @@ export const updateEmail = new Elysia().patch(
 		// Auth & rate limit validation
 		const userId = await validateAndRateLimit(request, set);
 
-		const emailId = params.id;
+		const emailId = await resolveStructuredEmailId(params.id, userId);
 
 		// Validate that at least one field is being updated
 		if (body.is_read === undefined && body.is_archived === undefined) {
