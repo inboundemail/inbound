@@ -150,7 +150,7 @@ export function buildHandlers(
 				return callback(null);
 			}
 			auth
-				.authenticate(address, authData.password)
+				.authenticate(address, authData.password, ip)
 				.then((result) => {
 					if (!result) {
 						limits.recordAuthFailure(ip, address);

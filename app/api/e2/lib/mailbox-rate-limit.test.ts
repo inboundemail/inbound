@@ -14,6 +14,7 @@ interface Scenario {
 	blockSource?: boolean;
 	unavailable?: boolean;
 	missingRedis?: boolean;
+	gatewaySecret?: string;
 }
 
 interface ScenarioResult {
@@ -104,6 +105,7 @@ function runScenario(scenario: Scenario): ScenarioResult {
 				: "https://example.upstash.io",
 			UPSTASH_REDIS_REST_TOKEN: scenario.missingRedis ? "" : "test-token",
 			ALLOW_REQUESTS_WITHOUT_RATE_LIMIT: "false",
+			MAILBOX_GATEWAY_AUTH_SECRET: scenario.gatewaySecret ?? "",
 			MAILBOX_RATE_LIMIT_SCENARIO: JSON.stringify(scenario),
 		},
 		timeout: 10_000,
@@ -146,6 +148,47 @@ describe("mailbox authentication rate limiting", () => {
 			"203.0.113.20:user@example.com",
 		]);
 		expect(result.responses.map(({ status }) => status)).toEqual([429, 429]);
+	});
+
+	it("keys limits on the client IP forwarded by an authenticated gateway", () => {
+		const gateway = { "x-real-ip": "198.51.100.1" };
+		const result = runScenario({
+			gatewaySecret: "gateway-secret",
+			requests: [
+				{
+					endpoint: "mailbox",
+					loginAddress: "user@example.com",
+					headers: {
+						...gateway,
+						"x-inbound-gateway-secret": "gateway-secret",
+						"x-inbound-client-ip": "::ffff:203.0.113.10",
+					},
+				},
+				{
+					endpoint: "smtp",
+					loginAddress: "user@example.com",
+					headers: {
+						...gateway,
+						"x-inbound-gateway-secret": "wrong-secret",
+						"x-inbound-client-ip": "203.0.113.20",
+					},
+				},
+				{
+					endpoint: "mailbox",
+					loginAddress: "user@example.com",
+					headers: { ...gateway, "x-inbound-client-ip": "203.0.113.30" },
+				},
+			],
+		});
+
+		const loginKeys = result.calls
+			.filter(({ prefix }) => prefix === "e2:mailbox-auth:login")
+			.map(({ identifier }) => identifier);
+		expect(loginKeys).toEqual([
+			"203.0.113.10:user@example.com",
+			"198.51.100.1:user@example.com",
+			"198.51.100.1:user@example.com",
+		]);
 	});
 
 	it("shares a source-plus-login budget across mailbox and SMTP authentication", () => {

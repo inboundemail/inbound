@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { isIP } from "node:net";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { eq } from "drizzle-orm";
@@ -275,18 +276,40 @@ export async function enforceAuthenticatedUserAndRateLimit(
 }
 
 export const MAILBOX_GATEWAY_SECRET_HEADER = "x-inbound-gateway-secret";
+export const MAILBOX_GATEWAY_CLIENT_IP_HEADER = "x-inbound-client-ip";
+
+function hasValidGatewaySecret(request: Request): boolean {
+	const secret = process.env.MAILBOX_GATEWAY_AUTH_SECRET;
+	const provided = request.headers.get(MAILBOX_GATEWAY_SECRET_HEADER) ?? "";
+	if (!secret || !provided) return false;
+	const expectedDigest = createHash("sha256").update(secret).digest();
+	const providedDigest = createHash("sha256").update(provided).digest();
+	return timingSafeEqual(expectedDigest, providedDigest);
+}
+
+/**
+ * The IMAP/SMTP gateways call the auth endpoints on behalf of their clients, so the
+ * connecting IP is always the gateway. Trust the client IP they forward only when the
+ * request proves it came from a gateway; otherwise use the connecting IP.
+ */
+function getMailboxAuthClientIp(request: Request): string {
+	const forwarded = request.headers
+		.get(MAILBOX_GATEWAY_CLIENT_IP_HEADER)
+		?.trim()
+		.toLowerCase()
+		.replace(/^::ffff:/, "");
+	if (forwarded && isIP(forwarded) && hasValidGatewaySecret(request)) {
+		return forwarded;
+	}
+	return getClientIp(request);
+}
 
 export function enforceMailboxGatewayAuthorization(
 	request: Request,
 	set: { status?: number | string; headers?: unknown },
 ): void {
-	const secret = process.env.MAILBOX_GATEWAY_AUTH_SECRET;
-	if (!secret) return;
-
-	const provided = request.headers.get(MAILBOX_GATEWAY_SECRET_HEADER) ?? "";
-	const expectedDigest = createHash("sha256").update(secret).digest();
-	const providedDigest = createHash("sha256").update(provided).digest();
-	if (provided && timingSafeEqual(expectedDigest, providedDigest)) return;
+	if (!process.env.MAILBOX_GATEWAY_AUTH_SECRET) return;
+	if (hasValidGatewaySecret(request)) return;
 
 	set.status = 403;
 	const headers = {
@@ -329,7 +352,7 @@ export async function enforceMailboxAuthenticationRateLimit(
 		);
 	}
 
-	const clientIp = getClientIp(request);
+	const clientIp = getMailboxAuthClientIp(request);
 	const normalizedLoginAddress = loginAddress.trim().toLowerCase();
 	let results: Awaited<ReturnType<typeof mailboxLoginRatelimit.limit>>[];
 	try {

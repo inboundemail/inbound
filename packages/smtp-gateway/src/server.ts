@@ -329,7 +329,7 @@ export class SmtpGateway {
 			});
 		}
 
-		const identity = await this.client.authenticateSmtp(username, password);
+		const identity = await this.client.authenticateSmtp(username, password, ip);
 		if (!identity) {
 			this.recordFailure(ip, username);
 			throw new SmtpRelayError({
