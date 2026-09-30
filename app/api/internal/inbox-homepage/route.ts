@@ -1,61 +1,138 @@
-import { realtime } from "@/lib/realtime"
-import type { InboundWebhookPayload } from "@/lib/types/inbound-webhooks"
+import { Ratelimit } from "@upstash/ratelimit";
+import { and, eq, gte } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { structuredEmails } from "@/lib/db/schema";
+import { realtime } from "@/lib/realtime";
+import { redis } from "@/lib/redis";
 
-/**
- * Inbound webhook handler for the homepage inbox demo
- * 
- * This endpoint receives emails sent to *@inbox.inbound.new addresses
- * and broadcasts them to the corresponding realtime channel so the
- * homepage can display incoming emails in real-time.
- */
-export async function POST(request: Request) {
-  try {
-    const payload: InboundWebhookPayload = await request.json()
+const INBOX_DOMAIN = "inbox.inbound.new";
+const LOCAL_PART_PATTERN = /^[a-z0-9-]{1,64}$/;
+const MAX_EMAIL_AGE_MS = 10 * 60 * 1000;
+const EMITTED_TTL_SECONDS = 60 * 60;
 
-    // Extract the local part of the recipient email (e.g., "word" from "word@inbox.inbound.new")
-    const recipient = payload.email.recipient || ""
-    const localPart = recipient.split("@")[0]
+const perInboxLimit = new Ratelimit({
+	redis,
+	limiter: Ratelimit.slidingWindow(10, "1 m"),
+	prefix: "ratelimit:inbox-homepage:inbox",
+});
 
-    if (!localPart) {
-      console.warn("[inbox-homepage] No recipient local part found in webhook")
-      return new Response("OK", { status: 200 })
-    }
+const globalLimit = new Ratelimit({
+	redis,
+	limiter: Ratelimit.slidingWindow(300, "1 m"),
+	prefix: "ratelimit:inbox-homepage:global",
+});
 
-    // Extract email data from the webhook payload
-    const from = payload.email.from?.addresses?.[0]?.address || payload.email.from?.text || "unknown@example.com"
-    const fromName = payload.email.from?.addresses?.[0]?.name || from.split("@")[0]
-    const subject = payload.email.subject || "(no subject)"
-    const preview = payload.email.cleanedContent?.text?.slice(0, 150) 
-      || payload.email.parsedData?.textBody?.slice(0, 150) 
-      || ""
+type InboxHomepagePayload = {
+	email?: { id?: unknown };
+};
 
-    // The channel is scoped to this specific inbox address
-    // Using the local part as the channel identifier
-    const channel = `inbox-${localPart}`
+type FromData = {
+	text?: string;
+	addresses?: Array<{ name?: string | null; address?: string | null }>;
+};
 
-    console.log(`[inbox-homepage] Emitting email to channel: ${channel}`)
-
-    // Emit the event to the realtime channel
-    // Using channel().event.emit() pattern for scoped channels
-    const channelInstance = realtime.channel(channel) as typeof realtime
-    await channelInstance.emit("inbox.emailReceived", {
-      from: fromName ? `${fromName} <${from}>` : from,
-      subject,
-      preview,
-      timestamp: new Date().toISOString(),
-      emailId: payload.email.id,
-    })
-
-    console.log(`[inbox-homepage] Successfully emitted email to channel: ${channel}`)
-
-    return new Response("OK", { status: 200 })
-  } catch (error) {
-    console.error("[inbox-homepage] Error processing webhook:", error)
-    return new Response("Internal Server Error", { status: 500 })
-  }
+function parseFrom(fromData: string | null) {
+	if (!fromData) return "unknown sender";
+	try {
+		const parsed = JSON.parse(fromData) as FromData;
+		const first = parsed.addresses?.[0];
+		if (first?.address) {
+			return first.name ? `${first.name} <${first.address}>` : first.address;
+		}
+		return parsed.text || "unknown sender";
+	} catch {
+		return "unknown sender";
+	}
 }
 
-// Handle GET for health checks
+function demoRecipient(recipients: Array<string | null>) {
+	const suffix = `@${INBOX_DOMAIN}`;
+	for (const recipient of recipients) {
+		const normalized = recipient?.trim().toLowerCase();
+		if (normalized?.endsWith(suffix)) {
+			return normalized.slice(0, -suffix.length);
+		}
+	}
+	return null;
+}
+
+export async function POST(request: Request) {
+	let payload: InboxHomepagePayload;
+	try {
+		payload = (await request.json()) as InboxHomepagePayload;
+	} catch {
+		return new Response("Invalid JSON", { status: 400 });
+	}
+
+	const emailId = payload.email?.id;
+	if (typeof emailId !== "string" || emailId.length === 0 || emailId.length > 255) {
+		return new Response("Missing email id", { status: 400 });
+	}
+
+	try {
+		const [email] = await db
+			.select({
+				id: structuredEmails.id,
+				recipient: structuredEmails.recipient,
+				envelopeRecipients: structuredEmails.envelopeRecipients,
+				fromData: structuredEmails.fromData,
+				subject: structuredEmails.subject,
+				textBody: structuredEmails.textBody,
+			})
+			.from(structuredEmails)
+			.where(
+				and(
+					eq(structuredEmails.id, emailId),
+					gte(structuredEmails.createdAt, new Date(Date.now() - MAX_EMAIL_AGE_MS)),
+				),
+			)
+			.limit(1);
+
+		if (!email) {
+			return new Response("Not found", { status: 404 });
+		}
+
+		const localPart = demoRecipient([
+			email.recipient,
+			...(email.envelopeRecipients ?? []),
+		]);
+		if (!localPart || !LOCAL_PART_PATTERN.test(localPart)) {
+			return new Response("Not found", { status: 404 });
+		}
+
+		const firstDelivery = await redis.set(
+			`inbox-homepage:emitted:${email.id}`,
+			"1",
+			{ nx: true, ex: EMITTED_TTL_SECONDS },
+		);
+		if (firstDelivery !== "OK") {
+			return new Response("OK", { status: 200 });
+		}
+
+		const [inbox, global] = await Promise.all([
+			perInboxLimit.limit(localPart),
+			globalLimit.limit("all"),
+		]);
+		if (!inbox.success || !global.success) {
+			return new Response("Too many requests", { status: 429 });
+		}
+
+		const channel = realtime.channel(`inbox-${localPart}`) as typeof realtime;
+		await channel.emit("inbox.emailReceived", {
+			from: parseFrom(email.fromData),
+			subject: email.subject || "(no subject)",
+			preview: email.textBody?.slice(0, 150) ?? "",
+			timestamp: new Date().toISOString(),
+			emailId: email.id,
+		});
+
+		return new Response("OK", { status: 200 });
+	} catch (error) {
+		console.error("[inbox-homepage] Failed to process webhook:", error);
+		return new Response("Internal Server Error", { status: 500 });
+	}
+}
+
 export async function GET() {
-  return new Response("Inbox homepage webhook is active", { status: 200 })
+	return new Response("Inbox homepage webhook is active", { status: 200 });
 }
