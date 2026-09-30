@@ -76,6 +76,36 @@ describe("InboundApiClient.authenticateSmtp", () => {
 		expect(options?.signal).toBeInstanceOf(AbortSignal);
 	});
 
+	it("omits the gateway secret header when not configured", async () => {
+		const fetchMock = spyOn(globalThis, "fetch").mockResolvedValue(
+			Response.json(identity),
+		);
+
+		await client({ gatewayAuthSecret: null }).authenticateSmtp(
+			"sender@example.com",
+			"secret",
+		);
+		const [, options] = fetchMock.mock.calls[0] ?? [];
+		expect(
+			(options?.headers as Record<string, string>)["x-inbound-gateway-secret"],
+		).toBeUndefined();
+	});
+
+	it("sends the shared gateway secret when configured", async () => {
+		const fetchMock = spyOn(globalThis, "fetch").mockResolvedValue(
+			Response.json(identity),
+		);
+
+		await client({ gatewayAuthSecret: "gateway-secret" }).authenticateSmtp(
+			"sender@example.com",
+			"secret",
+		);
+		const [, options] = fetchMock.mock.calls[0] ?? [];
+		expect(
+			(options?.headers as Record<string, string>)["x-inbound-gateway-secret"],
+		).toBe("gateway-secret");
+	});
+
 	it("treats unauthorized managed credentials as invalid", async () => {
 		spyOn(globalThis, "fetch").mockResolvedValue(
 			new Response(null, { status: 401 }),

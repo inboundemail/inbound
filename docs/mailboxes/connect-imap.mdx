@@ -1,0 +1,258 @@
+---
+title: "Connect with IMAP"
+description: "Create a managed mailbox credential and connect securely with IMAP or SMTP"
+---
+
+Connect an email client or application to Inbound using a managed **Mailbox + SMTP** credential. The same login email and generated password work for receiving over IMAP and sending over SMTP.
+
+## Connection settings
+
+| Protocol | Host | Port | Security |
+| --- | --- | --- | --- |
+| IMAP | `imap.inboundemail.com` | `993` | TLS |
+| SMTP | `smtp.inboundemail.com` | `465` | TLS |
+| SMTP | `smtp.inboundemail.com` | `587` | STARTTLS |
+
+Use your managed **Login email** and generated **Password** for both protocols. Require TLS 1.2 or later and keep certificate verification enabled. SMTP on port `587` must upgrade with STARTTLS before authentication. Ordinary account API keys cannot authenticate to IMAP or SMTP.
+
+<Note>
+  SMTP does not automatically save messages to IMAP `Sent`, and received messages removed from `INBOX` can reappear. Review [IMAP behavior and limits](/mailboxes/imap-behavior) before configuring a traditional email client.
+</Note>
+
+## Create a mailbox credential
+
+<Steps>
+  <Step title="Open Mailboxes & SMTP">
+    Add and verify a domain in [domain settings](https://inbound.new/emails), including its receiving MX records if you want incoming mail. Then open the [Mailboxes & SMTP dashboard](https://inbound.new/mailboxes) and select **Create credential**.
+  </Step>
+
+  <Step title="Choose the credential and IMAP access">
+    Select **Mailbox + SMTP** under **Credential type**. Enter a descriptive **Name** and a **Login email** on an exact domain you own and have verified. The login email is your authentication username; it does not have to match the receiving or sending address.
+
+    Under **IMAP access**, choose **Read only** to prevent mailbox changes or **Read and write** to save messages in `Sent` or `Drafts`, change flags, and modify supported mailboxes. Read-only credentials can still send through SMTP. Scope-specific folders are always read-only.
+  </Step>
+
+  <Step title="Set the sender policy">
+    Select **Exact identity** to restrict sending to one **Exact From address** covered by a scope. The optional dashboard **Display name** does not set the name recipients see; provide that name in your email client's From header instead.
+
+    Alternatively, select **Any scoped domain** to permit any sender address on each exact domain represented by your scopes. Subdomains are not included.
+
+    <Warning>
+      An address scope only limits which mail is received. With **Any scoped domain**, a scope for `support@example.com` still permits sending from `billing@example.com`, `admin@example.com`, or any other address at `example.com`. Choose **Exact identity** to restrict sending to one address.
+    </Warning>
+  </Step>
+
+  <Step title="Add verified domain or address scopes">
+    Under **Mail access & sending scopes**, choose **Domain** for an entire verified domain or **Address** for one exact address. For an address scope, enter the local part without `@`, then choose the verified domain.
+
+    Select **Add** for each scope. At least one scope is required, and scopes determine which received messages are visible through IMAP.
+  </Step>
+
+  <Step title="Create the credential and save its password">
+    Select **Create credential**. The confirmation dialog displays the **Username**, generated **Password**, and the IMAP and SMTP connection settings.
+
+    Copy the password into a password manager or secret manager before selecting **I saved the password**.
+
+    <Warning>
+      The generated password is a mail-scoped API key and is shown only once. Anyone with it can send mail within its sender policy, including through the HTTP email-sending endpoint. If it is lost or exposed, rotate it immediately and update every client.
+    </Warning>
+  </Step>
+</Steps>
+
+## Connect from your application
+
+Store your managed credential as `INBOUND_MAILBOX_LOGIN` and `INBOUND_MAILBOX_PASSWORD` in your application's secret manager or environment. Both examples open `INBOX` read-only and inspect message headers without changing mailbox state.
+
+For the TypeScript example, install ImapFlow:
+
+```bash
+bun add imapflow
+```
+
+<CodeGroup>
+```typescript ImapFlow
+import { ImapFlow } from "imapflow";
+
+const login = process.env.INBOUND_MAILBOX_LOGIN;
+const password = process.env.INBOUND_MAILBOX_PASSWORD;
+
+if (!login || !password) {
+  throw new Error("Set INBOUND_MAILBOX_LOGIN and INBOUND_MAILBOX_PASSWORD");
+}
+
+const client = new ImapFlow({
+  host: "imap.inboundemail.com",
+  port: 993,
+  secure: true,
+  auth: { user: login, pass: password },
+});
+
+await client.connect();
+
+try {
+  const lock = await client.getMailboxLock("INBOX", { readOnly: true });
+
+  try {
+    const totalMessages = client.mailbox ? client.mailbox.exists : 0;
+
+    if (totalMessages === 0) {
+      console.log("INBOX is empty");
+    } else {
+      const firstMessage = Math.max(1, totalMessages - 9);
+      const range = `${firstMessage}:${totalMessages}`;
+
+      for await (const message of client.fetch(range, { envelope: true })) {
+        console.log({
+          uid: message.uid,
+          from: message.envelope?.from,
+          subject: message.envelope?.subject,
+        });
+      }
+    }
+  } finally {
+    lock.release();
+  }
+} finally {
+  await client.logout();
+}
+```
+
+```python Python
+import imaplib
+import os
+import ssl
+from email import policy
+from email.parser import BytesParser
+
+login = os.environ["INBOUND_MAILBOX_LOGIN"]
+password = os.environ["INBOUND_MAILBOX_PASSWORD"]
+context = ssl.create_default_context()
+
+with imaplib.IMAP4_SSL(
+    "imap.inboundemail.com", 993, ssl_context=context
+) as client:
+    client.login(login, password)
+
+    status, _ = client.select("INBOX", readonly=True)
+    if status != "OK":
+        raise RuntimeError("Could not open INBOX")
+
+    status, message_ids = client.search(None, "ALL")
+    if status != "OK":
+        raise RuntimeError("Could not search INBOX")
+
+    for message_id in message_ids[0].split()[-10:]:
+        status, parts = client.fetch(
+            message_id,
+            "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])",
+        )
+        if status != "OK":
+            continue
+
+        for part in parts:
+            if isinstance(part, tuple) and isinstance(part[1], bytes):
+                headers = BytesParser(policy=policy.default).parsebytes(part[1])
+                print({
+                    "from": str(headers.get("From", "")),
+                    "subject": str(headers.get("Subject", "")),
+                    "date": str(headers.get("Date", "")),
+                })
+```
+</CodeGroup>
+
+<Note>
+  `BODY.PEEK` reads the requested headers without marking a message as seen. Opening `INBOX` in read-only mode also works with both **Read only** and **Read and write** credentials.
+</Note>
+
+## Send with SMTP
+
+Both **Mailbox + SMTP** and **SMTP only** credentials can authenticate to `smtp.inboundemail.com`. Use the generated login email and password, and choose a From address permitted by your sender policy.
+
+```bash
+bun add nodemailer
+bun add -d @types/nodemailer
+```
+
+<CodeGroup>
+```typescript SMTP over TLS (port 465)
+import nodemailer from "nodemailer";
+
+const transport = nodemailer.createTransport({
+  host: "smtp.inboundemail.com",
+  port: 465,
+  secure: true,
+  auth: {
+    user: process.env.INBOUND_MAILBOX_LOGIN,
+    pass: process.env.INBOUND_MAILBOX_PASSWORD,
+  },
+});
+
+await transport.sendMail({
+  from: "Support <support@example.com>",
+  to: "recipient@example.com",
+  subject: "Hello from Inbound",
+  text: "Sent with a managed mailbox credential.",
+});
+```
+
+```typescript SMTP with STARTTLS (port 587)
+import nodemailer from "nodemailer";
+
+const transport = nodemailer.createTransport({
+  host: "smtp.inboundemail.com",
+  port: 587,
+  secure: false,
+  requireTLS: true,
+  auth: {
+    user: process.env.INBOUND_MAILBOX_LOGIN,
+    pass: process.env.INBOUND_MAILBOX_PASSWORD,
+  },
+});
+
+await transport.sendMail({
+  from: "Support <support@example.com>",
+  to: "recipient@example.com",
+  subject: "Hello from Inbound",
+  text: "Sent with a managed mailbox credential.",
+});
+```
+</CodeGroup>
+
+Set the sender's display name in `from`, as shown above; the dashboard's optional **Display name** does not populate outgoing messages. Both the visible From address and any nonempty SMTP envelope `MAIL FROM` address must satisfy the credential's sender policy.
+
+## Troubleshooting
+
+### Authentication fails
+
+Use the managed **Login email** and generated `mail_` or legacy `imap_` password, not an ordinary account API key or your dashboard password. Confirm that the credential is active and has not been deleted or rotated. IMAP requires **Mailbox + SMTP**; **SMTP only** credentials cannot authenticate to IMAP.
+
+### The inbox is empty
+
+Check that the receiving domain is verified and its receiving MX records are configured and verified in [domain settings](https://inbound.new/emails). Confirm the message's recipient matches one of the credential's domain or address scopes. The login email alone does not grant access to messages outside those scopes.
+
+### TLS or certificate validation fails
+
+Confirm the hostname, port, TLS mode, and TLS 1.2 support match the connection settings. Keep hostname and certificate validation enabled. Test the TLS handshake without providing a username or password:
+
+```bash
+openssl s_client -connect imap.inboundemail.com:993 \
+  -servername imap.inboundemail.com \
+  -verify_hostname imap.inboundemail.com \
+  -verify_return_error
+
+openssl s_client -connect smtp.inboundemail.com:587 \
+  -starttls smtp \
+  -servername smtp.inboundemail.com \
+  -verify_hostname smtp.inboundemail.com \
+  -verify_return_error
+```
+
+These commands inspect the connection and certificate without placing credentials in shell history.
+
+### A domain is missing or SMTP rejects the sender
+
+[Add and verify the domain](https://inbound.new/emails) before creating or editing a credential, and use an exact owned, verified domain for the login email. Select **Add** after configuring each scope.
+
+For **Exact identity**, both the visible From address and any nonempty envelope sender must match the configured address. For **Any scoped domain**, both must use an exact represented domain, even when the receiving scope names only one address. Parent-domain scopes do not authorize subdomains.
+
+Learn more about [scopes and permissions](/mailboxes/scopes-and-permissions), [managing credentials](/mailboxes/manage-credentials), and [IMAP behavior](/mailboxes/imap-behavior).

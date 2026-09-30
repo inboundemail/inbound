@@ -1,0 +1,131 @@
+---
+title: "Scopes and Permissions"
+description: "Control exactly which messages a credential can read and which addresses it can send from"
+---
+
+Every managed credential combines a credential type, one or more verified-domain scopes, an IMAP access mode, and an SMTP sender policy. These settings answer two separate questions: which incoming messages are visible, and which sender addresses are allowed.
+
+## Credential types
+
+| Type | IMAP | SMTP | Intended use |
+| --- | --- | --- | --- |
+| `mailbox` | Available, subject to `accessMode` | Available, subject to the sender policy | Email clients and applications that receive and send |
+| `smtp` | Not available | Available, subject to the sender policy | Applications that only send |
+
+An SMTP-only credential still requires scopes and a sender policy. Its `accessMode` is returned as `read_write`, but this does not grant IMAP access.
+
+## Domain and address scopes
+
+Each credential must include between 1 and 100 unique scopes. Every scope references the ID of an exact domain that your account owns and that has a verified domain record.
+
+| Scope type | Example | Incoming mail included |
+| --- | --- | --- |
+| `domain` | `*@example.com` | Addresses on `example.com` |
+| `address` | `support@example.com` | Only `support@example.com` |
+
+A domain scope matches the exact domain, not its subdomains. For example, `*@example.com` includes `billing@example.com`, but does not include `billing@mail.example.com`. To include `mail.example.com`, add that exact subdomain as its own verified domain record and configure a separate scope for it.
+
+Address scopes must match their referenced domain exactly. Multiple distinct scopes can be combined, including scopes from different verified domains; duplicate scopes are rejected. Domain wildcard scopes omit the reserved `dmarc@` address; add an explicit address scope if that address needs to be included.
+
+<Note>
+  A subdomain can inherit parts of its parent domain's verification, but inheritance does not extend the parent's mailbox scope. The exact subdomain must still exist as a separate verified domain record before it can be used as a login domain, sender domain, or scope.
+</Note>
+
+## How scopes appear in IMAP
+
+A `mailbox` credential presents one combined `INBOX` containing incoming messages from all its scopes, plus a read-only folder for each individual scope:
+
+```text
+INBOX
+Scopes/*@example.com
+Scopes/support@another-example.com
+```
+
+`Scopes` is a folder container, not a selectable mailbox. Domain folders use the literal `*@domain` format; address folders use the complete email address.
+
+Scope folders are always read-only, including for credentials with `read_write` access. Update flags or organize messages through `INBOX` or another writable folder instead. See [IMAP behavior](/mailboxes/imap-behavior) for folder, flag, and synchronization details.
+
+## IMAP access modes
+
+`accessMode` applies only to `mailbox` credentials:
+
+- `read`: Open folders, fetch messages, search, and receive `IDLE` updates. All folders are read-only.
+- `read_write`: Read messages and modify writable folders using operations such as `STORE`, `APPEND`, `COPY`, `MOVE`, and `EXPUNGE`. `Scopes/*` folders remain read-only.
+
+IMAP access mode does not control whether SMTP sending is available. A read-only mailbox credential can still send through SMTP when its sender policy permits the sender.
+
+## SMTP sender policies
+
+### Exact identity
+
+With `sendingMode: "identity"`, the credential can send only from its configured `sendingAddress`.
+
+```json
+{
+  "sendingMode": "identity",
+  "sendingName": "Support",
+  "sendingAddress": "support@example.com"
+}
+```
+
+The sending address must be covered by an existing domain or address scope. `sendingName` is optional and can be `null`; it is credential metadata and does not rewrite the outgoing display name, which comes from the message itself.
+
+The message's `From` address and any nonempty SMTP envelope `MAIL FROM` address must both satisfy the exact-identity policy. An empty envelope sender is permitted, but the message still needs an authorized `From` address.
+
+### Any scoped domain
+
+With `sendingMode: "scoped_domains"`, the credential can send from any address on any exact domain represented by its scopes:
+
+```json
+{
+  "sendingMode": "scoped_domains",
+  "sendingName": null,
+  "sendingAddress": null
+}
+```
+
+For example, a scope for `example.com` allows `support@example.com` and `billing@example.com`, but not `support@mail.example.com`. The message's `From` address and any nonempty envelope sender must both use an allowed exact domain; an empty envelope sender is permitted.
+
+<Warning>
+  An address scope restricts incoming IMAP visibility to that address, but it does not restrict SMTP to that address when the sender policy is `scoped_domains`. A credential scoped only to `support@example.com` can still send as `billing@example.com`, `admin@example.com`, or any other address on `example.com`. Use `identity` when SMTP must be limited to one exact sender.
+</Warning>
+
+## Login identity is separate
+
+`loginAddress` is the username for IMAP and SMTP authentication. When a credential is created or its definition is edited, the login address must use an exact domain owned and verified by your account. It does not need to match the incoming scope or the allowed sending identity.
+
+For example, the following configuration is valid when both domains are verified:
+
+```text
+Login username: imap@operations.example
+Incoming scope: support@customer.example
+SMTP policy:    identity
+SMTP sender:    support@customer.example
+```
+
+The login username does not automatically grant access to mail sent to `imap@operations.example`, and it does not automatically authorize that address as an SMTP sender.
+
+<Note>
+  Later IMAP and SMTP login attempts recheck both the verified scope domains and the login address's own verified domain. A domain-status change does not itself disconnect an existing IMAP session; changing or disabling the credential does. See [IMAP behavior](/mailboxes/imap-behavior#scope-changes-and-revoked-access).
+</Note>
+
+## Permission examples
+
+| Configuration | Read incoming mail | Modify IMAP folders | Send with SMTP |
+| --- | --- | --- | --- |
+| `mailbox`, `read`, address scope, `identity` | Only the scoped address | No | Only the exact configured sender |
+| `mailbox`, `read_write`, domain scope, `identity` | Addresses on the exact scoped domain | Yes, except `Scopes/*` | Only the exact configured sender |
+| `mailbox`, `read_write`, address scope, `scoped_domains` | Only the scoped address | Yes, except `Scopes/*` | Any address on that exact scoped domain |
+| `smtp`, address scope, `identity` | No IMAP access | No IMAP access | Only the exact configured sender |
+| `smtp`, address scope, `scoped_domains` | No IMAP access | No IMAP access | Any address on that exact scoped domain |
+
+Disabled credentials cannot authenticate, regardless of their other permissions.
+
+<CardGroup cols={2}>
+  <Card title="Manage Credentials" icon="key" href="/mailboxes/manage-credentials">
+    Create credentials, update scopes, disable access, and rotate passwords.
+  </Card>
+  <Card title="IMAP Behavior" icon="inbox" href="/mailboxes/imap-behavior">
+    Understand folders, read-only views, flags, limits, and synchronization.
+  </Card>
+</CardGroup>

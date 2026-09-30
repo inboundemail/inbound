@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 
 import Clipboard2 from "@/components/icons/clipboard-2";
@@ -35,26 +35,36 @@ export function MailboxPasswordDialog({
 	type,
 	wasRotated,
 }: MailboxPasswordDialogProps) {
-	const [copied, setCopied] = useState(false);
+	const usernameId = useId();
+	const passwordId = useId();
+	const [copied, setCopied] = useState<"username" | "password" | null>(null);
 
-	const copyPassword = async () => {
+	const copyCredential = async (field: "username" | "password") => {
 		try {
-			await navigator.clipboard.writeText(password);
-			setCopied(true);
-			toast.success("Password copied");
+			await navigator.clipboard.writeText(
+				field === "password" ? password : loginAddress,
+			);
+			setCopied(field);
+			toast.success(
+				field === "password" ? "Password copied" : "Username copied",
+			);
 		} catch {
-			toast.error("Failed to copy password");
+			toast.error(`Failed to copy ${field}`);
 		}
 	};
 
 	const handleOpenChange = (nextOpen: boolean) => {
-		if (!nextOpen) setCopied(false);
+		if (!nextOpen) setCopied(null);
 		onOpenChange(nextOpen);
 	};
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="sm:max-w-lg">
+			<DialogContent
+				className="max-h-[85dvh] overflow-y-auto p-4 sm:max-w-lg sm:p-6"
+				onInteractOutside={(event) => event.preventDefault()}
+				onEscapeKeyDown={(event) => event.preventDefault()}
+			>
 				<DialogHeader>
 					<DialogTitle>
 						{wasRotated
@@ -68,32 +78,58 @@ export function MailboxPasswordDialog({
 					</DialogDescription>
 				</DialogHeader>
 
-				<Alert>
+				<Alert id={`${passwordId}-warning`}>
 					<ShieldCheck width="18" height="18" />
 					<AlertTitle>Save this password now</AlertTitle>
 					<AlertDescription>
 						This password is shown once and cannot be recovered. Store it in a
-						password manager.
+						password manager before closing this window.
 					</AlertDescription>
 				</Alert>
 
 				<div className="space-y-4">
 					<div className="space-y-2">
-						<Label>Username</Label>
-						<Input value={loginAddress} readOnly className="font-mono" />
-					</div>
-					<div className="space-y-2">
-						<Label>Password</Label>
+						<Label htmlFor={usernameId}>Username</Label>
 						<div className="flex gap-2">
-							<Input value={password} readOnly className="font-mono" />
+							<Input
+								id={usernameId}
+								value={loginAddress}
+								readOnly
+								className="min-w-0 font-mono"
+							/>
 							<Button
 								type="button"
 								variant="secondary"
-								onClick={copyPassword}
+								onClick={() => copyCredential("username")}
+								aria-label="Copy username"
+							>
+								<Clipboard2 width="16" height="16" />
+								<span className="hidden sm:inline">
+									{copied === "username" ? "Copied" : "Copy"}
+								</span>
+							</Button>
+						</div>
+					</div>
+					<div className="space-y-2">
+						<Label htmlFor={passwordId}>Password</Label>
+						<div className="flex gap-2">
+							<Input
+								id={passwordId}
+								value={password}
+								readOnly
+								aria-describedby={`${passwordId}-warning`}
+								className="min-w-0 font-mono"
+							/>
+							<Button
+								type="button"
+								variant="secondary"
+								onClick={() => copyCredential("password")}
 								aria-label="Copy password"
 							>
-								<Clipboard2 width="16" height="16" className="mr-2" />
-								{copied ? "Copied" : "Copy"}
+								<Clipboard2 width="16" height="16" />
+								<span className="hidden sm:inline">
+									{copied === "password" ? "Copied" : "Copy"}
+								</span>
 							</Button>
 						</div>
 					</div>

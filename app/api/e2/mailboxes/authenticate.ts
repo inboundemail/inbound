@@ -1,5 +1,8 @@
 import { Elysia, t } from "elysia";
-import { enforceMailboxAuthenticationRateLimit } from "@/app/api/e2/lib/auth";
+import {
+	enforceMailboxAuthenticationRateLimit,
+	enforceMailboxGatewayAuthorization,
+} from "@/app/api/e2/lib/auth";
 import {
 	authenticateManagedMailCredential,
 	MailboxErrorSchema,
@@ -38,6 +41,7 @@ export const authenticateMailbox = new Elysia().post(
 			loginAddress ?? body.loginAddress.trim().toLowerCase(),
 			set,
 		);
+		enforceMailboxGatewayAuthorization(request, set);
 		if (!loginAddress) return unauthorized(set);
 
 		const credential = await authenticateManagedMailCredential(body.password, {
@@ -64,6 +68,7 @@ export const authenticateMailbox = new Elysia().post(
 			200: AuthenticateResponse,
 			400: MailboxErrorSchema,
 			401: MailboxErrorSchema,
+			403: MailboxErrorSchema,
 			429: MailboxErrorSchema,
 			500: MailboxErrorSchema,
 			503: MailboxErrorSchema,

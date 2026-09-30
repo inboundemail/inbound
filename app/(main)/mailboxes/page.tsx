@@ -1,8 +1,9 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
+import Link from "next/link";
 import { parseAsString, useQueryStates } from "nuqs";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 import CirclePlus from "@/components/icons/circle-plus";
 import DotsVertical from "@/components/icons/dots-vertical";
@@ -41,6 +42,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useDomainsListV2Query } from "@/features/domains/hooks/useDomainV2Hooks";
 import {
 	useDeleteMailboxMutation,
@@ -59,6 +61,7 @@ interface PasswordState {
 }
 
 export default function MailboxesPage() {
+	const connectionSettingsId = useId();
 	const [filters, setFilters] = useQueryStates(
 		{
 			search: parseAsString.withDefault(""),
@@ -71,6 +74,7 @@ export default function MailboxesPage() {
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [selectedMailbox, setSelectedMailbox] = useState<Mailbox | null>(null);
 	const [deleteMailbox, setDeleteMailbox] = useState<Mailbox | null>(null);
+	const [disableMailbox, setDisableMailbox] = useState<Mailbox | null>(null);
 	const [rotateMailbox, setRotateMailbox] = useState<Mailbox | null>(null);
 	const [passwordState, setPasswordState] = useState<PasswordState | null>(
 		null,
@@ -86,6 +90,7 @@ export default function MailboxesPage() {
 	const rotateMutation = useRotateMailboxPasswordMutation();
 
 	const mailboxes = mailboxesQuery.data?.data ?? [];
+	const hasFilters = Boolean(filters.search || filters.status !== "all");
 	const domains = (domainsQuery.data?.data ?? [])
 		.filter((domain) => domain.status === "verified")
 		.map(({ id, domain }) => ({ id, domain }));
@@ -124,6 +129,7 @@ export default function MailboxesPage() {
 			toast.success(
 				mailbox.enabled ? "Credential disabled" : "Credential enabled",
 			);
+			setDisableMailbox(null);
 		} catch (error) {
 			toast.error(
 				error instanceof Error ? error.message : "Failed to update credential",
@@ -167,13 +173,20 @@ export default function MailboxesPage() {
 	if (mailboxesQuery.error) {
 		return (
 			<div className="min-h-screen p-4">
-				<div className="mx-auto max-w-5xl rounded-xl border border-destructive/20 bg-destructive/10 p-6">
+				<div
+					role="alert"
+					className="mx-auto max-w-5xl rounded-xl border border-destructive/20 bg-destructive/10 p-6"
+				>
 					<div className="flex items-center gap-3 text-destructive">
-						<span className="text-sm">{mailboxesQuery.error.message}</span>
+						<div className="min-w-0">
+							<p className="text-sm font-medium">Unable to load credentials</p>
+							<p className="mt-1 text-sm">{mailboxesQuery.error.message}</p>
+						</div>
 						<Button
 							variant="ghost"
 							size="sm"
 							onClick={() => mailboxesQuery.refetch()}
+							disabled={mailboxesQuery.isFetching}
 							className="ml-auto"
 						>
 							Try again
@@ -197,7 +210,9 @@ export default function MailboxesPage() {
 										Mailboxes & SMTP
 									</h2>
 									<p className="text-sm font-medium text-muted-foreground">
-										{mailboxesQuery.data?.pagination.total ?? 0} credentials
+										{mailboxesQuery.isLoading
+											? "Loading credentials"
+											: `${mailboxesQuery.data?.pagination.total ?? 0} credentials, ${mailboxes.filter((mailbox) => mailbox.enabled).length} active${mailboxesQuery.data?.pagination.hasMore ? " on this page" : ""}`}
 									</p>
 								</div>
 							</div>
@@ -211,6 +226,7 @@ export default function MailboxesPage() {
 									variant="outline"
 									onClick={() => mailboxesQuery.refetch()}
 									disabled={mailboxesQuery.isFetching}
+									aria-label="Refresh credentials"
 								>
 									<Refresh2
 										width="14"
@@ -227,60 +243,140 @@ export default function MailboxesPage() {
 						</div>
 					</div>
 
-					<div>
-						<div className="flex flex-wrap items-center gap-3">
-							<div className="relative min-w-[200px] flex-1">
-								<Magnifier2
-									width="16"
-									height="16"
-									className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-								/>
-								<Input
-									placeholder="Search credentials..."
-									value={filters.search}
-									onChange={(event) =>
-										setFilters({ search: event.target.value || null })
+					{(mailboxes.length > 0 || hasFilters) && (
+						<div>
+							<div className="flex flex-wrap items-center gap-3">
+								<div className="relative min-w-[200px] flex-1">
+									<Magnifier2
+										width="16"
+										height="16"
+										className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+									/>
+									<Input
+										placeholder="Search credentials..."
+										aria-label="Search credentials"
+										value={filters.search}
+										onChange={(event) =>
+											setFilters({ search: event.target.value || null })
+										}
+										className="h-9 rounded-xl pl-10"
+									/>
+								</div>
+								<Select
+									value={filters.status}
+									onValueChange={(value) =>
+										setFilters({ status: value === "all" ? null : value })
 									}
-									className="h-9 rounded-xl pl-10"
-								/>
+								>
+									<SelectTrigger
+										className="h-9 w-[140px] rounded-xl"
+										aria-label="Filter credentials by status"
+									>
+										<SelectValue placeholder="Status" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="all">All status</SelectItem>
+										<SelectItem value="active">Active</SelectItem>
+										<SelectItem value="disabled">Disabled</SelectItem>
+									</SelectContent>
+								</Select>
 							</div>
-							<Select
-								value={filters.status}
-								onValueChange={(value) =>
-									setFilters({ status: value === "all" ? null : value })
-								}
-							>
-								<SelectTrigger className="h-9 w-[140px] rounded-xl">
-									<SelectValue placeholder="Status" />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">All status</SelectItem>
-									<SelectItem value="active">Active</SelectItem>
-									<SelectItem value="disabled">Disabled</SelectItem>
-								</SelectContent>
-							</Select>
+							{hasFilters && (
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={() => setFilters({ search: null, status: null })}
+									className="mt-2 h-8"
+								>
+									<Filter2 width="14" height="14" className="mr-2" />
+									Clear filters
+								</Button>
+							)}
 						</div>
-						{(filters.search || filters.status !== "all") && (
+					)}
+
+					{domainsQuery.error && (
+						<div
+							role="alert"
+							className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-destructive/10 p-4"
+						>
+							<p className="text-sm text-destructive">
+								Verified domains could not be loaded. Creating or editing
+								credentials may be unavailable.
+							</p>
 							<Button
-								variant="ghost"
+								variant="secondary"
 								size="sm"
-								onClick={() => setFilters({ search: null, status: null })}
-								className="mt-2 h-8"
+								onClick={() => domainsQuery.refetch()}
+								disabled={domainsQuery.isFetching}
 							>
-								<Filter2 width="14" height="14" className="mr-2" />
-								Clear filters
+								Try again
 							</Button>
-						)}
-					</div>
+						</div>
+					)}
 				</div>
 
 				<div className="mx-auto max-w-5xl p-2 py-4">
+					{mailboxes.length > 0 && (
+						<section
+							aria-labelledby={connectionSettingsId}
+							className="mb-4 rounded-xl border border-border bg-card p-4 sm:p-5"
+						>
+							<div className="mb-4">
+								<h3 id={connectionSettingsId} className="text-sm font-semibold">
+									Connection settings
+								</h3>
+								<p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+									Authenticate with the credential login and its saved password.
+									Passwords cannot be viewed again; rotate a lost password.
+								</p>
+							</div>
+							<div className="grid gap-3 sm:grid-cols-2">
+								<div className="min-w-0 rounded-lg bg-muted/40 p-3">
+									<p className="text-xs font-medium text-muted-foreground">
+										IMAP - Mailbox credentials only
+									</p>
+									<p className="mt-1 break-all font-mono text-sm">
+										imap.inboundemail.com
+									</p>
+									<p className="mt-1 text-xs text-muted-foreground">
+										Port 993 - TLS
+									</p>
+								</div>
+								<div className="min-w-0 rounded-lg bg-muted/40 p-3">
+									<p className="text-xs font-medium text-muted-foreground">
+										SMTP - All credentials
+									</p>
+									<p className="mt-1 break-all font-mono text-sm">
+										smtp.inboundemail.com
+									</p>
+									<p className="mt-1 text-xs text-muted-foreground">
+										Port 465 - TLS, or 587 - STARTTLS
+									</p>
+								</div>
+							</div>
+						</section>
+					)}
+
 					{mailboxesQuery.isLoading ? (
-						<div className="flex items-center justify-center py-20 text-muted-foreground">
-							Loading credentials...
+						<div
+							role="status"
+							aria-label="Loading credentials"
+							className="space-y-3"
+						>
+							{["first", "second", "third"].map((row) => (
+								<div
+									key={row}
+									className="rounded-xl border border-border bg-card p-4"
+								>
+									<Skeleton className="h-4 w-40" />
+									<Skeleton className="mt-3 h-3 w-56 max-w-full" />
+									<Skeleton className="mt-4 h-5 w-32" />
+								</div>
+							))}
 						</div>
 					) : filteredMailboxes.length === 0 ? (
-						<div className="rounded-xl bg-card p-8">
+						<div className="rounded-xl border border-border bg-card px-5 py-12 sm:px-8">
 							<div className="text-center">
 								<EnvelopeOpen
 									width="48"
@@ -288,17 +384,42 @@ export default function MailboxesPage() {
 									className="mx-auto mb-4 text-muted-foreground"
 								/>
 								<h3 className="mb-2 text-lg font-semibold text-foreground">
-									No credentials found
+									{hasFilters
+										? "No matching credentials"
+										: "Connect your first mailbox"}
 								</h3>
-								<p className="mb-4 text-sm text-muted-foreground">
-									{filters.search || filters.status !== "all"
+								<p className="mx-auto mb-5 max-w-md text-sm leading-relaxed text-muted-foreground">
+									{hasFilters
 										? "Try adjusting your filters or search query."
-										: "Create credentials to receive with IMAP, send with SMTP, or both."}
+										: !domainsQuery.isLoading &&
+												!domainsQuery.error &&
+												domains.length === 0
+											? "Add and verify a domain first, then create scoped credentials for IMAP and SMTP."
+											: "Create scoped credentials to receive email over IMAP, send over SMTP, or connect a send-only client."}
 								</p>
-								<Button variant="secondary" onClick={openCreate}>
-									<CirclePlus width="16" height="16" className="mr-2" />
-									Create your first credential
-								</Button>
+								{hasFilters ? (
+									<Button
+										variant="secondary"
+										onClick={() => setFilters({ search: null, status: null })}
+									>
+										<Filter2 width="16" height="16" className="mr-2" />
+										Clear filters
+									</Button>
+								) : !domainsQuery.isLoading &&
+									!domainsQuery.error &&
+									domains.length === 0 ? (
+									<Button variant="secondary" asChild>
+										<Link href="/add">
+											<CirclePlus width="16" height="16" className="mr-2" />
+											Add a domain
+										</Link>
+									</Button>
+								) : (
+									<Button variant="secondary" onClick={openCreate}>
+										<CirclePlus width="16" height="16" className="mr-2" />
+										Create your first credential
+									</Button>
+								)}
 							</div>
 						</div>
 					) : (
@@ -371,7 +492,10 @@ export default function MailboxesPage() {
 											<p className="mt-1 text-xs text-muted-foreground md:hidden">
 												{lastUsed}
 											</p>
-											<div className="mt-3 flex flex-wrap gap-1.5">
+											<div
+												aria-label="Allowed email scopes"
+												className="mt-3 flex flex-wrap gap-1.5"
+											>
 												{visibleScopes.map((scope) => (
 													<Badge
 														key={scope.id}
@@ -416,7 +540,14 @@ export default function MailboxesPage() {
 													<Refresh2 width="16" height="16" />
 													Rotate password
 												</DropdownMenuItem>
-												<DropdownMenuItem onSelect={() => setEnabled(mailbox)}>
+												<DropdownMenuItem
+													onSelect={() =>
+														mailbox.enabled
+															? setDisableMailbox(mailbox)
+															: setEnabled(mailbox)
+													}
+													disabled={updateMutation.isPending}
+												>
 													{mailbox.enabled ? "Disable" : "Enable"}
 												</DropdownMenuItem>
 												<DropdownMenuSeparator />
@@ -443,6 +574,8 @@ export default function MailboxesPage() {
 				mailbox={selectedMailbox}
 				domains={domains}
 				isLoadingDomains={domainsQuery.isLoading}
+				domainError={domainsQuery.error?.message ?? null}
+				onRetryDomains={() => domainsQuery.refetch()}
 				onPasswordCreated={(password, loginAddress, type) =>
 					setPasswordState({ password, loginAddress, type, wasRotated: false })
 				}
@@ -468,18 +601,55 @@ export default function MailboxesPage() {
 			/>
 
 			<Dialog
+				open={Boolean(disableMailbox)}
+				onOpenChange={(open) => {
+					if (!open && !updateMutation.isPending) setDisableMailbox(null);
+				}}
+			>
+				<DialogContent className="sm:max-w-md">
+					<DialogHeader>
+						<DialogTitle>Disable credential</DialogTitle>
+						<DialogDescription>
+							Clients using {disableMailbox?.name} will immediately lose{" "}
+							{disableMailbox?.type === "mailbox" ? "IMAP and SMTP" : "SMTP"}{" "}
+							access. You can enable this credential again later.
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter className="gap-2">
+						<Button
+							variant="secondary"
+							onClick={() => setDisableMailbox(null)}
+							disabled={updateMutation.isPending}
+						>
+							Cancel
+						</Button>
+						<Button
+							variant="destructive"
+							onClick={() => disableMailbox && setEnabled(disableMailbox)}
+							disabled={updateMutation.isPending}
+						>
+							{updateMutation.isPending ? "Disabling..." : "Disable credential"}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			<Dialog
 				open={Boolean(rotateMailbox)}
-				onOpenChange={(open) => !open && setRotateMailbox(null)}
+				onOpenChange={(open) => {
+					if (!open && !rotateMutation.isPending) setRotateMailbox(null);
+				}}
 			>
 				<DialogContent className="sm:max-w-md">
 					<DialogHeader>
 						<DialogTitle>Rotate credential password</DialogTitle>
 						<DialogDescription>
 							The current password for {rotateMailbox?.name} will stop working
-							immediately. The new password will only be shown once.
+							immediately, disconnecting every client using it. The new password
+							will only be shown once.
 						</DialogDescription>
 					</DialogHeader>
-					<DialogFooter>
+					<DialogFooter className="gap-2">
 						<Button
 							variant="secondary"
 							onClick={() => setRotateMailbox(null)}
@@ -487,7 +657,11 @@ export default function MailboxesPage() {
 						>
 							Cancel
 						</Button>
-						<Button onClick={confirmRotate} disabled={rotateMutation.isPending}>
+						<Button
+							variant="destructive"
+							onClick={confirmRotate}
+							disabled={rotateMutation.isPending}
+						>
 							{rotateMutation.isPending ? "Rotating..." : "Rotate password"}
 						</Button>
 					</DialogFooter>

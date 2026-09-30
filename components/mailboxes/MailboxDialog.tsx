@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 
@@ -47,6 +48,8 @@ interface MailboxDialogProps {
 	mailbox: Mailbox | null;
 	domains: SelectableDomain[];
 	isLoadingDomains: boolean;
+	domainError: string | null;
+	onRetryDomains: () => void;
 	onPasswordCreated: (
 		password: string,
 		loginAddress: string,
@@ -73,6 +76,8 @@ export function MailboxDialog({
 	mailbox,
 	domains,
 	isLoadingDomains,
+	domainError,
+	onRetryDomains,
 	onPasswordCreated,
 }: MailboxDialogProps) {
 	const nameId = useId();
@@ -92,6 +97,7 @@ export function MailboxDialog({
 	const createMailbox = useCreateMailboxMutation();
 	const updateMailbox = useUpdateMailboxMutation();
 	const isPending = createMailbox.isPending || updateMailbox.isPending;
+	const defaultDomainId = domains[0]?.id ?? "";
 
 	useEffect(() => {
 		if (!open) return;
@@ -115,10 +121,10 @@ export function MailboxDialog({
 				: initialForm,
 		);
 		setScopeType("domain");
-		setScopeDomainId(domains[0]?.id ?? "");
+		setScopeDomainId(defaultDomainId);
 		setScopeLocalPart("");
 		setErrors({});
-	}, [open, mailbox, domains]);
+	}, [open, mailbox, defaultDomainId]);
 
 	const domainName = (domainId: string) =>
 		domains.find((domain) => domain.id === domainId)?.domain ??
@@ -248,14 +254,14 @@ export function MailboxDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+			<DialogContent className="max-h-[85dvh] overflow-y-auto p-4 sm:max-w-2xl sm:p-6">
 				<DialogHeader>
 					<DialogTitle>
 						{mailbox ? "Edit credential" : "Create credential"}
 					</DialogTitle>
 					<DialogDescription>
-						Configure mailbox and SMTP access with explicit sender and scope
-						policies.
+						Choose what this credential can access and which sender addresses it
+						may use.
 					</DialogDescription>
 				</DialogHeader>
 
@@ -321,9 +327,12 @@ export function MailboxDialog({
 								}
 								placeholder="Support inbox"
 								aria-invalid={Boolean(errors.name)}
+								aria-describedby={errors.name ? `${nameId}-error` : undefined}
 							/>
 							{errors.name && (
-								<p className="text-xs text-destructive">{errors.name}</p>
+								<p id={`${nameId}-error`} className="text-xs text-destructive">
+									{errors.name}
+								</p>
 							)}
 						</div>
 
@@ -341,10 +350,20 @@ export function MailboxDialog({
 								}
 								placeholder="imap@example.com"
 								aria-invalid={Boolean(errors.loginAddress)}
+								aria-describedby={
+									errors.loginAddress ? `${loginId}-error` : `${loginId}-hint`
+								}
 							/>
-							{errors.loginAddress && (
-								<p className="text-xs text-destructive">
+							{errors.loginAddress ? (
+								<p id={`${loginId}-error`} className="text-xs text-destructive">
 									{errors.loginAddress}
+								</p>
+							) : (
+								<p
+									id={`${loginId}-hint`}
+									className="text-xs leading-relaxed text-muted-foreground"
+								>
+									Your IMAP/SMTP username; it does not set the From address.
 								</p>
 							)}
 						</div>
@@ -371,8 +390,11 @@ export function MailboxDialog({
 								</SelectContent>
 							</Select>
 							<p className="text-xs leading-relaxed text-muted-foreground">
-								IMAP presents one combined INBOX plus read-only folders for each
-								configured scope.
+								{form.accessMode === "read"
+									? "Read-only clients can view messages but cannot modify them."
+									: "Read-and-write clients can view and modify messages."}{" "}
+								IMAP includes one combined INBOX and read-only folders per
+								scope.
 							</p>
 						</div>
 					)}
@@ -392,20 +414,35 @@ export function MailboxDialog({
 						>
 							<Label
 								htmlFor={identityModeId}
-								className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 font-normal has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+								className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 font-normal has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
 							>
-								<RadioGroupItem id={identityModeId} value="identity" />
-								<span className="font-medium">Exact identity</span>
+								<RadioGroupItem
+									id={identityModeId}
+									value="identity"
+									className="mt-0.5"
+								/>
+								<span>
+									<span className="block font-medium">Exact identity</span>
+									<span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+										Allow one specific From address. Recommended.
+									</span>
+								</span>
 							</Label>
 							<Label
 								htmlFor={scopedDomainsModeId}
-								className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 font-normal has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+								className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 font-normal has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
 							>
 								<RadioGroupItem
 									id={scopedDomainsModeId}
 									value="scoped_domains"
+									className="mt-0.5"
 								/>
-								<span className="font-medium">Any scoped domain</span>
+								<span>
+									<span className="block font-medium">Any scoped domain</span>
+									<span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+										Allow every From address on scoped domains.
+									</span>
+								</span>
 							</Label>
 						</RadioGroup>
 
@@ -439,9 +476,17 @@ export function MailboxDialog({
 										}
 										placeholder="support@example.com"
 										aria-invalid={Boolean(errors.sendingAddress)}
+										aria-describedby={
+											errors.sendingAddress
+												? `${sendingAddressId}-error`
+												: undefined
+										}
 									/>
 									{errors.sendingAddress && (
-										<p className="text-xs text-destructive">
+										<p
+											id={`${sendingAddressId}-error`}
+											className="text-xs text-destructive"
+										>
 											{errors.sendingAddress}
 										</p>
 									)}
@@ -453,8 +498,9 @@ export function MailboxDialog({
 							</div>
 						) : (
 							<p className="rounded-lg bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
-								SMTP can use any From address on the exact domains represented
-								by the configured scopes. Subdomains are never included.
+								SMTP can send from any address on each scoped domain, even when
+								the scope grants access to only one address. Subdomains are not
+								included.
 							</p>
 						)}
 					</div>
@@ -467,7 +513,9 @@ export function MailboxDialog({
 									: "Mail access & sending scopes"}
 							</Label>
 							<p className="mt-1 text-xs text-muted-foreground">
-								Grant a whole verified domain or one exact address.
+								{form.type === "smtp"
+									? "Choose the verified domains or addresses this credential can send from."
+									: "Choose which verified domains or exact addresses this credential can read and send from."}
 							</p>
 						</div>
 
@@ -526,7 +574,7 @@ export function MailboxDialog({
 									</SelectContent>
 								</Select>
 
-								<div className="flex min-w-0 gap-2">
+								<div className="flex min-w-0 flex-col gap-2 sm:flex-row">
 									{scopeType === "address" && (
 										<Input
 											value={scopeLocalPart}
@@ -545,6 +593,7 @@ export function MailboxDialog({
 										<SelectTrigger
 											className="min-w-0 flex-1"
 											aria-label="Domain"
+											disabled={isLoadingDomains || Boolean(domainError)}
 										>
 											<SelectValue
 												placeholder={
@@ -567,17 +616,39 @@ export function MailboxDialog({
 									type="button"
 									variant="secondary"
 									onClick={addScope}
-									disabled={domains.length === 0}
+									disabled={domains.length === 0 || Boolean(domainError)}
 								>
 									<CirclePlus width="14" height="14" className="mr-1" />
 									Add
 								</Button>
 							</div>
-							{!isLoadingDomains && domains.length === 0 && (
-								<p className="mt-2 text-xs text-muted-foreground">
-									Add and verify a domain before creating a credential.
-								</p>
-							)}
+							{domainError ? (
+								<div
+									role="alert"
+									className="mt-3 flex flex-wrap items-center justify-between gap-2"
+								>
+									<p className="text-xs text-destructive">
+										Unable to load verified domains: {domainError}
+									</p>
+									<Button
+										type="button"
+										variant="secondary"
+										size="sm"
+										onClick={onRetryDomains}
+									>
+										Try again
+									</Button>
+								</div>
+							) : !isLoadingDomains && domains.length === 0 ? (
+								<div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+									<p className="text-xs text-muted-foreground">
+										Add and verify a domain before creating a credential.
+									</p>
+									<Button type="button" variant="secondary" size="sm" asChild>
+										<Link href="/add">Add a domain</Link>
+									</Button>
+								</div>
+							) : null}
 							{errors.scopeDraft && (
 								<p className="mt-2 text-xs text-destructive">
 									{errors.scopeDraft}
@@ -589,7 +660,7 @@ export function MailboxDialog({
 						)}
 					</div>
 
-					<DialogFooter>
+					<DialogFooter className="gap-2">
 						<Button
 							type="button"
 							variant="secondary"
@@ -598,7 +669,12 @@ export function MailboxDialog({
 						>
 							Cancel
 						</Button>
-						<Button type="submit" disabled={isPending || domains.length === 0}>
+						<Button
+							type="submit"
+							disabled={
+								isPending || domains.length === 0 || Boolean(domainError)
+							}
+						>
 							{isPending
 								? mailbox
 									? "Saving..."

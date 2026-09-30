@@ -1,3 +1,4 @@
+import { count, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { nanoid } from "nanoid";
 import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
@@ -19,6 +20,11 @@ const CreateMailboxResponse = t.Object({
 	password: t.String(),
 });
 
+export function maxMailboxesPerUser(): number {
+	const parsed = Number.parseInt(process.env.MAILBOX_MAX_PER_USER ?? "", 10);
+	return Number.isInteger(parsed) && parsed > 0 ? parsed : 100;
+}
+
 export const createMailbox = new Elysia().post(
 	"/mailboxes",
 	async ({ request, body, set }) => {
@@ -27,6 +33,18 @@ export const createMailbox = new Elysia().post(
 		if ("error" in validated) {
 			set.status = 400;
 			return { error: validated.error };
+		}
+
+		const mailboxLimit = maxMailboxesPerUser();
+		const [existingCount] = await db
+			.select({ count: count() })
+			.from(imapCredentials)
+			.where(eq(imapCredentials.userId, userId));
+		if ((existingCount?.count ?? 0) >= mailboxLimit) {
+			set.status = 403;
+			return {
+				error: `Mailbox limit reached (${mailboxLimit}). Delete unused mailboxes first.`,
+			};
 		}
 
 		const apiKey = await auth.api.createApiKey({

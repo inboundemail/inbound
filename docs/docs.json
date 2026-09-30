@@ -40,6 +40,16 @@
             ]
           },
           {
+            "group": "Mailboxes & SMTP",
+            "pages": [
+              "mailboxes/overview",
+              "mailboxes/connect-imap",
+              "mailboxes/scopes-and-permissions",
+              "mailboxes/manage-credentials",
+              "mailboxes/imap-behavior"
+            ]
+          },
+          {
             "group": "Integrations",
             "pages": [
               "integrations/mcp",

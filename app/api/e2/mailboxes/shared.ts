@@ -135,6 +135,14 @@ interface ScopeRecord {
 	address: string | null;
 }
 
+export function containsControlCharacters(value: string): boolean {
+	for (const char of value) {
+		const code = char.codePointAt(0) ?? 0;
+		if (code < 0x20 || code === 0x7f) return true;
+	}
+	return false;
+}
+
 export function normalizeEmailAddress(value: string): string | null {
 	const address = value.trim().toLowerCase();
 	const at = address.lastIndexOf("@");
@@ -170,8 +178,14 @@ export async function validateMailboxInput(
 ): Promise<{ data: ValidatedMailboxInput } | { error: string }> {
 	const name = input.name.trim();
 	if (!name) return { error: "Name is required" };
+	if (containsControlCharacters(input.name)) {
+		return { error: "Name must not contain control characters" };
+	}
 	if (input.scopes.length === 0)
 		return { error: "At least one scope is required" };
+	if (input.sendingName && containsControlCharacters(input.sendingName)) {
+		return { error: "Sending name must not contain control characters" };
+	}
 	const sendingName = input.sendingName?.trim() || null;
 
 	const loginAddress = normalizeEmailAddress(input.loginAddress);
@@ -431,6 +445,24 @@ export async function authenticateManagedMailCredential(
 	) {
 		return null;
 	}
+
+	const normalizedLogin = normalizeEmailAddress(credential.loginAddress);
+	if (!normalizedLogin) return null;
+	const loginDomain = normalizedLogin.slice(
+		normalizedLogin.lastIndexOf("@") + 1,
+	);
+	const [verifiedLoginDomain] = await db
+		.select({ id: emailDomains.id })
+		.from(emailDomains)
+		.where(
+			and(
+				eq(emailDomains.userId, credential.userId),
+				eq(emailDomains.domain, loginDomain),
+				eq(emailDomains.status, "verified"),
+			),
+		)
+		.limit(1);
+	if (!verifiedLoginDomain) return null;
 
 	const verifiedScopes = (
 		await loadCredentialScopes(credential.userId, [credential.id], true)

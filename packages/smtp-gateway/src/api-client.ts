@@ -108,11 +108,17 @@ export class InboundApiClient {
 		password: string,
 	): Promise<SmtpIdentity | null> {
 		const failure = "4.3.0 Authentication backend unavailable, try again later";
+		const headers: Record<string, string> = {
+			"Content-Type": "application/json",
+		};
+		if (this.config.gatewayAuthSecret) {
+			headers["x-inbound-gateway-secret"] = this.config.gatewayAuthSecret;
+		}
 		const response = await this.request(
 			`${this.config.apiBaseUrl}/mailboxes/authenticate-smtp`,
 			{
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers,
 				body: JSON.stringify({ loginAddress, password }),
 			},
 			this.config.authRequestTimeoutMs,
