@@ -43,68 +43,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 			priority: 1.0,
 		},
 
-		// Main competitor landing pages - high priority
-		{
-			url: `${baseUrl}/improvmx-alternative`,
-			lastModified: new Date(),
-			changeFrequency: "monthly" as const,
-			priority: 0.9,
-		},
-		{
-			url: `${baseUrl}/mailgun-inbound-alternative`,
-			lastModified: new Date(),
-			changeFrequency: "monthly" as const,
-			priority: 0.9,
-		},
-		{
-			url: `${baseUrl}/sendgrid-inbound-alternative`,
-			lastModified: new Date(),
-			changeFrequency: "monthly" as const,
-			priority: 0.9,
-		},
-		{
-			url: `${baseUrl}/postmark-inbound-alternative`,
-			lastModified: new Date(),
-			changeFrequency: "monthly" as const,
-			priority: 0.9,
-		},
-		{
-			url: `${baseUrl}/email-as-webhook`,
-			lastModified: new Date(),
-			changeFrequency: "monthly" as const,
-			priority: 0.9,
-		},
-		{
-			url: `${baseUrl}/email-webhook-api`,
-			lastModified: new Date(),
-			changeFrequency: "monthly" as const,
-			priority: 0.9,
-		},
-		{
-			url: `${baseUrl}/email-parsing-api`,
-			lastModified: new Date(),
-			changeFrequency: "monthly" as const,
-			priority: 0.9,
-		},
-		{
-			url: `${baseUrl}/inbound-email-service`,
-			lastModified: new Date(),
-			changeFrequency: "monthly" as const,
-			priority: 0.9,
-		},
-		{
-			url: `${baseUrl}/email-api`,
-			lastModified: new Date(),
-			changeFrequency: "monthly" as const,
-			priority: 0.9,
-		},
-		{
-			url: `${baseUrl}/examples`,
-			lastModified: new Date(),
-			changeFrequency: "monthly" as const,
-			priority: 0.9,
-		},
-
 		// Core product pages
 		{
 			url: `${baseUrl}/pricing`,

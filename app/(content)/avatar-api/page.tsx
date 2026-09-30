@@ -559,9 +559,6 @@ Example URLs:
               
               <div className="flex flex-wrap gap-3 justify-center">
                 <Button variant="outline" size="sm" asChild>
-                  <Link href="/email-api">Email API</Link>
-                </Button>
-                <Button variant="outline" size="sm" asChild>
                   <Link href="/bimi-generator">BIMI Generator</Link>
                 </Button>
                 {session && (

@@ -156,7 +156,7 @@ export function SiteHeader() {
 
 					<div className="flex items-center">
 						<nav className="hidden md:flex items-center gap-6 text-sm tracking-normal">
-							{["/features", "/examples", "/pricing", "/docs", "/blog"].map(
+							{["/features", "/pricing", "/docs", "/blog"].map(
 								(href) => (
 									<Link
 										key={href}
@@ -282,7 +282,6 @@ export function SiteHeader() {
 									<div className="flex flex-col gap-6">
 										{[
 											"/features",
-											"/examples",
 											"/pricing",
 											"/docs",
 											"/blog",

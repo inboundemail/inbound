@@ -112,6 +112,62 @@ const nextConfig: NextConfig = {
 	},
 	async redirects() {
 		return [
+			// Retired SEO landing pages; temporary so the slugs can be reused
+			{
+				source: "/improvmx-alternative",
+				destination: "/",
+				permanent: false,
+			},
+			{
+				source: "/mailgun-inbound-alternative",
+				destination: "/",
+				permanent: false,
+			},
+			{
+				source: "/sendgrid-inbound-alternative",
+				destination: "/",
+				permanent: false,
+			},
+			{
+				source: "/postmark-inbound-alternative",
+				destination: "/",
+				permanent: false,
+			},
+			{
+				source: "/email-as-webhook",
+				destination: "/",
+				permanent: false,
+			},
+			{
+				source: "/email-webhook-api",
+				destination: "/",
+				permanent: false,
+			},
+			{
+				source: "/email-parsing-api",
+				destination: "/",
+				permanent: false,
+			},
+			{
+				source: "/inbound-email-service",
+				destination: "/",
+				permanent: false,
+			},
+			{
+				source: "/email-api",
+				destination: "/",
+				permanent: false,
+			},
+			{
+				source: "/examples",
+				destination: "/",
+				permanent: false,
+			},
+			{
+				source: "/vercel-oss-program",
+				destination: "/",
+				permanent: false,
+			},
 			// Disable v1 API - return 410 Gone
 			{
 				source: "/api/v1/:path*",
