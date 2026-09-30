@@ -11,7 +11,11 @@ import { pauseTenant } from "../admin/tenants/pause";
 import { suspendTenant } from "../admin/tenants/suspend";
 import { banUser } from "../admin/users/ban";
 import { unbanUser } from "../admin/users/unban";
-import { getAttachment } from "../attachments/get";
+import {
+	getAttachment,
+	getAttachmentPart,
+	listAttachments,
+} from "../attachments/get";
 import { revokeCurrentApiKey } from "../auth/revoke-key";
 import { createDomain } from "../domains/create";
 import { deleteDomain } from "../domains/delete";
@@ -119,7 +123,7 @@ const payload: InboundWebhookPayload = {
           size: 45678,
           contentId: '<att_abc123>',
           contentDisposition: 'attachment',
-          downloadUrl: 'https://inbound.new/api/e2/attachments/inbnd_abc123/order-receipt.pdf'
+          downloadUrl: 'https://inbound.new/api/e2/attachments/inbnd_abc123/parts/0'
         }
       ]
     }
@@ -481,6 +485,8 @@ https://inbound.new/api/e2
 	.use(updateEmailAddress)
 	.use(deleteEmailAddress)
 	// Attachment routes
+	.use(listAttachments)
+	.use(getAttachmentPart)
 	.use(getAttachment)
 	.use(revokeCurrentApiKey)
 	// Email routes (sending, listing, managing)

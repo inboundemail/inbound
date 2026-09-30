@@ -18,9 +18,9 @@ interface AttachmentListProps {
   attachments: Attachment[]
 }
 
-async function handleDownloadAttachment(emailId: string, attachmentFilename: string) {
+async function handleDownloadAttachment(emailId: string, index: number) {
   try {
-    const result = await downloadAttachment(emailId, attachmentFilename)
+    const result = await downloadAttachment(emailId, index)
     
     if (!result.success || !result.data) {
       console.error('Failed to download attachment:', result.error)
@@ -71,7 +71,7 @@ export function AttachmentList({ emailId, attachments }: AttachmentListProps) {
           <div className="flex items-center gap-3">
             <Hashtag2 width="16" height="16" className="text-muted-foreground" />
             <div>
-              <p className="font-medium text-sm">{att.filename}</p>
+              <p className="font-medium text-sm">{att.filename || 'Unnamed attachment'}</p>
               <p className="text-xs text-muted-foreground">{att.contentType} • {att.size ? `${Math.round(att.size / 1024)}KB` : 'Unknown size'}</p>
             </div>
           </div>
@@ -79,17 +79,15 @@ export function AttachmentList({ emailId, attachments }: AttachmentListProps) {
             {att.contentId && (
               <Badge variant="outline" className="text-xs">Inline</Badge>
             )}
-            {att.filename && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-8 w-8 p-0"
-                onClick={() => handleDownloadAttachment(emailId, att.filename!)}
-                title="Download attachment"
-              >
-                <Download2 width="14" height="14" />
-              </Button>
-            )}
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-8 w-8 p-0"
+              onClick={() => handleDownloadAttachment(emailId, idx)}
+              title="Download attachment"
+            >
+              <Download2 width="14" height="14" />
+            </Button>
           </div>
         </div>
       ))}

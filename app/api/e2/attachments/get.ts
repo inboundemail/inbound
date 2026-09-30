@@ -1,11 +1,8 @@
 import { Elysia, t } from "elysia"
 import { validateAndRateLimit } from "../lib/auth"
-import { db } from "@/lib/db"
-import { structuredEmails, sesEvents } from "@/lib/db/schema"
-import { eq, and } from "drizzle-orm"
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3"
-import { simpleParser } from "mailparser"
-import { resolveStructuredEmailId } from "@/lib/email-management/email-aliases"
+import type { Attachment } from "mailparser"
+import { attachmentDownloadUrl } from "@/lib/email-management/attachment-url"
+import { loadStoredAttachments as loadAttachments } from "@/lib/email-management/stored-attachments"
 
 // Error Response schema for OpenAPI
 const ErrorResponse = t.Object({
@@ -13,174 +10,132 @@ const ErrorResponse = t.Object({
   details: t.Optional(t.String()),
 })
 
-export const getAttachment = new Elysia().get(
-  "/attachments/:id/:filename",
+function attachmentResponse(attachment: Attachment, fallbackName: string): Response {
+  // RFC 5987: ASCII fallback plus UTF-8 encoded filename
+  const filename = attachment.filename || fallbackName
+  const asciiFilename = filename.replace(/[^\x20-\x7E]|["\\]/g, "_")
+  const contentDisposition = `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+
+  return new Response(new Uint8Array(attachment.content), {
+    status: 200,
+    headers: {
+      "Content-Type": attachment.contentType || "application/octet-stream",
+      "Content-Disposition": contentDisposition,
+      "Content-Length": attachment.content.length.toString(),
+      "Cache-Control": "private, max-age=3600",
+    },
+  })
+}
+
+const AttachmentPartSchema = t.Object({
+  index: t.Number({ description: "Position of the attachment in the email, starting at 0" }),
+  filename: t.Union([t.String(), t.Null()], {
+    description: "Filename from the email; null when the sender didn't provide one",
+  }),
+  contentType: t.String(),
+  size: t.Number(),
+  contentId: t.Union([t.String(), t.Null()]),
+  inline: t.Boolean({ description: "True for inline parts such as embedded images" }),
+  downloadUrl: t.String(),
+})
+
+export const listAttachments = new Elysia().get(
+  "/attachments/:id",
   async ({ request, params, set }) => {
-    console.log("📥 GET /api/e2/attachments/:id/:filename - Request started")
-    console.log(`   Email ID: ${params.id}`)
-    console.log(`   Filename (raw): ${params.filename}`)
-    console.log(`   Filename (decoded): ${decodeURIComponent(params.filename)}`)
-
-    // Auth & rate limit validation - throws on error
     const userId = await validateAndRateLimit(request, set)
-    console.log(`🔐 Attachment download - Authenticated userId: ${userId}`)
+    const loaded = await loadAttachments(params.id, userId)
+    if (!loaded.ok) {
+      set.status = loaded.status
+      return { error: loaded.error }
+    }
 
-    const { filename: attachmentFilename } = params
-    const emailId = await resolveStructuredEmailId(params.id, userId)
+    return {
+      emailId: loaded.emailId,
+      attachments: loaded.attachments.map((attachment, index) => ({
+        index,
+        filename: attachment.filename || null,
+        contentType: attachment.contentType || "application/octet-stream",
+        size: attachment.content.length,
+        contentId: attachment.contentId || null,
+        inline: attachment.contentDisposition === "inline" || attachment.related === true,
+        downloadUrl: attachmentDownloadUrl(loaded.emailId, index),
+      })),
+    }
+  },
+  {
+    params: t.Object({ id: t.String() }),
+    response: {
+      200: t.Object({ emailId: t.String(), attachments: t.Array(AttachmentPartSchema) }),
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      tags: ["Attachments"],
+      summary: "List email attachments",
+      description:
+        "List every attachment in a received email, including ones without a filename, with a download URL for each.",
+    },
+  }
+)
 
-    if (!emailId || !attachmentFilename) {
+export const getAttachmentPart = new Elysia().get(
+  "/attachments/:id/parts/:index",
+  async ({ request, params, set }) => {
+    const userId = await validateAndRateLimit(request, set)
+    const index = Number(params.index)
+    if (!/^\d+$/.test(params.index) || !Number.isSafeInteger(index)) {
       set.status = 400
-      return { error: "Email ID and attachment filename are required" }
+      return { error: "Attachment index must be a non-negative integer" }
     }
 
-    // Get the structured email to verify ownership and find SES event
-    console.log(`🔎 Attachment download - Querying for structured email with: emailId=${emailId}, userId=${userId}`)
-    const structuredEmail = await db
-      .select({
-        sesEventId: structuredEmails.sesEventId,
-        userId: structuredEmails.userId,
-      })
-      .from(structuredEmails)
-      .where(and(eq(structuredEmails.id, emailId), eq(structuredEmails.userId, userId)))
-      .limit(1)
-
-    if (!structuredEmail.length) {
-      console.error(`❌ Attachment download - Structured email not found: emailId=${emailId}, userId=${userId}`)
-      set.status = 404
-      return { error: "Email not found or access denied" }
+    const loaded = await loadAttachments(params.id, userId)
+    if (!loaded.ok) {
+      set.status = loaded.status
+      return { error: loaded.error }
     }
 
-    console.log(`✅ Attachment download - Found structured email: ${emailId}`)
-
-    const sesEventId = structuredEmail[0].sesEventId
-    if (!sesEventId) {
-      console.error(`❌ Attachment download - No SES event ID for email: ${emailId}`)
-      set.status = 404
-      return { error: "Email event information not found" }
-    }
-
-    // Get the SES event to find email content
-    const sesEvent = await db
-      .select({
-        s3BucketName: sesEvents.s3BucketName,
-        s3ObjectKey: sesEvents.s3ObjectKey,
-        emailContent: sesEvents.emailContent,
-      })
-      .from(sesEvents)
-      .where(eq(sesEvents.id, sesEventId))
-      .limit(1)
-
-    if (!sesEvent.length) {
-      set.status = 404
-      return { error: "Email content not found" }
-    }
-
-    console.log(`✅ Attachment download - Found SES event: ${sesEventId}`)
-
-    const { s3BucketName, s3ObjectKey, emailContent } = sesEvent[0]
-
-    console.log(`📦 Attachment download - SES event data: s3Bucket=${s3BucketName}, s3Key=${s3ObjectKey ? "yes" : "no"}, hasEmailContent=${!!emailContent}`)
-
-    // Parse email to extract attachments
-    let rawEmailContent: string | null = null
-
-    // Try S3 first, then fallback to direct email content
-    if (s3BucketName && s3ObjectKey) {
-      try {
-        console.log(`📦 Attachment download - Fetching email from S3: ${s3BucketName}/${s3ObjectKey}`)
-
-        const s3Client = new S3Client({
-          region: process.env.AWS_REGION || "us-east-1",
-        })
-
-        const command = new GetObjectCommand({
-          Bucket: s3BucketName,
-          Key: s3ObjectKey,
-        })
-
-        const response = await s3Client.send(command)
-
-        if (response.Body) {
-          // Convert stream to string
-          const chunks: Uint8Array[] = []
-          const reader = response.Body.transformToWebStream().getReader()
-
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            chunks.push(value)
-          }
-
-          const buffer = Buffer.concat(chunks)
-          rawEmailContent = buffer.toString("utf-8")
-          console.log(`✅ Attachment download - S3 fetch successful. Content size: ${rawEmailContent.length} bytes.`)
-        } else {
-          throw new Error("No email content in S3")
-        }
-      } catch (s3Error) {
-        console.error(`Failed to fetch from S3:`, s3Error)
-        // Fallback to direct content
-        rawEmailContent = emailContent
-        console.log(`🔄 Attachment download - S3 fetch failed, falling back to direct content (${rawEmailContent?.length || 0} bytes)`)
-      }
-    } else {
-      rawEmailContent = emailContent
-      console.log(`📄 Attachment download - No S3 info, using direct email content (${rawEmailContent?.length || 0} bytes)`)
-    }
-
-    if (!rawEmailContent) {
-      console.error(`❌ Attachment download - No email content available: s3BucketName=${s3BucketName}, s3ObjectKey=${s3ObjectKey}, emailContent=${emailContent ? "present" : "null"}`)
-      set.status = 404
-      return { error: "Email content not available" }
-    }
-
-    console.log(`✅ Attachment download - Email content ready (${rawEmailContent.length} bytes)`)
-
-    // Parse the email to find the attachment
-    const parsed = await simpleParser(rawEmailContent)
-
-    if (!parsed.attachments || parsed.attachments.length === 0) {
-      console.warn(`⚠️ Attachment download - No attachments found in email ${emailId}`)
-      set.status = 404
-      return { error: "No attachments found in this email" }
-    }
-
-    const decodedFilename = decodeURIComponent(attachmentFilename)
-    console.log(`🔍 Attachment download - Looking for: "${decodedFilename}"`)
-    console.log(`📋 Attachment download - Available attachments (${parsed.attachments.length}): ${parsed.attachments.map((a) => a.filename).join(", ")}`)
-
-    // Find the specific attachment by filename
-    const attachment = parsed.attachments.find((att) => att.filename === decodedFilename)
-
+    const attachment = loaded.attachments[index]
     if (!attachment) {
-      console.error(`❌ Attachment download - Attachment not found`)
-      console.error(`   Looking for: "${decodedFilename}"`)
-      console.error(`   Available: ${parsed.attachments.map((a) => `"${a.filename}"`).join(", ")}`)
       set.status = 404
       return { error: "Attachment not found" }
     }
+    return attachmentResponse(attachment, `attachment-${index + 1}`)
+  },
+  {
+    params: t.Object({ id: t.String(), index: t.String() }),
+    response: {
+      // 200 is the binary file (returned as a Response)
+      400: ErrorResponse,
+      401: ErrorResponse,
+      404: ErrorResponse,
+    },
+    detail: {
+      tags: ["Attachments"],
+      summary: "Download attachment by position",
+      description:
+        "Download an attachment by its position in the email (the `index` from List email attachments; webhook `downloadUrl`s use this form). Works for attachments without a filename and for several attachments sharing one name.",
+    },
+  }
+)
 
-    console.log(`✅ Attachment download - Found: ${attachment.filename} (${attachment.size} bytes)`)
+export const getAttachment = new Elysia().get(
+  "/attachments/:id/:filename",
+  async ({ request, params, set }) => {
+    const userId = await validateAndRateLimit(request, set)
+    const loaded = await loadAttachments(params.id, userId)
+    if (!loaded.ok) {
+      set.status = loaded.status
+      return { error: loaded.error }
+    }
 
-    // Encode filename for Content-Disposition header (RFC 5987)
-    // This handles non-ASCII characters properly
-    const safeFilename = attachment.filename || "download"
-    const asciiFilename = safeFilename.replace(/[^\x00-\x7F]/g, "_") // ASCII fallback
-    const encodedFilename = encodeURIComponent(safeFilename) // UTF-8 encoded
-
-    // Use both filename (ASCII fallback) and filename* (UTF-8 encoded) per RFC 5987
-    const contentDisposition = `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodedFilename}`
-
-    // Return the attachment as a Response with binary data
-    return new Response(new Uint8Array(attachment.content), {
-      status: 200,
-      headers: {
-        "Content-Type": attachment.contentType || "application/octet-stream",
-        "Content-Disposition": contentDisposition,
-        "Content-Length": attachment.size?.toString() || "0",
-        "Cache-Control": "private, max-age=3600",
-      },
-    })
+    // Filenames aren't unique; this returns the first match. Prefer /parts/:index.
+    const filename = decodeURIComponent(params.filename)
+    const attachment = loaded.attachments.find((att) => att.filename === filename)
+    if (!attachment) {
+      set.status = 404
+      return { error: "Attachment not found" }
+    }
+    return attachmentResponse(attachment, "download")
   },
   {
     params: t.Object({
@@ -188,8 +143,7 @@ export const getAttachment = new Elysia().get(
       filename: t.String(),
     }),
     response: {
-      // Note: 200 response is binary data (handled via Response object)
-      // Only error responses are JSON
+      // 200 is the binary file (returned as a Response)
       400: ErrorResponse,
       401: ErrorResponse,
       404: ErrorResponse,
@@ -199,8 +153,7 @@ export const getAttachment = new Elysia().get(
       tags: ["Attachments"],
       summary: "Download email attachment",
       description:
-        "Download an email attachment by email ID and filename. Returns the binary file content with appropriate Content-Type and Content-Disposition headers.",
+        "Download an attachment by filename. If several attachments share the name, the first is returned; use Download attachment by position to get a specific one.",
     },
   }
 )
-

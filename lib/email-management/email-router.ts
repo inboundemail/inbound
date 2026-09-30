@@ -5,6 +5,7 @@
  * Used by the webhook API route after email ingestion to deliver emails to their configured destinations.
  */
 
+import { attachmentDownloadUrl } from "@/lib/email-management/attachment-url";
 import { readTextLimited, safeFetch } from "@/lib/security/safe-fetch";
 import { Autumn as autumn } from "autumn-js";
 import { and, asc, eq, gte, ilike, isNull, lt, or } from "drizzle-orm";
@@ -1120,14 +1121,11 @@ async function handleWebhookEndpoint(
 		// Reconstruct ParsedEmailData from structured data
 		const parsedEmailData = reconstructParsedEmailData(emailData);
 
-		// Get the base URL for attachment downloads (from environment or construct from request)
-		const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://inbound.new";
-
-		// Add download URLs to attachments in parsedData
+		// Add download URLs, addressed by position: filenames can be missing or repeated
 		const attachmentsWithUrls =
-			parsedEmailData.attachments?.map((att) => ({
+			parsedEmailData.attachments?.map((att, index) => ({
 				...att,
-				downloadUrl: `${baseUrl}/api/e2/attachments/${emailData.structuredId}/${encodeURIComponent(att.filename || "attachment")}`,
+				downloadUrl: attachmentDownloadUrl(emailData.structuredId, index),
 			})) || [];
 
 		// Create enhanced parsedData with download URLs

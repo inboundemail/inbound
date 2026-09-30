@@ -72,7 +72,7 @@ const payload: InboundWebhookPayload = {
           size: 45678,
           contentId: '<att_abc123>',
           contentDisposition: 'attachment',
-          downloadUrl: 'https://inbound.new/api/e2/attachments/inbnd_abc123def456ghi/order-receipt.pdf'
+          downloadUrl: 'https://inbound.new/api/e2/attachments/inbnd_abc123def456ghi/parts/0'
         }
       ],
       headers: {},
@@ -90,7 +90,7 @@ const payload: InboundWebhookPayload = {
           size: 45678,
           contentId: '<att_abc123>',
           contentDisposition: 'attachment',
-          downloadUrl: 'https://inbound.new/api/e2/attachments/inbnd_abc123def456ghi/order-receipt.pdf'
+          downloadUrl: 'https://inbound.new/api/e2/attachments/inbnd_abc123def456ghi/parts/0'
         }
       ],
       headers: {}
@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
 ```
 
 <Note>
-The download URL follows the format: `https://inbound.new/api/e2/attachments/{emailId}/{filename}`
+The download URL follows the format: `https://inbound.new/api/e2/attachments/{emailId}/parts/{index}`, where `index` is the attachment's position in the `attachments` array. This works for attachments without a filename and for several attachments with the same name. Older URLs in the `{emailId}/{filename}` form keep working and return the first attachment with that name.
 
 Authentication via API key in the Authorization header is required to download attachments.
 </Note>
