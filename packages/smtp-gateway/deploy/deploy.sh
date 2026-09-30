@@ -57,13 +57,18 @@ if ! cmp -s deploy/smtp-gateway.service /etc/systemd/system/smtp-gateway.service
   systemctl daemon-reload
   echo "systemd unit updated"
 fi
+started=$(date +%s)
 systemctl restart smtp-gateway
-for i in $(seq 1 10); do
+# systemd reports "active" as soon as the process spawns; wait for the gateway
+# itself to log that it is listening.
+for i in $(seq 1 20); do
   sleep 1
-  systemctl is-active --quiet smtp-gateway && break
-  [ "$i" = 10 ] && { echo "service failed to start"; journalctl -u smtp-gateway --no-pager | tail -20; exit 1; }
+  journalctl -u smtp-gateway --no-pager --since "@$started" | grep -q listening && break
+  if [ "$i" = 20 ] || ! systemctl is-active --quiet smtp-gateway; then
+    echo "service failed to start"; journalctl -u smtp-gateway --no-pager | tail -20; exit 1
+  fi
 done
-journalctl -u smtp-gateway --no-pager --since "-15s" | grep listening
+systemctl is-active smtp-gateway
 REMOTE
 
 echo "==> smoke test ($SMTP_HOSTNAME:587 STARTTLS + :465 TLS)"
