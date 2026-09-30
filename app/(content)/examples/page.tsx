@@ -633,7 +633,7 @@ app.post('/webhook/email', async (req, res) => {
 						</div>
 						<div className="flex gap-8 text-sm text-muted-foreground">
 							<Link
-								href="https://docs.inbound.new"
+								href="https://inbound.new/docs"
 								className="hover:text-foreground transition-colors"
 							>
 								Docs

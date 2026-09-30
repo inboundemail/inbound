@@ -290,7 +290,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 							<SidebarMenuItem>
 								<SidebarMenuButton tooltip="Docs" asChild>
 									<a
-										href="https://docs.inbound.new"
+										href="https://inbound.new/docs"
 										target="_blank"
 										rel="noopener noreferrer"
 									>

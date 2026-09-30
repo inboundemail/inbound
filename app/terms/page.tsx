@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import { MarketingNav, MarketingFooter } from "@/components/marketing-nav";
+
+export const metadata: Metadata = {
+  title: "Terms of Service",
+  description: "The terms that govern your use of inbound.",
+  alternates: { canonical: "/terms" },
+};
 
 export default function TermsPage() {
   return (

@@ -11,8 +11,6 @@
  * to provide consistent navigation experience across the application.
  */
 import { guardAccessFlag } from "@/app/actions/feature-flags";
-import Cloud2 from "@/components/icons/cloud-2";
-import Code2 from "@/components/icons/code-2";
 import EmailFlow from "@/components/icons/email-flow";
 import EnvelopeOpen from "@/components/icons/envelope-open";
 import Gear2 from "@/components/icons/gear-2";
@@ -20,7 +18,6 @@ import Globe2 from "@/components/icons/globe-2";
 import Key2 from "@/components/icons/key-2";
 import ShieldCheck from "@/components/icons/shield-check";
 import StrokeProjectingCap from "@/components/icons/stroke-projecting-cap";
-import UserGroup from "@/components/icons/user-group";
 
 export interface NavigationItem {
 	title: string;
@@ -91,26 +88,7 @@ export const navigationConfig: NavigationConfig = {
 	],
 	secondary: [],
 	features: [],
-	admin: [
-		{
-			title: "Tenants",
-			url: "/admin/tenant",
-			icon: Cloud2,
-			description: "SES tenant monitoring, bounces and complaints",
-		},
-		{
-			title: "Users",
-			url: "/admin/users",
-			icon: UserGroup,
-			description: "User analytics and activity monitoring",
-		},
-		{
-			title: "Lambda Logs",
-			url: "/admin/lambda",
-			icon: Code2,
-			description: "Lambda function monitoring and logs",
-		},
-	],
+	admin: [],
 };
 
 // Helper function to get page title from URL
@@ -144,7 +122,6 @@ export function getPageTitleFromUrl(pathname: string): string {
 	if (secondaryItem) return secondaryItem.title;
 
 	// Special cases for compound words
-	if (firstSegment === "addinbound") return "Add Inbound Email";
 	if (firstSegment === "admin") return "Admin Panel";
 
 	// Default fallback - capitalize first segment

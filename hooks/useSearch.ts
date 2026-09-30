@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 // Types from the search API
@@ -56,20 +56,17 @@ export function useSearch() {
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
 
-  // Debounce search query
-  const debounceSearch = useCallback((query: string) => {
+  useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedQuery(query)
-    }, 300) // 300ms debounce
+      setDebouncedQuery(searchQuery)
+    }, 300)
 
     return () => clearTimeout(timer)
-  }, [])
+  }, [searchQuery])
 
-  // Update search query and trigger debounce
   const updateSearchQuery = useCallback((query: string) => {
     setSearchQuery(query)
-    debounceSearch(query)
-  }, [debounceSearch])
+  }, [])
 
   // React Query for search API
   const {

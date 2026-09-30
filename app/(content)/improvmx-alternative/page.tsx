@@ -23,6 +23,9 @@ export const metadata: Metadata = {
   title: 'Best ImprovMX Alternative - Free Email Aliases For Custom Domains | Inbound',
   description: 'Looking for an ImprovMX alternative? Get unlimited free email aliases, custom domain forwarding, and AI-powered webhook integration. Perfect for developers and businesses.',
   keywords: 'ImprovMX alternative, free email aliases, custom domain email forwarding, email forwarding service, unlimited aliases, webhook integration, developer email tools',
+  alternates: {
+    canonical: 'https://inbound.new/improvmx-alternative'
+  },
   openGraph: {
     title: 'Best ImprovMX Alternative - Free Email Aliases For Custom Domains',
     description: 'Get unlimited free email aliases, custom domain forwarding, and AI-powered webhook integration. Perfect for developers and businesses.',

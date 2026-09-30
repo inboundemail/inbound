@@ -1,5 +1,12 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { MarketingNav, MarketingFooter } from "@/components/marketing-nav"
+
+export const metadata: Metadata = {
+  title: "Features",
+  description: "Send, receive, and reply to email with one API: transactional sending, inbound webhooks, threading, and retries.",
+  alternates: { canonical: "/features" },
+}
 
 export default function FeaturesPage() {
   const features = [

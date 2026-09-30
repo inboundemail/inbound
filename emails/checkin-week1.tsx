@@ -43,7 +43,7 @@ export const CheckinWeek1Email = ({
           </Text>
           <Text className="text-base leading-7">
             Questions? Reply to this email or browse the{" "}
-            <Link href="https://docs.inbound.new" className="text-violet-600 underline">
+            <Link href="https://inbound.new/docs" className="text-violet-600 underline">
               docs
             </Link>.
           </Text>

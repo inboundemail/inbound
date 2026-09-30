@@ -44,7 +44,7 @@ function AddToBlocklistForm() {
       if (response.success) {
         // Clear the form after successful blocking
         setTimeout(() => {
-          router.push('/dashboard')
+          router.push('/logs')
         }, 2000)
       }
     } catch (error) {

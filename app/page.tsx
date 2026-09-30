@@ -1,4 +1,5 @@
 import { BookOpen, Workflow } from "lucide-react";
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import EnvelopeSparkle from "@/components/icons/envelope-sparkle";
@@ -8,6 +9,10 @@ import { HeroSignupButton } from "@/components/marketing/hero-signup-button";
 import { MarketingFooter, MarketingNav } from "@/components/marketing-nav";
 import { PricingTable } from "@/components/pricing-table";
 import { auth } from "@/lib/auth/auth";
+
+export const metadata: Metadata = {
+	alternates: { canonical: "/" },
+};
 
 export default async function Page() {
 	const session = await auth.api

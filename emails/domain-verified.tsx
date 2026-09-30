@@ -48,7 +48,7 @@ export const DomainVerifiedEmail = ({
               dashboard
             </Link>{" "}
             or read the{" "}
-            <Link href="https://docs.inbound.new" className="text-violet-600 underline">
+            <Link href="https://inbound.new/docs" className="text-violet-600 underline">
               docs
             </Link>{" "}
             to get started. Reply to this email if you have any questions.

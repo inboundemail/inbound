@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { MarketingFooter, MarketingNav } from "@/components/marketing-nav";
 import { getBlogPostsSorted } from "@/features/blog/utils/blog-posts";
+
+export const metadata: Metadata = {
+  title: "Blog",
+  description: "Product updates, guides, and engineering notes from the inbound team.",
+  alternates: { canonical: "/blog" },
+};
 
 export default async function BlogPage() {
 	const blogs = await getBlogPostsSorted();

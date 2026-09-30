@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import { MarketingNav, MarketingFooter } from "@/components/marketing-nav";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  description: "How inbound collects, uses, and protects your data.",
+  alternates: { canonical: "/privacy" },
+};
 
 export default function PrivacyPage() {
   return (

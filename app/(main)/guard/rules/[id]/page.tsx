@@ -41,7 +41,8 @@ import CircleXmark from "@/components/icons/circle-xmark";
 import { ApiIdLabel } from "@/components/api-id-label";
 import { useGuardRulesQuery } from "@/features/guard/hooks/useGuardHooks";
 import { DeleteConfirmationDialog } from "@/components/ui/delete-confirmation-dialog";
-import { useMailV2Query } from "@/features/emails/hooks/useMailV2Hooks";
+import { useQuery } from "@tanstack/react-query";
+import { client, getEdenErrorMessage } from "@/lib/api/client";
 import { EndpointSelector } from "@/components/endpoints";
 
 export default function GuardRuleDetailPage() {
@@ -686,7 +687,19 @@ function RecentEmailsList({
   testResult: CheckRuleMatchResponse | null;
   actionConfig: RuleActionConfig | null;
 }) {
-  const { data, isLoading, error } = useMailV2Query({ limit: 5, offset: 0 });
+  const { data: emails, isLoading, error } = useQuery({
+    queryKey: ["guard", "recent-received-emails"],
+    queryFn: async () => {
+      const { data, error } = await client.api.e2.emails.get({
+        query: { type: "received", limit: "5" },
+      });
+      if (error) {
+        throw new Error(getEdenErrorMessage(error, "Failed to fetch recent emails"));
+      }
+      return data?.data ?? [];
+    },
+    staleTime: 30 * 1000,
+  });
 
   if (isLoading) {
     return (
@@ -696,7 +709,7 @@ function RecentEmailsList({
     );
   }
 
-  if (error || !data?.emails?.length) {
+  if (error || !emails?.length) {
     return (
       <div className="text-xs text-muted-foreground">
         No recent emails found.
@@ -706,7 +719,7 @@ function RecentEmailsList({
 
   return (
     <ul className="divide-y border rounded-md">
-      {data.emails.map((email) => {
+      {emails.map((email) => {
         const isTested = testedEmailId === email.id;
         const testedState = isTested && testResult;
         return (
@@ -714,10 +727,10 @@ function RecentEmailsList({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium truncate">
-                  {email.fromName || email.from}
+                  {email.from_name || email.from}
                 </span>
                 <span className="text-xs text-muted-foreground truncate">
-                  {email.fromName ? `<${email.from}>` : ""}
+                  {email.from_name ? `<${email.from}>` : ""}
                 </span>
               </div>
               <div className="text-sm truncate">

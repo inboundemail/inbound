@@ -74,13 +74,9 @@ export const metadata: Metadata = {
 	metadataBase: new URL(
 		process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
 	),
-	alternates: {
-		canonical: "/",
-	},
 	openGraph: {
 		type: "website",
 		locale: "en_US",
-		url: "/",
 		title: "inbound - email infrastructure, redefined",
 		description:
 			"the modern email infrastructure platform for developers. receive, parse, and manage inbound emails with powerful apis, webhooks, and real-time processing.",
@@ -132,7 +128,6 @@ export const metadata: Metadata = {
 			{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
 		],
 	},
-	manifest: "/site.webmanifest",
 	category: "technology",
 };
 

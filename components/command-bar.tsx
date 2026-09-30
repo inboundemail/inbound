@@ -54,7 +54,7 @@ export function CommandBar({ open, onOpenChange }: CommandBarProps) {
     searchResults.addresses?.forEach(address => {
       results.push({
         type: 'address',
-        id: address.id,
+        id: address.domainId,
         title: address.address,
         subtitle: `${address.domain} • ${address.endpointName || 'No endpoint'}`
       })
@@ -147,7 +147,7 @@ export function CommandBar({ open, onOpenChange }: CommandBarProps) {
         router.push(`/emails/${id}`)
         break
       case 'address':
-        router.push(`/emails?address=${id}`)
+        router.push(`/emails/${id}`)
         break
       case 'endpoint':
         router.push(`/endpoints/${id}`)
@@ -287,7 +287,7 @@ export function CommandBar({ open, onOpenChange }: CommandBarProps) {
                                   return (
                                     <div
                                       key={address.id}
-                                      onClick={() => handleResultClick('address', address.id)}
+                                      onClick={() => handleResultClick('address', address.domainId)}
                                       className={cn(
                                         "flex items-center p-2 rounded-lg cursor-pointer group transition-colors",
                                         isSelected 

@@ -1369,7 +1369,7 @@ export default function DomainDetailPage() {
 													added the correct record to your domain provider.
 												</p>
 												<Link
-													href="https://docs.inbound.new"
+													href="https://inbound.new/docs"
 													target="_blank"
 													className="text-sm text-amber-700 hover:text-amber-900 dark:text-amber-300 flex items-center gap-1 shrink-0"
 												>

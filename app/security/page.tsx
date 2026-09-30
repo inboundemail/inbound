@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import { MarketingNav, MarketingFooter } from "@/components/marketing-nav";
+
+export const metadata: Metadata = {
+  title: "Security",
+  description: "How to report a security vulnerability in inbound and how we handle disclosures.",
+  alternates: { canonical: "/security" },
+};
 
 export default function SecurityPage() {
   return (

@@ -18,16 +18,9 @@ export default function manifest(): MetadataRoute.Manifest {
 		orientation: "any",
 		icons: [
 			{
-				src: "/images/icon-192.png",
-				sizes: "192x192",
+				src: "/images/icon-light.png",
+				sizes: "240x240",
 				type: "image/png",
-				purpose: "maskable",
-			},
-			{
-				src: "/images/icon-512.png",
-				sizes: "512x512",
-				type: "image/png",
-				purpose: "maskable",
 			},
 			{
 				src: "/favicon.ico",
@@ -40,68 +33,24 @@ export default function manifest(): MetadataRoute.Manifest {
 				type: "image/png",
 			},
 		],
-		screenshots: [
-			{
-				src: "/images/screenshot-wide.png",
-				sizes: "2880x1800",
-				type: "image/png",
-				form_factor: "wide",
-				label: "inbound Email Dashboard",
-			},
-			{
-				src: "/images/screenshot-narrow.png",
-				sizes: "1284x2778",
-				type: "image/png",
-				form_factor: "narrow",
-				label: "inbound Mobile View",
-			},
-		],
 		shortcuts: [
 			{
 				name: "Dashboard",
 				short_name: "Dashboard",
 				description: "Access your email dashboard",
 				url: "/logs",
-				icons: [
-					{
-						src: "/images/shortcut-dashboard.png",
-						sizes: "96x96",
-						type: "image/png",
-					},
-				],
 			},
 			{
 				name: "Add Domain",
 				short_name: "Add Domain",
 				description: "Add a new email domain",
 				url: "/add",
-				icons: [
-					{
-						src: "/images/shortcut-add.png",
-						sizes: "96x96",
-						type: "image/png",
-					},
-				],
 			},
 			{
 				name: "Documentation",
 				short_name: "Docs",
 				description: "View API documentation",
 				url: "/docs",
-				icons: [
-					{
-						src: "/images/shortcut-docs.png",
-						sizes: "96x96",
-						type: "image/png",
-					},
-				],
-			},
-		],
-		related_applications: [
-			{
-				platform: "web",
-				url: "https://docs.inbound.new",
-				id: "inbound-docs",
 			},
 		],
 	};
