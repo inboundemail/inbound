@@ -57,13 +57,18 @@ if ! cmp -s deploy/imap-gateway.service /etc/systemd/system/imap-gateway.service
   systemctl daemon-reload
   echo "systemd unit updated"
 fi
+started=$(date +%s)
 systemctl restart imap-gateway
-for i in $(seq 1 10); do
+# systemd reports "active" as soon as the process spawns; wait for the gateway
+# itself to log that it is listening.
+for i in $(seq 1 20); do
   sleep 1
-  systemctl is-active --quiet imap-gateway && break
-  [ "$i" = 10 ] && { echo "service failed to start"; journalctl -u imap-gateway --no-pager | tail -20; exit 1; }
+  journalctl -u imap-gateway --no-pager --since "@$started" | grep -q -i listening && break
+  if [ "$i" = 20 ] || ! systemctl is-active --quiet imap-gateway; then
+    echo "service failed to start"; journalctl -u imap-gateway --no-pager | tail -20; exit 1
+  fi
 done
-journalctl -u imap-gateway --no-pager --since "-15s" | grep -i listening
+systemctl is-active imap-gateway
 REMOTE
 
 echo "==> smoke test ($IMAP_HOSTNAME:993)"
