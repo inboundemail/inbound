@@ -52,6 +52,7 @@ export function buildLocalEnv(options: {
 		NEXT_PUBLIC_APP_URL: options.appUrl,
 		BETTER_AUTH_SECRET: "inbound-local-dev-secret-not-for-production",
 		SERVICE_API_KEY: LOCAL_SERVICE_API_KEY,
+		INBOUND_API_KEY: "inbound-local-placeholder",
 		UPSTASH_REDIS_REST_URL: LOCAL_REDIS_REST_URL,
 		UPSTASH_REDIS_REST_TOKEN: LOCAL_REDIS_REST_TOKEN,
 		AUTUMN_SECRET_KEY: "am_sk_local_mock",
