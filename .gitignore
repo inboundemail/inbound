@@ -19,6 +19,7 @@ dist
 
 # next.js
 .next
+.next-e2e
 /out/
 
 # Development endpoints  

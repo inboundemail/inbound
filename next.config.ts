@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-	/* config options here */
+	distDir: process.env.NEXT_DIST_DIR || ".next",
 	// Add Turbopack configuration to suppress warnings
 	turbopack: {
 		// Empty configuration to acknowledge Turbopack usage

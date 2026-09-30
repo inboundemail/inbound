@@ -1,84 +1,82 @@
 /**
  * E2 API - End-to-end email flow tests
- * Covers outbound sending plus inbound parsing (text/html/attachments).
+ *
+ * Self-contained: runs against the local Docker services from `bun run dev:local`
+ * (Postgres, Neon HTTP proxy, Redis REST), a fresh `inbound_e2e` database, a
+ * local SES stub that loops sent mail back into /api/inbound/webhook, and a local
+ * webhook receiver. No production database, AWS, ngrok, or real API keys.
+ *
+ * Run with: bun run test:e2e
  */
 
 // @ts-ignore - bun:test is a Bun-specific module not recognized by TypeScript
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { type ChildProcess, spawn } from "node:child_process";
-import ngrok from "@ngrok/ngrok";
-import dotenv from "dotenv";
-
-dotenv.config();
-
-function envString(name: string): string | null {
-	const value = process.env[name];
-	if (!value) {
-		return null;
-	}
-
-	const trimmed = value.trim();
-	return trimmed.length > 0 ? trimmed : null;
-}
-
-function envFlag(name: string): boolean {
-	const value = envString(name);
-	if (!value) {
-		return false;
-	}
-
-	return ["1", "true", "yes", "on"].includes(value.toLowerCase());
-}
+import {
+	buildLocalEnv,
+	LOCAL_SERVICE_API_KEY,
+} from "@/scripts/local-dev/env";
+import { deliverInbound, startLocalMailServer } from "@/scripts/local-dev/mail-server";
+import {
+	flushRedis,
+	recreateDatabase,
+	runSeed,
+	startServices,
+} from "@/scripts/local-dev/services";
 
 const TEST_RUN_TOKEN = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-let API_URL =
-	envString("INBOUND_E2_API_URL") || "https://dev.inbound.new/api/e2";
-const API_KEY = process.env.INBOUND_API_KEY;
-
+const E2E_DATABASE = "inbound_e2e";
 const LOCAL_PORT = 8778;
+const WEBHOOK_PORT = 8779;
+const MAIL_PORT = 8781;
 const LOCAL_BASE_URL = `http://127.0.0.1:${LOCAL_PORT}`;
-const TUNNEL_DOMAIN =
-	envString("INBOUND_E2_TUNNEL_DOMAIN") || "dev.inbound.new";
-const E2_API_BASE_URL =
-	envString("INBOUND_E2_PUBLIC_API_URL") || `https://${TUNNEL_DOMAIN}/api/e2`;
-const TEST_WEBHOOK_PATH =
-	envString("INBOUND_E2_TEST_WEBHOOK_PATH") || "/api/development/testing";
-const TEST_WEBHOOK_URL =
-	envString("INBOUND_E2_TEST_WEBHOOK_URL") ||
-	`https://${TUNNEL_DOMAIN}${TEST_WEBHOOK_PATH}`;
-const TEST_ENDPOINT_NAME =
-	envString("INBOUND_E2_ENDPOINT_NAME") ||
-	`e2e-dev-testing-webhook-${TEST_RUN_TOKEN}`;
-const E2E_SENDER_ADDRESS =
-	envString("INBOUND_E2_SENDER_ADDRESS") || "e2e-testing@inbound.new";
-const E2E_RECIPIENT_ADDRESS =
-	envString("INBOUND_E2_RECIPIENT_ADDRESS") || "e2e-receive@inbound.new";
+const API_URL = `${LOCAL_BASE_URL}/api/e2`;
+const TEST_WEBHOOK_PATH = "/api/development/testing";
+const TEST_WEBHOOK_URL = `http://hooks.localtest.me:${WEBHOOK_PORT}${TEST_WEBHOOK_PATH}`;
+const TEST_ENDPOINT_NAME = `e2e-local-webhook-${TEST_RUN_TOKEN}`;
+const E2E_DOMAIN = "e2e.inbound.test";
+const E2E_SENDER_ADDRESS = `e2e-sender@${E2E_DOMAIN}`;
+const E2E_RECIPIENT_ADDRESS = `e2e-receive@${E2E_DOMAIN}`;
+const E2E_RATE_LIMIT_PER_SECOND = 20;
 
-if (!API_KEY) {
-	console.error("❌ INBOUND_API_KEY not found in environment variables");
-	process.exit(1);
-}
+let API_KEY = "";
+let ALT_API_KEY = "";
+
+type E2ESeed = {
+	domain: string;
+	domainId: string;
+	primary: { userId: string; apiKey: string };
+	secondary: { userId: string; apiKey: string };
+};
+
+type ReceivedWebhook = {
+	path: string;
+	body: string;
+	receivedAt: number;
+};
+
+const receivedWebhooks: ReceivedWebhook[] = [];
 
 const RATE_LIMIT_CONFIG = {
 	maxRetries: 3,
-	baseDelayMs: 150,
+	baseDelayMs: 60,
 	retryDelayMs: 1000,
 };
 
 const POLL_CONFIG = {
-	inboundTimeoutMs: 120000,
-	threadTimeoutMs: 120000,
-	intervalMs: 3000,
+	inboundTimeoutMs: 60000,
+	threadTimeoutMs: 60000,
+	intervalMs: 1000,
 };
 
 const TEST_TIMEOUT_MS = 180000;
+const SETUP_TIMEOUT_MS = 300000;
 const SHOW_LOCAL_SERVER_LOGS =
 	process.argv.includes("--verbose") ||
-	envFlag("INBOUND_E2_VERBOSE_SERVER_LOGS");
+	process.env.INBOUND_E2E_VERBOSE === "true";
 
 let lastRequestTime = 0;
-let resolvedApiUrlPromise: Promise<string> | null = null;
 
 type EmailAddressListItem = {
 	id: string;
@@ -278,61 +276,12 @@ const e2eCache: {
 };
 
 let localServerProcess: ChildProcess | null = null;
-let ngrokListener: Awaited<ReturnType<typeof ngrok.forward>> | null = null;
+let mailServer: ReturnType<typeof startLocalMailServer> | null = null;
+let webhookServer: ReturnType<typeof Bun.serve> | null = null;
 let managedEndpointId: string | null = null;
-let createdManagedEndpoint = false;
-let managedEmailAddressId: string | null = null;
-let originalRecipientEndpointId: string | null = null;
-let originalRecipientWebhookId: string | null = null;
-let originalRecipientIsActive: boolean | null = null;
-let createdManagedRecipientAddress = false;
 
 async function sleep(ms: number): Promise<void> {
 	await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function resolveApiUrl(): Promise<string> {
-	if (resolvedApiUrlPromise) {
-		return resolvedApiUrlPromise;
-	}
-
-	resolvedApiUrlPromise = (async () => {
-		const configuredApiUrl = envString("INBOUND_E2_API_URL");
-		const candidates = configuredApiUrl
-			? [configuredApiUrl]
-			: ["https://dev.inbound.new/api/e2", "https://inbound.new/api/e2"];
-
-		for (const candidate of candidates) {
-			try {
-				const response = await fetch(`${candidate}/openapi.json`);
-				if (!response.ok) {
-					continue;
-				}
-
-				const raw = await response.text();
-				const parsed = JSON.parse(raw) as { openapi?: string };
-				if (parsed.openapi) {
-					API_URL = candidate;
-					console.log(`🌐 Using E2 API base URL: ${API_URL}`);
-					return candidate;
-				}
-			} catch {
-				// Try next candidate URL
-			}
-		}
-
-		if (configuredApiUrl) {
-			throw new Error(
-				`Configured INBOUND_E2_API_URL did not return a valid OpenAPI response: ${configuredApiUrl}`,
-			);
-		}
-
-		throw new Error(
-			"Could not resolve a working E2 API base URL. Set INBOUND_E2_API_URL to override.",
-		);
-	})();
-
-	return resolvedApiUrlPromise;
 }
 
 async function apiRequest(
@@ -340,7 +289,6 @@ async function apiRequest(
 	options: RequestInit = {},
 	retryCount = 0,
 ): Promise<Response> {
-	const baseUrl = await resolveApiUrl();
 	const now = Date.now();
 	const timeSinceLastRequest = now - lastRequestTime;
 	if (timeSinceLastRequest < RATE_LIMIT_CONFIG.baseDelayMs) {
@@ -348,7 +296,7 @@ async function apiRequest(
 	}
 	lastRequestTime = Date.now();
 
-	const response = await fetch(`${baseUrl}${endpoint}`, {
+	const response = await fetch(`${API_URL}${endpoint}`, {
 		...options,
 		headers: {
 			Authorization: `Bearer ${API_KEY}`,
@@ -407,8 +355,7 @@ async function apiRequestWithKey(
 	apiKey: string,
 	options: RequestInit = {},
 ): Promise<Response> {
-	const baseUrl = await resolveApiUrl();
-	return fetch(`${baseUrl}${endpoint}`, {
+	return fetch(`${API_URL}${endpoint}`, {
 		...options,
 		headers: {
 			Authorization: `Bearer ${apiKey}`,
@@ -502,100 +449,26 @@ async function postSyntheticInboundRecord(options: {
 	sesMessageId?: string;
 	from?: string;
 }): Promise<InboundWebhookResponse> {
-	const serviceApiKey = process.env.SERVICE_API_KEY;
-	if (!serviceApiKey) {
-		throw new Error("SERVICE_API_KEY is required for synthetic inbound tests");
-	}
-
-	const nowIso = new Date().toISOString();
 	const sender = options.from || "synthetic-sender@example.test";
-	const sesMessageId = options.sesMessageId || `ses-${makeToken("inbound")}`;
-	const commonHeaders: {
-		from: string[];
-		to: string[];
-		subject: string;
-		messageId: string;
-		date: string;
-	} = {
-		from: [sender],
-		to: [options.recipient],
-		subject: options.subject,
-		messageId: normalizeMessageIdHeader(options.messageId),
-		date: new Date(nowIso).toUTCString(),
-	};
-
-	const payload = {
-		type: "ses_event_with_content",
-		timestamp: nowIso,
-		originalEvent: {
-			Records: [],
-		},
-		processedRecords: [
-			{
-				eventSource: "aws:ses",
-				eventVersion: "1.0",
-				ses: {
-					mail: {
-						timestamp: nowIso,
-						source: sender,
-						messageId: sesMessageId,
-						destination: [options.recipient],
-						headers: [
-							{ name: "From", value: sender },
-							{ name: "To", value: options.recipient },
-							{ name: "Subject", value: options.subject },
-							{
-								name: "Message-ID",
-								value: normalizeMessageIdHeader(options.messageId),
-							},
-						],
-						commonHeaders,
-					},
-					receipt: {
-						timestamp: nowIso,
-						processingTimeMillis: 50,
-						recipients: [options.recipient],
-						spamVerdict: { status: "PASS" },
-						virusVerdict: { status: "PASS" },
-						spfVerdict: { status: "PASS" },
-						dkimVerdict: { status: "PASS" },
-						dmarcVerdict: { status: "PASS" },
-						action: {
-							type: "S3",
-							bucketName: "",
-							objectKey: "",
-						},
-					},
-				},
-				emailContent: buildRawEmailContent({
-					from: sender,
-					to: options.recipient,
-					subject: options.subject,
-					messageId: options.messageId,
-					text: options.text,
-					html: options.html,
-					inReplyTo: options.inReplyTo,
-					references: options.references,
-				}),
-			},
-		],
-		context: {
-			functionName: "e2e-test",
-			functionVersion: "1",
-			requestId: `req-${makeToken("webhook")}`,
-		},
-	};
-
-	const response = await fetch(`${LOCAL_BASE_URL}/api/inbound/webhook`, {
-		method: "POST",
-		headers: {
-			Authorization: `Bearer ${serviceApiKey}`,
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify(payload),
+	const response = await deliverInbound({
+		inboundWebhookUrl: `${LOCAL_BASE_URL}/api/inbound/webhook`,
+		serviceApiKey: LOCAL_SERVICE_API_KEY,
+		recipient: options.recipient,
+		sesMessageId: options.sesMessageId || `ses-${makeToken("inbound")}`,
+		source: sender,
+		raw: buildRawEmailContent({
+			from: sender,
+			to: options.recipient,
+			subject: options.subject,
+			messageId: options.messageId,
+			text: options.text,
+			html: options.html,
+			inReplyTo: options.inReplyTo,
+			references: options.references,
+		}),
 	});
 
-	const raw = await response.text();
+	const raw = response.body;
 	let data: InboundWebhookResponse;
 	try {
 		data = JSON.parse(raw) as InboundWebhookResponse;
@@ -706,6 +579,20 @@ async function waitForHttpOk(
 	throw new Error(`Timed out waiting for ${label}: ${url}`);
 }
 
+function e2eServerEnv() {
+	return buildLocalEnv({
+		appUrl: LOCAL_BASE_URL,
+		databaseName: E2E_DATABASE,
+		mailPort: MAIL_PORT,
+		extra: {
+			PORT: String(LOCAL_PORT),
+			NEXT_DIST_DIR: ".next-e2e",
+			INBOUND_E2E_TEST_MODE: "true",
+			E2_LOCAL_RATE_LIMIT_PER_SECOND: String(E2E_RATE_LIMIT_PER_SECOND),
+		},
+	});
+}
+
 async function startLocalServer(): Promise<void> {
 	if (localServerProcess) {
 		return;
@@ -718,11 +605,7 @@ async function startLocalServer(): Promise<void> {
 		"bunx",
 		["next", "dev", "--port", String(LOCAL_PORT), "--hostname", "127.0.0.1"],
 		{
-			env: {
-				...process.env,
-				PORT: String(LOCAL_PORT),
-				INBOUND_E2E_TEST_MODE: "true",
-			},
+			env: e2eServerEnv(),
 			stdio: SHOW_LOCAL_SERVER_LOGS ? "inherit" : "ignore",
 		},
 	);
@@ -750,50 +633,19 @@ async function stopLocalServer(): Promise<void> {
 	localServerProcess = null;
 }
 
-async function startNgrokTunnel(): Promise<void> {
-	if (ngrokListener) {
-		return;
-	}
-
-	const authtoken =
-		process.env.NGROK_AUTHTOKEN?.trim() ||
-		process.env.NGROK_AUTH_TOKEN?.trim() ||
-		process.env.NGROK_TOKEN?.trim();
-
-	if (!authtoken) {
-		throw new Error(
-			"NGROK_AUTHTOKEN (or NGROK_AUTH_TOKEN / NGROK_TOKEN) is required to start the reserved dev.inbound.new tunnel",
-		);
-	}
-
-	console.log(`🌐 Starting ngrok tunnel for ${TUNNEL_DOMAIN} -> ${LOCAL_PORT}`);
-	ngrokListener = await ngrok.forward({
-		addr: LOCAL_PORT,
-		domain: TUNNEL_DOMAIN,
-		proto: "http",
-		authtoken,
+function startWebhookReceiver(): void {
+	webhookServer = Bun.serve({
+		port: WEBHOOK_PORT,
+		hostname: "127.0.0.1",
+		async fetch(request) {
+			receivedWebhooks.push({
+				path: new URL(request.url).pathname,
+				body: await request.text(),
+				receivedAt: Date.now(),
+			});
+			return Response.json({ ok: true });
+		},
 	});
-
-	console.log(`🌐 ngrok public URL: ${ngrokListener.url()}`);
-}
-
-async function stopNgrokTunnel(): Promise<void> {
-	console.log("🧹 Stopping ngrok tunnel");
-	try {
-		if (ngrokListener) {
-			await ngrokListener.close();
-		}
-	} catch {
-		// Best effort close
-	}
-
-	try {
-		await ngrok.disconnect();
-	} catch {
-		// Best effort disconnect
-	}
-
-	ngrokListener = null;
 }
 
 function normalizeWebhookConfig(
@@ -813,243 +665,63 @@ function normalizeWebhookConfig(
 	};
 }
 
-async function ensureTestingEndpoint(): Promise<string> {
-	const { response, data } = await apiJson<EndpointListResponse>(
-		`/endpoints${queryString({
-			type: "webhook",
-			search: TEST_ENDPOINT_NAME,
-			limit: 100,
-			offset: 0,
-		})}`,
-	);
-
-	if (response.status !== 200) {
-		throw new Error(`Failed to list endpoints (${response.status})`);
-	}
-
-	const existing = data.data.find(
-		(endpoint) => endpoint.name === TEST_ENDPOINT_NAME,
-	);
-	if (existing) {
-		managedEndpointId = existing.id;
-		const expectedConfig = normalizeWebhookConfig(existing.config || {});
-		const needsUpdate =
-			existing.config?.url !== expectedConfig.url ||
-			existing.config?.timeout !== expectedConfig.timeout ||
-			existing.config?.retryAttempts !== expectedConfig.retryAttempts;
-
-		if (needsUpdate) {
-			const updated = await apiJson<EndpointListItem>(
-				`/endpoints/${existing.id}`,
-				{
-					method: "PUT",
-					body: JSON.stringify({ config: expectedConfig }),
-				},
-			);
-
-			if (updated.response.status !== 200) {
-				throw new Error(
-					`Failed to update webhook endpoint (${updated.response.status})`,
-				);
-			}
-		}
-
-		return existing.id;
-	}
-
+async function createTestingEndpoint(): Promise<string> {
 	const created = await apiJson<EndpointListItem>("/endpoints", {
 		method: "POST",
 		body: JSON.stringify({
 			name: TEST_ENDPOINT_NAME,
 			type: "webhook",
 			config: normalizeWebhookConfig({}),
-			description: "E2E local ngrok webhook for app/api/e2/e2e.test.ts",
+			description: "Local webhook receiver for app/api/e2/e2e.test.ts",
 		}),
 	});
 
 	if (created.response.status !== 201) {
 		throw new Error(
-			`Failed to create webhook endpoint (${created.response.status})`,
+			`Failed to create webhook endpoint (${created.response.status}): ${JSON.stringify(created.data)}`,
 		);
 	}
 
 	managedEndpointId = created.data.id;
-	createdManagedEndpoint = true;
 	return created.data.id;
 }
 
-async function listAllEmailAddresses(
-	isActive?: boolean,
-): Promise<EmailAddressListItem[]> {
-	const all: EmailAddressListItem[] = [];
-	let offset = 0;
-	const limit = 100;
-
-	while (true) {
-		const { response, data } = await apiJson<EmailAddressListResponse>(
-			`/email-addresses${queryString({ limit, offset, isActive })}`,
-		);
-
-		if (response.status !== 200) {
-			throw new Error(`Failed to list email addresses (${response.status})`);
-		}
-
-		all.push(...data.data);
-		if (!data.pagination.hasMore) {
-			break;
-		}
-
-		offset += data.pagination.limit;
-	}
-
-	return all;
-}
-
 async function findDomainIdByAddress(address: string): Promise<string> {
-	const at = address.lastIndexOf("@");
-	if (at === -1 || at === address.length - 1) {
-		throw new Error(`Invalid recipient address: ${address}`);
-	}
-
-	const domainName = address.slice(at + 1).toLowerCase();
-	let offset = 0;
-	const limit = 100;
-
-	while (true) {
-		const { response, data } = await apiJson<DomainListResponse>(
-			`/domains${queryString({ limit, offset })}`,
-		);
-
-		if (response.status !== 200) {
-			throw new Error(`Failed to list domains (${response.status})`);
-		}
-
-		const match = data.data.find(
-			(item) => item.domain.toLowerCase() === domainName,
-		);
-		if (match) {
-			return match.id;
-		}
-
-		if (!data.pagination.hasMore) {
-			break;
-		}
-
-		offset += data.pagination.limit;
-	}
-
-	throw new Error(`Domain not found for recipient address: ${domainName}`);
-}
-
-async function ensureRecipientAddressRouting(
-	endpointId: string,
-): Promise<void> {
-	const allAddresses = await listAllEmailAddresses();
-	const recipient = allAddresses.find(
-		(item) =>
-			item.address.toLowerCase() === E2E_RECIPIENT_ADDRESS.toLowerCase(),
-	);
-
-	if (!recipient) {
-		const domainId = await findDomainIdByAddress(E2E_RECIPIENT_ADDRESS);
-		const created = await apiJson<EmailAddressUpdateResponse>(
-			"/email-addresses",
-			{
-				method: "POST",
-				body: JSON.stringify({
-					address: E2E_RECIPIENT_ADDRESS,
-					domainId,
-					endpointId,
-					isActive: true,
-				}),
-			},
-		);
-
-		if (created.response.status !== 201) {
-			throw new Error(
-				`Failed to create recipient address ${E2E_RECIPIENT_ADDRESS} (${created.response.status})`,
-			);
-		}
-
-		managedEmailAddressId = created.data.id;
-		originalRecipientEndpointId = null;
-		originalRecipientWebhookId = null;
-		originalRecipientIsActive = null;
-		createdManagedRecipientAddress = true;
-		return;
-	}
-
-	managedEmailAddressId = recipient.id;
-	originalRecipientEndpointId = recipient.endpointId || null;
-	originalRecipientWebhookId = recipient.webhookId || null;
-	originalRecipientIsActive = recipient.isActive;
-
-	if (
-		recipient.endpointId === endpointId &&
-		!recipient.webhookId &&
-		recipient.isActive
-	) {
-		return;
-	}
-
-	const updated = await apiJson<EmailAddressUpdateResponse>(
-		`/email-addresses/${recipient.id}`,
-		{
-			method: "PUT",
-			body: JSON.stringify({ endpointId, isActive: true }),
-		},
-	);
-
-	if (updated.response.status !== 200) {
-		throw new Error(
-			`Failed to update recipient routing for ${E2E_RECIPIENT_ADDRESS} (${updated.response.status})`,
-		);
-	}
-}
-
-async function restoreRecipientRouting(): Promise<void> {
-	if (!managedEmailAddressId) {
-		return;
-	}
-
-	if (createdManagedRecipientAddress) {
-		const response = await apiRequest(
-			`/email-addresses/${managedEmailAddressId}`,
-			{
-				method: "DELETE",
-			},
-		);
-		if (response.status !== 200 && response.status !== 404) {
-			console.warn(
-				`⚠️ Failed to delete created recipient address ${managedEmailAddressId} (${response.status})`,
-			);
-		}
-		return;
-	}
-
-	const body: {
-		endpointId?: string | null;
-		webhookId?: string | null;
-		isActive?: boolean;
-	} = originalRecipientWebhookId
-		? { webhookId: originalRecipientWebhookId }
-		: { endpointId: originalRecipientEndpointId };
-
-	if (typeof originalRecipientIsActive === "boolean") {
-		body.isActive = originalRecipientIsActive;
-	}
-
-	const response = await apiRequest(
-		`/email-addresses/${managedEmailAddressId}`,
-		{
-			method: "PUT",
-			body: JSON.stringify(body),
-		},
+	const domainName = address.slice(address.lastIndexOf("@") + 1).toLowerCase();
+	const { response, data } = await apiJson<DomainListResponse>(
+		`/domains${queryString({ limit: 100, offset: 0 })}`,
 	);
 
 	if (response.status !== 200) {
-		console.warn(
-			`⚠️ Failed to restore recipient routing (${response.status}) for ${E2E_RECIPIENT_ADDRESS}`,
+		throw new Error(`Failed to list domains (${response.status})`);
+	}
+
+	const match = data.data.find(
+		(item) => item.domain.toLowerCase() === domainName,
+	);
+	if (!match) {
+		throw new Error(`Domain not found for address: ${domainName}`);
+	}
+	return match.id;
+}
+
+async function createRecipientAddress(endpointId: string): Promise<void> {
+	const created = await apiJson<EmailAddressUpdateResponse>(
+		"/email-addresses",
+		{
+			method: "POST",
+			body: JSON.stringify({
+				address: E2E_RECIPIENT_ADDRESS,
+				domainId: await findDomainIdByAddress(E2E_RECIPIENT_ADDRESS),
+				endpointId,
+				isActive: true,
+			}),
+		},
+	);
+
+	if (created.response.status !== 201) {
+		throw new Error(
+			`Failed to create recipient address ${E2E_RECIPIENT_ADDRESS} (${created.response.status}): ${JSON.stringify(created.data)}`,
 		);
 	}
 }
@@ -1088,6 +760,12 @@ async function ensureWebhookDelivery(receivedEmailId: string): Promise<void> {
 	);
 
 	expect(delivery).toBeDefined();
+
+	const received = receivedWebhooks.find(
+		(webhook) =>
+			webhook.path === TEST_WEBHOOK_PATH && webhook.body.includes(receivedEmailId),
+	);
+	expect(received).toBeDefined();
 }
 
 async function pollFor<T>(
@@ -1293,44 +971,40 @@ async function ensureRoundTrip(): Promise<RoundTripState | null> {
 
 describe("E2 API - Email E2E", () => {
 	beforeAll(async () => {
-		process.env.INBOUND_E2_API_URL = E2_API_BASE_URL;
-		API_URL = E2_API_BASE_URL;
-		resolvedApiUrlPromise = null;
+		console.log("🐳 Starting local Docker services");
+		startServices();
+		console.log(`🗄️  Recreating ${E2E_DATABASE}`);
+		recreateDatabase(E2E_DATABASE);
+		await flushRedis();
+
+		const seed = runSeed<E2ESeed>(["e2e"], e2eServerEnv());
+		API_KEY = seed.primary.apiKey;
+		ALT_API_KEY = seed.secondary.apiKey;
+
+		mailServer = startLocalMailServer({
+			port: MAIL_PORT,
+			inboundWebhookUrl: `${LOCAL_BASE_URL}/api/inbound/webhook`,
+			serviceApiKey: LOCAL_SERVICE_API_KEY,
+			log: SHOW_LOCAL_SERVER_LOGS ? console.log : undefined,
+		});
+		startWebhookReceiver();
 
 		await startLocalServer();
-		await waitForHttpOk(
-			`${LOCAL_BASE_URL}/api/e2/openapi.json`,
-			"local API server",
-		);
+		await waitForHttpOk(`${API_URL}/openapi.json`, "local API server", 240000);
 
-		await startNgrokTunnel();
-		await waitForHttpOk(`${E2_API_BASE_URL}/openapi.json`, "public ngrok API");
-
-		const endpointId = await ensureTestingEndpoint();
-		await ensureRecipientAddressRouting(endpointId);
+		const endpointId = await createTestingEndpoint();
+		await createRecipientAddress(endpointId);
 
 		e2eCache.recipientAddress = E2E_RECIPIENT_ADDRESS;
-		console.log("📬 E2E recipient address:", e2eCache.recipientAddress);
+		console.log("📬 E2E recipient address:", E2E_RECIPIENT_ADDRESS);
 		console.log("📮 E2E sender address:", E2E_SENDER_ADDRESS);
 		console.log("🔗 E2E webhook URL:", TEST_WEBHOOK_URL);
-	}, TEST_TIMEOUT_MS);
+	}, SETUP_TIMEOUT_MS);
 
 	afterAll(async () => {
-		await restoreRecipientRouting();
-
-		if (managedEndpointId && createdManagedEndpoint) {
-			const response = await apiRequest(`/endpoints/${managedEndpointId}`, {
-				method: "DELETE",
-			});
-			if (response.status !== 200 && response.status !== 404) {
-				console.warn(
-					`⚠️ Failed to delete managed endpoint ${managedEndpointId} (${response.status})`,
-				);
-			}
-		}
-
-		await stopNgrokTunnel();
 		await stopLocalServer();
+		mailServer?.stop();
+		webhookServer?.stop(true);
 	}, TEST_TIMEOUT_MS);
 
 	it(
@@ -1676,18 +1350,11 @@ describe("E2 API - Email E2E", () => {
 			);
 			expect(invalid.status).toBe(401);
 
-			const alternateApiKey = process.env.INBOUND_API_KEY_ALT?.trim();
-			if (alternateApiKey && alternateApiKey !== API_KEY) {
-				const crossTenantRead = await apiRequestWithKey(
-					`/emails/${result.sentEmailId}`,
-					alternateApiKey,
-				);
-				expect([401, 404]).toContain(crossTenantRead.status);
-			} else {
-				console.log(
-					"ℹ️ INBOUND_API_KEY_ALT not set; skipping secondary-tenant assertion",
-				);
-			}
+			const crossTenantRead = await apiRequestWithKey(
+				`/emails/${result.sentEmailId}`,
+				ALT_API_KEY,
+			);
+			expect([401, 404]).toContain(crossTenantRead.status);
 		},
 		TEST_TIMEOUT_MS,
 	);
@@ -1846,7 +1513,7 @@ describe("E2 API - Email E2E", () => {
 		async () => {
 			const token = makeToken("endpoint-lifecycle");
 			const endpointName = `e2e-endpoint-${token}`;
-			const address = `e2e-endpoint-${token}@inbound.new`;
+			const address = `e2e-endpoint-${token}@${E2E_DOMAIN}`;
 			let endpointId: string | null = null;
 			let emailAddressId: string | null = null;
 
@@ -1974,27 +1641,21 @@ describe("E2 API - Email E2E", () => {
 		async () => {
 			let sawRateLimit = false;
 
-			for (let attempt = 0; attempt < 3 && !sawRateLimit; attempt += 1) {
-				const responses = await Promise.all(
-					Array.from({ length: 25 }, () =>
-						apiRequestWithKey(
+			for (let attempt = 0; attempt < 5 && !sawRateLimit; attempt += 1) {
+				const results = await Promise.allSettled(
+					Array.from({ length: E2E_RATE_LIMIT_PER_SECOND * 3 }, async () => {
+						const response = await apiRequestWithKey(
 							`/endpoints${queryString({ limit: 1, offset: 0 })}`,
 							API_KEY,
-						),
-					),
-				);
-
-				sawRateLimit = responses.some((response) => response.status === 429);
-				await Promise.all(
-					responses.map(async (response) => {
-						try {
-							await response.arrayBuffer();
-						} catch {
-							// Ignore body parse failures for non-critical response assertions
-						}
+						);
+						await response.arrayBuffer().catch(() => undefined);
+						return response.status;
 					}),
 				);
 
+				sawRateLimit = results.some(
+					(result) => result.status === "fulfilled" && result.value === 429,
+				);
 				if (!sawRateLimit) {
 					await sleep(1200);
 				}
@@ -2017,7 +1678,7 @@ console.log("  - Thread API roundtrip verification");
 console.log("  - Sent/received list filtering by unique subject");
 console.log("  - Idempotency-key dedupe for outbound send");
 console.log("  - Inbound webhook message-id dedupe");
-console.log("  - Auth boundary enforcement (invalid API key)");
+console.log("  - Auth boundary enforcement (invalid key + second tenant)");
 console.log("  - Reply threading via In-Reply-To/References");
 console.log("  - Multi-attachment parsing edge cases");
 console.log("  - Endpoint lifecycle update + cleanup behavior");

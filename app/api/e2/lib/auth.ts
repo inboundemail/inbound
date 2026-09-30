@@ -25,10 +25,17 @@ if (
 		token: process.env.UPSTASH_REDIS_REST_TOKEN,
 	});
 
-	// Rate limiter: 100 requests per second per account
+	// Rate limiter: 100 requests per second per account (overridable only in local dev)
+	const localDevLimit =
+		process.env.INBOUND_LOCAL_DEV === "true"
+			? Number(process.env.E2_LOCAL_RATE_LIMIT_PER_SECOND)
+			: Number.NaN;
 	ratelimit = new Ratelimit({
 		redis,
-		limiter: Ratelimit.slidingWindow(100, "1 s"),
+		limiter: Ratelimit.slidingWindow(
+			Number.isFinite(localDevLimit) && localDevLimit > 0 ? localDevLimit : 100,
+			"1 s",
+		),
 		analytics: true,
 		prefix: "e2:ratelimit",
 	});

@@ -123,11 +123,19 @@ git clone https://github.com/R44VC0RP/inbound
 cd inbound
 bun install
 
-# Start Postgres in Docker and run next dev against it
+# Start local Docker services and run next dev against them
 bun run dev:local
+
+# Run the self-contained API end-to-end suite
+bun run test:e2e
 ```
 
-`dev:local` blanks sending, AWS, QStash, Svix, Redis, and OAuth credentials for the dev server, so nothing reaches production. Sign in at `http://localhost:3000/login` with any email; the magic link is printed in the terminal. Then add demo data with `bun run dev:local seed you@example.com`. Run `bun run dev:local reset` to wipe the local database (for example after `lib/db/schema.ts` changes).
+`dev:local` runs Postgres, a Neon HTTP proxy, and Redis in Docker and blanks every production credential for the dev server. Outgoing email goes to a local SES stub (`http://127.0.0.1:8780/_local/messages`) and is looped back into `/api/inbound/webhook`, so sending to your own local domain shows up as received mail. Billing checks are answered by a local Autumn mock.
+
+- Sign in at `http://localhost:3000/login` with any email; the magic link is printed in the terminal.
+- `bun run dev:local seed you@example.com` adds a demo domain, address, endpoint, and received emails.
+- `bun run dev:local api-key you@example.com` creates a local user with a verified `demo.localtest.me` domain and prints an API key.
+- `bun run dev:local reset` wipes all local data (for example after `lib/db/schema.ts` changes).
 
 Plain `bun run dev` refuses to connect to a remote database unless `ALLOW_REMOTE_DB=true` is set.
 

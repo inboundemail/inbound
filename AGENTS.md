@@ -7,6 +7,7 @@
 | Task | Command |
 |------|---------|
 | Local dev (Docker Postgres, no prod services) | `bun run dev:local` |
+| Self-contained API e2e (local Docker, fresh DB) | `bun run test:e2e` |
 | Single test | `bun test path/to/file.test.ts` |
 | All E2 API tests | `bun run test:e2` |
 | Legacy API tests | `bun run test-api` |
@@ -117,7 +118,7 @@ return createErrorResponse(400, "Bad Request", "Validation failed");
 
 ## Testing
 
-Tests use `bun:test` against the dev API:
+`app/api/e2/e2e.test.ts` is self-contained: it recreates the `inbound_e2e` local database, seeds two users with API keys, starts its own Next server, a local SES stub that loops sent mail into `/api/inbound/webhook`, and a local webhook receiver. Prefer extending it for API behavior changes. Some older test files still use `bun:test` against the dev API:
 
 ```typescript
 import { describe, it, expect } from "bun:test";
