@@ -1,0 +1,184 @@
+---
+title: "Send with SMTP"
+description: "Send email through Inbound from any SMTP client using a managed credential"
+---
+
+Any SMTP client or library can send mail through Inbound with a managed **Mailbox + SMTP** or **SMTP only** credential. Messages submitted over SMTP go through the same sending pipeline as the [send email API](/api-reference/emails/send-an-email), so the same account sending limits and domain checks apply.
+
+If you don't have a credential yet, follow [Create a mailbox credential](/mailboxes/connect-imap#create-a-mailbox-credential). Choose **SMTP only** if the application never needs to read mail.
+
+## Connection settings
+
+| Setting | Value |
+| --- | --- |
+| Host | `smtp.inboundemail.com` |
+| Port `465` | Implicit TLS (TLS from the first byte) |
+| Port `587` | STARTTLS (upgrade to TLS before authenticating) |
+| Username | The credential's **Login email** |
+| Password | The credential's generated password |
+| Authentication | `PLAIN` or `LOGIN` (normal password) |
+
+Both ports require TLS 1.2 or later. On port `587`, the server only offers `AUTH` after `STARTTLS` has completed, and authentication attempted before TLS is rejected with `538`. Keep certificate verification enabled.
+
+Ordinary account API keys and your dashboard password cannot authenticate to SMTP.
+
+## Allowed senders
+
+Each credential has a sender policy. The gateway checks both the envelope sender (`MAIL FROM`) and the address in the message's `From` header against it:
+
+| Sender policy | Allowed `MAIL FROM` and `From` addresses |
+| --- | --- |
+| **Exact identity** (`identity`) | Only the configured sending address |
+| **Any scoped domain** (`scoped_domains`) | Any address on an exact domain in the credential's scopes. Subdomains are not included. |
+
+An empty envelope sender (`MAIL FROM:<>`) is accepted, but the `From` header must still be allowed. If the message has no `From` header, the envelope sender is used as the From address. A disallowed sender is rejected with `553`.
+
+The display name comes from the `From` header you send. The dashboard's **Display name** field does not change outgoing messages. See [SMTP sender policies](/mailboxes/scopes-and-permissions#smtp-sender-policies) for how scopes and sender policies interact.
+
+## Recipients and Bcc
+
+The envelope recipients (`RCPT TO`) decide who receives the message:
+
+- Addresses in the `To` and `Cc` headers are delivered and shown only if they are also envelope recipients. Header addresses that are not envelope recipients are removed.
+- Envelope recipients that don't appear in `To` or `Cc` are delivered as Bcc and are not visible to other recipients.
+- A `Bcc` header in the message is ignored.
+
+Nodemailer and Python's `send_message` build the envelope from `To`, `Cc`, and `Bcc` automatically, so Bcc works as expected with both.
+
+## How messages are rebuilt
+
+Inbound parses each submitted message and sends it again through the email API; it does not relay the raw bytes. The delivered message keeps:
+
+- `From`, `To`, `Cc`, `Reply-To`, and `Subject`
+- The plain-text and HTML bodies
+- Attachments, including inline images referenced by `Content-ID`
+- `In-Reply-To`, `References`, and custom `X-` headers (except `X-SES-*`)
+
+Other headers, such as your own `Message-ID` or `Date`, are not preserved. Line breaks and control characters are removed from header values.
+
+## Limits
+
+| Limit | Value |
+| --- | --- |
+| Maximum message size | 3 MiB (`3,145,728` bytes), advertised as `SIZE 3145728` |
+| Recipients per message | 50 distinct envelope recipients |
+| Simultaneous connections per client IP address | 10 |
+| Idle connection timeout | 60 seconds |
+| Failed logins | 10 per login address and IP address, and 50 per IP address, in a 15-minute window |
+
+The size limit applies to the complete MIME message. Base64 encoding makes attachments about a third larger than the original files. If the client sends a `SIZE` parameter above the limit, the message is rejected before `DATA`.
+
+When a login is throttled, further attempts from that address fail with `421` until the 15-minute window ends, even with the correct password. Authentication requests are also rate-limited by the API.
+
+SMTP sends count toward your account's sending limits and [API rate limits](/api-reference/rate-limits). SMTP does not save a copy in the IMAP `Sent` folder; see [Sent mail is not saved automatically](/mailboxes/imap-behavior#sent-mail-is-not-saved-automatically).
+
+## Supported extensions
+
+The server advertises `PIPELINING`, `8BITMIME`, `SIZE`, `STARTTLS` (port `587`, before TLS), and `AUTH PLAIN LOGIN` (after TLS).
+
+`SMTPUTF8`, `DSN`, and `ENHANCEDSTATUSCODES` are not supported:
+
+- Addresses must be ASCII. A non-ASCII local part is rejected with `553`. Non-ASCII display names, subjects, and bodies work normally when MIME-encoded.
+- `MAIL FROM` accepts only the `SIZE`, `BODY`, and `AUTH` parameters, and `RCPT TO` accepts none. Others, such as the DSN parameters `RET`, `ENVID`, `NOTIFY`, and `ORCPT`, are rejected with `555`. In Nodemailer, leave the `dsn` option unset.
+
+After `STARTTLS`, send `EHLO` again before `AUTH`. SMTP libraries do this automatically.
+
+## Reply codes
+
+Reply text includes an enhanced status code, such as `5.7.8`, even though `ENHANCEDSTATUSCODES` is not advertised.
+
+| Code | Meaning | What to do |
+| --- | --- | --- |
+| `250` | Accepted. The reply text includes `Queued as` and the Inbound email ID. | Nothing |
+| `421` | Too many connections from your IP address, too many failed logins, or the connection is closing | Reduce concurrent connections, or wait out the 15-minute login window. Reconnect with backoff. |
+| `451` | Temporary failure: rate limited, the same message is already being processed, the gateway is busy, or the email API is unavailable | Retry later with backoff |
+| `452` | More than 50 recipients | Send the remaining recipients in another message |
+| `454` | The authentication service is unavailable | Retry later with backoff |
+| `530` | `MAIL FROM` was sent before authenticating | Authenticate first |
+| `535` | Invalid login email or password, disabled credential, or the domain or scope is no longer verified | Check the credential. Repeated failures lead to `421`. |
+| `538` | `AUTH` was attempted before TLS | Use port `465`, or run `STARTTLS` on port `587` first |
+| `550` | The email API rejected the message (for example, not authorized or invalid content), or the message has no sender or recipients | Read the reply text and fix the message or account. Don't retry unchanged. |
+| `552` | The message is larger than 3 MiB | Reduce the size or remove attachments |
+| `553` | The sender isn't allowed by the credential's sender policy, or an address contains non-ASCII characters | Use an allowed From and `MAIL FROM` address |
+| `555` | Unsupported `MAIL FROM` or `RCPT TO` parameter, such as DSN or `SMTPUTF8` | Remove the parameter |
+
+Inbound derives an idempotency key from the credential, envelope sender, recipients, and exact message bytes. If a client resubmits an identical message that was already sent, for example after a dropped connection, Inbound returns the original result instead of sending it twice. Libraries that generate a new `Message-ID` or `Date` for each attempt produce a different message, so this only covers retries of the same bytes.
+
+## Examples
+
+Store the credential as `INBOUND_MAILBOX_LOGIN` and `INBOUND_MAILBOX_PASSWORD`. Replace `support@example.com` with an address your sender policy allows. The TypeScript example uses Nodemailer (`bun add nodemailer`); the Python example uses only the standard library.
+
+<CodeGroup>
+```typescript Nodemailer
+import nodemailer from "nodemailer";
+
+const transport = nodemailer.createTransport({
+  host: "smtp.inboundemail.com",
+  port: 465,
+  secure: true, // use port: 587, secure: false, requireTLS: true for STARTTLS
+  auth: {
+    user: process.env.INBOUND_MAILBOX_LOGIN,
+    pass: process.env.INBOUND_MAILBOX_PASSWORD,
+  },
+});
+
+const info = await transport.sendMail({
+  from: "Support <support@example.com>",
+  to: "recipient@example.com",
+  subject: "Hello from Inbound",
+  text: "Sent over SMTP.",
+});
+
+console.log(info.response);
+```
+
+```python Python
+import os
+import smtplib
+import ssl
+from email.message import EmailMessage
+
+message = EmailMessage()
+message["From"] = "Support <support@example.com>"
+message["To"] = "recipient@example.com"
+message["Subject"] = "Hello from Inbound"
+message.set_content("Sent over SMTP.")
+
+context = ssl.create_default_context()
+
+with smtplib.SMTP("smtp.inboundemail.com", 587) as smtp:
+    smtp.starttls(context=context)
+    smtp.login(
+        os.environ["INBOUND_MAILBOX_LOGIN"],
+        os.environ["INBOUND_MAILBOX_PASSWORD"],
+    )
+    smtp.send_message(message)
+```
+</CodeGroup>
+
+For port `465` in Python, use `smtplib.SMTP_SSL("smtp.inboundemail.com", 465, context=context)` and skip `starttls()`.
+
+### Mail client settings
+
+| Field | Value |
+| --- | --- |
+| Outgoing server | `smtp.inboundemail.com` |
+| Port and security | `465` with SSL/TLS, or `587` with STARTTLS |
+| Authentication | Normal password |
+| Username | Your credential's login email |
+| Password | Your credential's generated password |
+
+Set the account's email address to an address your sender policy allows. To receive mail in the same client, add the [IMAP settings](/mailboxes/connect-imap#connection-settings).
+
+## Test the connection
+
+Check TLS and the advertised extensions without sending credentials:
+
+```bash
+openssl s_client -connect smtp.inboundemail.com:587 \
+  -starttls smtp \
+  -servername smtp.inboundemail.com \
+  -verify_return_error
+```
+
+After the handshake, type `EHLO example.com`. The reply should list `AUTH PLAIN LOGIN` and `SIZE 3145728`. Type `QUIT` to close the connection.
