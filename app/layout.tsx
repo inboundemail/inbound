@@ -4,6 +4,7 @@ import "./globals.css";
 import "./prose.css";
 import { AutumnProvider } from "autumn-js/react";
 import Script from "next/script";
+import { OPENAI_ADS_PIXEL_ID } from "@/lib/analytics/openai-ads";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { AnalyticsTracker } from "@/components/analytics/analytics-tracker";
 import { QueryProvider } from "@/components/providers/query-provider";
@@ -154,6 +155,24 @@ export default function RootLayout({
 						strategy="beforeInteractive"
 					/>
 				)}
+
+				{/* ChatGPT Ads Measurement Pixel */}
+				<Script
+					id="openai-ads-pixel"
+					strategy="afterInteractive"
+					dangerouslySetInnerHTML={{
+						__html: `
+              window.oaiq = window.oaiq || function () {
+                (window.oaiq.q = window.oaiq.q || []).push(arguments);
+              };
+              oaiq("init", { pixelId: "${OPENAI_ADS_PIXEL_ID}" });
+            `,
+					}}
+				/>
+				<Script
+					src="https://bzrcdn.openai.com/sdk/oaiq.min.js"
+					strategy="afterInteractive"
+				/>
 
 				{/* Google Analytics */}
 				<Script

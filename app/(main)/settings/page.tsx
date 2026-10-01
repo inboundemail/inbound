@@ -1,5 +1,6 @@
 "use client";
 
+import { measureSubscriptionCreated } from "@/lib/analytics/openai-ads";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCustomer } from "autumn-js/react";
 import {
@@ -369,6 +370,7 @@ export default function SettingsPage() {
 
 		if (upgradeParam === "true") {
 			setIsUpgradeSuccessOpen(true);
+			measureSubscriptionCreated();
 
 			const newUrl = new URL(window.location.href);
 			newUrl.searchParams.delete("upgrade");

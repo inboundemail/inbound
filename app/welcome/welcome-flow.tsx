@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Mark } from "@/components/marketing/mark";
 import { useCreateApiKeyMutation } from "@/features/settings/hooks";
+import { measureSubscriptionFromSuccessUrl } from "@/lib/analytics/openai-ads";
 import { signOut } from "@/lib/auth/auth-client";
 
 type InboxEmail = {
@@ -108,6 +109,12 @@ function agentPrompt(domain: string) {
 }
 
 export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid, price, returning }: Props) {
+	// Entry-plan checkout returns to /welcome?subscribed=1; count it once the
+	// server confirms the plan is paid.
+	useEffect(() => {
+		if (paid) measureSubscriptionFromSuccessUrl("subscribed", "1");
+	}, [paid]);
+
 	const reduceMotion = useReducedMotion();
 	const { emails, loaded } = useInbox(!!domain);
 	const { copied, copy } = useCopy();

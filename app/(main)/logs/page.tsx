@@ -1,5 +1,6 @@
 "use client"
 
+import { measureSubscriptionFromSuccessUrl } from '@/lib/analytics/openai-ads'
 import { useEffect, useState, useMemo, Suspense } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -128,6 +129,11 @@ function LogsPageSkeleton() {
 }
 
 export default function LogsPage() {
+  // Checkout success from the marketing pricing table lands here.
+  useEffect(() => {
+    measureSubscriptionFromSuccessUrl('upgrade', 'true', ['upgrade', 'product'])
+  }, [])
+
   // Search and filter state with URL persistence
   const [filters, setFilters] = useQueryStates({
     search: parseAsString.withDefault(''),
