@@ -61,6 +61,14 @@ import { authenticateSmtp } from "../mailboxes/authenticate-smtp";
 import { createMailbox } from "../mailboxes/create";
 import { deleteMailbox } from "../mailboxes/delete";
 import { listMailboxes } from "../mailboxes/list";
+import {
+	getMailbox,
+	getMailboxAttachment,
+	getMailboxMessage,
+	getMailboxThread,
+	listMailboxMessages,
+	updateMailboxMessage,
+} from "../mailboxes/messages";
 import { rotateMailboxPassword } from "../mailboxes/rotate-password";
 import { updateMailbox } from "../mailboxes/update";
 import { checkOnboardingReply } from "../onboarding/check-reply";
@@ -509,6 +517,12 @@ https://inbound.new/api/e2
 	.use(rotateMailboxPassword)
 	.use(authenticateMailbox)
 	.use(authenticateSmtp)
+	.use(getMailbox)
+	.use(listMailboxMessages)
+	.use(getMailboxMessage)
+	.use(updateMailboxMessage)
+	.use(getMailboxThread)
+	.use(getMailboxAttachment)
 	// Onboarding routes
 	.use(sendOnboardingDemo)
 	.use(checkOnboardingReply)

@@ -4,6 +4,7 @@ import {
 } from "@/app/api/e2/lib/auth";
 import {
 	authenticateManagedMailCredential,
+	type ManagedMailCredential,
 	normalizeEmailAddress,
 } from "@/app/api/e2/mailboxes/shared";
 
@@ -16,7 +17,11 @@ export interface ManagedSenderPolicy {
 export async function authenticateEmailSend(
 	request: Request,
 	set: { status?: number | string; headers?: unknown },
-): Promise<{ userId: string; senderPolicy: ManagedSenderPolicy | null }> {
+): Promise<{
+	userId: string;
+	senderPolicy: ManagedSenderPolicy | null;
+	credential: ManagedMailCredential | null;
+}> {
 	const authorization = request.headers.get("authorization");
 	const apiKey = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
 	if (apiKey?.startsWith("mail_") || apiKey?.startsWith("imap_")) {
@@ -30,6 +35,7 @@ export async function authenticateEmailSend(
 					sendingAddress: credential.sendingAddress,
 					allowedDomains: credential.allowedDomains,
 				},
+				credential,
 			};
 		}
 	}
@@ -37,6 +43,7 @@ export async function authenticateEmailSend(
 	return {
 		userId: await validateAndRateLimit(request, set),
 		senderPolicy: null,
+		credential: null,
 	};
 }
 

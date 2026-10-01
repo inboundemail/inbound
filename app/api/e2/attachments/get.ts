@@ -10,7 +10,7 @@ const ErrorResponse = t.Object({
   details: t.Optional(t.String()),
 })
 
-function attachmentResponse(attachment: Attachment, fallbackName: string): Response {
+export function attachmentResponse(attachment: Attachment, fallbackName: string): Response {
   // RFC 5987: ASCII fallback plus UTF-8 encoded filename
   const filename = attachment.filename || fallbackName
   const asciiFilename = filename.replace(/[^\x20-\x7E]|["\\]/g, "_")

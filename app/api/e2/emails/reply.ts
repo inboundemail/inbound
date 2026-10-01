@@ -37,7 +37,11 @@ import {
 	attachmentsToStorageFormat,
 	processAttachments,
 } from "../helper/attachment-processor";
-import { validateAndRateLimit } from "../lib/auth";
+import { receivedVisibleTo } from "../mailboxes/access";
+import {
+	authenticateEmailSend,
+	senderPolicyAllowsAddress,
+} from "../lib/send-auth";
 
 // Initialize SES client
 const awsRegion = process.env.AWS_REGION || "us-east-2";
@@ -191,8 +195,19 @@ export const replyToEmail = new Elysia().post(
 			`📧 [${requestId}] POST /api/e2/emails/:id/reply - Starting request`,
 		);
 
-		// Auth & rate limit validation
-		const userId = await validateAndRateLimit(request, set);
+		// Auth & rate limit validation. A mailbox password may reply to mail
+		// within its scopes, from an address its sending policy allows.
+		const { userId, senderPolicy, credential } = await authenticateEmailSend(
+			request,
+			set,
+		);
+		if (
+			credential &&
+			(credential.type !== "mailbox" || credential.accessMode !== "read_write")
+		) {
+			set.status = 403;
+			return { error: "This credential cannot reply to mail" };
+		}
 
 		const unsafeHeaderInput = findUnsafeHeaderInput(body);
 		if (unsafeHeaderInput) {
@@ -287,6 +302,10 @@ export const replyToEmail = new Elysia().post(
 		}
 
 		const original = originalEmail[0];
+		if (credential && !receivedVisibleTo(credential, original)) {
+			set.status = 404;
+			return { error: "Email not found" };
+		}
 
 		// Validate content
 		if (!body.html && !body.text) {
@@ -338,6 +357,11 @@ export const replyToEmail = new Elysia().post(
 			console.error("Email extraction error:", extractionError);
 			set.status = 400;
 			return { error: "Failed to process email address" };
+		}
+
+		if (senderPolicy && !senderPolicyAllowsAddress(senderPolicy, fromAddress)) {
+			set.status = 403;
+			return { error: "This credential cannot send from that address" };
 		}
 
 		const formattedFromAddress = formatSenderAddress(fromAddress, senderName);

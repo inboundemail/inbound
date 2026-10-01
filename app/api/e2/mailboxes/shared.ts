@@ -392,12 +392,42 @@ export async function authenticateManagedMailCredential(
 		: null;
 	if (!apiKeyId || !apiKeyOwnerId) return null;
 
-	const conditions = [
-		eq(imapCredentials.apiKeyId, apiKeyId),
-		eq(imapCredentials.userId, apiKeyOwnerId),
-	];
-	if (options.loginAddress) {
-		conditions.push(eq(imapCredentials.loginAddress, options.loginAddress));
+	return resolveManagedMailCredential(
+		{
+			userId: apiKeyOwnerId,
+			apiKeyId,
+			loginAddress: options.loginAddress,
+		},
+		{ requireType: options.requireType },
+	);
+}
+
+/**
+ * Loads a mailbox or SMTP credential and the policy it grants, applying the
+ * same checks as password authentication: enabled, owner not banned, login
+ * domain verified, at least one verified scope and a valid sending identity.
+ * Used after verifying a mailbox password, and when the account owner acts on
+ * one of their own mailboxes by ID.
+ */
+export async function resolveManagedMailCredential(
+	where: {
+		userId: string;
+		apiKeyId?: string;
+		credentialId?: string;
+		loginAddress?: string;
+	},
+	options: { requireType?: "mailbox" } = {},
+): Promise<ManagedMailCredential | null> {
+	if (!where.apiKeyId && !where.credentialId) return null;
+	const conditions = [eq(imapCredentials.userId, where.userId)];
+	if (where.apiKeyId) {
+		conditions.push(eq(imapCredentials.apiKeyId, where.apiKeyId));
+	}
+	if (where.credentialId) {
+		conditions.push(eq(imapCredentials.id, where.credentialId));
+	}
+	if (where.loginAddress) {
+		conditions.push(eq(imapCredentials.loginAddress, where.loginAddress));
 	}
 
 	const [credential] = await db
