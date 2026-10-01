@@ -16,7 +16,7 @@ import {
 	Trash2,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { updateUserProfile } from "@/app/actions/primary";
 import { PricingTable, plans } from "@/components/pricing-table";
@@ -362,6 +362,8 @@ export default function SettingsPage() {
 		}
 	};
 
+	const subscriptionConversionTracked = useRef(false);
+
 	// Check for upgrade/addon success parameter
 	useEffect(() => {
 		const upgradeParam = searchParams.get("upgrade");
@@ -370,7 +372,12 @@ export default function SettingsPage() {
 
 		if (upgradeParam === "true") {
 			setIsUpgradeSuccessOpen(true);
-			measureSubscriptionCreated();
+			// This effect re-runs (e.g. when the session loads) before the
+			// router.replace below lands; count the conversion only once.
+			if (!subscriptionConversionTracked.current) {
+				subscriptionConversionTracked.current = true;
+				measureSubscriptionCreated();
+			}
 
 			const newUrl = new URL(window.location.href);
 			newUrl.searchParams.delete("upgrade");
