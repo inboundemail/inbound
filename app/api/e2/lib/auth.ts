@@ -1,3 +1,4 @@
+import { verifyAccountAccessToken } from "@/app/api/e2/lib/oauth-token";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 import { Ratelimit } from "@upstash/ratelimit";
@@ -502,7 +503,13 @@ export async function validateAndRateLimit(
 			}
 		}
 
-		// Determine userId from either session or API key
+		// OAuth access tokens (MCP clients) are JWTs; API keys never are.
+		const oauthUserId =
+			!session?.user?.id && !apiKeyUserId && apiKey
+				? await verifyAccountAccessToken(apiKey)
+				: null;
+
+		// Determine userId from session, API key or OAuth access token
 		let userId: string;
 
 		if (session?.user?.id) {
@@ -514,6 +521,9 @@ export async function validateAndRateLimit(
 			console.log("🔑 [E2] Auth Type: API_KEY");
 			console.log("🔑 [E2] API Key:", maskApiKey(apiKey));
 			console.log("✅ API key authentication successful for userId:", userId);
+		} else if (oauthUserId) {
+			userId = oauthUserId;
+			console.log("🔑 [E2] Auth Type: OAUTH");
 		} else {
 			console.log("❌ Authentication failed: No valid session or API key");
 			// RFC 7235: 401 responses MUST include WWW-Authenticate header

@@ -13,14 +13,18 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { authClient } from "@/lib/auth/auth-client";
+import { INBOUND_ACCOUNT_SCOPE } from "@/lib/auth/inbound-oauth-session";
 
 export function OAuthConsent({
 	clientName,
 	scopes,
+	redirectHost,
 }: {
 	clientName: string;
 	scopes: string[];
+	redirectHost?: string | null;
 }) {
+	const fullAccess = scopes.includes(INBOUND_ACCOUNT_SCOPE);
 	const [pendingAction, setPendingAction] = useState<"allow" | "deny" | null>(
 		null,
 	);
@@ -63,14 +67,25 @@ export function OAuthConsent({
 							Allow {clientName}?
 						</CardTitle>
 						<CardDescription className="leading-6">
-							The application will receive your Inbound identity and the domain
-							access you selected.
+							{fullAccess
+								? "The application will get full access to your Inbound account: domains, endpoints, emails and mailboxes, including sending email as you."
+								: "The application will receive your Inbound identity and the domain access you selected."}
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-5">
+						{redirectHost && (
+							<p className="text-center text-sm text-muted-foreground">
+								You'll return to{" "}
+								<span className="font-medium text-foreground">
+									{redirectHost}
+								</span>
+								. Only continue if you started this from that app.
+							</p>
+						)}
 						<div className="rounded-lg bg-muted p-4 text-sm leading-6 text-muted-foreground">
-							You can revoke the resulting session without sharing your Inbound
-							password.
+							{fullAccess
+								? "You never share your Inbound password or API key with the application."
+								: "You can revoke the resulting session without sharing your Inbound password."}
 						</div>
 						{error && <p className="text-sm text-destructive">{error}</p>}
 						<div className="grid grid-cols-2 gap-3">

@@ -108,6 +108,11 @@ const nextConfig: NextConfig = {
 				source: "/api/v2/:path*",
 				destination: "/api/e2/:path*",
 			},
+			// MCP server (inboundemail/mcp, Vercel project inbound-mcp)
+			{
+				source: "/mcp",
+				destination: "https://inbound-mcp.vercel.app/mcp",
+			},
 		];
 	},
 	async redirects() {

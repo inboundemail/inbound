@@ -26,6 +26,10 @@ import {
 	INBOUND_DOMAIN_SCOPE,
 	INBOUND_SESSION_CLAIM,
 } from "@/lib/auth/inbound-oauth";
+import {
+	INBOUND_ACCOUNT_SCOPE,
+	MCP_RESOURCE_URL,
+} from "@/lib/auth/inbound-oauth-session";
 import { db } from "../db/index";
 import * as schema from "../db/schema";
 
@@ -87,7 +91,7 @@ const inbound = new Inbound({
 			: undefined,
 });
 
-const authBaseURL =
+export const authBaseURL =
 	process.env.NODE_ENV === "development"
 		? process.env.NEXT_PUBLIC_APP_URL
 		: process.env.VERCEL_ENV === "preview"
@@ -199,11 +203,22 @@ export const auth = betterAuth({
 				"email",
 				"offline_access",
 				INBOUND_DOMAIN_SCOPE,
+				INBOUND_ACCOUNT_SCOPE,
 			],
 			grantTypes: ["authorization_code", "refresh_token"],
-			validAudiences: [`${authBaseURL}/api`],
-			allowDynamicClientRegistration: false,
-			allowUnauthenticatedClientRegistration: false,
+			validAudiences: [`${authBaseURL}/api`, MCP_RESOURCE_URL],
+			// MCP clients (Claude, Cursor, ChatGPT…) register themselves as
+			// public clients. They may only ask for account access plus identity;
+			// inbound:domains stays limited to clients created by an admin.
+			allowDynamicClientRegistration: true,
+			allowUnauthenticatedClientRegistration: true,
+			clientRegistrationDefaultScopes: [
+				"openid",
+				"profile",
+				"email",
+				"offline_access",
+				INBOUND_ACCOUNT_SCOPE,
+			],
 			clientPrivileges: ({ user }) => user?.role === "admin",
 			postLogin: {
 				page: "/oauth/domain-access",

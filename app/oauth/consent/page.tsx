@@ -30,6 +30,14 @@ async function ConsentContent({
 	const clientId = Array.isArray(rawClientId) ? rawClientId[0] : rawClientId;
 	const rawScope = params.scope;
 	const scope = Array.isArray(rawScope) ? rawScope[0] : rawScope;
+	const rawRedirect = params.redirect_uri;
+	const redirectUri = Array.isArray(rawRedirect) ? rawRedirect[0] : rawRedirect;
+	let redirectHost: string | null = null;
+	try {
+		redirectHost = redirectUri ? new URL(redirectUri).host || redirectUri : null;
+	} catch {
+		redirectHost = null;
+	}
 	const session = await auth.api.getSession({ headers: await headers() });
 	if (!session?.user || !clientId) {
 		return (
@@ -63,6 +71,7 @@ async function ConsentContent({
 		<OAuthConsent
 			clientName={client.name ?? "this application"}
 			scopes={requestedScopes}
+			redirectHost={redirectHost}
 		/>
 	);
 }

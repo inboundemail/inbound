@@ -56,3 +56,13 @@ export function buildInboundOAuthSession(
 		domainScope: { mode: "selected", domains: selectedDomains },
 	};
 }
+
+/**
+ * Full account access for MCP clients and other OAuth apps that act as the
+ * user against the e2 API (the same power as an API key).
+ */
+export const INBOUND_ACCOUNT_SCOPE = "inbound:account";
+
+/** Public MCP endpoint; the OAuth resource (token audience) for MCP clients. */
+export const MCP_RESOURCE_URL =
+	process.env.MCP_RESOURCE_URL || "https://inbound.new/mcp";
