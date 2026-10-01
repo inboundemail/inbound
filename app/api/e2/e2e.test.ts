@@ -2007,6 +2007,190 @@ describe("E2 API - Email E2E", () => {
 	);
 
 	it(
+		"routes mail for any subdomain of a wildcard domain to the parent catch-all",
+		async () => {
+			const secondaryUserId = psql(
+				`select id from "user" where email = 'e2e-secondary@inbound.test';`,
+				E2E_DATABASE,
+			);
+			psql(
+				`insert into email_domains (id, domain, status, user_id, can_receive_emails, is_catch_all_enabled, catch_all_endpoint_id, include_subdomains, subdomain_receipt_rule_name) values
+				('dom_wild_root', 'wild-e2e.com', 'verified', '${PRIMARY_USER_ID}', true, true, '${managedEndpointId}', true, 'batch-rule-e2e'),
+				('dom_wild_evil', 'evil.wild-e2e.com', 'pending', '${secondaryUserId}', false, true, null, false, null);`,
+				E2E_DATABASE,
+			);
+
+			const token = makeToken("wild").replace(/[^a-z0-9-]/gi, "");
+			const addresses = [
+				`orders@random-${token}.wild-e2e.com`,
+				`anything@deep.nested-${token}.wild-e2e.com`,
+				`x-${token}@evil.wild-e2e.com`,
+			];
+
+			for (const address of addresses) {
+				const subject = `E2E Wildcard ${address}`;
+				const result = await postSyntheticInboundRecord({
+					subject,
+					messageId: `${makeToken("wildmsg")}@example.test`,
+					recipient: address,
+					text: `Wildcard routing ${token}`,
+				});
+				expect(result.success).toBe(true);
+
+				const [received] = await listExactSubjectEmails("received", subject);
+				expect(received).toBeDefined();
+				const detail = await getEmailDetail(received.id);
+				expect(detail.envelope_recipients).toEqual([address]);
+
+				const delivery = await pollFor(
+					`wildcard webhook delivery for ${address}`,
+					POLL_CONFIG.inboundTimeoutMs,
+					async () =>
+						receivedWebhooks.find(
+							(webhook) =>
+								webhook.path === TEST_WEBHOOK_PATH &&
+								webhook.body.includes(received.id),
+						) || null,
+				);
+				expect(delivery).toBeDefined();
+				const payload = JSON.parse(delivery?.body ?? "{}") as {
+					email: { recipient: string; envelopeRecipients: string[] };
+				};
+				expect(payload.email.recipient).toBe(address);
+				expect(payload.email.envelopeRecipients).toEqual([address]);
+
+				const otherTenant = await apiRequestWithKey(
+					`/emails/${received.id}`,
+					ALT_API_KEY,
+				);
+				expect(otherTenant.status).toBe(404);
+			}
+
+			const siblingSubject = `E2E Wildcard sibling ${token}`;
+			await postSyntheticInboundRecord({
+				subject: siblingSubject,
+				messageId: `${makeToken("wildmsg")}@example.test`,
+				recipient: `x@sub.notwild-e2e.com`,
+				text: "not a subdomain of the wildcard domain",
+			});
+			expect(
+				(await listExactSubjectEmails("received", siblingSubject)).length,
+			).toBe(0);
+
+			const domain = await apiJson<{
+				includeSubdomains: boolean;
+				subdomainDnsRecords: Array<{ type: string; name: string; value: string }>;
+			}>("/domains/dom_wild_root");
+			expect(domain.response.status).toBe(200);
+			expect(domain.data.includeSubdomains).toBe(true);
+			expect(domain.data.subdomainDnsRecords).toEqual([
+				expect.objectContaining({
+					type: "MX",
+					name: "*.wild-e2e.com",
+					value: "10 inbound-smtp.us-east-2.amazonaws.com",
+				}),
+			]);
+
+			const list = await apiJson<
+				DomainListResponse & { data: Array<{ includeSubdomains: boolean }> }
+			>(`/domains${queryString({ limit: 100, offset: 0 })}`);
+			const listed = list.data.data.find(
+				(item) => item.domain === "wild-e2e.com",
+			);
+			expect(listed?.includeSubdomains).toBe(true);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"validates includeSubdomains updates and blocks subdomain hijacking",
+		async () => {
+			const secondaryUserId = psql(
+				`select id from "user" where email = 'e2e-secondary@inbound.test';`,
+				E2E_DATABASE,
+			);
+			psql(
+				`insert into email_domains (id, domain, status, user_id, can_receive_emails) values
+				('dom_plain_root', 'plain-e2e.com', 'verified', '${PRIMARY_USER_ID}', true),
+				('dom_plain_sub', 'sub.plain-e2e.com', 'verified', '${PRIMARY_USER_ID}', true),
+				('dom_pending_root', 'pending-e2e.com', 'pending', '${PRIMARY_USER_ID}', false),
+				('dom_taken_root', 'taken-e2e.com', 'verified', '${PRIMARY_USER_ID}', true),
+				('dom_taken_sub', 'owned.taken-e2e.com', 'pending', '${secondaryUserId}', false);`,
+				E2E_DATABASE,
+			);
+			psql(
+				`insert into email_domains (id, domain, status, user_id, can_receive_emails, include_subdomains) values
+				('dom_stale_wild', 'stale-wild-e2e.com', 'verified', '${PRIMARY_USER_ID}', true, true);`,
+				E2E_DATABASE,
+			);
+
+			const patch = (id: string, body: Record<string, unknown>, key = API_KEY) =>
+				apiRequestWithKey(`/domains/${id}`, key, {
+					method: "PATCH",
+					body: JSON.stringify(body),
+				});
+
+			expect((await patch("dom_plain_root", {})).status).toBe(400);
+			expect(
+				(await patch("dom_pending_root", { includeSubdomains: true })).status,
+			).toBe(400);
+
+			const subdomain = await patch("dom_plain_sub", { includeSubdomains: true });
+			expect(subdomain.status).toBe(400);
+			expect(((await subdomain.json()) as { code?: string }).code).toBe(
+				"INCLUDE_SUBDOMAINS_ROOT_ONLY",
+			);
+
+			const taken = await patch("dom_taken_root", { includeSubdomains: true });
+			expect(taken.status).toBe(409);
+			expect(((await taken.json()) as { code?: string }).code).toBe(
+				"SUBDOMAIN_OWNED_BY_ANOTHER_ACCOUNT",
+			);
+
+			expect(
+				(
+					await patch("dom_plain_root", { includeSubdomains: true }, ALT_API_KEY)
+				).status,
+			).toBe(404);
+
+			const alreadyOff = await apiJsonWithKey<{
+				includeSubdomains: boolean;
+				subdomainDnsRecords: unknown[];
+			}>("/domains/dom_plain_root", API_KEY, {
+				method: "PATCH",
+				body: JSON.stringify({ includeSubdomains: false }),
+			});
+			expect(alreadyOff.response.status).toBe(200);
+			expect(alreadyOff.data.includeSubdomains).toBe(false);
+			expect(alreadyOff.data.subdomainDnsRecords).toEqual([]);
+
+			const turnedOff = await apiJsonWithKey<{ includeSubdomains: boolean }>(
+				"/domains/dom_stale_wild",
+				API_KEY,
+				{ method: "PATCH", body: JSON.stringify({ includeSubdomains: false }) },
+			);
+			expect(turnedOff.response.status).toBe(200);
+			expect(turnedOff.data.includeSubdomains).toBe(false);
+
+			const hijack = await apiRequestWithKey("/domains", ALT_API_KEY, {
+				method: "POST",
+				body: JSON.stringify({ domain: "hijack.wild-e2e.com" }),
+			});
+			expect(hijack.status).toBe(409);
+			expect(((await hijack.json()) as { code?: string }).code).toBe(
+				"DOMAIN_COVERED_BY_WILDCARD",
+			);
+
+			const deepHijack = await apiRequestWithKey("/domains", ALT_API_KEY, {
+				method: "POST",
+				body: JSON.stringify({ domain: "a.b.wild-e2e.com" }),
+			});
+			expect(deepHijack.status).toBe(409);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
 		"returns 429 responses when burst traffic exceeds rate limits",
 		async () => {
 			let sawRateLimit = false;

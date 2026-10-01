@@ -8,7 +8,8 @@ import { type NextRequest, NextResponse } from "next/server";
 import type { SESEvent, SESRecord } from "@/lib/aws-ses/aws-ses";
 import { db } from "@/lib/db";
 import { user } from "@/lib/db/auth-schema";
-import { emailDomains, sesEvents, structuredEmails } from "@/lib/db/schema";
+import { resolveInboundDomainOwner } from "@/lib/db/domains";
+import { sesEvents, structuredEmails } from "@/lib/db/schema";
 import { recordDeliveryEventFromDsn } from "@/lib/email-management/delivery-event-tracker";
 import { isDsn } from "@/lib/email-management/dsn-parser";
 import { isEmailBlocked } from "@/lib/email-management/email-blocking";
@@ -83,29 +84,21 @@ async function mapRecipientToUserId(recipient: string): Promise<string> {
 
 		console.log(`🔍 Webhook - Looking up domain owner for: ${domain}`);
 
-		// Look up the domain in the emailDomains table to find the owner
-		const domainRecord = await db
-			.select({
-				userId: emailDomains.userId,
-				status: emailDomains.status,
-				canReceiveEmails: emailDomains.canReceiveEmails,
-			})
-			.from(emailDomains)
-			.where(eq(emailDomains.domain, domain))
-			.limit(1);
+		// Look up the domain owner, falling back to a wildcard parent domain
+		const domainRecord = await resolveInboundDomainOwner(domain);
 
-		if (domainRecord[0]?.userId) {
-			const { userId, status, canReceiveEmails } = domainRecord[0];
+		if (domainRecord?.userId) {
+			const { userId, status, canReceiveEmails, viaWildcard } = domainRecord;
 
 			// Log domain status for debugging
 			console.log(
-				`✅ Webhook - Found domain ${domain}: status=${status}, canReceiveEmails=${canReceiveEmails}, userId=${userId}`,
+				`✅ Webhook - Found domain ${domainRecord.domain}${viaWildcard ? ` (wildcard parent of ${domain})` : ""}: status=${status}, canReceiveEmails=${canReceiveEmails}, userId=${userId}`,
 			);
 
 			// Check if domain is properly configured to receive emails
 			if (!canReceiveEmails) {
 				console.warn(
-					`⚠️ Webhook - Domain ${domain} is not configured to receive emails, but processing anyway`,
+					`⚠️ Webhook - Domain ${domainRecord.domain} is not configured to receive emails, but processing anyway`,
 				);
 			}
 

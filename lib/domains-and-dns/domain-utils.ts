@@ -62,3 +62,13 @@ export function isSubdomain(domain: string): boolean {
   return domain !== rootDomain && domain.endsWith('.' + rootDomain)
 }
 
+
+export function getWildcardMxRecord(domain: string, awsRegion: string = process.env.AWS_REGION || 'us-east-2') {
+  return {
+    type: 'MX',
+    name: `*.${domain}`,
+    value: `10 inbound-smtp.${awsRegion}.amazonaws.com`,
+    description: `Wildcard MX record that routes mail for every subdomain of ${domain} to Inbound. Subdomains that already have their own DNS records need their own MX record.`,
+    isRequired: true,
+  }
+}

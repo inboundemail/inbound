@@ -7,6 +7,7 @@ import { BatchRuleManager } from "@/lib/aws-ses/batch-rule-manager";
 import { db } from "@/lib/db";
 import {
 	createDomainVerification,
+	findWildcardAncestorOwnedByOthers,
 	getVerifiedParentDomain,
 } from "@/lib/db/domains";
 import {
@@ -178,6 +179,22 @@ export const createDomain = new Elysia().post(
 					code: "DOMAIN_ALREADY_REGISTERED",
 				};
 			}
+		}
+
+		const wildcardAncestor = await findWildcardAncestorOwnedByOthers(
+			domain,
+			userId,
+		);
+		if (wildcardAncestor) {
+			console.log(
+				`❌ Domain ${domain} is covered by another account's wildcard domain ${wildcardAncestor.domain}`,
+			);
+			set.status = 409;
+			return {
+				error:
+					"This domain is a subdomain of a domain that another account has verified and enabled subdomain receiving for. Contact support if you believe this is an error.",
+				code: "DOMAIN_COVERED_BY_WILDCARD",
+			};
 		}
 
 		// Check Autumn domain limits
