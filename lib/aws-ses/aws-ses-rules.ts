@@ -315,9 +315,11 @@ export class AWSSESReceiptRuleManager {
       console.log(`📋 SES Batch - Updated recipients: ${updatedRecipients.length}`)
       
       // Update the rule with remaining recipients
+      // An enabled rule with no recipients matches every verified domain, so disable it instead
       const updatedRule: ReceiptRule = {
         ...existingRule,
-        Recipients: updatedRecipients
+        Recipients: updatedRecipients,
+        Enabled: updatedRecipients.length > 0 ? existingRule.Enabled : false
       }
       
       const updateCommand = new UpdateReceiptRuleCommand({
