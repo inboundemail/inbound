@@ -21,7 +21,7 @@ export const page: SeoPage = {
 			paragraphs: [
 				"A cleaned reply and a stored conversation solve different problems. Postmark's StrippedTextReply attempts to isolate the new reply; MailboxHash helps your application locate a ticket. inbound exposes threadId and parsed reply headers, while cleanedContent.text remains the parsed text body. Do not substitute it for a latest-reply extractor.",
 				"Postmark documents one inbound stream per server and default message retention of 45 days, with extended retention available as an add-on. Confirm inbound's current retention terms before moving an archive-dependent workflow; this comparison does not promise matching storage duration.",
-				"inbound plans start at $4/month with separate sending and receiving allowances. Postmark counts sending and receiving toward shared volume; its paid inbound entry is Pro, not Basic. See pricing for current terms rather than comparing sending-only allowances.",
+				"inbound plans start at $9/month with separate sending and receiving allowances. Postmark counts sending and receiving toward shared volume; its paid inbound entry is Pro, not Basic. See pricing for current terms rather than comparing sending-only allowances.",
 				"Postmark documents a 35 MB cumulative inbound attachment limit and a 10 MB outbound message limit. Test receive-and-reply attachments against both directions. For inbound, verify your receiving requirements in the docs instead of assuming outbound limits also describe receiving.",
 			],
 		},
@@ -96,7 +96,7 @@ export const page: SeoPage = {
 			{
 				label: "How pricing works",
 				inbound:
-					"Plans start at $4/month; separate sent and received allowances. See pricing.",
+					"Plans start at $9/month; separate sent and received allowances. See pricing.",
 				other:
 					"Sending and receiving share message volume. Paid inbound is on Pro, not Basic; check current pricing.",
 			},

@@ -62,7 +62,7 @@ export const page: SeoPage = {
 		{
 			heading: "Connect through the API, CLI, or agent tools",
 			paragraphs: [
-				"Use REST or the inboundemail TypeScript SDK in your application. For agent-driven operation, inbound also provides the inboundctl CLI, an installable agent skill, and a hosted MCP server. The docs cover API setup; plans start at $4/month, with current details on the pricing page.",
+				"Use REST or the inboundemail TypeScript SDK in your application. For agent-driven operation, inbound also provides the inboundctl CLI, an installable agent skill, and a hosted MCP server. The docs cover API setup; plans start at $9/month, with current details on the pricing page.",
 			],
 			bullets: [
 				"inboundctl: inbox search, thread lookup, draft validation, JSON output, and send/reply dry runs. A dry run helps inspect a proposed send; your application still owns approval.",

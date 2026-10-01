@@ -15,7 +15,7 @@ import {
 const plans = [
 	{
 		name: "Default",
-		price: 4,
+		price: 9,
 		description: "5,000 emails/mo · Basic support",
 		autumn_id: "inbound_default_test",
 	},

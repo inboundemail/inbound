@@ -21,7 +21,7 @@ export const page: SeoPage = {
 			paragraphs: [
 				"Mailgun delivers form data or multipart data by default, and JSON when the forwarding destination ends in json. Its current HTTP documentation describes Base64 attachment content inside that JSON payload. inbound sends parsed bodies and attachment metadata with authenticated download URLs.",
 				"Mailgun documents temporary route storage for up to three days and HTTP delivery retries over eight hours, subject to response-code rules. inbound records delivery failures but does not retry automatically; use POST /api/e2/emails/:id/retry after fixing the endpoint. Build recovery into the migration, rather than carrying over assumptions about retries.",
-				"inbound plans start at $4/month, with sending and receiving metered separately. Mailgun's route entitlements depend on the plan, including a route on its Free plan. How Mailgun bills receiving that only forwards to HTTP is described in their docs; an outbound sending allowance doesn't tell you how inbound is billed.",
+				"inbound plans start at $9/month, with sending and receiving metered separately. Mailgun's route entitlements depend on the plan, including a route on its Free plan. How Mailgun bills receiving that only forwards to HTTP is described in their docs; an outbound sending allowance doesn't tell you how inbound is billed.",
 			],
 		},
 		{
@@ -97,7 +97,7 @@ export const page: SeoPage = {
 			{
 				label: "How pricing works",
 				inbound:
-					"Plans start at $4/month; separate sent and received allowances. See pricing for current terms.",
+					"Plans start at $9/month; separate sent and received allowances. See pricing for current terms.",
 				other:
 					"Route entitlements vary by plan. Exact HTTP-only receiving metering: see their docs.",
 			},

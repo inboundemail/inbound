@@ -14,7 +14,7 @@ export const page: SeoPage = {
 			paragraphs: [
 				"Suppose your application assigns customer-42@receive.example.com and customer-73@receive.example.com to two customers. Enable catch-all on receive.example.com and point it at a webhook endpoint. Your handler maps each incoming alias to the correct customer.",
 				"Create a specific route for billing@receive.example.com when billing needs a different endpoint. Under normal address routing, its active dedicated endpoint takes precedence over the domain catch-all. Addresses without a matching dedicated route use the catch-all fallback.",
-				"Manage specific routes through /api/e2/email-addresses and catch-all settings through PATCH /api/e2/domains/:id. Plans start at $4/month; see the pricing page for current details and the docs for request fields.",
+				"Manage specific routes through /api/e2/email-addresses and catch-all settings through PATCH /api/e2/domains/:id. Plans start at $9/month; see the pricing page for current details and the docs for request fields.",
 			],
 			code: {
 				label: "Example routing configuration for receive.example.com",

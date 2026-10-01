@@ -22,7 +22,7 @@ export const page: SeoPage = {
 				"SendGrid requires an authenticated receiving domain and a unique receiving hostname. Its documented total message limit is 30 MB, including attachments. Verify your own web server's request-size limits too: accepting the email and accepting the resulting multipart request are different steps.",
 				"SendGrid retries failed Parse delivery for up to three days, then drops undeliverable messages without prior notification. inbound records failures but does not retry automatically; recovery uses POST /api/e2/emails/:id/retry. Persist accepted messages before acknowledging delivery and make application actions idempotent.",
 				"Use each provider's own request-verification procedure. For inbound, compare X-Webhook-Verification-Token with your endpoint's configured token. For SendGrid's current Inbound Parse security options, see their docs; do not reuse verification code intended for outbound delivery events.",
-				"inbound plans start at $4/month. SendGrid lists Inbound Parse in its Email API plan comparison, but a separate per-inbound-message rate was not established in the reviewed pricing. Check current pricing and quotas instead of assuming an extra inbound add-on charge.",
+				"inbound plans start at $9/month. SendGrid lists Inbound Parse in its Email API plan comparison, but a separate per-inbound-message rate was not established in the reviewed pricing. Check current pricing and quotas instead of assuming an extra inbound add-on charge.",
 			],
 		},
 		{
@@ -111,7 +111,7 @@ function fromInbound(event) {
 			{
 				label: "How pricing works",
 				inbound:
-					"Plans start at $4/month; sending and receiving have separate allowances. See pricing.",
+					"Plans start at $9/month; sending and receiving have separate allowances. See pricing.",
 				other:
 					"Inbound Parse is listed in Email API plans. Separate inbound rates and quotas: see their docs.",
 			},

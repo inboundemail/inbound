@@ -2,7 +2,10 @@ import { Autumn as autumn } from "autumn-js";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { nanoid } from "nanoid";
 import { auth } from "@/lib/auth/auth";
+import { db } from "@/lib/db";
+import { userOnboarding } from "@/lib/db/schema";
 import { ensureManagedDomain, hasPaidPlan } from "@/lib/domains-and-dns/managed-domain";
 import { WelcomeFlow } from "./welcome-flow";
 
@@ -36,6 +39,17 @@ export default async function WelcomePage() {
 		hasPaidPlan(session.user.id),
 		planPrice(),
 	]);
+
+	// Paying users are done onboarding; without this the sign-in hook keeps
+	// sending them back here.
+	if (paid) {
+		const now = new Date();
+		await db
+			.insert(userOnboarding)
+			.values({ id: nanoid(), userId: session.user.id, isCompleted: true, defaultEndpointCreated: false, completedAt: now, createdAt: now, updatedAt: now })
+			.onConflictDoUpdate({ target: userOnboarding.userId, set: { isCompleted: true, completedAt: now, updatedAt: now } })
+			.catch((error: unknown) => console.error("welcome: could not mark onboarding complete", error));
+	}
 
 	return (
 		<WelcomeFlow

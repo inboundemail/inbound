@@ -395,7 +395,7 @@ export const auth = betterAuth({
 					.limit(1);
 
 				if (onboarding && !onboarding.isCompleted) {
-					throw ctx.redirect("/onboarding");
+					throw ctx.redirect("/welcome");
 				}
 
 				if (timeDiffSeconds < 10) {
@@ -411,7 +411,7 @@ export const auth = betterAuth({
 							updatedAt: now,
 						})
 						.onConflictDoNothing();
-					throw ctx.redirect("/onboarding");
+					throw ctx.redirect("/welcome");
 				}
 
 				const location = ctx.context.responseHeaders?.get("location");

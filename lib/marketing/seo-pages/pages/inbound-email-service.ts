@@ -50,7 +50,7 @@ await fetch(\`https://inbound.new/api/e2/emails/\${email.id}/reply\`, {
 			heading: "What you get, and the limits to plan around",
 			paragraphs: [
 				"Each received message arrives as one JSON POST with the event email.received. The payload includes parsed fields, the raw MIME source, sanitized HTML, thread information and authenticated attachment download URLs. The email parsing API page lists every field.",
-				"These are the operational details worth knowing before you commit. Plans start at $4/month and include both sending and receiving volume; see the pricing page for current plans.",
+				"These are the operational details worth knowing before you commit. Plans start at $9/month and include both sending and receiving volume; see the pricing page for current plans.",
 			],
 			bullets: [
 				"Webhook requests carry an X-Webhook-Verification-Token header that you compare with your endpoint's token. It is a shared token, not an HMAC signature.",

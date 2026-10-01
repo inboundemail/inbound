@@ -42,7 +42,7 @@ inbound
 			paragraphs: [
 				"Resend supports receiving on a provided domain or a custom-domain catch-all. The reviewed receiving docs do not establish a native thread resource; use their current docs for any newer capability. Keep your application conversation mapping and reply-header logic explicit when evaluating the migration.",
 				"inbound supports individual address endpoints and catch-all routing. Its thread APIs retrieve conversation context, and POST /api/e2/emails/:id/reply sets In-Reply-To and References. Keep your application's conversation ID alongside inbound's IDs rather than assuming historical conversations are imported automatically.",
-				"Resend documents 30-day email retention on Free, Pro, and Scale, with sending and receiving counted toward combined quotas. inbound plans start at $4/month and meter sending and receiving separately. Check current pricing, domain allowances, and retention requirements for your workload; entry price alone does not determine the total bill.",
+				"Resend documents 30-day email retention on Free, Pro, and Scale, with sending and receiving counted toward combined quotas. inbound plans start at $9/month and meter sending and receiving separately. Check current pricing, domain allowances, and retention requirements for your workload; entry price alone does not determine the total bill.",
 			],
 		},
 		{
@@ -103,7 +103,7 @@ inbound
 			{
 				label: "How pricing works",
 				inbound:
-					"Plans start at $4/month; separate sent and received allowances. See pricing.",
+					"Plans start at $9/month; separate sent and received allowances. See pricing.",
 				other:
 					"Sent and received email share the quota; free-plan daily limits also apply to receiving.",
 			},

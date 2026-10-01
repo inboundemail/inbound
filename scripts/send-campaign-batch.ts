@@ -57,9 +57,9 @@ function htmlFor(r: BatchRecipient): string {
   <div style="max-width:540px;margin:0 auto;padding:32px 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1c1917;">
     <p style="margin:0 0 16px;">every side project has an inbox nobody checks. we made it so your coding agent checks it for you.</p>
     <p style="margin:0 0 16px;">inbound inboxes are now fully agent-managed &mdash; opencode, claude code, codex, cursor, or any agent can read what comes in, reply in thread, and flag the stuff that actually needs you.</p>
-    <p style="margin:0 0 24px;">the default plan covers it: $4/mo gets you ${addressLine(r)}, 5,000 emails in, 5,000 out, and email support from us. that's more volume than any side project's support inbox will ever see &mdash; your agent has plenty of room to just handle it.</p>
+    <p style="margin:0 0 24px;">the default plan covers it: $9/mo gets you ${addressLine(r)}, 5,000 emails in, 5,000 out, and email support from us. that's more volume than any side project's support inbox will ever see &mdash; your agent has plenty of room to just handle it.</p>
     <p style="margin:0 0 24px;">
-      <a href="${r.checkout_url}" style="display:inline-block;background-color:#8161FF;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:600;font-size:15px;">upgrade to default &mdash; $4/mo</a>
+      <a href="${r.checkout_url}" style="display:inline-block;background-color:#8161FF;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:600;font-size:15px;">upgrade to default &mdash; $9/mo</a>
     </p>
     <p style="margin:0 0 24px;">or just look around: <a href="${r.home_url}" style="color:#8161FF;text-decoration:underline;">inbound.new</a></p>
     <p style="margin:0 0 32px;">&mdash; ryan</p>
@@ -74,9 +74,9 @@ function textFor(r: BatchRecipient): string {
 
 inbound inboxes are now fully agent-managed — opencode, claude code, codex, cursor, or any agent can read what comes in, reply in thread, and flag the stuff that actually needs you.
 
-the default plan covers it: $4/mo gets you ${addressLineText(r)}, 5,000 emails in, 5,000 out, and email support from us. that's more volume than any side project's support inbox will ever see — your agent has plenty of room to just handle it.
+the default plan covers it: $9/mo gets you ${addressLineText(r)}, 5,000 emails in, 5,000 out, and email support from us. that's more volume than any side project's support inbox will ever see — your agent has plenty of room to just handle it.
 
-upgrade to default — $4/mo:
+upgrade to default — $9/mo:
 ${r.checkout_url}
 
 or just look around:

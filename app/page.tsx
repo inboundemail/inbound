@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 };
 
 const plans = [
-	{ name: "Default", price: 4, description: "5,000 emails/mo · Basic support" },
+	{ name: "Default", price: 9, description: "5,000 emails/mo · Basic support" },
 	{ name: "Pro", price: 15, description: "50,000 emails/mo · 50 domains" },
 	{ name: "Growth", price: 39, description: "100,000 emails/mo · 300 domains" },
 	{ name: "Scale", price: 79, description: "200,000 emails/mo · unlimited domains" },
@@ -153,14 +153,14 @@ export default async function Page() {
 						</h1>
 						<p className="mt-6 text-[19px] leading-[29px] text-[#52525b]">
 							Receive, parse, and reply in thread through one API &amp; CLI.
-							Unlimited mailboxes on your domain — from $4/mo.
+							Unlimited mailboxes on your domain — from $9/mo.
 						</p>
 						<div className="mt-9 flex flex-wrap items-center gap-2.5">
 							<Link
 								href={startHref}
 								className="rounded-xl bg-[#8161FF] px-[22px] py-[13px] text-base font-medium text-white transition-[background-color,transform] duration-200 ease-[cubic-bezier(0.2,0,0,1)] hover:bg-[#6b4fd9] active:scale-[0.99]"
 							>
-								{isLoggedIn ? "Go to dashboard" : "Start for $4/mo"}
+								{isLoggedIn ? "Go to dashboard" : "Start for $9/mo"}
 							</Link>
 							<CopyPromptButton />
 						</div>

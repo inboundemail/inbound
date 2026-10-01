@@ -100,7 +100,7 @@ export const inboundDefaultTest = product({
 	name: "Inbound Default",
 	items: [
 		priceItem({
-			price: 4,
+			price: 9,
 			interval: "month",
 		}),
 

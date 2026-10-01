@@ -90,7 +90,7 @@ export default function FeaturesPage() {
         <section className="py-12 border-t border-[#e7e5e4]">
           <div className="text-center">
             <h2 className="font-heading text-xl font-semibold tracking-tight mb-2">Build better email experiences</h2>
-            <p className="text-[#52525b] mb-6">Plans start at $4/month. Integrate in minutes and scale as you grow.</p>
+            <p className="text-[#52525b] mb-6">Plans start at $9/month. Integrate in minutes and scale as you grow.</p>
             <div className="flex items-center justify-center gap-3">
               <Link
                 href="/login"
