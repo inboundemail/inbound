@@ -1,172 +1,106 @@
 ---
 title: "MCP Server"
-description: "Connect AI assistants like Claude, Cursor, and OpenCode to your Inbound account"
+description: "Connect Claude, ChatGPT, Cursor, OpenCode and other AI agents to Inbound, and give agents their own mailboxes"
 ---
 
-The Inbound MCP (Model Context Protocol) server allows AI assistants to interact with your Inbound account to manage domains, endpoints, and emails.
+Inbound's MCP (Model Context Protocol) server lets AI assistants manage your domains, endpoints, addresses, emails and Guard rules. It can also create **mailboxes**: virtual email accounts that an agent can read, reply from and send from.
 
-## Quick Start
+**Server URL:** `https://inbound.new/mcp`
 
-The fastest way to get started is using Inbound's hosted MCP server at `mcp.inbound.new/mcp`.
+## Connect
 
-### Cursor
+### With OAuth (recommended)
 
-Add to your Cursor MCP config (`.cursor/mcp.json` in your project or global config):
+Add the URL to your client. When it connects, it opens Inbound in your browser; sign in and approve access. No API key needed.
 
-```json
+<CodeGroup>
+
+```bash Claude Code
+claude mcp add --transport http inbound https://inbound.new/mcp
+```
+
+```json Cursor (.cursor/mcp.json)
 {
   "mcpServers": {
-    "inbound": {
-      "type": "http",
-      "url": "https://mcp.inbound.new/mcp",
-      "headers": {
-        "x-inbound-api-key": "your-api-key"
-      }
-    }
+    "inbound": { "type": "http", "url": "https://inbound.new/mcp" }
   }
 }
 ```
 
-### OpenCode
-
-Add to your `opencode.json` config:
-
-```json
+```json OpenCode (opencode.json)
 {
   "mcp": {
-    "inbound": {
-      "type": "remote",
-      "url": "https://mcp.inbound.new/mcp",
-      "headers": {
-        "x-inbound-api-key": "your-api-key"
-      }
-    }
+    "inbound": { "type": "remote", "url": "https://inbound.new/mcp" }
   }
 }
 ```
 
-### Claude Desktop
+</CodeGroup>
 
-Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+In Claude.ai and ChatGPT, add a custom connector with the same URL.
 
-```json
-{
-  "mcpServers": {
-    "inbound": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote",
-        "https://mcp.inbound.new/mcp",
-        "--header",
-        "x-inbound-api-key:${INBOUND_API_KEY}"
-      ],
-      "env": {
-        "INBOUND_API_KEY": "your-api-key"
-      }
-    }
-  }
-}
-```
+OAuth grants full access to your account, the same as an API key. The approval screen names the app and where it will send you back to; only approve apps you started the connection from.
 
-<Note>
-Claude Desktop connects over STDIO, so `mcp-remote` bridges it to the hosted inbound MCP server.
-</Note>
+### With an API key
 
-## Authentication
-
-The MCP server authenticates using your Inbound API key. Get your API key from the [dashboard](https://inbound.new/settings).
-
-### Domain Restriction (Optional)
-
-To restrict all operations to a single domain (and its subdomains), add the `x-inbound-domain` header:
+For scripts and clients without OAuth, send an API key from [settings](https://inbound.new/settings) as a bearer token:
 
 ```json
 {
   "mcpServers": {
     "inbound": {
       "type": "http",
-      "url": "https://mcp.inbound.new/mcp",
-      "headers": {
-        "x-inbound-api-key": "your-api-key",
-        "x-inbound-domain": "example.com"
-      }
+      "url": "https://inbound.new/mcp",
+      "headers": { "Authorization": "Bearer YOUR_API_KEY" }
     }
   }
 }
 ```
 
-This will filter results to show only `example.com` and subdomains like `mail.example.com`, `support.example.com`, etc.
+The `x-inbound-api-key` header also works. Clients that only support STDIO can bridge with `npx mcp-remote https://inbound.new/mcp --header "Authorization:Bearer ${INBOUND_API_KEY}"`.
 
-## Available Tools
+## Give an agent its own mailbox
 
-### Domains
+1. Ask your assistant to create a mailbox, e.g. *"Create a mailbox for agent@yourdomain.com called Support Agent"*. This calls `create_mailbox`, which returns a password shown once.
+2. Connect the agent to `https://inbound.new/mcp` with `Authorization: Bearer <mailbox password>`.
+3. The agent now has one email account: it can check its inbox, read, reply, send and archive. It can't see other mail in your account or send as any other address. The Inbound API enforces this.
 
-| Tool | Description |
-|------|-------------|
-| `list_domains` | List all domains in your account (respects domain restriction) |
+The same mailbox password works over [IMAP](/mailboxes/connect-imap) and [SMTP](/mailboxes/connect-smtp), and the mailbox appears in the [dashboard](https://inbound.new/mailboxes). The address must be on a verified domain; new accounts can use their instant `*.inbnd.dev` domain.
 
-### Endpoints
-
-| Tool | Description |
-|------|-------------|
-| `list_endpoints` | List webhook and email forwarding endpoints |
-| `create_endpoint` | Create a webhook, email forward, or email group endpoint |
-
-### Emails
+### Mailbox tools
 
 | Tool | Description |
 |------|-------------|
-| `list_emails` | List sent, received, and scheduled emails with filtering |
-| `get_email` | Get detailed information about a specific email including full content |
-| `send_email` | Send or schedule an email |
+| `whoami` | The mailbox's address, sending identity, scopes and unread count |
+| `list_messages` | Inbox, archive or sent folder, with `unread_only` and search |
+| `read_message` | Full message; marks it read |
+| `update_message` | Mark read/unread, archive/unarchive |
+| `get_thread` | The whole conversation |
+| `reply` | Reply to a received message, threaded |
+| `send_email` | Send a new email as the mailbox |
+| `download_attachment` | Fetch an attachment |
 
-### Threads
+## Account tools
 
-| Tool | Description |
-|------|-------------|
-| `list_threads` | List email conversations with previews |
-| `get_thread` | Get all messages in a thread |
+Connected with OAuth or an API key, the server exposes 50 tools:
 
-## Example Usage
+| Area | Tools |
+|------|-------|
+| Domains | `list_domains`, `get_domain`, `create_domain`, `update_domain`, `delete_domain`, `enable_domain_dkim` |
+| Endpoints | `list_endpoints`, `get_endpoint`, `create_endpoint`, `update_endpoint`, `delete_endpoint`, `test_endpoint` |
+| Addresses | `list_email_addresses`, `get_email_address`, `create_email_address`, `update_email_address`, `delete_email_address` |
+| Emails | `list_emails`, `get_email`, `send_email`, `reply_to_email`, `update_email`, `cancel_scheduled_email`, `pause_scheduled_email`, `resume_scheduled_email`, `retry_email_delivery`, `list_threads`, `get_thread`, `list_attachments`, `download_attachment` |
+| Mailboxes | `list_mailboxes`, `create_mailbox`, `update_mailbox`, `delete_mailbox`, `rotate_mailbox_password`, `get_mailbox`, `list_mailbox_messages`, `read_mailbox_message`, `update_mailbox_message`, `get_mailbox_thread`, `send_from_mailbox`, `reply_from_mailbox`, `download_mailbox_attachment` |
+| Guard | `list_guard_rules`, `get_guard_rule`, `create_guard_rule`, `update_guard_rule`, `delete_guard_rule`, `check_guard_rule`, `generate_guard_rule` |
 
-Once configured, you can ask your AI assistant to:
+To expose fewer tools, add `?toolsets=` with any of `domains,endpoints,addresses,emails,mailboxes,guard`, for example `https://inbound.new/mcp?toolsets=mailboxes,emails`.
 
-- "List all my domains"
-- "Show me the last 10 received emails"
-- "Send an email to support@example.com with subject 'Hello'"
-- "Create a webhook endpoint for notifications@mydomain.com"
-- "Show me the conversation thread with john@example.com"
-- "Get the full content of email ID abc123"
+## Example prompts
 
-## Available Prompts
+- "Show me unread email to support@mydomain.com"
+- "Create a webhook endpoint for https://example.com/hooks and route orders@mydomain.com to it"
+- "Create a mailbox for agent@mydomain.com and give me its MCP config"
+- "Reply to the last email from jane@example.com saying we'll ship Friday"
+- "Block cold sales outreach with a Guard rule"
 
-The MCP server includes a `getting-started` prompt that teaches the AI assistant how to use Inbound effectively. Most AI assistants will automatically discover and use this prompt.
-
-## Troubleshooting
-
-<AccordionGroup>
-  <Accordion title="Tools not appearing">
-    Make sure your API key is valid and has the necessary permissions. Check the MCP server logs for authentication errors.
-  </Accordion>
-  
-  <Accordion title="Domain filtering not working">
-    Ensure the `x-inbound-domain` header value matches exactly with your domain name in Inbound (case-sensitive).
-  </Accordion>
-  
-  <Accordion title="Connection refused">
-    If self-hosting, verify the server is running and the port is accessible. For the hosted version, check your network connectivity.
-  </Accordion>
-</AccordionGroup>
-
-## Security
-
-<Warning>
-Never commit your API key to version control. Use environment variables or a secrets manager.
-</Warning>
-
-Best practices:
-- Use environment variables for API keys: `"x-inbound-api-key": "$INBOUND_API_KEY"`
-- Restrict operations to specific domains using `x-inbound-domain`
-- Regularly rotate your API keys
-- Use separate API keys for different environments (dev, staging, production)
+The server is open source: [inboundemail/mcp](https://github.com/inboundemail/mcp).
