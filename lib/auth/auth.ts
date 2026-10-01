@@ -409,7 +409,11 @@ export const auth = betterAuth({
 					.where(eq(schema.userOnboarding.userId, user.id))
 					.limit(1);
 
-				if (onboarding && !onboarding.isCompleted) {
+				// Signing in to authorize an OAuth/MCP client: let the provider
+				// continue to consent instead of detouring through /welcome.
+				const inOAuthFlow = (await getCurrentOAuthClientId()) !== null;
+
+				if (onboarding && !onboarding.isCompleted && !inOAuthFlow) {
 					throw ctx.redirect("/welcome");
 				}
 
@@ -426,6 +430,7 @@ export const auth = betterAuth({
 							updatedAt: now,
 						})
 						.onConflictDoNothing();
+					if (inOAuthFlow) return;
 					throw ctx.redirect("/welcome");
 				}
 
@@ -440,7 +445,7 @@ export const auth = betterAuth({
 					return;
 				}
 
-				if ((await getCurrentOAuthClientId()) !== null) return;
+				if (inOAuthFlow) return;
 
 				console.log("Existing user logged in with email: ", user.email);
 				throw ctx.redirect("/logs");
