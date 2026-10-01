@@ -32,6 +32,9 @@ type Props = {
 };
 
 const POLL_MS = 2500;
+// Sender of the "Send me a test" email. Replying to it would go to our own
+// address, so replies to that email are addressed to the account email instead.
+const TEST_EMAIL_SENDER = "agent@inbnd.dev";
 const ease = [0.2, 0, 0, 1] as const;
 
 function useCopy() {
@@ -126,6 +129,8 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 
 	const address = domain ? `hello@${domain}` : "";
 	const latest = emails.find((email) => email.id === selectedId) ?? emails[0] ?? null;
+	const replyRecipient =
+		latest?.fromAddress?.toLowerCase() === TEST_EMAIL_SENDER ? accountEmail : null;
 	const inboxDone = emails.length > 0;
 	const agentDone = replyState === "sent" || promptCopied || skippedToPlan;
 	const activeStep = !inboxDone ? 1 : !agentDone ? 2 : 3;
@@ -164,12 +169,16 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 			const response = await fetch(`/api/e2/emails/${latest.id}/reply`, {
 				method: "POST",
 				headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-				body: JSON.stringify({ from: address, text: replyText }),
+				body: JSON.stringify({
+					from: address,
+					text: replyText,
+					...(replyRecipient ? { to: replyRecipient } : {}),
+				}),
 			});
 			const data = (await response.json().catch(() => null)) as { error?: string } | null;
 			if (!response.ok) throw new Error(data?.error ?? `Request failed (${response.status})`);
 			setReplyState("sent");
-			setReplyMessage(`Sent to ${latest.fromAddress ?? latest.from}. Check that inbox.`);
+			setReplyMessage(`Sent to ${replyRecipient ?? latest.fromAddress ?? latest.from}. Check that inbox.`);
 		} catch (error) {
 			setReplyState("error");
 			setReplyMessage(error instanceof Error ? error.message : "Reply failed");
@@ -197,7 +206,7 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 	};
 
 	const replyCode = `await inbound.emails.reply("${latest?.id ?? "email_id"}", {
-  from: "${address}",
+  from: "${address}",${replyRecipient ? `\n  to: "${replyRecipient}",` : ""}
   text: ${JSON.stringify(replyText)},
 })`;
 
