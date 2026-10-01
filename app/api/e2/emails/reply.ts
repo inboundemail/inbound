@@ -412,6 +412,7 @@ export const replyToEmail = new Elysia().post(
 			fromAddress,
 			fromDomain,
 			isAgentEmail,
+			recipients: toAddresses,
 		});
 		if (!outboundGuard.allowed) {
 			console.log("🚫 Reply blocked by outbound guard:", {

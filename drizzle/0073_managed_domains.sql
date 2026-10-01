@@ -1,0 +1,2 @@
+ALTER TABLE "email_domains" ADD COLUMN "kind" varchar(20) DEFAULT 'custom' NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "email_domains_one_managed_per_user" ON "email_domains" USING btree ("user_id") WHERE "email_domains"."kind" = 'managed';

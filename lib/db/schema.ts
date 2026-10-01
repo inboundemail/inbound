@@ -137,10 +137,17 @@ export const emailDomains = pgTable("email_domains", {
 	receiveDmarcEmails: boolean("receive_dmarc_emails").default(false), // Whether to receive DMARC report emails (dmarc@domain)
 	// Tenant association (NEW)
 	tenantId: varchar("tenant_id", { length: 255 }), // References sesTenants.id
+	// 'custom' = a domain the user brought; 'managed' = an instant <slug>.inbnd.dev
+	// subdomain provisioned by inbound (see lib/domains-and-dns/managed-domain.ts)
+	kind: varchar("kind", { length: 20 }).notNull().default("custom"),
 	createdAt: timestamp("created_at").defaultNow(),
 	updatedAt: timestamp("updated_at").defaultNow(),
 	userId: varchar("user_id", { length: 255 }).notNull(),
-});
+}, (table) => ({
+	oneManagedDomainPerUser: uniqueIndex("email_domains_one_managed_per_user")
+		.on(table.userId)
+		.where(sql`${table.kind} = 'managed'`),
+}));
 
 export const inboundOAuthGrants = pgTable(
 	"inbound_oauth_grants",

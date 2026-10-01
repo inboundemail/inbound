@@ -512,6 +512,13 @@
       "when": 1790733361596,
       "tag": "0072_idempotency_and_envelope_recipients",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1790879667393,
+      "tag": "0073_managed_domains",
+      "breakpoints": true
     }
   ]
 }

@@ -612,6 +612,7 @@ export async function relaySmtpMessage(params: {
 		fromAddress: message.fromAddress,
 		fromDomain: message.fromDomain,
 		isAgentEmail,
+		recipients: params.envelope.rcptTo,
 	});
 
 	if (!outboundGuard.allowed) {

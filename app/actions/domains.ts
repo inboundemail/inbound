@@ -1,6 +1,7 @@
 "use server"
 
 import { auth } from "@/lib/auth/auth"
+import { isManagedDomainName } from '@/lib/domains-and-dns/managed-domain'
 import { headers } from "next/headers"
 import { revalidatePath } from 'next/cache'
 import { verifyDnsRecords, reevaluateCanReceiveEmails } from '@/lib/domains-and-dns/dns'
@@ -524,6 +525,18 @@ export async function deleteDomain(domain: string, domainId: string) {
     }
 
     console.log(`✅ Delete Domain - Domain ownership verified for: ${domain}`)
+
+    // The instant <slug>.inbnd.dev domain stays with the account
+    if (isManagedDomainName(domainRecord.domain)) {
+      return {
+        success: false,
+        domain,
+        domainId,
+        message: '',
+        error: "Your inbnd.dev domain is included with your account and can't be deleted",
+        timestamp: new Date()
+      }
+    }
 
     // Step 1: Remove SES receipt rules first (if domain is verified)
     if (domainRecord.status === 'verified' || domainRecord.status === 'ses_verified') {

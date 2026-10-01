@@ -283,6 +283,11 @@ export const sendEmail = new Elysia().post(
 			fromAddress,
 			fromDomain,
 			isAgentEmail,
+			recipients: [
+				...toArray(body.to),
+				...toArray(body.cc),
+				...toArray(body.bcc),
+			],
 		});
 		if (!outboundGuard.allowed) {
 			console.log("🚫 Outbound send blocked:", {

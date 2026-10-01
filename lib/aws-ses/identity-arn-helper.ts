@@ -69,6 +69,7 @@ export async function getTenantSendingInfo(
         domain: emailDomains.domain,
         tenantId: emailDomains.tenantId,
         userId: emailDomains.userId,
+        kind: emailDomains.kind,
       })
       .from(emailDomains)
       .where(
@@ -119,7 +120,11 @@ export async function getTenantSendingInfo(
       
       // Build the identity ARN - domain has its own tenant/identity
       // Format: arn:aws:ses:REGION:ACCOUNT_ID:identity/DOMAIN
-      const identityArn = `arn:aws:ses:${awsRegion}:${awsAccountId}:identity/${fromDomain}`
+      // Managed <slug>.inbnd.dev domains have no SES identity of their own; they
+      // send through the shared inbnd.dev identity, which is associated with
+      // the user's tenant when the managed domain is provisioned.
+      const identityDomain = domain.kind === 'managed' ? 'inbnd.dev' : fromDomain
+      const identityArn = `arn:aws:ses:${awsRegion}:${awsAccountId}:identity/${identityDomain}`
       
       console.log(`✅ Built identity ARN for tenant tracking: ${identityArn}`)
       

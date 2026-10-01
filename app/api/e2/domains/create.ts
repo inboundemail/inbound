@@ -17,6 +17,10 @@ import {
 import { checkDomainCanReceiveEmails } from "@/lib/domains-and-dns/dns";
 import { isSubdomain } from "@/lib/domains-and-dns/domain-utils";
 import { initiateDomainVerification } from "@/lib/domains-and-dns/domain-verification";
+import {
+	isManagedDomainName,
+	MANAGED_DOMAIN_ROOT,
+} from "@/lib/domains-and-dns/managed-domain";
 import { validateAndRateLimit } from "../lib/auth";
 
 // AWS Region for MX record
@@ -110,6 +114,15 @@ export const createDomain = new Elysia().post(
 			console.log("❌ Invalid domain format:", domain);
 			set.status = 400;
 			return { error: "Invalid domain format" };
+		}
+
+		// <slug>.inbnd.dev subdomains are provisioned by inbound itself (one per user)
+		if (isManagedDomainName(domain)) {
+			set.status = 400;
+			return {
+				error: `${MANAGED_DOMAIN_ROOT} subdomains are provided automatically and can't be added manually`,
+				code: "MANAGED_DOMAIN_RESERVED",
+			};
 		}
 
 		// Check domain block list

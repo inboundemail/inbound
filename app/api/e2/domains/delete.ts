@@ -80,6 +80,13 @@ export const deleteDomain = new Elysia().delete(
     const domain = domainResult[0];
     console.log("✅ Found domain:", domain.domain, "status:", domain.status);
 
+    // The instant <slug>.inbnd.dev domain stays with the account, so agents
+    // pointed at it keep working after a custom domain is added.
+    if (domain.kind === "managed") {
+      set.status = 400;
+      return { error: "Your inbnd.dev domain is included with your account and can't be deleted" };
+    }
+
     // Check if this is a root domain with dependent subdomains
     if (isRootDomain(domain.domain)) {
       const dependentSubdomains = await getDependentSubdomains(

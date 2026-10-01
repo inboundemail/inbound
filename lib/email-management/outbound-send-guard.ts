@@ -10,6 +10,11 @@ import {
 	sesTenants,
 } from "@/lib/db/schema";
 import { getRootDomain, isSubdomain } from "@/lib/domains-and-dns/domain-utils";
+import {
+	checkUnpaidManagedRecipients,
+	hasPaidPlan,
+	MANAGED_DOMAIN_KIND,
+} from "@/lib/domains-and-dns/managed-domain";
 import { sendHarkNotification } from "@/lib/notifications/hark";
 
 type GuardReasonCode =
@@ -19,6 +24,7 @@ type GuardReasonCode =
 	| "tenant_inactive"
 	| "sender_address_disabled"
 	| "hourly_send_limit_exceeded"
+	| "managed_domain_unpaid"
 	| "guard_check_failed";
 
 export interface OutboundSendGuardResult {
@@ -34,6 +40,8 @@ interface OutboundSendGuardInput {
 	fromAddress: string;
 	fromDomain: string;
 	isAgentEmail: boolean;
+	/** All envelope recipients (to/cc/bcc). Required to send from a managed domain before payment. */
+	recipients?: string[];
 }
 
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
@@ -267,7 +275,7 @@ function deny(
 export async function enforceOutboundSendGuard(
 	input: OutboundSendGuardInput,
 ): Promise<OutboundSendGuardResult> {
-	const { userId, fromAddress, fromDomain, isAgentEmail } = input;
+	const { userId, fromAddress, fromDomain, isAgentEmail, recipients } = input;
 
 	try {
 		const [userRecord] = await db
@@ -404,6 +412,7 @@ export async function enforceOutboundSendGuard(
 				id: emailDomains.id,
 				domain: emailDomains.domain,
 				tenantId: emailDomains.tenantId,
+				kind: emailDomains.kind,
 			})
 			.from(emailDomains)
 			.where(
@@ -423,6 +432,7 @@ export async function enforceOutboundSendGuard(
 						id: emailDomains.id,
 						domain: emailDomains.domain,
 						tenantId: emailDomains.tenantId,
+						kind: emailDomains.kind,
 					})
 					.from(emailDomains)
 					.where(
@@ -450,6 +460,22 @@ export async function enforceOutboundSendGuard(
 				"Email sending is disabled for this account.",
 				"tenant_inactive",
 			);
+		}
+
+		if (verifiedDomain.kind === MANAGED_DOMAIN_KIND && !(await hasPaidPlan(userId))) {
+			const recipientCheck = await checkUnpaidManagedRecipients({
+				userId,
+				userEmail: userRecord.email,
+				domain: verifiedDomain.domain,
+				recipients: recipients ?? [],
+			});
+			if (!recipientCheck.allowed) {
+				return deny(
+					403,
+					`Until you subscribe, ${verifiedDomain.domain} can only send to your account email or reply to people who emailed it in the last 24 hours. Subscribe at https://inbound.new/welcome to send to anyone.`,
+					"managed_domain_unpaid",
+				);
+			}
 		}
 
 		const [senderAddressRecord] = await db
