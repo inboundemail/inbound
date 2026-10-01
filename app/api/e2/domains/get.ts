@@ -140,6 +140,8 @@ const GetDomainResponse = t.Object({
   // Subdomain inheritance info
   inheritsFromParent: t.Optional(t.Boolean()),
   parentDomain: t.Optional(t.Nullable(t.String())),
+  // 'managed' = instant <slug>.inbnd.dev domain provisioned by inbound (no DNS to check)
+  kind: t.Optional(t.String()),
 });
 
 export const getDomain = new Elysia().get(
@@ -188,8 +190,14 @@ export const getDomain = new Elysia().get(
     // Check if this is a subdomain that inherits verification from a parent
     let inheritsFromParent = false;
     let parentDomainName: string | null = null;
+    const isManaged = domain.kind === "managed";
 
-    if (isSubdomain(domain.domain)) {
+    if (isManaged) {
+      // Managed <slug>.inbnd.dev domains send and receive through inbound's own
+      // inbnd.dev setup, so there is nothing for the user to verify.
+      inheritsFromParent = true;
+      parentDomainName = "inbnd.dev";
+    } else if (isSubdomain(domain.domain)) {
       const rootDomain = getRootDomain(domain.domain);
       if (rootDomain) {
         // Check if user has the parent domain verified
@@ -321,10 +329,11 @@ export const getDomain = new Elysia().get(
       // Subdomain inheritance info
       inheritsFromParent,
       parentDomain: parentDomainName,
+      kind: domain.kind,
     };
 
     // If check=true, perform DNS and SES verification checks
-    if (check) {
+    if (check && !isManaged) {
       console.log(
         `🔍 Performing verification check for domain: ${domain.domain}`
       );

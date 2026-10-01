@@ -866,8 +866,11 @@ export default function DomainDetailPage() {
 	// canSend: Domain can send emails if verified (either directly or inherited from parent)
 	const canSend = status === DOMAIN_STATUS.VERIFIED;
 
+	// Managed <slug>.inbnd.dev domains are ready to send and receive on creation
+	const isManagedDomain = domainDetailsData?.kind === "managed";
+
 	// canReceive: Domain can receive emails if MX record is verified
-	const canReceive = mxRecordVerified;
+	const canReceive = mxRecordVerified || isManagedDomain;
 
 	// Determine what to show based on domain status
 	const showEmailSection = status === DOMAIN_STATUS.VERIFIED;
@@ -970,7 +973,8 @@ export default function DomainDetailPage() {
 							{isRefreshingVerification ? "Checking..." : "Refresh"}
 						</Button>
 
-						{/* Delete Domain Button */}
+						{/* Delete Domain Button (the managed inbnd.dev domain can't be deleted) */}
+						{!isManagedDomain && (
 						<Dialog
 							open={isDeleteDialogOpen}
 							onOpenChange={setIsDeleteDialogOpen}
@@ -1042,6 +1046,7 @@ export default function DomainDetailPage() {
 								</DialogFooter>
 							</DialogContent>
 						</Dialog>
+						)}
 					</div>
 				</div>
 

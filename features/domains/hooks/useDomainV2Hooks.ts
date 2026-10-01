@@ -145,6 +145,7 @@ export interface DomainDetailsResponse {
 	// E2 API specific fields
 	inheritsFromParent?: boolean;
 	parentDomain?: string | null;
+	kind?: string;
 	// DNS records are always included in e2 response
 	dnsRecords?: Array<{
 		id: string;
