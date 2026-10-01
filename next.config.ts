@@ -119,6 +119,8 @@ const nextConfig: NextConfig = {
 				permanent: true,
 			},
 			{ source: "/email-api", destination: "/", permanent: true },
+			// Onboarding moved to /welcome (instant inbnd.dev inbox, agent setup, subscribe)
+			{ source: "/onboarding", destination: "/welcome", permanent: false },
 			{ source: "/examples", destination: "/docs", permanent: true },
 			{
 				source: "/improvmx-alternative",
