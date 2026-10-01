@@ -274,6 +274,7 @@ export const listDomains = new Elysia().get(
           canReceiveEmails: domain.canReceiveEmails || false,
           hasMxRecords: domain.hasMxRecords || false,
           isCatchAllEnabled: domain.isCatchAllEnabled || false,
+          includeSubdomains: domain.includeSubdomains ?? false,
           receiveDmarcEmails: domain.receiveDmarcEmails || false,
           lastDnsCheck: domain.lastDnsCheck?.toISOString() || null,
           lastSesCheck: domain.lastSesCheck?.toISOString() || null,
