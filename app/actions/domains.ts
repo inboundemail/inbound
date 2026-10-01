@@ -545,6 +545,20 @@ export async function deleteDomain(domain: string, domainId: string) {
         const sesRuleManager = new AWSSESReceiptRuleManager()
         const batchManager = new BatchRuleManager('inbound-catchall-domain-default')
 
+        if (domainRecord.subdomainReceiptRuleName) {
+          const wildcardRemoveResult = await sesRuleManager.removeDomainFromBatchRule({
+            domain: `.${domain}`,
+            ruleSetName: 'inbound-catchall-domain-default',
+            ruleName: domainRecord.subdomainReceiptRuleName
+          })
+
+          if (wildcardRemoveResult.success) {
+            await batchManager.decrementRuleCapacityByName(domainRecord.subdomainReceiptRuleName, 1)
+          } else {
+            console.warn(`⚠️ Failed to remove subdomain wildcard from batch rule: ${wildcardRemoveResult.error}`)
+          }
+        }
+
         // Check if domain uses batch catch-all rule (new format: batch-rule-XXX)
         if (domainRecord.catchAllReceiptRuleName?.startsWith('batch-rule-')) {
           console.log(`🔧 Removing domain from batch catch-all rule: ${domainRecord.catchAllReceiptRuleName}`)

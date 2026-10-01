@@ -167,7 +167,12 @@ export class BatchRuleManager {
         .from(emailDomains)
         .where(eq(emailDomains.catchAllReceiptRuleName, rule.ruleName))
       
-      const actualCount = domainCount[0]?.count || 0
+      const subdomainCount = await db
+        .select({ count: sql<number>`cast(count(*) as int)` })
+        .from(emailDomains)
+        .where(eq(emailDomains.subdomainReceiptRuleName, rule.ruleName))
+      
+      const actualCount = (domainCount[0]?.count || 0) + (subdomainCount[0]?.count || 0)
       
       await db
         .update(sesReceiptRules)

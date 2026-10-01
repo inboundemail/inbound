@@ -140,6 +140,11 @@ export const emailDomains = pgTable("email_domains", {
 	// 'custom' = a domain the user brought; 'managed' = an instant <slug>.inbnd.dev
 	// subdomain provisioned by inbound (see lib/domains-and-dns/managed-domain.ts)
 	kind: varchar("kind", { length: 20 }).notNull().default("custom"),
+	// Root domains only: receive mail for every subdomain via a ".<domain>" SES recipient
+	includeSubdomains: boolean("include_subdomains").notNull().default(false),
+	subdomainReceiptRuleName: varchar("subdomain_receipt_rule_name", {
+		length: 255,
+	}),
 	createdAt: timestamp("created_at").defaultNow(),
 	updatedAt: timestamp("updated_at").defaultNow(),
 	userId: varchar("user_id", { length: 255 }).notNull(),

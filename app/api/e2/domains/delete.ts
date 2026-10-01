@@ -130,6 +130,28 @@ export const deleteDomain = new Elysia().delete(
           "inbound-catchall-domain-default"
         );
 
+        if (domain.subdomainReceiptRuleName) {
+          console.log(
+            `🔧 Removing .${domain.domain} from batch rule: ${domain.subdomainReceiptRuleName}`
+          );
+          const wildcardRemoveResult = await sesManager.removeDomainFromBatchRule({
+            domain: `.${domain.domain}`,
+            ruleSetName: "inbound-catchall-domain-default",
+            ruleName: domain.subdomainReceiptRuleName,
+          });
+
+          if (wildcardRemoveResult.success) {
+            await batchManager.decrementRuleCapacityByName(
+              domain.subdomainReceiptRuleName,
+              1
+            );
+          } else {
+            console.warn(
+              `⚠️ Failed to remove subdomain wildcard from batch rule: ${wildcardRemoveResult.error}`
+            );
+          }
+        }
+
         // Check if domain uses batch catch-all rule (new format: batch-rule-XXX)
         if (domain.catchAllReceiptRuleName?.startsWith("batch-rule-")) {
           console.log(

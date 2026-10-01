@@ -13,6 +13,7 @@ import { nanoid } from "nanoid";
 import type { Endpoint } from "@/features/endpoints/types";
 import { getTenantSendingInfoForDomainOrParent } from "@/lib/aws-ses/identity-arn-helper";
 import { db } from "@/lib/db";
+import { findWildcardParentDomain } from "@/lib/db/domains";
 import {
 	emailAddresses,
 	emailDomains,
@@ -754,6 +755,38 @@ async function getThreadRootEndpoint(
 }
 
 /**
+ * Catch-all settings of a verified parent domain with "include subdomains" enabled.
+ * Skipped when the user registered the exact domain themselves, so that row's own
+ * catch-all setting stays authoritative.
+ */
+async function findWildcardCatchAll(
+	domain: string,
+	userId: string,
+): Promise<{
+	catchAllEndpointId: string | null;
+	catchAllWebhookId: string | null;
+} | null> {
+	const parent = await findWildcardParentDomain(domain);
+	if (!parent || parent.userId !== userId || !parent.isCatchAllEnabled) {
+		return null;
+	}
+
+	const exactDomain = await db
+		.select({ id: emailDomains.id })
+		.from(emailDomains)
+		.where(and(eq(emailDomains.domain, domain), eq(emailDomains.userId, userId)))
+		.limit(1);
+	if (exactDomain[0]) {
+		return null;
+	}
+
+	return {
+		catchAllEndpointId: parent.catchAllEndpointId,
+		catchAllWebhookId: parent.catchAllWebhookId,
+	};
+}
+
+/**
  * Find endpoint configuration for an email recipient
  * Priority: endpointId → webhookId → catch-all endpoint → catch-all webhook
  */
@@ -852,8 +885,11 @@ async function findEndpointForEmail(
 			)
 			.limit(1);
 
-		if (domainRecord[0]) {
-			const { catchAllEndpointId, catchAllWebhookId } = domainRecord[0];
+		const catchAllDomain =
+			domainRecord[0] ?? (await findWildcardCatchAll(domain, userId));
+
+		if (catchAllDomain) {
+			const { catchAllEndpointId, catchAllWebhookId } = catchAllDomain;
 			console.log(
 				`🌐 findEndpointForEmail - Found catch-all domain: ${domain}, endpointId: ${catchAllEndpointId}, webhookId: ${catchAllWebhookId}`,
 			);

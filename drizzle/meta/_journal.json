@@ -519,6 +519,13 @@
       "when": 1790879667393,
       "tag": "0073_managed_domains",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1790887807869,
+      "tag": "0074_wildcard_subdomains",
+      "breakpoints": true
     }
   ]
 }

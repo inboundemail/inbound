@@ -1,6 +1,6 @@
 import { db } from './index'
 import { emailDomains, domainDnsRecords, emailAddresses, type EmailDomain, type NewEmailDomain, type DomainDnsRecord, type NewDomainDnsRecord, type EmailAddress, type NewEmailAddress } from './schema'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, inArray, like, ne } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { getRootDomain, isSubdomain } from '@/lib/domains-and-dns/domain-utils'
 
@@ -536,3 +536,135 @@ export async function getDependentSubdomains(
     return domainRoot === rootDomain
   })
 } 
+
+/**
+ * Domains that can claim a subdomain's mail via "include subdomains", nearest first,
+ * up to and including the registrable root.
+ *
+ * @example
+ * getParentDomainCandidates('a.b.example.com') // ['b.example.com', 'example.com']
+ */
+export function getParentDomainCandidates(domain: string): string[] {
+  const root = getRootDomain(domain)
+  if (!root || domain === root || !domain.endsWith('.' + root)) return []
+
+  const labels = domain.split('.')
+  const candidates: string[] = []
+  for (let i = 1; i < labels.length; i++) {
+    const candidate = labels.slice(i).join('.')
+    candidates.push(candidate)
+    if (candidate === root) break
+  }
+  return candidates
+}
+
+function nearestDomain<T extends { domain: string }>(rows: T[]): T | null {
+  return rows.reduce<T | null>(
+    (best, row) => (!best || row.domain.length > best.domain.length ? row : best),
+    null
+  )
+}
+
+/**
+ * Verified ancestor of `domain` that has "include subdomains" enabled, regardless of owner.
+ * Used on the receiving path, where the recipient domain is not yet tied to a user.
+ */
+export async function findWildcardParentDomain(domain: string): Promise<EmailDomain | null> {
+  const candidates = getParentDomainCandidates(domain)
+  if (candidates.length === 0) return null
+
+  const rows = await db
+    .select()
+    .from(emailDomains)
+    .where(and(
+      inArray(emailDomains.domain, candidates),
+      eq(emailDomains.includeSubdomains, true),
+      eq(emailDomains.status, 'verified')
+    ))
+
+  return nearestDomain(rows)
+}
+
+/**
+ * Ancestor of `domain` with "include subdomains" enabled that belongs to someone else.
+ * Verification status is deliberately ignored so a lapsed parent still blocks claims.
+ */
+export async function findWildcardAncestorOwnedByOthers(
+  domain: string,
+  userId: string
+): Promise<EmailDomain | null> {
+  const candidates = getParentDomainCandidates(domain)
+  if (candidates.length === 0) return null
+
+  const rows = await db
+    .select()
+    .from(emailDomains)
+    .where(and(
+      inArray(emailDomains.domain, candidates),
+      eq(emailDomains.includeSubdomains, true),
+      ne(emailDomains.userId, userId)
+    ))
+
+  return nearestDomain(rows)
+}
+
+/**
+ * Subdomains of `rootDomain` registered by users other than `userId`.
+ */
+export async function findSubdomainsOwnedByOthers(
+  rootDomain: string,
+  userId: string
+): Promise<EmailDomain[]> {
+  return db
+    .select()
+    .from(emailDomains)
+    .where(and(
+      like(emailDomains.domain, `%.${rootDomain}`),
+      ne(emailDomains.userId, userId)
+    ))
+}
+
+export interface InboundDomainOwner {
+  userId: string
+  domain: string
+  status: string
+  canReceiveEmails: boolean | null
+  viaWildcard: boolean
+}
+
+/**
+ * Resolve which account receives mail addressed to `domain`.
+ *
+ * A verified exact row always wins. Otherwise a verified ancestor with "include
+ * subdomains" wins, so an unverified exact row can never capture mail on a wildcard
+ * domain (the domain-create guard blocks this; this is the defensive second layer).
+ * With no wildcard ancestor, any exact row is used as before.
+ */
+export async function resolveInboundDomainOwner(domain: string): Promise<InboundDomainOwner | null> {
+  const candidates = getParentDomainCandidates(domain)
+
+  const rows = await db
+    .select({
+      userId: emailDomains.userId,
+      domain: emailDomains.domain,
+      status: emailDomains.status,
+      canReceiveEmails: emailDomains.canReceiveEmails,
+      includeSubdomains: emailDomains.includeSubdomains,
+    })
+    .from(emailDomains)
+    .where(inArray(emailDomains.domain, [domain, ...candidates]))
+
+  const exact = rows.find(row => row.domain === domain)
+  if (exact?.status === 'verified') {
+    return { ...exact, viaWildcard: false }
+  }
+
+  const wildcard = nearestDomain(
+    rows.filter(row => row.domain !== domain && row.includeSubdomains && row.status === 'verified')
+  )
+  if (wildcard) {
+    return { ...wildcard, viaWildcard: true }
+  }
+
+  return exact ? { ...exact, viaWildcard: false } : null
+}

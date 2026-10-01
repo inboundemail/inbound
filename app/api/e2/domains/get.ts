@@ -17,7 +17,11 @@ import {
   SetIdentityMailFromDomainCommand,
   VerifyDomainIdentityCommand,
 } from "@aws-sdk/client-ses";
-import { isSubdomain, getRootDomain } from "@/lib/domains-and-dns/domain-utils";
+import {
+  isSubdomain,
+  getRootDomain,
+  getWildcardMxRecord,
+} from "@/lib/domains-and-dns/domain-utils";
 
 // AWS SES Client setup
 const awsRegion = process.env.AWS_REGION || "us-east-2";
@@ -70,6 +74,14 @@ const DnsRecordSchema = t.Object({
   isVerified: t.Boolean(),
   lastChecked: t.Nullable(t.String({ format: "date-time" })),
   createdAt: t.String({ format: "date-time" }),
+});
+
+const SubdomainDnsRecordSchema = t.Object({
+  type: t.String(),
+  name: t.String(),
+  value: t.String(),
+  description: t.Optional(t.String()),
+  isRequired: t.Boolean(),
 });
 
 const VerificationDnsRecordSchema = t.Object({
@@ -125,6 +137,8 @@ const GetDomainResponse = t.Object({
   lastSesCheck: t.Nullable(t.String({ format: "date-time" })),
   isCatchAllEnabled: t.Boolean(),
   catchAllEndpointId: t.Nullable(t.String()),
+  includeSubdomains: t.Boolean(),
+  subdomainDnsRecords: t.Array(SubdomainDnsRecordSchema),
   mailFromDomain: t.Nullable(t.String()),
   mailFromDomainStatus: t.Nullable(t.String()),
   mailFromDomainVerifiedAt: t.Nullable(t.String({ format: "date-time" })),
@@ -315,6 +329,10 @@ export const getDomain = new Elysia().get(
       lastSesCheck: domain.lastSesCheck?.toISOString() || null,
       isCatchAllEnabled: domain.isCatchAllEnabled || false,
       catchAllEndpointId: domain.catchAllEndpointId,
+      includeSubdomains: domain.includeSubdomains,
+      subdomainDnsRecords: domain.includeSubdomains
+        ? [getWildcardMxRecord(domain.domain)]
+        : [],
       mailFromDomain: domain.mailFromDomain,
       mailFromDomainStatus: domain.mailFromDomainStatus,
       mailFromDomainVerifiedAt:
