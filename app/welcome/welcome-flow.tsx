@@ -12,6 +12,7 @@ import { signOut } from "@/lib/auth/auth-client";
 type InboxEmail = {
 	id: string;
 	from: string;
+	fromName: string | null;
 	fromAddress: string | null;
 	to: string | null;
 	subject: string;
@@ -241,6 +242,7 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 								<div className="flex flex-col gap-3 rounded-xl border border-[#e7e5e4] bg-[#fafaf9] px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
 									<button
 										type="button"
+										data-track="welcome: copy address"
 										onClick={() => copy("address", address)}
 										className="group flex min-w-0 items-center gap-2.5 text-left"
 										aria-label="Copy inbox address"
@@ -258,6 +260,7 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 									</button>
 									<div className="flex shrink-0 items-center gap-2">
 										<a
+											data-track="welcome: open email app"
 											href={`mailto:${address}?subject=${encodeURIComponent("Hello inbound")}&body=${encodeURIComponent("Testing my new inbox.")}`}
 											className="rounded-lg bg-[#8161FF] px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#6b4fd9]"
 										>
@@ -265,6 +268,7 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 										</a>
 										<button
 											type="button"
+											data-track="welcome: send test email"
 											onClick={sendTestEmail}
 											disabled={testState === "sending"}
 											className="rounded-lg border border-[#e7e5e4] bg-white px-3.5 py-2 text-sm font-medium transition-colors hover:border-[#d6d3d1] disabled:opacity-60"
@@ -309,7 +313,7 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 																	<span className={`mt-1.5 size-2 shrink-0 rounded-full ${selected ? "bg-[#8161FF]" : "bg-transparent"}`} />
 																	<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 																		<span className="flex items-center justify-between gap-3">
-																			<span className="truncate text-sm font-medium">{email.from}</span>
+																			<span className="truncate text-sm font-medium">{email.fromName ?? email.fromAddress ?? email.from}</span>
 																			<span className="shrink-0 text-xs text-[#a8a29e]">{timeAgo(email.receivedAt)}</span>
 																		</span>
 																		<span className="truncate text-sm text-[#52525b]">{email.subject}</span>
@@ -359,6 +363,7 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 									{apiKey ? (
 										<button
 											type="button"
+											data-track="welcome: copy api key"
 											onClick={() => copy("key", apiKey)}
 											className="group flex items-center justify-between gap-3 rounded-lg border border-[#e7e5e4] bg-[#fafaf9] px-3.5 py-2.5 text-left"
 										>
@@ -372,6 +377,7 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 									) : (
 										<button
 											type="button"
+											data-track="welcome: create api key"
 											onClick={createKey}
 											disabled={createApiKey.isPending}
 											className="self-start rounded-lg bg-[#1c1917] px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#3f3f46] disabled:opacity-60"
@@ -399,6 +405,7 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 									<div className="flex flex-wrap items-center gap-3">
 										<button
 											type="button"
+											data-track="welcome: run reply"
 											onClick={sendReply}
 											disabled={!apiKey || !latest || replyState === "sending"}
 											className="rounded-lg bg-[#8161FF] px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#6b4fd9] disabled:cursor-not-allowed disabled:opacity-50"
@@ -417,6 +424,7 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 									<div className="flex flex-wrap items-center gap-3">
 										<button
 											type="button"
+											data-track="welcome: copy setup prompt"
 											onClick={async () => {
 												await copy("prompt", agentPrompt(domain));
 												setPromptCopied(true);
@@ -428,6 +436,7 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 										{activeStep === 2 && (
 											<button
 												type="button"
+												data-track="welcome: do this later"
 												onClick={() => setSkippedToPlan(true)}
 												className="text-sm text-[#78716c] transition-colors hover:text-[#1c1917]"
 											>
@@ -473,6 +482,7 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 									<div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
 										<button
 											type="button"
+											data-track="welcome: subscribe"
 											onClick={subscribe}
 											disabled={subscribing}
 											className="rounded-xl bg-[#8161FF] px-5 py-3 text-base font-medium text-white transition-[background-color,transform] duration-200 ease-[cubic-bezier(0.2,0,0,1)] hover:bg-[#6b4fd9] active:scale-[0.99] disabled:opacity-60"

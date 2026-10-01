@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { gte } from "drizzle-orm";
+import { gte, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { dayKey, lastDays, readOverview, readPage } from "@/lib/analytics/store";
 import { auth } from "@/lib/auth/auth";
@@ -32,9 +32,19 @@ export async function GET(request: Request) {
 	const days = lastDays(range);
 	const since = new Date(`${days[0]}T00:00:00Z`);
 
-	const [overview, newUsers] = await Promise.all([
+	const [overview, newUsers, welcomeFunnel] = await Promise.all([
 		readOverview(days),
 		db.select({ createdAt: user.createdAt }).from(user).where(gte(user.createdAt, since)),
+		// /welcome funnel: instant inbnd.dev inboxes created in range, and how many got mail
+		db.execute<{ created: number; received_email: number }>(sql`
+			select count(*)::int as created,
+				count(*) filter (where exists (
+					select 1 from structured_emails se
+					where se.user_id = d.user_id and se.recipient ilike '%@' || d.domain
+				))::int as received_email
+			from email_domains d
+			where d.kind = 'managed' and d.created_at >= ${since.toISOString()}
+		`),
 	]);
 
 	const signupsByDay: Record<string, number> = {};
@@ -73,5 +83,9 @@ export async function GET(request: Request) {
 		referrers: overview.referrers,
 		devices: overview.devices,
 		pages,
+		welcome: {
+			inboxesCreated: Number(welcomeFunnel.rows?.[0]?.created ?? 0),
+			inboxesThatReceivedEmail: Number(welcomeFunnel.rows?.[0]?.received_email ?? 0),
+		},
 	});
 }

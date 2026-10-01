@@ -52,10 +52,14 @@ export async function GET() {
 		try {
 			attachmentCount = (JSON.parse(row.attachments ?? "[]") as unknown[]).length;
 		} catch {}
+		const sender = from?.addresses?.[0];
+		const senderName = sender?.name?.replace(/^"|"$/g, "").trim() || null;
+		const senderAddress = sender?.address ?? null;
 		return {
 			id: row.id,
-			from: from?.text ?? from?.addresses?.[0]?.address ?? "unknown sender",
-			fromAddress: from?.addresses?.[0]?.address ?? null,
+			from: senderName && senderAddress ? `${senderName} <${senderAddress}>` : (senderAddress ?? from?.text ?? "unknown sender"),
+			fromName: senderName,
+			fromAddress: senderAddress,
 			to: row.recipient,
 			subject: row.subject ?? "(no subject)",
 			text: (row.textBody ?? "").trim().slice(0, 600),
