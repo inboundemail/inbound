@@ -23,8 +23,15 @@ function oaiq(...args: unknown[]) {
 	window.oaiq(...args);
 }
 
+// Checkout success pages can mount more than once before their success
+// params are cleared; remember the URL already counted in this page load.
+let lastSubscriptionUrl: string | null = null;
+
 /** A paid subscription started (Stripe checkout completed). */
 export function measureSubscriptionCreated() {
+	if (typeof window === "undefined") return;
+	if (lastSubscriptionUrl === window.location.href) return;
+	lastSubscriptionUrl = window.location.href;
 	oaiq("measure", "subscription_created", { type: "plan_enrollment" });
 }
 
