@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { nanoid } from "nanoid";
 import { auth } from "@/lib/auth/auth";
+import { getEntryPlanOffer } from "@/lib/billing/entry-plan";
 import { db } from "@/lib/db";
 import { userOnboarding } from "@/lib/db/schema";
 import { ensureManagedDomain, hasPaidPlan } from "@/lib/domains-and-dns/managed-domain";
@@ -28,7 +29,7 @@ export default async function WelcomePage() {
 	const session = await auth.api.getSession({ headers: await headers() }).catch(() => null);
 	if (!session?.user) redirect("/login");
 
-	const [domainResult, paid, price] = await Promise.all([
+	const [domainResult, paid, listPrice, offer] = await Promise.all([
 		ensureManagedDomain(session.user.id).then(
 			(domain) => ({ domain: domain.domain, error: null }),
 			(error: unknown) => {
@@ -38,6 +39,7 @@ export default async function WelcomePage() {
 		),
 		hasPaidPlan(session.user.id),
 		planPrice(),
+		getEntryPlanOffer(session.user.id),
 	]);
 
 	// Paying users are done onboarding; without this the sign-in hook keeps
@@ -58,8 +60,8 @@ export default async function WelcomePage() {
 			accountEmail={session.user.email}
 			firstName={session.user.name?.trim().split(/\s+/)[0] || null}
 			paid={paid}
-			price={price}
-			planId={PLAN_ID}
+			price={offer.price ?? listPrice}
+			returning={offer.returning}
 		/>
 	);
 }

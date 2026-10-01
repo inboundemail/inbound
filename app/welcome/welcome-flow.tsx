@@ -1,6 +1,5 @@
 "use client";
 
-import { useCustomer } from "autumn-js/react";
 import { Check, Copy, Loader2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
@@ -28,7 +27,8 @@ type Props = {
 	firstName: string | null;
 	paid: boolean;
 	price: number | null;
-	planId: string;
+	/** Paid for the plan before (usually canceled after failed payments). */
+	returning: boolean;
 };
 
 const POLL_MS = 2500;
@@ -107,11 +107,10 @@ function agentPrompt(domain: string) {
 	].join("\n");
 }
 
-export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid, price, planId }: Props) {
+export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid, price, returning }: Props) {
 	const reduceMotion = useReducedMotion();
 	const { emails, loaded } = useInbox(!!domain);
 	const { copied, copy } = useCopy();
-	const { attach } = useCustomer();
 	const createApiKey = useCreateApiKeyMutation();
 
 	const [apiKey, setApiKey] = useState<string | null>(null);
@@ -189,16 +188,10 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 		setSubscribing(true);
 		setSubscribeError(null);
 		try {
-			const result = (await attach({
-				productId: planId,
-				successUrl: `${window.location.origin}/welcome?subscribed=1`,
-			})) as { checkoutUrl?: string; data?: { checkoutUrl?: string } } | undefined;
-			const url = result?.checkoutUrl ?? result?.data?.checkoutUrl;
-			if (url) {
-				window.location.href = url;
-				return;
-			}
-			window.location.reload();
+			const response = await fetch("/api/welcome/checkout", { method: "POST" });
+			const data = (await response.json().catch(() => null)) as { url?: string; error?: string } | null;
+			if (!response.ok || !data?.url) throw new Error(data?.error ?? "Couldn't start checkout");
+			window.location.href = data.url;
 		} catch (error) {
 			setSubscribeError(error instanceof Error ? error.message : "Couldn't start checkout");
 			setSubscribing(false);
@@ -474,6 +467,12 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 									</Link>
 								</div>
 							) : (
+								<div className="flex flex-col gap-5">
+								{returning && (
+									<p className="rounded-lg border border-[#fde68a] bg-[#fffbeb] px-3.5 py-2.5 text-sm text-[#92400e]">
+										Welcome back. Your previous plan ended, often because a card payment failed. Resubscribe with a working card and you keep your old price.
+									</p>
+								)}
 								<div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
 									<ul className="flex flex-col gap-2 text-[15px] text-[#3f3f46]">
 										{[
@@ -501,6 +500,7 @@ export function WelcomeFlow({ domain, setupError, accountEmail, firstName, paid,
 										<span className="text-xs text-[#a8a29e]">Cancel anytime.</span>
 										{subscribeError && <span className="text-sm text-[#b91c1c]">{subscribeError}</span>}
 									</div>
+								</div>
 								</div>
 							)}
 						</Step>

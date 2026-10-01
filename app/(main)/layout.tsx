@@ -8,6 +8,7 @@ import { NavigationProvider } from "@/contexts/navigation-context"
 import { LoadingSpinner } from "@/components/loading-spinner"
 import { CommandBar, useCommandBar } from "@/components/command-bar"
 import { UnpaidWelcomeRedirect } from "@/components/unpaid-welcome-redirect"
+import { PaymentFailedBanner } from "@/components/payment-failed-banner"
 
 import { EnhancedPageTransition } from "@/components/page-transition"
 import { useSession } from "@/lib/auth/auth-client"
@@ -45,6 +46,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <AppSidebar variant="inset" />
         <SidebarInset>
           <UnpaidWelcomeRedirect />
+          <PaymentFailedBanner />
           <EnhancedPageTransition direction="fade" className="h-full">
             {children}
           </EnhancedPageTransition>
