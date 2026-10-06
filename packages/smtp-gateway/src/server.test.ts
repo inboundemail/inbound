@@ -703,6 +703,106 @@ describe("SmtpGateway envelope limits", () => {
 		expect(inspect.activeData).toBe(0);
 	});
 
+	it("relays S/MIME signed messages byte-for-byte and keeps plain messages on the JSON path", async () => {
+		const { inspect } = gateway();
+		spyOn(console, "log").mockImplementation(() => {});
+		const fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+			Object.assign(async () => Response.json({ id: "message-id" }), {
+				preconnect: globalThis.fetch.preconnect,
+			}),
+		);
+		const signed = [
+			"From: sender@example.com",
+			"To: recipient@example.com",
+			"Bcc: hidden@example.com",
+			'Content-Type: multipart/signed; boundary="sig"; protocol="application/pkcs7-signature"; micalg=sha-256',
+			"",
+			"--sig",
+			"Content-Type: text/plain",
+			"",
+			"Signed body  ",
+			"--sig",
+			"Content-Type: application/pkcs7-signature; name=smime.p7s",
+			"Content-Transfer-Encoding: base64",
+			"",
+			"MIAGCSqGSIb3DQEHAqCAMIACAQExDzANBglghkgBZQMEAgEFADCABgkqhkiG9w0BBwEAAA==",
+			"--sig--",
+			"",
+		].join("\r\n");
+		const recipients = ["recipient@example.com", "hidden@example.com"];
+
+		await inspect.handleData(
+			dataStream(signed),
+			session({ user: { apiKey: "secret", identity }, recipients }),
+		);
+		await inspect.handleData(
+			dataStream(
+				"From: sender@example.com\r\nTo: recipient@example.com\r\n\r\nHello",
+			),
+			session({
+				user: { apiKey: "secret", identity },
+				recipients: ["recipient@example.com"],
+			}),
+		);
+
+		const [rawUrl, rawOptions] = fetchMock.mock.calls[0] ?? [];
+		expect(rawUrl).toBe("https://example.com/api/e2/emails/raw");
+		const rawBody = JSON.parse(String(rawOptions?.body));
+		expect(Buffer.from(rawBody.raw, "base64").toString()).toBe(signed);
+		expect(rawBody.recipients).toEqual(recipients);
+		const [jsonUrl, jsonOptions] = fetchMock.mock.calls[1] ?? [];
+		expect(jsonUrl).toBe("https://example.com/api/e2/emails");
+		expect(JSON.parse(String(jsonOptions?.body)).text).toBe("Hello");
+	});
+
+	it("falls back to the JSON path when the API does not offer raw relay", async () => {
+		const { inspect } = gateway();
+		spyOn(console, "log").mockImplementation(() => {});
+		const fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+			Object.assign(
+				async (input: Parameters<typeof fetch>[0]) =>
+					String(input).endsWith("/emails/raw")
+						? new Response("Not Found", { status: 404 })
+						: Response.json({ id: "fallback-id" }),
+				{ preconnect: globalThis.fetch.preconnect },
+			),
+		);
+
+		await expect(
+			inspect.handleData(
+				dataStream(
+					[
+						"From: sender@example.com",
+						"To: recipient@example.com",
+						'Content-Type: multipart/signed; boundary="sig"; protocol="application/pkcs7-signature"',
+						"",
+						"--sig",
+						"Content-Type: text/plain",
+						"",
+						"Signed body",
+						"--sig",
+						"Content-Type: application/pkcs7-signature; name=smime.p7s",
+						"",
+						"AAAA",
+						"--sig--",
+					].join("\r\n"),
+				),
+				session({
+					user: { apiKey: "secret", identity },
+					recipients: ["recipient@example.com"],
+				}),
+			),
+		).resolves.toBe("Queued as fallback-id");
+		const fallback = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+		expect(fallback.text.trim()).toBe("Signed body");
+		expect(fallback.attachments).toBeUndefined();
+		expect(
+			new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Idempotency-Key"),
+		).toBe(
+			new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("Idempotency-Key"),
+		);
+	});
+
 	it("enforces the SES hard maximum even for programmatic configuration", async () => {
 		const { inspect } = gateway({ maxRecipients: 100 });
 		const active = session({

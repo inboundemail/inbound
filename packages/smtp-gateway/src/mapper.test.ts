@@ -26,6 +26,7 @@ describe("mapRawMessage", () => {
 		);
 
 		expect(mapped.fromAddress).toBe("sender@example.com");
+		expect(mapped.relayRaw).toBe(false);
 		expect(mapped.payload.to).toEqual(["Allowed Person <ALLOWED@example.com>"]);
 		expect(mapped.payload.cc).toEqual(["Other Person <other@example.com>"]);
 		expect(mapped.payload.bcc).toEqual(["hidden@example.com"]);
@@ -215,6 +216,7 @@ describe("mapRawMessage", () => {
 			},
 		);
 
+		expect(mapped.relayRaw).toBe(true);
 		expect(mapped.payload.text?.trim()).toBe("Signed body");
 		expect(mapped.payload.attachments).toEqual([
 			{
@@ -223,6 +225,27 @@ describe("mapRawMessage", () => {
 				content_type: "application/pdf",
 			},
 		]);
+	});
+	it("only selects S/MIME detached signatures for raw relay", async () => {
+		const envelope = {
+			mailFrom: "sender@example.com",
+			rcptTo: ["recipient@example.com"],
+		};
+		const signed = (protocol: string) =>
+			mapRawMessage(
+				message(
+					[
+						"From: sender@example.com",
+						"To: recipient@example.com",
+						`Content-Type: multipart/signed; boundary="sig"; protocol="${protocol}"`,
+					],
+					"--sig\r\nContent-Type: text/plain\r\n\r\nBody\r\n--sig--",
+				),
+				envelope,
+			);
+
+		expect((await signed("application/x-pkcs7-signature")).relayRaw).toBe(true);
+		expect((await signed("application/pgp-signature")).relayRaw).toBe(false);
 	});
 });
 

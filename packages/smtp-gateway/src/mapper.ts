@@ -11,16 +11,35 @@ export interface RelayEnvelope {
 export interface MappedRawMessage {
 	payload: SendEmailPayload;
 	fromAddress: string;
+	relayRaw: boolean;
 }
 
 const FORWARDED_HEADERS = ["in-reply-to", "references"];
 
-// The message is rebuilt by the send API, so a detached S/MIME signature (e.g. Apple Mail's
-// smime.p7s) can never verify and would only be rejected as an unsupported attachment.
+// The JSON send API rebuilds the message, so a detached S/MIME signature (e.g. Apple Mail's
+// smime.p7s) can never verify there and would only be rejected as an unsupported attachment.
+// Signed messages go through raw relay instead; this fallback drops the signature.
 const DETACHED_SIGNATURE_TYPES = new Set([
 	"application/pkcs7-signature",
 	"application/x-pkcs7-signature",
 ]);
+
+// multipart/signed S/MIME must reach SES byte-for-byte for the signature to verify.
+function isSignedSmime(parsed: ParsedMail): boolean {
+	const contentType = parsed.headers.get("content-type");
+	if (
+		typeof contentType !== "object" ||
+		!contentType ||
+		!("params" in contentType)
+	)
+		return false;
+	return (
+		contentType.value.toLowerCase() === "multipart/signed" &&
+		DETACHED_SIGNATURE_TYPES.has(
+			(contentType.params.protocol ?? "").toLowerCase(),
+		)
+	);
+}
 
 // The API writes these values into message headers verbatim, so decoded line breaks (e.g. from
 // RFC 2047 encoded-words) would inject headers.
@@ -164,6 +183,7 @@ export async function mapRawMessage(
 
 	return {
 		fromAddress: fromAddress.toLowerCase(),
+		relayRaw: isSignedSmime(parsed),
 		payload: {
 			from,
 			to,

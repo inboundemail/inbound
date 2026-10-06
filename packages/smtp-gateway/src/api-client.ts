@@ -30,6 +30,11 @@ export interface SendEmailPayload {
 	}>;
 }
 
+export interface SendRawEmailPayload {
+	raw: string;
+	recipients: string[];
+}
+
 export interface SendEmailResult {
 	id: string;
 	message_id?: string;
@@ -160,6 +165,42 @@ export class InboundApiClient {
 				message: "4.3.0 Temporary upstream failure, try again later",
 			},
 		);
+		if (!response.ok) {
+			const apiMessage = await readErrorMessage(response);
+			throw new SmtpRelayError(
+				smtpFailureForApiStatus(response.status, apiMessage),
+			);
+		}
+		return (await response.json()) as SendEmailResult;
+	}
+
+	/**
+	 * Relays the message bytes unchanged (S/MIME signatures stay valid). Returns null when the
+	 * API does not offer raw relay yet, so the caller can fall back to the rebuilt JSON send.
+	 */
+	async sendRawEmail(
+		apiKey: string,
+		payload: SendRawEmailPayload,
+		idempotencyKey: string,
+	): Promise<SendEmailResult | null> {
+		const headers: Record<string, string> = {
+			Authorization: `Bearer ${apiKey}`,
+			"Content-Type": "application/json",
+			"Idempotency-Key": idempotencyKey,
+		};
+		if (this.config.gatewayAuthSecret) {
+			headers["x-inbound-gateway-secret"] = this.config.gatewayAuthSecret;
+		}
+		const response = await this.request(
+			`${this.config.apiBaseUrl}${this.config.rawSendPath}`,
+			{ method: "POST", headers, body: JSON.stringify(payload) },
+			this.config.sendRequestTimeoutMs,
+			{
+				responseCode: 451,
+				message: "4.3.0 Temporary upstream failure, try again later",
+			},
+		);
+		if (response.status === 404 || response.status === 405) return null;
 		if (!response.ok) {
 			const apiMessage = await readErrorMessage(response);
 			throw new SmtpRelayError(

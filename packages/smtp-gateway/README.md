@@ -28,6 +28,7 @@ const transporter = nodemailer.createTransport({
 2. MAIL FROM / RCPT TO — sender authorization and the per-message recipient limit are enforced before DATA. Accepted envelope recipients are the sole delivery authority; MIME To/Cc addresses outside that envelope are discarded and remaining envelope recipients stay Bcc.
 3. DATA — raw MIME is parsed (mailparser), mapped to the send-API JSON shape, and POSTed with the credential as the Bearer token and an idempotency key derived from its stable credential ID, message, normalized sender, and normalized recipient set.
 4. API errors map to SMTP responses: 409/429 → 451 (retry), 413 → 552, other 4xx → 550, 5xx/network timeouts → 451; an unreachable auth backend → 454. Messages are rebuilt by the API, so header values are stripped of line breaks, display names of `<>"\`, and `X-SES-*` headers are dropped. Domain-ownership, blocklist, ban, and billing enforcement all happen in the API.
+5. S/MIME detached-signed messages (`multipart/signed` with a PKCS#7 signature protocol) are instead POSTed base64-encoded with their envelope recipients to `POST /emails/raw` (hidden, managed credentials only, gateway secret when configured), which applies the same guards but relays the original bytes: only top-level headers change (From canonicalized, Bcc/Sender/Return-Path/Resent-*/X-SES-* removed, Date added if missing), so the signature still verifies. If the API has no raw endpoint (404), the gateway falls back to the rebuilt JSON send without the signature.
 
 AUTH failures are throttled per login/IP pair and at a higher aggregate per-IP threshold; recently successful users remain exempt from the aggregate threshold.
 
@@ -39,6 +40,7 @@ Advertised extensions: PIPELINING, 8BITMIME, SIZE, STARTTLS (587), AUTH (after T
 |---|---|---|
 | `INBOUND_API_BASE_URL` | `https://inbound.new/api/e2` | Base URL for managed-credential authentication and sending |
 | `INBOUND_SEND_PATH` | `/emails` | Send endpoint relative to the API base URL |
+| `INBOUND_RAW_SEND_PATH` | `/emails/raw` | Raw relay endpoint for S/MIME signed messages |
 | `SMTP_HOSTNAME` | `smtp.inboundemail.com` | EHLO/banner name |
 | `SMTP_STARTTLS_PORT` | `587` | `0` disables |
 | `SMTP_IMPLICIT_TLS_PORT` | `465` | `0` disables; always requires both TLS paths |

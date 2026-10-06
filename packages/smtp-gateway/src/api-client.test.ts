@@ -227,3 +227,59 @@ describe("InboundApiClient.sendEmail", () => {
 		).rejects.toMatchObject({ responseCode: 451 });
 	});
 });
+
+describe("InboundApiClient.sendRawEmail", () => {
+	const payload = {
+		raw: Buffer.from("From: sender@example.com\r\n\r\nHello").toString(
+			"base64",
+		),
+		recipients: ["recipient@example.com"],
+	};
+
+	it("posts the raw message with authorization, idempotency and the gateway secret", async () => {
+		const fetchMock = spyOn(globalThis, "fetch").mockResolvedValue(
+			Response.json({ id: "message-id" }),
+		);
+
+		expect(
+			await client({ gatewayAuthSecret: "gateway-secret" }).sendRawEmail(
+				"secret",
+				payload,
+				"smtp-key",
+			),
+		).toEqual({ id: "message-id" });
+		const [url, options] = fetchMock.mock.calls[0] ?? [];
+		expect(url).toBe("https://example.com/api/e2/emails/raw");
+		expect(options?.headers).toEqual({
+			Authorization: "Bearer secret",
+			"Content-Type": "application/json",
+			"Idempotency-Key": "smtp-key",
+			"x-inbound-gateway-secret": "gateway-secret",
+		});
+		expect(options?.body).toBe(JSON.stringify(payload));
+	});
+
+	it("reports an API without raw relay so the caller can fall back", async () => {
+		spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response("Not Found", { status: 404 }),
+		);
+
+		expect(await client().sendRawEmail("secret", payload, "key")).toBeNull();
+	});
+
+	it("maps raw relay rejections to SMTP failures", async () => {
+		spyOn(globalThis, "fetch").mockResolvedValue(
+			Response.json(
+				{ error: "Duplicate from header" },
+				{ status: 400 },
+			),
+		);
+
+		await expect(
+			client().sendRawEmail("secret", payload, "key"),
+		).rejects.toMatchObject({
+			responseCode: 550,
+			message: "5.6.0 Message rejected: Duplicate from header",
+		});
+	});
+});

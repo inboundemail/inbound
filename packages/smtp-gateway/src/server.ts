@@ -390,13 +390,27 @@ export class SmtpGateway {
 					envelope.mailFrom.toLowerCase(),
 				);
 			}
-			const result = await this.client.sendEmail(
-				user.apiKey,
-				mapped.payload,
-				idempotencyKeyFor(raw, user.identity.credentialId, envelope),
+			const idempotencyKey = idempotencyKeyFor(
+				raw,
+				user.identity.credentialId,
+				envelope,
 			);
+			const rawResult = mapped.relayRaw
+				? await this.client.sendRawEmail(
+						user.apiKey,
+						{ raw: raw.toString("base64"), recipients: envelope.rcptTo },
+						idempotencyKey,
+					)
+				: null;
+			const result =
+				rawResult ??
+				(await this.client.sendEmail(
+					user.apiKey,
+					mapped.payload,
+					idempotencyKey,
+				));
 			console.log(
-				`[smtp-gateway] relayed message ${result.id} from=${mapped.payload.from} recipients=${envelope.rcptTo.length}`,
+				`[smtp-gateway] relayed ${rawResult ? "raw " : ""}message ${result.id} from=${mapped.payload.from} recipients=${envelope.rcptTo.length}`,
 			);
 			return `Queued as ${result.id}`;
 		} finally {
