@@ -15,6 +15,13 @@ export interface MappedRawMessage {
 
 const FORWARDED_HEADERS = ["in-reply-to", "references"];
 
+// The message is rebuilt by the send API, so a detached S/MIME signature (e.g. Apple Mail's
+// smime.p7s) can never verify and would only be rejected as an unsupported attachment.
+const DETACHED_SIGNATURE_TYPES = new Set([
+	"application/pkcs7-signature",
+	"application/x-pkcs7-signature",
+]);
+
 // The API writes these values into message headers verbatim, so decoded line breaks (e.g. from
 // RFC 2047 encoded-words) would inject headers.
 function headerText(value: string): string {
@@ -140,12 +147,19 @@ export async function mapRawMessage(
 			: undefined;
 	const text = parsed.text ?? (html ? undefined : "");
 
-	const attachments = (parsed.attachments ?? []).map((attachment, index) => ({
-		filename: phrase(attachment.filename) || `attachment-${index + 1}`,
-		content: attachment.content.toString("base64"),
-		content_type: phrase(attachment.contentType) || undefined,
-		...(attachment.cid ? { content_id: phrase(attachment.cid) } : {}),
-	}));
+	const attachments = (parsed.attachments ?? [])
+		.filter(
+			(attachment) =>
+				!DETACHED_SIGNATURE_TYPES.has(
+					(attachment.contentType ?? "").toLowerCase(),
+				),
+		)
+		.map((attachment, index) => ({
+			filename: phrase(attachment.filename) || `attachment-${index + 1}`,
+			content: attachment.content.toString("base64"),
+			content_type: phrase(attachment.contentType) || undefined,
+			...(attachment.cid ? { content_id: phrase(attachment.cid) } : {}),
+		}));
 	const headers = customHeaders(parsed);
 
 	return {

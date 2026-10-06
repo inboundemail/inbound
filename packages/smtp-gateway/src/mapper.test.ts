@@ -175,6 +175,55 @@ describe("mapRawMessage", () => {
 		expect(mapped.payload.subject).toBe("Hi Content-Type: text/html");
 		expect(mapped.payload.headers).toEqual({ "x-custom": "value" });
 	});
+
+	it("drops detached S/MIME signatures but keeps real attachments", async () => {
+		const mapped = await mapRawMessage(
+			message(
+				[
+					"From: sender@example.com",
+					"To: recipient@example.com",
+					"MIME-Version: 1.0",
+					'Content-Type: multipart/signed; boundary="sig"; protocol="application/pkcs7-signature"; micalg=sha-256',
+				],
+				[
+					"--sig",
+					'Content-Type: multipart/mixed; boundary="mix"',
+					"",
+					"--mix",
+					"Content-Type: text/plain",
+					"",
+					"Signed body",
+					"--mix",
+					'Content-Type: application/pdf; name="file.pdf"',
+					'Content-Disposition: attachment; filename="file.pdf"',
+					"Content-Transfer-Encoding: base64",
+					"",
+					"JVBERi0xLjQ=",
+					"--mix--",
+					"--sig",
+					'Content-Type: application/pkcs7-signature; name="smime.p7s"',
+					'Content-Disposition: attachment; filename="smime.p7s"',
+					"Content-Transfer-Encoding: base64",
+					"",
+					"MIAGCSqGSIb3DQEHAqCAMIACAQExDzANBglghkgBZQMEAgEFADCABgkqhkiG9w0BBwEAAA==",
+					"--sig--",
+				].join("\r\n"),
+			),
+			{
+				mailFrom: "sender@example.com",
+				rcptTo: ["recipient@example.com"],
+			},
+		);
+
+		expect(mapped.payload.text?.trim()).toBe("Signed body");
+		expect(mapped.payload.attachments).toEqual([
+			{
+				filename: "file.pdf",
+				content: "JVBERi0xLjQ=",
+				content_type: "application/pdf",
+			},
+		]);
+	});
 });
 
 describe("idempotencyKeyFor", () => {
