@@ -114,10 +114,7 @@ export function buildHandlers(
 	function sourceIsReadOnly(session: ImapSession, mailboxId: string): boolean {
 		const selected = session.selected;
 		return (
-			!selected ||
-			selected.mailbox !== mailboxId ||
-			Boolean(selected.readOnly) ||
-			Boolean(selected.path?.startsWith("Scopes/"))
+			!selected || selected.mailbox !== mailboxId || Boolean(selected.readOnly)
 		);
 	}
 
@@ -242,9 +239,7 @@ export function buildHandlers(
 						modifyIndex: fresh.modseq,
 						uidList,
 						flags: [],
-						readOnly:
-							Boolean(mailbox.scopeId) ||
-							requireUser(session).accessMode !== "read_write",
+						readOnly: requireUser(session).accessMode !== "read_write",
 					});
 				})
 				.catch((err: Error) => callback(err));
@@ -423,7 +418,14 @@ export function buildHandlers(
 				if (destination.scopeId) {
 					return { success: "READ-ONLY" as const, info: null };
 				}
-				if (destination.id === mailboxId) {
+				const selected = session.selected;
+				const fromScope = Boolean(
+					selected && selected.path?.startsWith("Scopes/"),
+				);
+				if (
+					destination.id === mailboxId ||
+					(fromScope && destination.path === "INBOX")
+				) {
 					return { success: "CANNOT" as const, info: null };
 				}
 				const info = await store.copyMessages(
@@ -573,7 +575,7 @@ export function buildHandlers(
 						return "READ-ONLY";
 					}
 					const mailbox = await store.getMailboxByPath(user, update.path);
-					if (!mailbox || mailbox.id !== mailboxId || mailbox.scopeId) {
+					if (!mailbox || mailbox.id !== mailboxId) {
 						return "READ-ONLY";
 					}
 				}

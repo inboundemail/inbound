@@ -82,6 +82,45 @@ function visibleToScopes(
 		), FALSE))`;
 }
 
+interface RemovedRow {
+	structured_email_id: string;
+	raw_source: string;
+}
+
+async function removeFromMirroredMailboxes(
+	sql: postgres.TransactionSql,
+	mailboxId: string,
+	removed: RemovedRow[],
+): Promise<void> {
+	const ids = removed
+		.filter((row) => row.raw_source === "structured")
+		.map((row) => row.structured_email_id);
+	if (ids.length === 0) return;
+	const rows = await sql<{ credential_id: string | null; mirrored: boolean }[]>`
+		SELECT credential_id, (path = 'INBOX' OR scope_id IS NOT NULL) AS mirrored
+		FROM imap_mailboxes WHERE id = ${mailboxId}`;
+	const credentialId = rows[0]?.credential_id;
+	if (!credentialId || !rows[0]?.mirrored) return;
+	await sql`
+		SELECT id FROM imap_mailboxes
+		WHERE credential_id = ${credentialId}
+		  AND (path = 'INBOX' OR scope_id IS NOT NULL)
+		ORDER BY id
+		FOR UPDATE`;
+	await sql`
+		INSERT INTO imap_mailbox_removals (credential_id, structured_email_id)
+		SELECT ${credentialId}, id FROM unnest(${ids}::text[]) AS removed(id)
+		ON CONFLICT DO NOTHING`;
+	await sql`
+		DELETE FROM imap_mailbox_messages mm
+		USING imap_mailboxes mb
+		WHERE mm.mailbox_id = mb.id
+		  AND mb.credential_id = ${credentialId}
+		  AND (mb.path = 'INBOX' OR mb.scope_id IS NOT NULL)
+		  AND mm.raw_source = 'structured'
+		  AND mm.structured_email_id = ANY(${ids})`;
+}
+
 function parseFlags(raw: string): string[] {
 	try {
 		const parsed = JSON.parse(raw) as unknown;
@@ -409,6 +448,19 @@ export class MailStore {
 				ORDER BY uid ASC`;
 			const locked = await sql<{ uid_next: number; modseq: number }[]>`
 				SELECT uid_next, modseq FROM imap_mailboxes WHERE id = ${destination.id} FOR UPDATE`;
+			const restored = source
+				.filter((row) => row.raw_source === "structured")
+				.map((row) => row.structured_email_id);
+			if (
+				destination.credentialId &&
+				destination.path === "INBOX" &&
+				restored.length > 0
+			) {
+				await sql`
+					DELETE FROM imap_mailbox_removals
+					WHERE credential_id = ${destination.credentialId}
+					  AND structured_email_id = ANY(${restored})`;
+			}
 			let nextUid = locked[0]?.uid_next ?? 1;
 			let nextModseq = locked[0]?.modseq ?? 0;
 			const sourceUid: number[] = [];
@@ -448,6 +500,7 @@ export class MailStore {
 				DELETE FROM imap_mailbox_messages
 				WHERE mailbox_id = ${mailboxId} AND uid = ANY(${uids})
 				RETURNING uid, structured_email_id, raw_source`;
+			await removeFromMirroredMailboxes(sql, mailboxId, deleted);
 			const appendedIds = deleted
 				.filter((row) => row.raw_source === "appended")
 				.map((row) => row.structured_email_id);
@@ -494,6 +547,10 @@ export class MailStore {
 						SELECT 1 FROM imap_mailbox_messages mm
 						WHERE mm.mailbox_id = ${mailbox.id}
 						  AND mm.structured_email_id = se.id)
+					  AND NOT EXISTS (
+						SELECT 1 FROM imap_mailbox_removals removal
+						WHERE removal.credential_id = ${principal.credentialId}
+						  AND removal.structured_email_id = se.id)
 				)
 				INSERT INTO imap_mailbox_messages
 					(id, mailbox_id, structured_email_id, uid, internal_date, size, modseq)
@@ -716,6 +773,7 @@ export class MailStore {
 					WHERE mailbox_id = ${mailboxId}
 					  AND flags::jsonb ? '\\Deleted'
 					RETURNING uid, structured_email_id, raw_source`;
+			await removeFromMirroredMailboxes(sql, mailboxId, deleted);
 			const appendedIds = deleted
 				.filter((row) => row.raw_source === "appended")
 				.map((row) => row.structured_email_id);

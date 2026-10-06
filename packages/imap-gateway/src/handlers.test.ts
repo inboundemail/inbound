@@ -47,7 +47,9 @@ function createHarness(
 			},
 		]),
 		addFlag: mock(async () => undefined),
-		updateFlags: mock(async () => [] as Array<{ uid: number; flags: string[] }>),
+		updateFlags: mock(
+			async () => [] as Array<{ uid: number; flags: string[] }>,
+		),
 		expunge: mock(async () => [] as number[]),
 		copyMessages: mock(async () => ({
 			uidValidity: 1,
@@ -86,7 +88,7 @@ function createHarness(
 		selected: {
 			mailbox: mailbox.id,
 			path: mailbox.path,
-			readOnly: Boolean(scopeId),
+			readOnly: accessMode !== "read_write",
 		},
 		formatResponse: () => ({ tag: "*", command: "FETCH", attributes: [] }),
 		getQueryResponse: () => [],
@@ -113,17 +115,17 @@ function callbackResult(
 
 describe("IMAP backend authorization", () => {
 	it.each([
-		["read", null],
-		["read_write", "scope"],
-	] as const)("opens %s credentials and scope folders read-only", async (mode, scopeId) => {
+		["read", null, true],
+		["read_write", "scope", false],
+	] as const)("opens %s credential folders with readOnly=%s for scope %s", async (mode, scopeId, readOnly) => {
 		const { handlers, mailbox, session } = createHarness(mode, scopeId);
 		const [selected] = await callbackResult((callback) => {
 			handlers.onOpen(mailbox.path, session, callback);
 		});
-		expect(selected).toMatchObject({ readOnly: true });
+		expect(selected).toMatchObject({ readOnly });
 	});
 
-	it("rejects STORE, EXPUNGE, and MOVE from read-only scope folders", async () => {
+	it("allows STORE, EXPUNGE, and MOVE from scope folders", async () => {
 		const { handlers, mailbox, session, store } = createHarness(
 			"read_write",
 			"scope",
@@ -154,14 +156,35 @@ describe("IMAP backend authorization", () => {
 			);
 		});
 
-		expect([stored, expunged, moved]).toEqual([
-			"READ-ONLY",
-			"READ-ONLY",
-			"READ-ONLY",
-		]);
-		expect(store.updateFlags).not.toHaveBeenCalled();
-		expect(store.expunge).not.toHaveBeenCalled();
-		expect(store.copyMessages).not.toHaveBeenCalled();
+		expect([stored, expunged, moved]).toEqual([true, true, true]);
+		expect(store.updateFlags).toHaveBeenCalledTimes(1);
+		expect(store.expunge).toHaveBeenCalledTimes(1);
+		expect(store.deleteMessages).toHaveBeenCalledWith(mailbox.id, [1]);
+	});
+
+	it("refuses MOVE from a scope folder into INBOX, which already holds the message", async () => {
+		const { handlers, mailbox, session, store } = createHarness(
+			"read_write",
+			"scope",
+		);
+		const inbox: MailboxRow = {
+			...mailbox,
+			id: "inbox",
+			path: "INBOX",
+			scopeId: null,
+		};
+		store.getMailboxByPath.mockImplementation(async () => inbox);
+		const [result] = await callbackResult((callback) => {
+			handlers.onMove(
+				mailbox.id,
+				{ destination: "INBOX", messages: [1] },
+				session,
+				callback,
+			);
+		});
+
+		expect(result).toBe("CANNOT");
+		expect(store.deleteMessages).not.toHaveBeenCalled();
 	});
 
 	it("fails closed when selected mailbox does not match the mutation source", async () => {
@@ -261,7 +284,7 @@ describe("IMAP backend authorization", () => {
 		expect(store.expunge).toHaveBeenCalledTimes(1);
 	});
 
-	it("rejects CLOSE-style expunges of scoped or mismatched mailboxes", async () => {
+	it("allows CLOSE-style expunges of scope folders but not mismatched mailboxes", async () => {
 		const scoped = createHarness("read_write", "scope");
 		scoped.session.selected = false;
 		const [scopeResult] = await callbackResult((callback) => {
@@ -283,9 +306,9 @@ describe("IMAP backend authorization", () => {
 			);
 		});
 
-		expect(scopeResult).toBe("READ-ONLY");
+		expect(scopeResult).toBe(true);
 		expect(mismatchResult).toBe("READ-ONLY");
-		expect(scoped.store.expunge).not.toHaveBeenCalled();
+		expect(scoped.store.expunge).toHaveBeenCalledTimes(1);
 		expect(writable.store.expunge).not.toHaveBeenCalled();
 	});
 
@@ -402,16 +425,11 @@ describe("IMAP backend authorization", () => {
 			});
 		}
 
-		expect(written).toEqual([
-			{ uid: 1, data: { uid: 1, flags: ["\\Seen"] } },
-		]);
+		expect(written).toEqual([{ uid: 1, data: { uid: 1, flags: ["\\Seen"] } }]);
 	});
 
-	it.each([
-		["read", null],
-		["read_write", "scope"],
-	] as const)("never marks messages seen for %s read-only selections", async (mode, scopeId) => {
-		const { handlers, mailbox, session, store } = createHarness(mode, scopeId);
+	it("never marks messages seen for read-only credentials", async () => {
+		const { handlers, mailbox, session, store } = createHarness("read");
 		const [success] = await callbackResult((callback) => {
 			handlers.onFetch(
 				mailbox.id,

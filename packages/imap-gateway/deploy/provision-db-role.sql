@@ -23,6 +23,7 @@ GRANT SELECT ON TABLE structured_emails TO imap_gateway;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE imap_mailboxes TO imap_gateway;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE imap_mailbox_messages TO imap_gateway;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE imap_appended_messages TO imap_gateway;
+GRANT SELECT, INSERT, DELETE ON TABLE imap_mailbox_removals TO imap_gateway;
 GRANT EXECUTE ON FUNCTION imap_notify_mailbox_message() TO imap_gateway;
 
 ALTER ROLE imap_gateway SET statement_timeout = '30s';

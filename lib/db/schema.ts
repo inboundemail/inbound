@@ -4,6 +4,7 @@ import {
 	index,
 	integer,
 	pgTable,
+	primaryKey,
 	text,
 	timestamp,
 	unique,
@@ -1290,6 +1291,22 @@ export const imapAppendedMessages = pgTable(
 	},
 	(table) => ({
 		userIdIdx: index("imap_appended_messages_user_id_idx").on(table.userId),
+	}),
+);
+
+export const imapMailboxRemovals = pgTable(
+	"imap_mailbox_removals",
+	{
+		credentialId: varchar("credential_id", { length: 255 })
+			.notNull()
+			.references(() => imapCredentials.id, { onDelete: "cascade" }),
+		structuredEmailId: varchar("structured_email_id", {
+			length: 255,
+		}).notNull(),
+		removedAt: timestamp("removed_at").notNull().defaultNow(),
+	},
+	(table) => ({
+		pk: primaryKey({ columns: [table.credentialId, table.structuredEmailId] }),
 	}),
 );
 
