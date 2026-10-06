@@ -11,7 +11,10 @@
 
 // @ts-ignore - bun:test is a Bun-specific module not recognized by TypeScript
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
 	buildLocalEnv,
 	LOCAL_SERVICE_API_KEY,
@@ -40,10 +43,12 @@ const E2E_DOMAIN = "e2e.inbound.test";
 const E2E_SENDER_ADDRESS = `e2e-sender@${E2E_DOMAIN}`;
 const E2E_RECIPIENT_ADDRESS = `e2e-receive@${E2E_DOMAIN}`;
 const E2E_RATE_LIMIT_PER_SECOND = 20;
+const E2E_GATEWAY_SECRET = "e2e-gateway-secret";
 
 let API_KEY = "";
 let ALT_API_KEY = "";
 let PRIMARY_USER_ID = "";
+let E2E_DOMAIN_ID = "";
 
 type E2ESeed = {
 	domain: string;
@@ -593,6 +598,7 @@ function e2eServerEnv() {
 			NEXT_DIST_DIR: ".next-e2e",
 			INBOUND_E2E_TEST_MODE: "true",
 			E2_LOCAL_RATE_LIMIT_PER_SECOND: String(E2E_RATE_LIMIT_PER_SECOND),
+			MAILBOX_GATEWAY_AUTH_SECRET: E2E_GATEWAY_SECRET,
 		},
 	});
 }
@@ -973,6 +979,92 @@ async function ensureRoundTrip(): Promise<RoundTripState | null> {
 	return e2eCache.roundTripPromise;
 }
 
+function openssl(args: string[], cwd: string): void {
+	const result = spawnSync("openssl", args, { cwd, encoding: "utf8" });
+	if (result.status !== 0) {
+		throw new Error(`openssl ${args[0]} failed: ${result.stderr}`);
+	}
+}
+
+function signSmimeMessage(
+	headers: string[],
+	content: string,
+): {
+	raw: string;
+	verify: (raw: string) => boolean;
+} {
+	const dir = mkdtempSync(join(tmpdir(), "inbound-smime-"));
+	openssl(
+		[
+			"req",
+			"-x509",
+			"-newkey",
+			"rsa:2048",
+			"-nodes",
+			"-days",
+			"1",
+			"-keyout",
+			"key.pem",
+			"-out",
+			"cert.pem",
+			"-subj",
+			`/CN=E2E Sender/emailAddress=${E2E_SENDER_ADDRESS}`,
+		],
+		dir,
+	);
+	writeFileSync(join(dir, "content.eml"), content);
+	openssl(
+		[
+			"smime",
+			"-sign",
+			"-crlfeol",
+			"-in",
+			"content.eml",
+			"-signer",
+			"cert.pem",
+			"-inkey",
+			"key.pem",
+			"-out",
+			"signed.eml",
+		],
+		dir,
+	);
+	const signed = readFileSync(join(dir, "signed.eml"), "utf8");
+	return {
+		raw: `${headers.join("\r\n")}\r\n${signed}`,
+		verify: (raw) => {
+			writeFileSync(join(dir, "relayed.eml"), raw);
+			return (
+				spawnSync(
+					"openssl",
+					[
+						"smime",
+						"-verify",
+						"-noverify",
+						"-in",
+						"relayed.eml",
+						"-out",
+						"/dev/null",
+					],
+					{ cwd: dir },
+				).status === 0
+			);
+		},
+	};
+}
+
+function messageBody(raw: string): string {
+	return raw.slice(raw.indexOf("\r\n\r\n"));
+}
+
+function headerNames(raw: string): string[] {
+	return raw
+		.slice(0, raw.indexOf("\r\n\r\n"))
+		.split("\r\n")
+		.filter((line) => !/^[ \t]/.test(line))
+		.map((line) => line.slice(0, line.indexOf(":")).toLowerCase());
+}
+
 describe("E2 API - Email E2E", () => {
 	beforeAll(async () => {
 		console.log("🐳 Starting local Docker services");
@@ -985,6 +1077,7 @@ describe("E2 API - Email E2E", () => {
 		API_KEY = seed.primary.apiKey;
 		ALT_API_KEY = seed.secondary.apiKey;
 		PRIMARY_USER_ID = seed.primary.userId;
+		E2E_DOMAIN_ID = seed.domainId;
 
 		mailServer = startLocalMailServer({
 			port: MAIL_PORT,
@@ -2191,6 +2284,164 @@ describe("E2 API - Email E2E", () => {
 	);
 
 	it(
+		"relays S/MIME signed SMTP messages byte-for-byte with the send guards",
+		async () => {
+			const token = makeToken("raw-relay");
+			const { response: mailboxResponse, data: mailbox } = await apiJson<{
+				password: string;
+			}>("/mailboxes", {
+				method: "POST",
+				body: JSON.stringify({
+					name: `Raw relay ${token}`,
+					loginAddress: `${token}@${E2E_DOMAIN}`,
+					type: "smtp",
+					accessMode: "read_write",
+					sendingMode: "identity",
+					sendingName: null,
+					sendingAddress: E2E_SENDER_ADDRESS,
+					scopes: [{ type: "domain", domainId: E2E_DOMAIN_ID }],
+				}),
+			});
+			expect(mailboxResponse.status).toBe(201);
+
+			const subject = `E2E Raw Relay ${token}`;
+			const hiddenRecipient = `raw-hidden-${token}@${E2E_DOMAIN}`;
+			const smime = signSmimeMessage(
+				[
+					`From: "E2E Sender" <${E2E_SENDER_ADDRESS}>`,
+					`To: ${E2E_RECIPIENT_ADDRESS}`,
+					`Bcc: ${hiddenRecipient}`,
+					"X-SES-CONFIGURATION-SET: attacker-set",
+					`Subject: ${subject}`,
+					"X-Entity-Ref-ID: raw-relay",
+				],
+				[
+					"Content-Type: text/plain; charset=utf-8",
+					"Content-Transfer-Encoding: 7bit",
+					"",
+					"Signed body   ",
+					"From the start of a line.",
+					"",
+				].join("\r\n"),
+			);
+			expect(smime.verify(smime.raw)).toBe(true);
+
+			const sendRaw = (
+				raw: string,
+				options: {
+					apiKey?: string;
+					secret?: string | null;
+					idempotencyKey?: string;
+					recipients?: string[];
+				} = {},
+			) =>
+				fetch(`${API_URL}/emails/raw`, {
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${options.apiKey ?? mailbox.password}`,
+						"Content-Type": "application/json",
+						...(options.secret === null
+							? {}
+							: {
+									"x-inbound-gateway-secret":
+										options.secret ?? E2E_GATEWAY_SECRET,
+								}),
+						...(options.idempotencyKey
+							? { "Idempotency-Key": options.idempotencyKey }
+							: {}),
+					},
+					body: JSON.stringify({
+						raw: Buffer.from(raw).toString("base64"),
+						recipients: options.recipients ?? [
+							E2E_RECIPIENT_ADDRESS,
+							hiddenRecipient,
+						],
+					}),
+				});
+
+			const idempotencyKey = `raw-relay-${token}`;
+			const response = await sendRaw(smime.raw, { idempotencyKey });
+			const sent = (await response.json()) as SendEmailResponse;
+			expect(response.status).toBe(200);
+
+			const relayed = mailServer?.messages.find(
+				(message) => message.messageId === sent.message_id,
+			);
+			expect(relayed).toBeDefined();
+			if (!relayed) return;
+			expect(relayed.from).toBe(E2E_SENDER_ADDRESS);
+			expect(relayed.recipients.sort()).toEqual(
+				[E2E_RECIPIENT_ADDRESS, hiddenRecipient].sort(),
+			);
+			expect(messageBody(relayed.raw)).toBe(messageBody(smime.raw));
+			expect(smime.verify(relayed.raw)).toBe(true);
+			const names = headerNames(relayed.raw);
+			expect(names).not.toContain("bcc");
+			expect(names.filter((name) => name.startsWith("x-ses-"))).toEqual([]);
+			expect(names.filter((name) => name === "from")).toHaveLength(1);
+			expect(names).toContain("date");
+			expect(names).toContain("x-entity-ref-id");
+			expect(relayed.raw).not.toContain(hiddenRecipient);
+
+			const sentEmail = await getEmailDetail(sent.id);
+			expect(sentEmail.subject).toBe(subject);
+			expect(sentEmail.to).toEqual([E2E_RECIPIENT_ADDRESS]);
+
+			const relayedCount = mailServer?.messages.length;
+			const replay = await sendRaw(smime.raw, { idempotencyKey });
+			expect(replay.status).toBe(200);
+			expect(((await replay.json()) as SendEmailResponse).id).toBe(sent.id);
+			expect(mailServer?.messages.length).toBe(relayedCount);
+
+			const replaceHeader = (from: string, to: string) =>
+				smime.raw.replace(from, to);
+			const rejected: Array<[number, Response]> = [
+				[403, await sendRaw(smime.raw, { secret: null })],
+				[403, await sendRaw(smime.raw, { apiKey: API_KEY })],
+				[
+					403,
+					await sendRaw(
+						replaceHeader(
+							`From: "E2E Sender" <${E2E_SENDER_ADDRESS}>`,
+							"From: ceo@e2e-secondary.inbound.test",
+						),
+					),
+				],
+				[
+					400,
+					await sendRaw(
+						replaceHeader(
+							"X-Entity-Ref-ID: raw-relay",
+							"From: ceo@e2e-secondary.inbound.test",
+						),
+					),
+				],
+				[
+					400,
+					await sendRaw(
+						replaceHeader(
+							"X-Entity-Ref-ID: raw-relay\r\n",
+							"X-Entity-Ref-ID: raw-relay\nBcc: attacker@evil.example\r\n",
+						),
+					),
+				],
+				[
+					400,
+					await sendRaw(
+						`From: ${E2E_SENDER_ADDRESS}\r\nTo: ${E2E_RECIPIENT_ADDRESS}\r\nSubject: plain\r\n\r\nUnsigned`,
+					),
+				],
+				[400, await sendRaw(smime.raw, { recipients: ["bad address@x"] })],
+			];
+			for (const [status, rejection] of rejected) {
+				expect(rejection.status).toBe(status);
+			}
+			expect(mailServer?.messages.length).toBe(relayedCount);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
 		"returns 429 responses when burst traffic exceeds rate limits",
 		async () => {
 			let sawRateLimit = false;
@@ -2236,5 +2487,6 @@ console.log("  - Auth boundary enforcement (invalid key + second tenant)");
 console.log("  - Reply threading via In-Reply-To/References");
 console.log("  - Multi-attachment parsing edge cases");
 console.log("  - Endpoint lifecycle update + cleanup behavior");
+console.log("  - S/MIME raw relay keeps signatures valid and strips Bcc");
 console.log("  - Rate-limit 429 behavior under burst traffic");
 console.log("=".repeat(60) + "\n");

@@ -30,7 +30,7 @@ export interface ProcessedAttachment {
 
 // Configuration - Following industry standards and AWS SES limits
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024 // 25MB per attachment (AWS SES limit)
-const MAX_TOTAL_EMAIL_SIZE = 40 * 1024 * 1024 // 40MB total email size (industry standard)
+export const MAX_TOTAL_EMAIL_SIZE = 40 * 1024 * 1024 // 40MB total email size (industry standard)
 const MAX_ATTACHMENTS_COUNT = 20              // Reasonable limit for number of attachments
 
 // Comprehensive list of supported file types (excluding potentially dangerous ones)

@@ -37,6 +37,7 @@ import { resumeEmail } from "../emails/resume";
 import { retryEmail } from "../emails/retry";
 // Email routes
 import { sendEmail } from "../emails/send";
+import { sendRawEmail } from "@/app/api/e2/emails/send-raw";
 import { updateEmail } from "../emails/update";
 import { createEndpoint } from "../endpoints/create";
 import { deleteEndpoint } from "../endpoints/delete";
@@ -499,6 +500,7 @@ https://inbound.new/api/e2
 	.use(revokeCurrentApiKey)
 	// Email routes (sending, listing, managing)
 	.use(sendEmail)
+	.use(sendRawEmail)
 	.use(listEmails)
 	.use(getEmail)
 	.use(updateEmail)
