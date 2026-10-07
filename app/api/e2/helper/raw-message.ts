@@ -30,6 +30,17 @@ const STRUCTURAL_HEADERS = new Set([
 	"date",
 	"mime-version",
 ]);
+const RELAYED_HEADERS = new Set([
+	"to",
+	"cc",
+	"reply-to",
+	"subject",
+	"date",
+	"message-id",
+	"in-reply-to",
+	"references",
+	"mime-version",
+]);
 const SMIME_SIGNATURE_PROTOCOLS = new Set([
 	"application/pkcs7-signature",
 	"application/x-pkcs7-signature",
@@ -67,9 +78,9 @@ export interface PreparedRawMessage {
 
 /**
  * Relays S/MIME detached-signed (multipart/signed) mail without touching the
- * signed entity: only top-level headers are rewritten. Bcc, Sender,
- * Return-Path, Resent-* and X-SES-* are removed, From is replaced by a
- * canonical single mailbox, and Date is added when missing. Delivery uses the
+ * signed entity: only top-level headers are rewritten. Only structural,
+ * threading, Content-* and X-* (except X-SES-*) headers are kept, From is
+ * replaced by a canonical single mailbox, and Date is added when missing. Delivery uses the
  * given envelope recipients, never the To/Cc/Bcc headers.
  */
 export async function prepareRawRelayMessage(
@@ -143,13 +154,11 @@ export async function prepareRawRelayMessage(
 	const headers: Record<string, string> = {};
 	for (const field of fields) {
 		const { lower } = field;
-		if (
-			lower === "bcc" ||
-			lower === "sender" ||
-			lower === "return-path" ||
-			lower.startsWith("resent-") ||
-			lower.startsWith("x-ses-")
-		) {
+		const relayed =
+			RELAYED_HEADERS.has(lower) ||
+			lower.startsWith("content-") ||
+			(lower.startsWith("x-") && !lower.startsWith("x-ses-"));
+		if (lower !== "from" && !relayed) {
 			continue;
 		}
 		if (lower === "from") {

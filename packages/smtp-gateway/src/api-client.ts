@@ -176,7 +176,8 @@ export class InboundApiClient {
 
 	/**
 	 * Relays the message bytes unchanged (S/MIME signatures stay valid). Returns null when the
-	 * API does not offer raw relay yet, so the caller can fall back to the rebuilt JSON send.
+	 * API does not offer raw relay yet or cannot relay this message raw, so the caller can fall
+	 * back to the rebuilt JSON send, which re-applies every check.
 	 */
 	async sendRawEmail(
 		apiKey: string,
@@ -200,7 +201,7 @@ export class InboundApiClient {
 				message: "4.3.0 Temporary upstream failure, try again later",
 			},
 		);
-		if (response.status === 404 || response.status === 405) return null;
+		if ([400, 404, 405, 413].includes(response.status)) return null;
 		if (!response.ok) {
 			const apiMessage = await readErrorMessage(response);
 			throw new SmtpRelayError(

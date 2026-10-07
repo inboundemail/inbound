@@ -259,27 +259,27 @@ describe("InboundApiClient.sendRawEmail", () => {
 		expect(options?.body).toBe(JSON.stringify(payload));
 	});
 
-	it("reports an API without raw relay so the caller can fall back", async () => {
-		spyOn(globalThis, "fetch").mockResolvedValue(
-			new Response("Not Found", { status: 404 }),
-		);
+	it.each([400, 404, 405, 413])(
+		"returns null on %i so the caller falls back to the JSON send",
+		async (status) => {
+			spyOn(globalThis, "fetch").mockResolvedValue(
+				Response.json({ error: "Duplicate from header" }, { status }),
+			);
 
-		expect(await client().sendRawEmail("secret", payload, "key")).toBeNull();
-	});
+			expect(await client().sendRawEmail("secret", payload, "key")).toBeNull();
+		},
+	);
 
-	it("maps raw relay rejections to SMTP failures", async () => {
+	it("maps other raw relay rejections to SMTP failures", async () => {
 		spyOn(globalThis, "fetch").mockResolvedValue(
 			Response.json(
-				{ error: "Duplicate from header" },
-				{ status: 400 },
+				{ error: "This credential cannot send from that address" },
+				{ status: 403 },
 			),
 		);
 
 		await expect(
 			client().sendRawEmail("secret", payload, "key"),
-		).rejects.toMatchObject({
-			responseCode: 550,
-			message: "5.6.0 Message rejected: Duplicate from header",
-		});
+		).rejects.toMatchObject({ responseCode: 550 });
 	});
 });

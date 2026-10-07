@@ -2312,6 +2312,8 @@ describe("E2 API - Email E2E", () => {
 					`To: ${E2E_RECIPIENT_ADDRESS}`,
 					`Bcc: ${hiddenRecipient}`,
 					"X-SES-CONFIGURATION-SET: attacker-set",
+					"Received: from client.example (client.example [203.0.113.7])",
+					"Sender: someone-else@e2e-secondary.inbound.test",
 					`Subject: ${subject}`,
 					"X-Entity-Ref-ID: raw-relay",
 				],
@@ -2381,6 +2383,8 @@ describe("E2 API - Email E2E", () => {
 			expect(names.filter((name) => name === "from")).toHaveLength(1);
 			expect(names).toContain("date");
 			expect(names).toContain("x-entity-ref-id");
+			expect(names).not.toContain("received");
+			expect(names).not.toContain("sender");
 			expect(relayed.raw).not.toContain(hiddenRecipient);
 
 			const sentEmail = await getEmailDetail(sent.id);
