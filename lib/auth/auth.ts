@@ -355,6 +355,18 @@ export const auth = betterAuth({
 	databaseHooks: {
 		user: {
 			create: {
+				before: async (user) => {
+					if (user.email && (await isBlockedEmailDomain(user.email))) {
+						console.log(
+							`🚫 Blocked user creation from banned domain: ${user.email}`,
+						);
+						throw new APIError("FORBIDDEN", {
+							message:
+								"Signups from this email domain are not allowed. Please use a different email address.",
+						});
+					}
+					return { data: user };
+				},
 				after: async (user) => {
 					if (process.env.INBOUND_LOCAL_DEV === "true") return;
 					// Personal welcome email from Ryan on every new signup.
