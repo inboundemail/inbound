@@ -52,8 +52,6 @@ const plans = [
 	{ name: "scale", volume: "200,000", price: 79, featured: false },
 ];
 
-const debrisClass = "pointer-events-none absolute hidden h-24 w-40 xl:block";
-
 export default async function Page() {
 	const session = await auth.api
 		.getSession({
@@ -75,7 +73,6 @@ export default async function Page() {
 					anchorOffset={120}
 					clear
 					fadeBottom={220}
-					interactive
 					className="pointer-events-none absolute inset-0 block h-full w-full"
 				/>
 				<div className="relative mx-auto max-w-3xl px-6">
@@ -107,16 +104,6 @@ export default async function Page() {
 					</header>
 
 					<div className="relative pt-20 sm:pt-28">
-						<Dither
-							scene="debris"
-							seed={1}
-							className={`${debrisClass} right-0 top-12 md:block`}
-						/>
-						<Dither
-							scene="debris"
-							seed={7}
-							className={`${debrisClass} right-full top-[240px] mr-16`}
-						/>
 						<h1 className="[font-family:inherit] text-[34px] font-normal leading-[40px] tracking-[-0.04em] sm:text-[56px] sm:leading-[62px]">
 							give every agent
 							<br />a real inbox.
@@ -146,11 +133,6 @@ export default async function Page() {
 
 			<div className="mx-auto max-w-3xl px-6">
 				<section className="relative pt-24">
-					<Dither
-						scene="debris"
-						seed={3}
-						className={`${debrisClass} left-full top-10 ml-12`}
-					/>
 					<h2 className="pb-10 [font-family:inherit] text-2xl font-normal leading-8 tracking-[-0.03em] sm:text-[28px] sm:leading-9">
 						one api for the whole conversation.
 					</h2>
@@ -180,11 +162,6 @@ export default async function Page() {
 				</section>
 
 				<section className="relative pt-28">
-					<Dither
-						scene="tear"
-						seed={5}
-						className="absolute inset-x-6 top-14 block h-4"
-					/>
 					<Image
 						src="/images/home/quote-dither.png"
 						alt=""
@@ -208,11 +185,6 @@ export default async function Page() {
 				</section>
 
 				<section className="relative pt-32">
-					<Dither
-						scene="debris"
-						seed={11}
-						className={`${debrisClass} right-full top-52 mr-16`}
-					/>
 					<h2 className="pb-8 [font-family:inherit] text-2xl font-normal leading-8 tracking-[-0.03em] sm:text-[28px] sm:leading-9">
 						unlimited mailboxes, every plan.
 					</h2>
@@ -254,7 +226,6 @@ export default async function Page() {
 					scene="horizon"
 					apex={0.62}
 					radius={0.57}
-					interactive
 					className="pointer-events-none absolute inset-x-0 bottom-0 block h-[220px] w-full sm:h-[320px]"
 				/>
 				<div className="relative mx-auto max-w-3xl px-6 pb-[240px] sm:pb-[340px]">
