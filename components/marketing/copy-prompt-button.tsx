@@ -17,10 +17,10 @@ export function CopyPromptButton() {
 		<button
 			type="button"
 			onClick={copy}
-			className="inline-flex items-center gap-2 rounded-xl border border-[#e7e5e4] bg-white px-[22px] py-[13px] text-base font-medium text-[#1c1917] transition-[background-color,transform] duration-200 ease-[cubic-bezier(0.2,0,0,1)] hover:bg-[#f5f5f4] active:scale-[0.99]"
+			className="inline-flex items-center gap-2.5 border border-[#3a3532] px-5 py-[13px] text-sm text-[#fafaf9] transition-colors duration-200 hover:border-[#57534e] hover:bg-[#232020]"
 		>
-			{copied && <Check className="size-4 text-[#8161FF]" />}
-			{copied ? "Prompt copied" : "Copy agent prompt"}
+			{copied ? <Check className="size-4 text-[#8161FF]" /> : <span className="text-[#8161FF]">$</span>}
+			{copied ? "prompt copied" : "copy agent prompt"}
 		</button>
 	);
 }
