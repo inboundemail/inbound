@@ -1,57 +1,55 @@
 "use client";
 
+import { Check } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { INSTALL_COMMAND } from "@/components/marketing/agent-prompt";
-import { useDemoInboxAddress } from "@/components/marketing/live-inbox";
 
-export function HomeCta() {
-	const address = useDemoInboxAddress();
-	const [copied, setCopied] = useState<"address" | "install" | null>(null);
+export function HomeCta({
+	startHref,
+	isLoggedIn,
+}: {
+	startHref: string;
+	isLoggedIn: boolean;
+}) {
+	const [copied, setCopied] = useState(false);
 
-	const copy = async (kind: "address" | "install", value: string) => {
-		if (!value) return;
-		await navigator.clipboard.writeText(value);
-		setCopied(kind);
-		setTimeout(() => setCopied(null), 2000);
+	const copy = async () => {
+		await navigator.clipboard.writeText(INSTALL_COMMAND);
+		setCopied(true);
+		setTimeout(() => setCopied(false), 2000);
 	};
 
 	return (
-		<section className="my-14 mb-24 flex flex-col gap-10 rounded-3xl bg-[#8161FF] p-8 sm:p-14 lg:flex-row lg:items-center lg:justify-between lg:gap-12">
-			<div className="flex max-w-[520px] flex-col gap-3">
-				<h2 className="font-heading text-[36px] font-semibold leading-[1.05] tracking-[-0.045em] text-white sm:text-[44px]">
-					your inbox is already live.
-				</h2>
-				<p className="text-[17px] leading-[26px] tracking-[-0.02em] text-[#ede8fe]">
-					Send it an email from your phone. It shows up above in real time — then
-					build on it.
-				</p>
-			</div>
-			<div className="flex flex-1 flex-col gap-2.5 lg:max-w-[480px]">
+		<section className="flex flex-col gap-10 pt-40">
+			<h2 className="[font-family:inherit] text-[34px] font-normal leading-[40px] tracking-[-0.04em] sm:text-[48px] sm:leading-[54px]">
+				your agent's inbox is <br className="hidden sm:inline" />
+				one command away.
+			</h2>
+			<div className="flex flex-wrap items-center gap-x-6 gap-y-3">
 				<button
 					type="button"
-					onClick={() => copy("address", address)}
-					className="flex items-center justify-between gap-4 rounded-xl bg-white px-[18px] py-4 text-left"
+					onClick={copy}
+					className="group flex items-center gap-6 border border-[#8161FF] bg-[#1c1917] px-5 py-[13px] text-sm transition-colors hover:bg-[#221d33]"
 				>
-					<span className="truncate font-mono text-base tracking-normal text-[#1c1917]">
-						{address || "\u00a0"}
-					</span>
-					<span className="shrink-0 text-sm font-medium text-[#6b4fd9]">
-						{copied === "address" ? "copied" : "copy"}
-					</span>
-				</button>
-				<button
-					type="button"
-					onClick={() => copy("install", INSTALL_COMMAND)}
-					className="flex items-center justify-between gap-4 rounded-xl bg-[#1c1917] px-[18px] py-4 text-left transition-colors hover:bg-[#292524]"
-				>
-					<span className="font-mono text-[15px] tracking-normal text-[#fafaf9]">
-						<span className="text-[#a8a29e]">$ </span>
+					<span>
+						<span className="text-[#8161FF]">$ </span>
 						{INSTALL_COMMAND}
 					</span>
-					<span className="shrink-0 text-sm text-[#a8a29e]">
-						{copied === "install" ? "copied" : "copy"}
-					</span>
+					{copied ? (
+						<Check className="size-4 text-[#8161FF]" />
+					) : (
+						<span className="text-[#78716c] transition-colors group-hover:text-[#fafaf9]">
+							copy
+						</span>
+					)}
 				</button>
+				<Link
+					href={startHref}
+					className="text-sm text-[#a8a29e] transition-colors hover:text-[#fafaf9]"
+				>
+					{isLoggedIn ? "go to dashboard →" : "or start for $9/mo →"}
+				</Link>
 			</div>
 		</section>
 	);

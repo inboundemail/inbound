@@ -253,7 +253,7 @@ function ExampleDetail({
 				initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }}
 				animate={{ opacity: 1, y: 0, scale: 1 }}
 				transition={{ delay: reduceMotion ? 0 : 1.4, duration: 0.35, ease }}
-				className="flex max-w-[400px] flex-col gap-1.5 self-end bg-[#8161FF] px-3.5 py-3"
+				className="flex min-w-0 max-w-[min(400px,100%)] flex-col gap-1.5 self-end bg-[#8161FF] px-3.5 py-3"
 			>
 				<span className="text-sm leading-5 text-white">{item.reply}</span>
 				<span className="truncate text-[11px] text-[#e4dcff]">
@@ -291,5 +291,31 @@ function LiveDetail({
 				)}
 			</div>
 		</motion.div>
+	);
+}
+
+export function InboxHint() {
+	const address = useDemoInboxAddress();
+	const [copied, setCopied] = useState(false);
+
+	const copy = async () => {
+		if (!address) return;
+		await navigator.clipboard.writeText(address);
+		setCopied(true);
+		setTimeout(() => setCopied(false), 2000);
+	};
+
+	return (
+		<p className="mt-8 text-[13px] leading-5 text-[#a8a29e]">
+			or email{" "}
+			<button
+				type="button"
+				onClick={copy}
+				className="text-[#fafaf9] underline decoration-[#8161FF] decoration-dotted underline-offset-4 transition-colors hover:decoration-solid"
+			>
+				{address || "your demo inbox"}
+			</button>{" "}
+			{copied ? "· copied" : "and watch it land ↓"}
+		</p>
 	);
 }

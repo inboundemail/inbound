@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-type Scene = "horizon" | "rowfill" | "step";
+type Scene = "horizon" | "rowfill" | "step" | "rail";
 
 type SceneInput = {
 	x: number;
@@ -104,16 +104,25 @@ function step({ x, y, w, h, level }: SceneInput) {
 	return level * (0.55 + 0.45 * (1 - (x + y) / (w + h)));
 }
 
+function rail({ y, h, t, seed }: SceneInput) {
+	const pulse = ((t * 160 + seed * 220) % (h + 300)) - 150;
+	const head = Math.exp(-(((y - pulse) / 60) ** 2));
+	const trail = y < pulse ? 0.45 * Math.exp((y - pulse) / 160) : 0;
+	return 0.22 + 0.8 * head + trail;
+}
+
 const SCENES: Record<Scene, (input: SceneInput) => number> = {
 	horizon,
 	rowfill,
 	step,
+	rail,
 };
 
 const ANIMATED: Record<Scene, boolean> = {
 	horizon: true,
 	rowfill: true,
 	step: false,
+	rail: true,
 };
 
 export function Dither({

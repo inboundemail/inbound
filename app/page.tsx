@@ -5,7 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { CopyPromptButton } from "@/components/marketing/copy-prompt-button";
 import { Dither } from "@/components/marketing/dither";
-import { LiveInbox } from "@/components/marketing/live-inbox";
+import { HomeCta } from "@/components/marketing/home-cta";
+import { InboxHint, LiveInbox } from "@/components/marketing/live-inbox";
 import { Mark } from "@/components/marketing/mark";
 import { footerGroups } from "@/components/marketing-nav";
 import { auth } from "@/lib/auth/auth";
@@ -29,16 +30,22 @@ export const metadata: Metadata = {
 
 const steps = [
 	{
+		status: "received",
+		time: "+0ms",
 		title: "Add your domain, get JSON.",
 		code: '{ from: "maya@acme.com",\n  subject: "move my demo?",\n  threadId: "V1StGXR8_Z5j" }',
 		level: 0.3,
 	},
 	{
+		status: "routed",
+		time: "+84ms",
 		title: "Route any address anywhere.",
 		code: "support@  →  /api/agent\nbilling@  →  /api/billing\n*@        →  /api/catch-all",
 		level: 0.6,
 	},
 	{
+		status: "replied",
+		time: "+1.2s",
 		title: "Reply in the same thread.",
 		code: 'inbound.emails.reply(threadId, {\n  text: "Moved to Friday."\n})',
 		level: 0.95,
@@ -64,7 +71,7 @@ export default async function Page() {
 
 	return (
 		<div
-			className={`${openTuiMono.className} min-h-screen overflow-x-hidden bg-[#1c1917] text-[#fafaf9] selection:bg-[#8161FF] selection:text-white`}
+			className={`${openTuiMono.className} min-h-screen overflow-x-hidden bg-[#1c1917] text-[#fafaf9] selection:bg-[#8161FF] selection:text-white [&_:is(a,button):focus-visible]:outline [&_:is(a,button):focus-visible]:outline-2 [&_:is(a,button):focus-visible]:outline-offset-4 [&_:is(a,button):focus-visible]:outline-[#8161FF]`}
 		>
 			<section className="relative">
 				<Dither
@@ -107,6 +114,10 @@ export default async function Page() {
 						<h1 className="[font-family:inherit] text-[34px] font-normal leading-[40px] tracking-[-0.04em] sm:text-[56px] sm:leading-[62px]">
 							give every agent
 							<br />a real inbox.
+							<span
+								aria-hidden="true"
+								className="ml-[0.12em] inline-block h-[0.78em] w-0 translate-y-[0.06em] animate-blink border-l-[0.5em] text-[#8161FF] motion-reduce:animate-none"
+							/>
 						</h1>
 						<p className="mt-6 max-w-[520px] text-base leading-[26px] text-[#a8a29e]">
 							Receive, parse, and reply in thread through one API &amp; CLI.
@@ -120,6 +131,7 @@ export default async function Page() {
 							</Link>
 							<CopyPromptButton />
 						</div>
+						<InboxHint />
 					</div>
 
 					<div
@@ -133,29 +145,43 @@ export default async function Page() {
 
 			<div className="mx-auto max-w-3xl px-6">
 				<section className="relative pt-24">
-					<h2 className="pb-10 [font-family:inherit] text-2xl font-normal leading-8 tracking-[-0.03em] sm:text-[28px] sm:leading-9">
+					<h2 className="[font-family:inherit] text-2xl font-normal leading-8 tracking-[-0.03em] sm:text-[32px] sm:leading-10">
 						one api for the whole conversation.
 					</h2>
-					<ol>
+					<ol className="relative mt-14">
 						{steps.map((item, index) => (
 							<li
 								key={item.title}
-								className="flex flex-col gap-5 border-t border-[#2e2a27] py-7 sm:flex-row sm:items-center sm:gap-8"
+								className="relative flex gap-6 pb-16 last:pb-0 sm:gap-10"
 							>
-								<div className="flex items-center gap-5 sm:w-[288px] sm:shrink-0 sm:gap-8">
+								{index < steps.length - 1 && (
+									<Dither
+										scene="rail"
+										seed={index}
+										className="pointer-events-none absolute left-5 top-12 block h-[calc(100%-3rem)] w-2"
+									/>
+								)}
+								<div className="relative size-12 shrink-0 bg-[#1c1917]">
 									<Dither
 										scene="step"
-										seed={index}
 										level={item.level}
-										className="size-12 shrink-0"
+										className="block size-12"
 									/>
-									<h3 className="[font-family:inherit] text-[17px] font-normal leading-6">
+								</div>
+								<div className="flex min-w-0 flex-1 flex-col gap-3">
+									<div className="flex items-baseline gap-3 text-[13px]">
+										<span className="text-[#8161FF]">{item.status}</span>
+										<span className="tabular-nums text-[#78716c]">
+											{item.time}
+										</span>
+									</div>
+									<h3 className="[font-family:inherit] text-xl font-normal leading-7 tracking-[-0.02em]">
 										{item.title}
 									</h3>
+									<pre className="mt-2 overflow-x-auto ![font-family:inherit] border border-[#2e2a27] bg-[#151312] px-5 py-[18px] text-xs leading-5 text-[#d6d3d1]">
+										{item.code}
+									</pre>
 								</div>
-								<pre className="min-w-0 flex-1 overflow-x-auto ![font-family:inherit] border border-[#2e2a27] bg-[#151312] px-5 py-[18px] text-xs leading-5 text-[#d6d3d1]">
-									{item.code}
-								</pre>
 							</li>
 						))}
 					</ol>
@@ -185,7 +211,7 @@ export default async function Page() {
 				</section>
 
 				<section className="relative pt-32">
-					<h2 className="pb-8 [font-family:inherit] text-2xl font-normal leading-8 tracking-[-0.03em] sm:text-[28px] sm:leading-9">
+					<h2 className="pb-8 [font-family:inherit] text-2xl font-normal leading-8 tracking-[-0.03em] sm:text-[32px] sm:leading-10">
 						unlimited mailboxes, every plan.
 					</h2>
 					<ul className="border-b border-[#2e2a27]">
@@ -210,7 +236,7 @@ export default async function Page() {
 										{plan.volume} emails/mo
 									</span>
 									<span
-										className={`relative text-[22px] tracking-[-0.03em] ${plan.featured ? "bg-[#1c1917] px-2 py-1" : ""}`}
+										className={`relative text-[22px] tabular-nums tracking-[-0.03em] ${plan.featured ? "bg-[#1c1917] px-2 py-1" : ""}`}
 									>
 										${plan.price}
 									</span>
@@ -219,9 +245,11 @@ export default async function Page() {
 						))}
 					</ul>
 				</section>
+
+				<HomeCta startHref={startHref} isLoggedIn={isLoggedIn} />
 			</div>
 
-			<footer className="relative mt-32">
+			<footer className="relative mt-28">
 				<Dither
 					scene="horizon"
 					apex={0.62}
