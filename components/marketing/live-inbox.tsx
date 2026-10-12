@@ -139,8 +139,8 @@ export function LiveInbox() {
 		: { duration: 0.45, ease };
 
 	return (
-		<div className="flex w-full flex-col overflow-hidden rounded-2xl border border-[#e7e5e4] bg-white shadow-[0_24px_48px_-24px_rgba(28,25,23,0.18)]">
-			<div className="flex items-center justify-between gap-4 border-b border-[#e7e5e4] px-[18px] py-3.5">
+		<div className="flex w-full flex-col overflow-hidden border border-[#3a3532] bg-[#1c1917] shadow-[0_32px_80px_-32px_rgba(129,97,255,0.45)]">
+			<div className="flex items-center justify-between gap-4 border-b border-[#2e2a27] bg-[#211e1c] px-[18px] py-3.5">
 				<button
 					type="button"
 					onClick={copyAddress}
@@ -148,20 +148,20 @@ export function LiveInbox() {
 					aria-label="Copy inbox address"
 				>
 					<span className="relative flex size-2 shrink-0">
-						<span className="absolute inline-flex size-full animate-ping rounded-full bg-[#16a34a] opacity-60 motion-reduce:animate-none" />
-						<span className="relative inline-flex size-2 rounded-full bg-[#16a34a]" />
+						<span className="absolute inline-flex size-full animate-ping bg-[#8161FF] opacity-60 motion-reduce:animate-none" />
+						<span className="relative inline-flex size-2 bg-[#8161FF]" />
 					</span>
-					<span className="truncate font-mono text-[13px] tracking-normal text-[#1c1917]">
+					<span className="truncate text-[13px] text-[#fafaf9]">
 						{address || "\u00a0"}
 					</span>
 					{copied ? (
 						<Check className="size-3.5 shrink-0 text-[#8161FF]" />
 					) : (
-						<Copy className="size-3.5 shrink-0 text-[#a8a29e] transition-colors group-hover:text-[#1c1917]" />
+						<Copy className="size-3.5 shrink-0 text-[#78716c] transition-colors group-hover:text-[#fafaf9]" />
 					)}
 				</button>
-				<span className="hidden shrink-0 font-mono text-[11px] tracking-[0.08em] text-[#78716c] sm:inline">
-					LIVE · SEND IT SOMETHING
+				<span className="hidden shrink-0 text-xs text-[#a8a29e] sm:inline">
+					live · email it
 				</span>
 			</div>
 
@@ -177,29 +177,27 @@ export function LiveInbox() {
 								animate={{ opacity: 1, y: 0 }}
 								exit={{ opacity: 0 }}
 								transition={rowTransition}
-								className={`flex h-[68px] items-start gap-3 border-b border-[#f0efee] px-[18px] py-3.5 transition-colors duration-500 ${
-									isLatest ? "bg-[#f6f3ff]" : "bg-white"
+								className={`flex h-[68px] items-start gap-3 border-b border-[#2e2a27] px-[18px] py-3.5 transition-colors duration-500 ${
+									isLatest ? "bg-[#221d33]" : "bg-[#1c1917]"
 								}`}
 							>
 								<span
-									className={`mt-1.5 size-2 shrink-0 rounded-full transition-colors duration-500 ${
+									className={`mt-1.5 size-2 shrink-0 transition-colors duration-500 ${
 										isLatest ? "bg-[#8161FF]" : "bg-transparent"
 									}`}
 								/>
 								<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 									<div className="flex items-center justify-between gap-3">
 										<span
-											className={`truncate text-sm tracking-[-0.01em] text-[#1c1917] ${
-												isLatest ? "font-semibold" : "font-medium"
-											}`}
+											className={`truncate text-sm ${isLatest ? "text-[#fafaf9]" : "text-[#d6d3d1]"}`}
 										>
 											{item.from}
 										</span>
-										<span className="shrink-0 text-xs text-[#a8a29e]">
+										<span className="shrink-0 text-xs text-[#78716c]">
 											{item.live ? "just now" : "example"}
 										</span>
 									</div>
-									<span className="truncate text-sm tracking-[-0.01em] text-[#52525b]">
+									<span className="truncate text-sm text-[#a8a29e]">
 										{item.subject}
 									</span>
 								</div>
@@ -245,22 +243,20 @@ function ExampleDetail({
 				initial={reduceMotion ? false : { opacity: 0, y: 4 }}
 				animate={{ opacity: 1, y: 0 }}
 				transition={{ delay: reduceMotion ? 0 : 0.6, duration: 0.3, ease }}
-				className="flex items-center gap-2 font-mono text-xs tracking-normal"
+				className="flex items-center gap-2 text-xs"
 			>
 				<span className="text-[#78716c]">POST</span>
-				<span className="text-[#6b4fd9]">{item.route}</span>
-				<span className="text-[#16a34a]">200 · {item.latency}</span>
+				<span className="text-[#a594ff]">{item.route}</span>
+				<span className="text-[#a8a29e]">200 · {item.latency}</span>
 			</motion.div>
 			<motion.div
 				initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }}
 				animate={{ opacity: 1, y: 0, scale: 1 }}
 				transition={{ delay: reduceMotion ? 0 : 1.4, duration: 0.35, ease }}
-				className="flex max-w-[380px] flex-col gap-1.5 self-end rounded-xl rounded-br-[4px] bg-[#8161FF] px-3.5 py-3"
+				className="flex max-w-[400px] flex-col gap-1.5 self-end bg-[#8161FF] px-3.5 py-3"
 			>
-				<span className="text-sm leading-5 tracking-[-0.01em] text-white">
-					{item.reply}
-				</span>
-				<span className="truncate font-mono text-[11px] tracking-normal text-[#dcd2ff]">
+				<span className="text-sm leading-5 text-white">{item.reply}</span>
+				<span className="truncate text-[11px] text-[#e4dcff]">
 					↳ replied in thread · Re: {item.subject}
 				</span>
 			</motion.div>
@@ -282,14 +278,14 @@ function LiveDetail({
 			transition={{ duration: 0.3 }}
 			className="flex flex-col gap-2"
 		>
-			<span className="font-mono text-xs tracking-normal text-[#16a34a]">
+			<span className="text-xs text-[#a594ff]">
 				parsed · ready for your webhook
 			</span>
-			<div className="flex flex-col rounded-lg bg-[#fafaf9] px-3 py-2.5 font-mono text-xs leading-5 tracking-normal text-[#1c1917]">
+			<div className="flex flex-col border border-[#2e2a27] bg-[#151312] px-3 py-2.5 text-xs leading-5 text-[#fafaf9]">
 				<span className="truncate">from: "{item.from}"</span>
 				<span className="truncate">subject: "{item.subject}"</span>
 				{item.preview && (
-					<span className="truncate text-[#78716c]">
+					<span className="truncate text-[#a8a29e]">
 						text: "{item.preview}"
 					</span>
 				)}

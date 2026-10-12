@@ -17,7 +17,7 @@ export function CopyPromptButton() {
 		<button
 			type="button"
 			onClick={copy}
-			className="inline-flex items-center gap-2.5 border border-[#3a3532] px-5 py-[13px] text-sm text-[#fafaf9] transition-colors duration-200 hover:border-[#57534e] hover:bg-[#232020]"
+			className="inline-flex items-center gap-2.5 border border-[#3a3532] bg-[#1c1917] px-5 py-[13px] text-sm text-[#fafaf9] transition-colors duration-200 hover:border-[#57534e] hover:bg-[#232020]"
 		>
 			{copied ? <Check className="size-4 text-[#8161FF]" /> : <span className="text-[#8161FF]">$</span>}
 			{copied ? "prompt copied" : "copy agent prompt"}
