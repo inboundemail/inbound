@@ -8,6 +8,7 @@ import { updateBlockedSignupDomain } from "../admin/blocked-signup-domains/updat
 import { deleteIdentity } from "../admin/identities/delete";
 import { listTenants } from "../admin/tenants/list";
 import { pauseTenant } from "../admin/tenants/pause";
+import { resumeTenant } from "../admin/tenants/resume";
 import { suspendTenant } from "../admin/tenants/suspend";
 import { banUser } from "../admin/users/ban";
 import { unbanUser } from "../admin/users/unban";
@@ -536,6 +537,7 @@ https://inbound.new/api/e2
 	.use(deleteBlockedSignupDomain)
 	.use(listTenants)
 	.use(pauseTenant)
+	.use(resumeTenant)
 	.use(suspendTenant)
 	.use(banUser)
 	.use(unbanUser)
