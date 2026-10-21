@@ -715,23 +715,23 @@ export const scheduledEmails = pgTable("scheduled_emails", {
 	tags: text("tags"), // JSON array of email tags (Resend-compatible)
 
 	// Processing metadata
-	attempts: integer("attempts").default(0), // Number of send attempts (managed by QStash retries)
-	maxAttempts: integer("max_attempts").default(3), // Maximum retry attempts (legacy, QStash handles this now)
-	nextRetryAt: timestamp("next_retry_at"), // When to retry if failed (legacy, QStash handles this now)
+	attempts: integer("attempts").default(0), // Number of times the send-scheduled cron has claimed this row
+	maxAttempts: integer("max_attempts").default(3), // Claims allowed before a row that never reached SES is failed
+	nextRetryAt: timestamp("next_retry_at"), // Unused (legacy)
 	lastError: text("last_error"), // Last error message if failed
 
 	// Idempotency
 	idempotencyKey: varchar("idempotency_key", { length: 256 }), // For preventing duplicates
 
-	// QStash integration fields (active - replaces cron-based scheduling)
-	qstashScheduleId: varchar("qstash_schedule_id", { length: 255 }), // QStash message ID for scheduled delivery
-	qstashDlqId: varchar("qstash_dlq_id", { length: 255 }), // Dead Letter Queue ID from QStash (future use)
+	// Unused since scheduled sends moved to the send-scheduled cron; kept to avoid a migration
+	qstashScheduleId: varchar("qstash_schedule_id", { length: 255 }),
+	qstashDlqId: varchar("qstash_dlq_id", { length: 255 }),
 
 	// Audit and tracking
 	createdAt: timestamp("created_at").defaultNow(),
 	updatedAt: timestamp("updated_at").defaultNow(),
 	sentAt: timestamp("sent_at"), // When the email was actually sent
-	sentEmailId: varchar("sent_email_id", { length: 255 }), // Reference to sentEmails after successful sending
+	sentEmailId: varchar("sent_email_id", { length: 255 }), // Set just before the SES call; a stale processing row with this set may have been sent
 });
 
 // Email Sending Evaluations table - stores AI evaluations of sent emails for fraud monitoring

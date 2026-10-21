@@ -1,4 +1,3 @@
-import { Client as QStashClient } from "@upstash/qstash";
 import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { db } from "@/lib/db";
@@ -29,69 +28,53 @@ export const pauseEmail = new Elysia().post(
 
 		const emailId = params.id;
 
-		const [scheduledEmail] = await db
-			.select()
-			.from(scheduledEmails)
+		const [paused] = await db
+			.update(scheduledEmails)
+			.set({
+				status: SCHEDULED_EMAIL_STATUS.PAUSED,
+				updatedAt: new Date(),
+			})
 			.where(
 				and(
 					eq(scheduledEmails.id, emailId),
 					eq(scheduledEmails.userId, userId),
+					eq(scheduledEmails.status, SCHEDULED_EMAIL_STATUS.SCHEDULED),
 				),
 			)
-			.limit(1);
+			.returning({ id: scheduledEmails.id });
 
-		if (!scheduledEmail) {
-			set.status = 404;
-			return { error: "Scheduled email not found" };
-		}
+		if (!paused) {
+			const [scheduledEmail] = await db
+				.select({ status: scheduledEmails.status })
+				.from(scheduledEmails)
+				.where(
+					and(
+						eq(scheduledEmails.id, emailId),
+						eq(scheduledEmails.userId, userId),
+					),
+				)
+				.limit(1);
 
-		if (scheduledEmail.status === SCHEDULED_EMAIL_STATUS.PAUSED) {
-			console.log("✅ Email already paused:", emailId);
-			return {
-				success: true,
-				message: "Email already paused",
-				id: emailId,
-				status: SCHEDULED_EMAIL_STATUS.PAUSED,
-			};
-		}
+			if (!scheduledEmail) {
+				set.status = 404;
+				return { error: "Scheduled email not found" };
+			}
 
-		if (scheduledEmail.status !== SCHEDULED_EMAIL_STATUS.SCHEDULED) {
+			if (scheduledEmail.status === SCHEDULED_EMAIL_STATUS.PAUSED) {
+				console.log("✅ Email already paused:", emailId);
+				return {
+					success: true,
+					message: "Email already paused",
+					id: emailId,
+					status: SCHEDULED_EMAIL_STATUS.PAUSED,
+				};
+			}
+
 			set.status = 400;
 			return {
 				error: `Cannot pause an email with status "${scheduledEmail.status}". Only scheduled emails can be paused.`,
 			};
 		}
-
-		if (scheduledEmail.qstashScheduleId) {
-			try {
-				const qstashClient = new QStashClient({
-					token: process.env.QSTASH_TOKEN!,
-				});
-
-				console.log(
-					"⏸️ Deleting from QStash, messageId:",
-					scheduledEmail.qstashScheduleId,
-				);
-
-				await qstashClient.messages.delete(scheduledEmail.qstashScheduleId);
-
-				console.log("✅ Deleted from QStash successfully");
-			} catch (qstashError) {
-				console.error(
-					"⚠️ Failed to delete from QStash (continuing anyway):",
-					qstashError,
-				);
-			}
-		}
-
-		await db
-			.update(scheduledEmails)
-			.set({
-				status: SCHEDULED_EMAIL_STATUS.PAUSED,
-				qstashScheduleId: null,
-				updatedAt: new Date(),
-			})
-			.where(eq(scheduledEmails.id, emailId));
 
 		console.log("✅ Scheduled email paused successfully:", emailId);
 

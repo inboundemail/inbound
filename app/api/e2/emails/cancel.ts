@@ -1,5 +1,4 @@
-import { Client as QStashClient } from "@upstash/qstash";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { db } from "@/lib/db";
 import {
@@ -86,14 +85,6 @@ export const cancelEmail = new Elysia().delete(
 			return { error: "Email not found" };
 		}
 
-		// Check if already sent
-		if (scheduledEmail.status === SCHEDULED_EMAIL_STATUS.SENT) {
-			console.log("⚠️ Email already sent, cannot cancel:", emailId);
-			set.status = 400;
-			return { error: "Cannot cancel an email that has already been sent" };
-		}
-
-		// Check if already cancelled
 		if (scheduledEmail.status === SCHEDULED_EMAIL_STATUS.CANCELLED) {
 			console.log("✅ Email already cancelled:", emailId);
 			return {
@@ -103,40 +94,57 @@ export const cancelEmail = new Elysia().delete(
 			};
 		}
 
-		// Cancel in QStash if we have a schedule ID
-		if (scheduledEmail.qstashScheduleId) {
-			try {
-				const qstashClient = new QStashClient({
-					token: process.env.QSTASH_TOKEN!,
-				});
-
-				console.log(
-					"🗑️ Deleting from QStash, messageId:",
-					scheduledEmail.qstashScheduleId,
-				);
-
-				// QStash uses messages.delete for scheduled messages
-				await qstashClient.messages.delete(scheduledEmail.qstashScheduleId);
-
-				console.log("✅ Deleted from QStash successfully");
-			} catch (qstashError) {
-				console.error(
-					"⚠️ Failed to delete from QStash (continuing anyway):",
-					qstashError,
-				);
-				// Continue with database cancellation even if QStash deletion fails
-				// The webhook will handle the case where the email is already cancelled
-			}
-		}
-
-		// Update database record to cancelled
-		await db
+		const [cancelled] = await db
 			.update(scheduledEmails)
 			.set({
 				status: SCHEDULED_EMAIL_STATUS.CANCELLED,
 				updatedAt: new Date(),
 			})
-			.where(eq(scheduledEmails.id, emailId));
+			.where(
+				and(
+					eq(scheduledEmails.id, emailId),
+					eq(scheduledEmails.userId, userId),
+					inArray(scheduledEmails.status, [
+						SCHEDULED_EMAIL_STATUS.SCHEDULED,
+						SCHEDULED_EMAIL_STATUS.PAUSED,
+						SCHEDULED_EMAIL_STATUS.FAILED,
+					]),
+				),
+			)
+			.returning({ id: scheduledEmails.id });
+
+		if (!cancelled) {
+			const [current] = await db
+				.select({ status: scheduledEmails.status })
+				.from(scheduledEmails)
+				.where(
+					and(
+						eq(scheduledEmails.id, emailId),
+						eq(scheduledEmails.userId, userId),
+					),
+				)
+				.limit(1);
+			const status = current?.status ?? scheduledEmail.status;
+
+			if (status === SCHEDULED_EMAIL_STATUS.CANCELLED) {
+				return {
+					success: true,
+					message: "Email already cancelled",
+					id: emailId,
+				};
+			}
+
+			console.log(`⚠️ Cannot cancel email ${emailId} with status ${status}`);
+			set.status = 400;
+			return {
+				error:
+					status === SCHEDULED_EMAIL_STATUS.SENT
+						? "Cannot cancel an email that has already been sent"
+						: status === SCHEDULED_EMAIL_STATUS.PROCESSING
+							? "Cannot cancel an email that is currently being sent"
+							: `Cannot cancel an email with status "${status}"`,
+			};
+		}
 
 		console.log("✅ Scheduled email cancelled successfully:", emailId);
 

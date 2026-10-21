@@ -1,6 +1,7 @@
 import {
 	buildLocalEnv,
 	LOCAL_APP_PORT,
+	LOCAL_CRON_SECRET,
 	LOCAL_MAIL_PORT,
 	LOCAL_SERVICE_API_KEY,
 } from "@/scripts/local-dev/env";
@@ -43,13 +44,20 @@ async function main() {
 	});
 
 	console.log(`Starting next dev against local services at ${appUrl}`);
+	console.log("Scheduled emails are sent by polling /api/cron/send-scheduled every minute.");
 	console.log(`Outgoing email is captured at http://127.0.0.1:${LOCAL_MAIL_PORT}/_local/messages and looped back to /api/inbound/webhook.`);
 	const child = Bun.spawn(["bunx", "next", "dev", "--port", String(LOCAL_APP_PORT)], {
 		env,
 		stdio: ["inherit", "inherit", "inherit"],
 	});
+	const scheduledSends = setInterval(() => {
+		fetch(`${appUrl}/api/cron/send-scheduled`, {
+			headers: { Authorization: `Bearer ${LOCAL_CRON_SECRET}` },
+		}).catch(() => {});
+	}, 60_000);
 	process.on("SIGINT", () => child.kill("SIGINT"));
 	const code = await child.exited;
+	clearInterval(scheduledSends);
 	mail.stop();
 	process.exit(code);
 }

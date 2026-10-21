@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	buildLocalEnv,
+	LOCAL_CRON_SECRET,
 	LOCAL_SERVICE_API_KEY,
 } from "@/scripts/local-dev/env";
 import { deliverInbound, startLocalMailServer } from "@/scripts/local-dev/mail-server";
@@ -1643,7 +1644,7 @@ describe("E2 API - Email E2E", () => {
 						body: JSON.stringify({
 							config: {
 								url: TEST_WEBHOOK_URL,
-								timeout: 45,
+								timeout: 25,
 								retryAttempts: 2,
 							},
 						}),
@@ -2457,6 +2458,163 @@ describe("E2 API - Email E2E", () => {
 	);
 
 	it(
+		"sends scheduled emails from the cron with pause, resume, cancel and stale recovery",
+		async () => {
+			const runCron = (authorized = true) =>
+				fetch(`${LOCAL_BASE_URL}/api/cron/send-scheduled`, {
+					headers: authorized
+						? { Authorization: `Bearer ${LOCAL_CRON_SECRET}` }
+						: {},
+				});
+			const stubCount = (subject: string) =>
+				(mailServer?.messages ?? []).filter((message) =>
+					message.raw.includes(subject),
+				).length;
+			const schedule = async (subject: string) => {
+				const created = await apiJson<{ id: string; status?: string }>(
+					"/emails",
+					{
+						method: "POST",
+						body: JSON.stringify({
+							from: E2E_SENDER_ADDRESS,
+							to: E2E_RECIPIENT_ADDRESS,
+							subject,
+							text: `Scheduled ${subject}`,
+							scheduled_at: new Date(Date.now() + 5 * 60_000).toISOString(),
+						}),
+					},
+				);
+				expect(created.response.status).toBe(201);
+				expect(created.data.status).toBe("scheduled");
+				return created.data.id;
+			};
+			const makeDue = (id: string) =>
+				psql(
+					`update scheduled_emails set scheduled_at = now() - interval '1 minute' where id = '${id}';`,
+					E2E_DATABASE,
+				);
+			const statusOf = async (id: string) =>
+				(await apiJson<EmailDetailResponse>(`/emails/${id}`)).data.status;
+
+			expect((await runCron(false)).status).toBe(401);
+
+			const token = makeToken("sched").replace(/[^a-z0-9-]/gi, "");
+			const subject = `E2E Scheduled ${token}`;
+			const id = await schedule(subject);
+
+			expect(
+				(await apiRequestWithKey(`/emails/${id}/pause`, ALT_API_KEY, {
+					method: "POST",
+				})).status,
+			).toBe(404);
+			const paused = await apiJson<{ status: string }>(`/emails/${id}/pause`, {
+				method: "POST",
+			});
+			expect(paused.response.status).toBe(200);
+			expect(paused.data.status).toBe("paused");
+
+			makeDue(id);
+			expect((await runCron()).status).toBe(200);
+			expect(stubCount(subject)).toBe(0);
+			expect(await statusOf(id)).toBe("paused");
+
+			const resumed = await apiJson<{ status: string; scheduled_at: string }>(
+				`/emails/${id}/resume`,
+				{ method: "POST" },
+			);
+			expect(resumed.response.status).toBe(200);
+			expect(resumed.data.status).toBe("scheduled");
+			expect(new Date(resumed.data.scheduled_at).getTime()).toBeLessThanOrEqual(
+				Date.now() + 1000,
+			);
+
+			const sentRun = await runCron();
+			expect(sentRun.status).toBe(200);
+			expect(((await sentRun.json()) as { sent: number }).sent).toBeGreaterThanOrEqual(1);
+			expect(await statusOf(id)).toBe("sent");
+			expect(stubCount(subject)).toBe(1);
+
+			expect((await runCron()).status).toBe(200);
+			expect(stubCount(subject)).toBe(1);
+			const cancelSent = await apiRequest(`/emails/${id}`, { method: "DELETE" });
+			expect(cancelSent.status).toBe(400);
+
+			const cancelSubject = `E2E Scheduled Cancel ${token}`;
+			const cancelId = await schedule(cancelSubject);
+			const cancelled = await apiRequest(`/emails/${cancelId}`, {
+				method: "DELETE",
+			});
+			expect(cancelled.status).toBe(200);
+			makeDue(cancelId);
+			await runCron();
+			expect(stubCount(cancelSubject)).toBe(0);
+			expect(await statusOf(cancelId)).toBe("cancelled");
+
+			const maybeSentSubject = `E2E Scheduled Interrupted After SES ${token}`;
+			const maybeSentId = await schedule(maybeSentSubject);
+			const unsentSubject = `E2E Scheduled Interrupted Before SES ${token}`;
+			const unsentId = await schedule(unsentSubject);
+			psql(
+				`update scheduled_emails set status = 'processing', attempts = 1, scheduled_at = now() - interval '20 minutes', updated_at = now() - interval '20 minutes', sent_email_id = case when id = '${maybeSentId}' then 'interrupted-${token}' else null end where id in ('${maybeSentId}', '${unsentId}');`,
+				E2E_DATABASE,
+			);
+			expect(
+				(await apiRequest(`/emails/${unsentId}`, { method: "DELETE" })).status,
+			).toBe(400);
+			expect((await runCron()).status).toBe(200);
+			expect(await statusOf(maybeSentId)).toBe("failed");
+			expect(stubCount(maybeSentSubject)).toBe(0);
+			expect(await statusOf(unsentId)).toBe("sent");
+			expect(stubCount(unsentSubject)).toBe(1);
+
+			const legacyProcessingSubject = `E2E Scheduled Legacy Processing ${token}`;
+			const legacyProcessingId = await schedule(legacyProcessingSubject);
+			const unclaimedProcessingSubject = `E2E Scheduled Unclaimed Processing ${token}`;
+			const unclaimedProcessingId = await schedule(unclaimedProcessingSubject);
+			psql(
+				`update scheduled_emails set status = 'processing', scheduled_at = now() - interval '20 minutes', updated_at = now() - interval '20 minutes', attempts = case when id = '${legacyProcessingId}' then 1 else 0 end, qstash_schedule_id = case when id = '${legacyProcessingId}' then 'legacy-${token}' else null end where id in ('${legacyProcessingId}', '${unclaimedProcessingId}');`,
+				E2E_DATABASE,
+			);
+			const legacyMissedSubject = `E2E Scheduled Legacy Missed ${token}`;
+			const legacyMissedId = await schedule(legacyMissedSubject);
+			const legacyDueSubject = `E2E Scheduled Legacy Due ${token}`;
+			const legacyDueId = await schedule(legacyDueSubject);
+			const backoffSubject = `E2E Scheduled Backoff ${token}`;
+			const backoffId = await schedule(backoffSubject);
+			psql(
+				`update scheduled_emails set qstash_schedule_id = 'legacy-${token}', scheduled_at = case when id = '${legacyMissedId}' then now() - interval '20 minutes' else now() - interval '5 minutes' end where id in ('${legacyMissedId}', '${legacyDueId}'); update scheduled_emails set scheduled_at = now() - interval '1 minute', next_retry_at = now() + interval '2 minutes' where id = '${backoffId}';`,
+				E2E_DATABASE,
+			);
+			expect((await runCron()).status).toBe(200);
+			expect(await statusOf(legacyProcessingId)).toBe("failed");
+			expect(await statusOf(unclaimedProcessingId)).toBe("failed");
+			expect(await statusOf(legacyMissedId)).toBe("failed");
+			expect(
+				psql(
+					`select last_error from scheduled_emails where id = '${legacyMissedId}';`,
+					E2E_DATABASE,
+				),
+			).toBe("Missed during scheduler migration");
+			expect(await statusOf(legacyDueId)).toBe("sent");
+			expect(await statusOf(backoffId)).toBe("scheduled");
+			expect(stubCount(legacyProcessingSubject)).toBe(0);
+			expect(stubCount(unclaimedProcessingSubject)).toBe(0);
+			expect(stubCount(legacyMissedSubject)).toBe(0);
+			expect(stubCount(legacyDueSubject)).toBe(1);
+			expect(stubCount(backoffSubject)).toBe(0);
+
+			psql(
+				`update scheduled_emails set next_retry_at = now() - interval '1 second' where id = '${backoffId}';`,
+				E2E_DATABASE,
+			);
+			expect((await runCron()).status).toBe(200);
+			expect(await statusOf(backoffId)).toBe("sent");
+			expect(stubCount(backoffSubject)).toBe(1);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
 		"returns 429 responses when burst traffic exceeds rate limits",
 		async () => {
 			let sawRateLimit = false;
@@ -2503,5 +2661,6 @@ console.log("  - Reply threading via In-Reply-To/References");
 console.log("  - Multi-attachment parsing edge cases");
 console.log("  - Endpoint lifecycle update + cleanup behavior");
 console.log("  - S/MIME raw relay keeps signatures valid and strips Bcc");
+console.log("  - Scheduled sends via cron (pause/resume/cancel, stale recovery)");
 console.log("  - Rate-limit 429 behavior under burst traffic");
 console.log("=".repeat(60) + "\n");

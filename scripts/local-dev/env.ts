@@ -8,6 +8,7 @@ export const LOCAL_MAIL_PORT = 8780;
 export const LOCAL_REDIS_REST_URL = "http://localhost:8079";
 export const LOCAL_REDIS_REST_TOKEN = "inbound-local-redis-token";
 export const LOCAL_SERVICE_API_KEY = "inbound-local-service-key";
+export const LOCAL_CRON_SECRET = "inbound-local-cron-secret";
 
 const KEEP_FROM_ENV_FILES = new Set(["GRAVATAR_API_KEY", "BASEHUB_TOKEN"]);
 const ENV_FILES = [".env", ".env.local", ".env.development", ".env.development.local"];
@@ -52,6 +53,7 @@ export function buildLocalEnv(options: {
 		NEXT_PUBLIC_APP_URL: options.appUrl,
 		BETTER_AUTH_SECRET: "inbound-local-dev-secret-not-for-production",
 		SERVICE_API_KEY: LOCAL_SERVICE_API_KEY,
+		CRON_SECRET: LOCAL_CRON_SECRET,
 		INBOUND_API_KEY: "inbound-local-placeholder",
 		UPSTASH_REDIS_REST_URL: LOCAL_REDIS_REST_URL,
 		UPSTASH_REDIS_REST_TOKEN: LOCAL_REDIS_REST_TOKEN,

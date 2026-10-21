@@ -1,4 +1,3 @@
-import { Client as QStashClient } from "@upstash/qstash";
 import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { db } from "@/lib/db";
@@ -58,62 +57,41 @@ export const resumeEmail = new Elysia().post(
 		const sendAt =
 			scheduledEmail.scheduledAt > now ? scheduledEmail.scheduledAt : now;
 
-		try {
-			const qstashClient = new QStashClient({
-				token: process.env.QSTASH_TOKEN!,
-			});
-
-			const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/send-email`;
-			const notBefore = Math.floor(sendAt.getTime() / 1000);
-
-			console.log("▶️ Rescheduling with QStash:", {
-				url: webhookUrl,
-				notBefore: new Date(notBefore * 1000).toISOString(),
-				scheduledEmailId: emailId,
-			});
-
-			const scheduleResponse = await qstashClient.publishJSON({
-				url: webhookUrl,
-				body: {
-					type: "scheduled",
-					scheduledEmailId: emailId,
-				},
-				notBefore: notBefore,
-				retries: 3,
-			});
-
-			await db
-				.update(scheduledEmails)
-				.set({
-					status: SCHEDULED_EMAIL_STATUS.SCHEDULED,
-					qstashScheduleId: scheduleResponse.messageId,
-					scheduledAt: sendAt,
-					updatedAt: new Date(),
-				})
-				.where(eq(scheduledEmails.id, emailId));
-
-			console.log(
-				"✅ Scheduled email resumed successfully:",
-				emailId,
-				"messageId:",
-				scheduleResponse.messageId,
-			);
-
-			return {
-				success: true,
-				message:
-					scheduledEmail.scheduledAt > now
-						? "Scheduled email resumed successfully"
-						: "Scheduled email resumed; original send time has passed so it will be sent shortly",
-				id: emailId,
+		const [resumed] = await db
+			.update(scheduledEmails)
+			.set({
 				status: SCHEDULED_EMAIL_STATUS.SCHEDULED,
-				scheduled_at: formatScheduledDate(sendAt),
+				scheduledAt: sendAt,
+				updatedAt: now,
+			})
+			.where(
+				and(
+					eq(scheduledEmails.id, emailId),
+					eq(scheduledEmails.userId, userId),
+					eq(scheduledEmails.status, SCHEDULED_EMAIL_STATUS.PAUSED),
+				),
+			)
+			.returning({ id: scheduledEmails.id });
+
+		if (!resumed) {
+			set.status = 400;
+			return {
+				error: "Cannot resume this email because its status changed. Only paused emails can be resumed.",
 			};
-		} catch (qstashError) {
-			console.error("❌ Failed to reschedule with QStash:", qstashError);
-			set.status = 500;
-			return { error: "Failed to resume scheduled email" };
 		}
+
+		console.log("✅ Scheduled email resumed successfully:", emailId);
+
+		return {
+			success: true,
+			message:
+				scheduledEmail.scheduledAt > now
+					? "Scheduled email resumed successfully"
+					: "Scheduled email resumed; original send time has passed so it will be sent shortly",
+			id: emailId,
+			status: SCHEDULED_EMAIL_STATUS.SCHEDULED,
+			scheduled_at: formatScheduledDate(sendAt),
+		};
 	},
 	{
 		params: t.Object({

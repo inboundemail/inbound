@@ -1,5 +1,3 @@
-import { Client as QStashClient } from "@upstash/qstash";
-import { eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { nanoid } from "nanoid";
 import {
@@ -270,69 +268,13 @@ export const sendEmail = new Elysia().post(
 
 			console.log("✅ Scheduled email created in database:", scheduledEmailId);
 
-			// Schedule with QStash
-			try {
-				const qstashClient = new QStashClient({
-					token: process.env.QSTASH_TOKEN!,
-				});
-
-				const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/send-email`;
-				const notBefore = Math.floor(parsedDate.date.getTime() / 1000);
-
-				console.log("📅 Scheduling with QStash:", {
-					url: webhookUrl,
-					notBefore: new Date(notBefore * 1000).toISOString(),
-					scheduledEmailId,
-				});
-
-				const scheduleResponse = await qstashClient.publishJSON({
-					url: webhookUrl,
-					body: {
-						type: "scheduled",
-						scheduledEmailId: scheduledEmailId,
-					},
-					notBefore: notBefore,
-					retries: 3,
-				});
-
-				await db
-					.update(scheduledEmails)
-					.set({
-						qstashScheduleId: scheduleResponse.messageId,
-						updatedAt: new Date(),
-					})
-					.where(eq(scheduledEmails.id, scheduledEmailId));
-
-				console.log(
-					"✅ Scheduled with QStash, messageId:",
-					scheduleResponse.messageId,
-				);
-
-				set.status = 201;
-				return {
-					id: scheduledEmailId,
-					scheduled_at: formatScheduledDate(createdScheduledEmail.scheduledAt),
-					status: "scheduled" as const,
-					timezone: createdScheduledEmail.timezone || "UTC",
-				};
-			} catch (qstashError) {
-				console.error("❌ Failed to schedule with QStash:", qstashError);
-
-				await db
-					.update(scheduledEmails)
-					.set({
-						status: SCHEDULED_EMAIL_STATUS.FAILED,
-						lastError:
-							qstashError instanceof Error
-								? qstashError.message
-								: "Failed to schedule with QStash",
-						updatedAt: new Date(),
-					})
-					.where(eq(scheduledEmails.id, scheduledEmailId));
-
-				set.status = 500;
-				return { error: "Failed to schedule email" };
-			}
+			set.status = 201;
+			return {
+				id: scheduledEmailId,
+				scheduled_at: formatScheduledDate(createdScheduledEmail.scheduledAt),
+				status: "scheduled" as const,
+				timezone: createdScheduledEmail.timezone || "UTC",
+			};
 		}
 
 		const formattedFromAddress = formattedFrom;
