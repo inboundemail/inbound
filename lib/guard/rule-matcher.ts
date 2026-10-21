@@ -1,16 +1,15 @@
 import { db } from '@/lib/db';
 import { guardRules, structuredEmails } from '@/lib/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
+import { askJev, JevError, type JevNoulQuestion } from '@/lib/ai/jev';
 import type { 
   CheckRuleMatchResponse, 
+  CheckRuleMatchSuccess,
   ExplicitRuleConfig, 
   AiPromptRuleConfig,
   GuardRule,
   RuleActionConfig 
 } from '@/features/guard/types';
-import { generateObject } from 'ai';
-import { z } from 'zod';
-import { getModel } from '@/lib/ai/provider';
 
 export interface GuardEvaluationResult {
   shouldBlock: boolean;
@@ -324,38 +323,64 @@ function checkEmailCriteria(
 }
 
 /**
- * Check if an AI prompt rule matches an email
- * TODO: Implement AI-based matching using AI gateway
+ * Jev returns the probability (0..1) that a rule applies. The old LLM prompt only
+ * matched when the rule "clearly applies", so a rule matches at 0.6 or above
+ * rather than at a coin flip.
  */
-async function checkAiPromptRule(
-  config: AiPromptRuleConfig,
-  email: typeof structuredEmails.$inferSelect
-): Promise<CheckRuleMatchResponse> {
-  if (!config || typeof config.prompt !== 'string' || !config.prompt.trim()) {
-    return { matched: false, error: 'Invalid AI prompt configuration' };
+export const AI_RULE_THRESHOLD = 0.6;
+const AI_BODY_LIMIT = 6000;
+const AI_PROMPT_LIMIT = 2000;
+const AI_EVALUATION_FAILED = 'AI prompt evaluation failed';
+
+interface AiRuleAnswer {
+  probability: number;
+  model: string;
+}
+
+function normalizeAiPrompt(config: AiPromptRuleConfig | null | undefined): string | null {
+  if (!config || typeof config.prompt !== 'string') {
+    return null;
   }
+  const prompt = config.prompt
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[“”„‟"`]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, AI_PROMPT_LIMIT);
+  return prompt || null;
+}
 
-  // Prepare email context (truncate to keep token usage reasonable)
-  const subject = email.subject || '';
-  const textBody = (email.textBody || '').toString();
-  const htmlBody = (email.htmlBody || '').toString();
-  const plainHtml = htmlBody.replace(/<[^>]*>/g, ' ');
-  const combinedBody = `${textBody}\n\n${plainHtml}`.trim();
-  const bodySnippet = combinedBody.slice(0, 6000);
+function aiRuleQuestion(prompt: string): JevNoulQuestion {
+  return {
+    type: 'noul',
+    instructions: `Does this rule apply to \`email\`? Rule: “${prompt}”`,
+    criteria: {
+      true: 'The rule clearly applies to this email',
+      false: 'The rule does not apply to this email, or it is unclear whether it applies',
+    },
+  };
+}
 
-  let fromAddresses: Array<{ name?: string | null; address?: string | null }> = [];
+function buildJevEmailState(email: typeof structuredEmails.$inferSelect): Record<string, unknown> {
+  let from: string[] = [];
   try {
-    if (email.fromData) {
-      const parsed = JSON.parse(email.fromData as string);
-      fromAddresses = Array.isArray(parsed?.addresses) ? parsed.addresses : [];
+    const parsed: unknown = email.fromData ? JSON.parse(email.fromData) : null;
+    if (isRecord(parsed) && Array.isArray(parsed.addresses)) {
+      from = parsed.addresses.flatMap((addr) => {
+        if (!isRecord(addr) || typeof addr.address !== 'string' || !addr.address.trim()) {
+          return [];
+        }
+        const name = typeof addr.name === 'string' ? addr.name.trim() : '';
+        return [name ? `${name} <${addr.address.trim()}>` : addr.address.trim()];
+      });
     }
   } catch {
     // ignore parse errors, treat as empty
   }
 
-  let toAddresses: string[] = [];
+  let to: string[] = [];
   try {
-    toAddresses = getRecipientAddresses(email);
+    to = getRecipientAddresses(email);
   } catch {
     // ignore parse errors, treat as empty
   }
@@ -368,70 +393,92 @@ async function checkAiPromptRule(
     // ignore
   }
 
-  const model = getModel();
-
-  // Ask the LLM for a structured yes/no match with rationale
-  try {
-    const matchSchema = z.object({
-      matched: z.boolean(),
-      reason: z.string().optional(),
-      matches: z
-        .array(
-          z.object({
-            criteria: z.string().describe('subject | from | to | body | attachments | other'),
-            value: z.string().describe('what content or pattern matched'),
-          })
-        )
-        .optional(),
-    });
-
-    const prompt = `You are an email guard. Decide if this email satisfies the following rule and return structured JSON only.
-
-Rule (user-provided):\n${config.prompt}\n
-Email:
-- Subject: ${subject}
-- From: ${fromAddresses
-        .map((a) => (a.name ? `${a.name} <${a.address || ''}>` : a.address || ''))
-        .filter(Boolean)
-        .join(', ')}
-- To: ${toAddresses.join(', ')}
-- Has attachments: ${hasAttachments ? 'yes' : 'no'}
-- Body (snippet):\n${bodySnippet}
-
-Instructions:
-- Respond with matched=true only if the rule clearly applies.
-- If uncertain, set matched=false.
-- Provide concise reason and any matches that justify the decision.`;
-
-    const { object } = await generateObject({
-      model,
-      schema: matchSchema,
-      schemaName: 'GuardAIMatch',
-      schemaDescription: 'Determines whether an email matches a user-provided rule',
-      prompt,
-      temperature: 0,
-    });
-
-    // Log AI structured response for debugging
-    try {
-      console.log('🧠 Guard AI match response:', {
-        model,
-        matched: object.matched,
-        reason: object.reason,
-        matches: object.matches,
-      });
-    } catch {
-      // ignore logging errors
-    }
+  const textBody = (email.textBody || '').trim();
+  const body = (textBody
+    || (email.htmlBody || '')
+      .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<[^>]*>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, AI_BODY_LIMIT);
 
   return {
-      matched: object.matched,
-      reason: object.reason,
-      matchDetails: object.matches?.map((m) => ({ criteria: m.criteria, value: m.value })),
-    };
+    email: {
+      from: from.join(', '),
+      to,
+      subject: email.subject || '',
+      has_attachments: hasAttachments,
+      body,
+    },
+  };
+}
+
+/**
+ * Ask Jev about several AI prompt rules for one email in a single request.
+ * Throws on any Jev failure; a rule with no answer is absent from the result.
+ */
+async function askJevAboutRules(
+  prompts: Map<string, string>,
+  email: typeof structuredEmails.$inferSelect
+): Promise<Map<string, AiRuleAnswer>> {
+  const ids = [...prompts.keys()];
+  const questions: Record<string, JevNoulQuestion> = {};
+  ids.forEach((id, index) => {
+    questions[`rule_${index}`] = aiRuleQuestion(prompts.get(id) as string);
+  });
+
+  const result = await askJev(buildJevEmailState(email), questions);
+  const answers = new Map<string, AiRuleAnswer>();
+  ids.forEach((id, index) => {
+    const answer = result.answers[`rule_${index}`];
+    if (answer) {
+      answers.set(id, { probability: answer.noul, model: result.model });
+    }
+  });
+  return answers;
+}
+
+function aiRuleMatch(answer: AiRuleAnswer): CheckRuleMatchSuccess {
+  return {
+    matched: answer.probability >= AI_RULE_THRESHOLD,
+    reason: `Jev: ${Math.round(answer.probability * 100)}% match`,
+    matchDetails: [{ criteria: 'ai_prompt', value: String(Math.round(answer.probability * 1000) / 1000) }],
+  };
+}
+
+function logJevFailure(error: unknown) {
+  if (error instanceof JevError) {
+    console.error(
+      error.code === 'missing_api_key'
+        ? '🛡️ Guard - TYPESAFE_API_KEY is not set, AI prompt rules cannot match'
+        : `🛡️ Guard - Jev evaluation failed (${error.status ?? error.code})`
+    );
+  } else {
+    console.error('🛡️ Guard - Jev evaluation failed:', error instanceof Error ? error.name : 'unknown');
+  }
+}
+
+/**
+ * Check if an AI prompt rule matches an email using Jev
+ */
+async function checkAiPromptRule(
+  config: AiPromptRuleConfig,
+  email: typeof structuredEmails.$inferSelect
+): Promise<CheckRuleMatchResponse> {
+  const prompt = normalizeAiPrompt(config);
+  if (!prompt) {
+    return { matched: false, error: 'Invalid AI prompt configuration' };
+  }
+
+  try {
+    const answer = (await askJevAboutRules(new Map([['rule', prompt]]), email)).get('rule');
+    if (!answer) {
+      return { matched: false, error: AI_EVALUATION_FAILED };
+    }
+    return aiRuleMatch(answer);
   } catch (error) {
-    console.error('AI prompt matching failed:', error);
-    return { matched: false, error: 'AI prompt evaluation failed' };
+    logJevFailure(error);
+    return { matched: false, error: AI_EVALUATION_FAILED };
   }
 }
 
@@ -478,6 +525,31 @@ export async function evaluateGuardRules(
       return { shouldBlock: false, action: 'allow' };
     }
 
+    // Jev answers for every AI prompt rule, fetched in one request when the first one is reached
+    let aiAnswers: Map<string, AiRuleAnswer> | null | undefined;
+    const getAiAnswers = async () => {
+      if (aiAnswers !== undefined) {
+        return aiAnswers;
+      }
+      const prompts = new Map<string, string>();
+      for (const candidate of activeRules) {
+        if (candidate.type !== 'ai_prompt') continue;
+        try {
+          const prompt = normalizeAiPrompt(JSON.parse(candidate.config));
+          if (prompt) prompts.set(candidate.id, prompt);
+        } catch {
+          // invalid config, skipped below
+        }
+      }
+      try {
+        aiAnswers = prompts.size > 0 ? await askJevAboutRules(prompts, email) : new Map();
+      } catch (error) {
+        logJevFailure(error);
+        aiAnswers = null;
+      }
+      return aiAnswers;
+    };
+
     // Evaluate rules in priority order (highest first)
     for (const rule of activeRules) {
       try {
@@ -491,10 +563,16 @@ export async function evaluateGuardRules(
 
         // Check if rule matches
         let matchResult: CheckRuleMatchResponse;
+        let aiAnswer: AiRuleAnswer | undefined;
         if (rule.type === 'explicit') {
           matchResult = await checkExplicitRule(config as ExplicitRuleConfig, email);
         } else if (rule.type === 'ai_prompt') {
-          matchResult = await checkAiPromptRule(config as AiPromptRuleConfig, email);
+          if (!normalizeAiPrompt(config as AiPromptRuleConfig)) {
+            matchResult = { matched: false, error: 'Invalid AI prompt configuration' };
+          } else {
+            aiAnswer = (await getAiAnswers())?.get(rule.id);
+            matchResult = aiAnswer ? aiRuleMatch(aiAnswer) : { matched: false, error: AI_EVALUATION_FAILED };
+          }
         } else {
           continue;
         }
@@ -535,6 +613,7 @@ export async function evaluateGuardRules(
               ruleName: rule.name,
               ruleType: rule.type,
               matchDetails: 'matchDetails' in matchResult ? matchResult.matchDetails : undefined,
+              ...(aiAnswer ? { jevModel: aiAnswer.model, jevProbability: aiAnswer.probability } : {}),
               evaluatedAt: new Date().toISOString(),
             },
           };
