@@ -312,7 +312,10 @@ async function routeEmailWithResult(
 		const inbound = await evaluateInboundEmail(
 			emailData.structuredId,
 			emailData.userId,
-			{ guard: guardFeatureEnabled },
+			{
+				guard: guardFeatureEnabled,
+				email: { ...emailData, id: emailData.structuredId },
+			},
 		);
 
 		if (guardFeatureEnabled) {
@@ -622,6 +625,7 @@ async function getEmailWithStructuredData(emailId: string, userId?: string) {
 			parseSuccess: structuredEmails.parseSuccess,
 			parseError: structuredEmails.parseError,
 			guardBlocked: structuredEmails.guardBlocked,
+			jevClassification: structuredEmails.jevClassification,
 
 			// Threading fields
 			threadId: structuredEmails.threadId,

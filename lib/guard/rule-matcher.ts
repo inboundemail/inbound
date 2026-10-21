@@ -20,6 +20,7 @@ import {
 import {
   buildJevEmailState,
   type JevEmailFacts,
+  type JevStateEmail,
   type SesVerdicts,
 } from '@/lib/guard/email-state';
 import type { 
@@ -123,7 +124,7 @@ export async function checkRuleMatch(
  */
 export async function checkExplicitRule(
   config: ExplicitRuleConfig,
-  email: typeof structuredEmails.$inferSelect
+  email: GuardEmail
 ): Promise<CheckRuleMatchResponse> {
   const matchDetails: Array<{ criteria: string; value: string }> = [];
   let allCriteriaMatch = true;
@@ -280,7 +281,7 @@ function checkStringCriteria(
  * Collect recipient addresses for an email from the delivered-to row recipient.
  */
 function getRecipientAddresses(
-  email: typeof structuredEmails.$inferSelect
+  email: GuardEmail
 ): string[] {
   const recipient = email.recipient?.trim().toLowerCase();
   if (recipient) {
@@ -351,7 +352,9 @@ export const AI_RULE_THRESHOLD = 0.6;
 const AI_PROMPT_LIMIT = 20000;
 const AI_EVALUATION_FAILED = 'AI prompt evaluation failed';
 
-type StructuredEmail = typeof structuredEmails.$inferSelect;
+/** The stored email columns Guard and classification read. */
+export type GuardEmail = JevStateEmail &
+  Pick<typeof structuredEmails.$inferSelect, 'id' | 'sesEventId' | 'jevClassification'>;
 
 interface AiRuleAnswer {
   probability: number;
@@ -440,7 +443,7 @@ interface JevEmailOutcome {
  * 4s budget.
  */
 async function askJevAboutEmail(
-  email: StructuredEmail,
+  email: GuardEmail,
   questions: Record<string, JevQuestion>
 ): Promise<JevEmailOutcome> {
   const deadline = Date.now() + TOTAL_BUDGET_MS;
@@ -492,7 +495,7 @@ function logJevFailure(error: unknown) {
  */
 async function checkAiPromptRule(
   config: AiPromptRuleConfig,
-  email: StructuredEmail
+  email: GuardEmail
 ): Promise<CheckRuleMatchResponse> {
   const prompt = normalizeAiPrompt(config);
   if (!prompt) {
@@ -532,6 +535,8 @@ export interface InboundEvaluationOptions {
   guard: boolean;
   /** Ask the classification questions. Defaults to on unless JEV_CLASSIFICATION=off. */
   classify?: boolean;
+  /** The email row when the caller already loaded it for this user, to avoid selecting it again. */
+  email?: GuardEmail;
 }
 
 export interface InboundEvaluationResult {
@@ -582,15 +587,17 @@ export async function evaluateInboundEmail(
       return failOpen;
     }
 
-    // Fetch the email
-    const [email] = await db
-      .select()
-      .from(structuredEmails)
-      .where(and(
-        eq(structuredEmails.id, structuredEmailId),
-        eq(structuredEmails.userId, userId)
-      ))
-      .limit(1);
+    // Fetch the email unless the caller already loaded it
+    const [email] = options.email
+      ? [options.email]
+      : await db
+          .select()
+          .from(structuredEmails)
+          .where(and(
+            eq(structuredEmails.id, structuredEmailId),
+            eq(structuredEmails.userId, userId)
+          ))
+          .limit(1);
 
     if (!email) {
       console.error(`🛡️ Guard - Email ${structuredEmailId} not found`)
@@ -676,7 +683,7 @@ export async function evaluateGuardRules(
  */
 async function runGuardRules(
   activeRules: GuardRule[],
-  email: StructuredEmail,
+  email: GuardEmail,
   getAiAnswers: () => Promise<Map<string, AiRuleAnswer> | null>
 ): Promise<GuardEvaluationResult> {
     // Evaluate rules in priority order (highest first)

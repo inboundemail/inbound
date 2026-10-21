@@ -246,6 +246,7 @@ describe("guard AI prompt rules (Jev)", () => {
 		expect(Object.keys(requests[0].questions)).toEqual(["rule_0"]);
 		expect(requests[0].state.email).toMatchObject({
 			from: "Sam Seller <sam@vendor.example>",
+			delivered_to: "inbox-b@example.com",
 			subject: "Quick question about your growth plans",
 			text: "Hi there,\n\nWould you like a demo of our product?",
 			links: [],
@@ -838,9 +839,9 @@ describe("Jev email state", () => {
 			dmarc: "FAIL",
 			ses_spam: "PASS",
 			ses_virus: "PASS",
+			sender_domain: "paypa1-security.com",
+			link_domains: ["paypa1-security.com"],
 			reply_to_differs_from_sender: true,
-			link_domains_differ_from_sender: false,
-			link_text_shows_other_domain: true,
 			display_name_contains_other_address: true,
 		});
 
@@ -852,15 +853,16 @@ describe("Jev email state", () => {
 				replyToData: JSON.stringify({
 					addresses: [{ name: null, address: "ana@example.co.uk" }],
 				}),
-				textBody: "See https://docs.example.co.uk/a and https://other.org/b",
+				textBody:
+					"See https://docs.example.co.uk/a, https://other.org/b and https://x.other.org/c",
 			}),
 			null,
 		).facts;
 		expect(normal).toMatchObject({
 			spf: null,
+			sender_domain: "example.co.uk",
+			link_domains: ["example.co.uk", "other.org"],
 			reply_to_differs_from_sender: false,
-			link_domains_differ_from_sender: true,
-			link_text_shows_other_domain: false,
 			display_name_contains_other_address: false,
 		});
 	});
@@ -920,6 +922,75 @@ describe("Jev email state", () => {
 	});
 });
 
+describe("Jev email state on adversarial input", () => {
+	const cases: Array<[string, Partial<StructuredEmail>]> = [
+		["300 KB of unterminated comments", { htmlBody: "<!--".repeat(75_000) }],
+		["100k unterminated anchors", { htmlBody: "<a ".repeat(100_000) }],
+		[
+			"100k anchors without closing tags",
+			{ htmlBody: "<a href=x>".repeat(100_000) },
+		],
+		[
+			"1.2 MB of unterminated script tags",
+			{ htmlBody: "<script>".repeat(150_000) },
+		],
+		["500k bare angle brackets", { htmlBody: "<".repeat(500_000) }],
+		["4 MB of nested tags", { htmlBody: "<div ".repeat(800_000) }],
+		[
+			"a 60k-character display name",
+			{
+				fromData: JSON.stringify({
+					addresses: [
+						{
+							name: `${"x".repeat(30_000)}@${"x".repeat(30_000)}`,
+							address: "a@b.com",
+						},
+					],
+				}),
+			},
+		],
+		["a URL of 100k dots", { textBody: `http://a${".".repeat(100_000)}b` }],
+		[
+			"a 1 MB folded header",
+			{ rawContent: `X-Long: ${"a\r\n ".repeat(250_000)}\r\n\r\nbody` },
+		],
+		[
+			"a header full of signature tags",
+			{ rawContent: `DKIM-Signature: ${"b=".repeat(200_000)}\r\n\r\nbody` },
+		],
+	];
+
+	for (const [name, overrides] of cases) {
+		it(`builds the state for ${name} in under 200 ms`, () => {
+			const started = performance.now();
+			const state = buildJevEmailState(buildStructuredEmail(overrides), null);
+			expect(performance.now() - started).toBeLessThan(200);
+			expect(JSON.stringify(state).length).toBeLessThanOrEqual(
+				STATE_CHAR_LIMIT,
+			);
+		});
+	}
+
+	it("keeps the truncation marker inside the header limit", () => {
+		const headers = JSON.stringify(
+			Object.fromEntries(
+				Array.from({ length: 400 }, (_, i) => [`x-h${i}`, "v".repeat(100)]),
+			),
+		);
+		for (const scale of [1, 0.5]) {
+			const state = buildJevEmailState(
+				buildStructuredEmail({ headers }),
+				null,
+				scale,
+			);
+			expect(state.email.headers.endsWith("[more headers truncated]")).toBe(
+				true,
+			);
+			expect(state.email.headers.length).toBeLessThanOrEqual(12_000 * scale);
+		}
+	});
+});
+
 describe("Jev classification summary", () => {
 	const facts = {
 		spf: "PASS",
@@ -927,9 +998,9 @@ describe("Jev classification summary", () => {
 		dmarc: "PASS",
 		ses_spam: "PASS",
 		ses_virus: "PASS",
+		sender_domain: "example.com",
+		link_domains: [],
 		reply_to_differs_from_sender: false,
-		link_domains_differ_from_sender: false,
-		link_text_shows_other_domain: false,
 		display_name_contains_other_address: false,
 	};
 	const answers = {
@@ -973,6 +1044,26 @@ describe("Jev classification summary", () => {
 			impersonation: { level: 4 },
 			malware: { level: 4 },
 			spam: { level: 4 },
+		});
+	});
+
+	it("only lets a display-name address raise levels when authentication fails", () => {
+		const passing = summarizeClassification(answers, {
+			...facts,
+			display_name_contains_other_address: true,
+		});
+		expect(passing).toMatchObject({
+			phishing: { level: 1 },
+			impersonation: { level: 2 },
+		});
+		const failing = summarizeClassification(answers, {
+			...facts,
+			dmarc: "FAIL",
+			display_name_contains_other_address: true,
+		});
+		expect(failing).toMatchObject({
+			phishing: { level: 2 },
+			impersonation: { level: 4 },
 		});
 	});
 });

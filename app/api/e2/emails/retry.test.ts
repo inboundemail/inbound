@@ -193,7 +193,7 @@ const inboundEvaluation = mock(
 	async (
 		_structuredEmailId: string,
 		_userId: string,
-		options: { guard: boolean },
+		options: { guard: boolean; email?: unknown },
 	) => ({
 		guard: options.guard ? await guardRules() : null,
 		classification: null,
@@ -655,7 +655,10 @@ describe("email recovery", () => {
 		expect(inboundEvaluation.mock.calls[0]).toEqual([
 			"structured",
 			"owner",
-			{ guard: false },
+			{
+				guard: false,
+				email: expect.objectContaining({ id: "structured", userId: "owner" }),
+			},
 		]);
 		expect(guardRules).not.toHaveBeenCalled();
 	});

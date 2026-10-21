@@ -9,7 +9,23 @@ import type { structuredEmails } from "@/lib/db/schema";
  * because Jev cannot verify signatures and is weak at comparing strings.
  */
 
-type StructuredEmail = typeof structuredEmails.$inferSelect;
+/** The stored email columns the state is built from. */
+export type JevStateEmail = Pick<
+	typeof structuredEmails.$inferSelect,
+	| "messageId"
+	| "date"
+	| "subject"
+	| "recipient"
+	| "fromData"
+	| "toData"
+	| "ccData"
+	| "replyToData"
+	| "textBody"
+	| "htmlBody"
+	| "rawContent"
+	| "attachments"
+	| "headers"
+>;
 
 export interface SesVerdicts {
 	spamVerdict: string | null;
@@ -25,9 +41,11 @@ export interface JevEmailFacts {
 	dmarc: string | null;
 	ses_spam: string | null;
 	ses_virus: string | null;
+	/** Registrable domain of the From address. */
+	sender_domain: string | null;
+	/** Distinct registrable domains of the email's links (click-tracking domains included). */
+	link_domains: string[];
 	reply_to_differs_from_sender: boolean;
-	link_domains_differ_from_sender: boolean;
-	link_text_shows_other_domain: boolean;
 	display_name_contains_other_address: boolean;
 }
 
@@ -47,6 +65,8 @@ export interface JevEmailState {
 	email: {
 		from: string;
 		to: string;
+		/** The envelope address this copy was delivered to (catch-all, Bcc and alias deliveries). */
+		delivered_to: string;
 		subject: string;
 		headers: string;
 		text: string;
@@ -65,7 +85,16 @@ const LINK_LIMIT = 50;
 const LINK_URL_LIMIT = 300;
 const LINK_TEXT_LIMIT = 120;
 const ATTACHMENT_LIMIT = 20;
+/** Hard ceilings applied before any regex touches attacker-controlled input. */
 const RAW_HEADER_SCAN_LIMIT = 256_000;
+const BODY_INPUT_LIMIT = 512_000;
+const DISPLAY_NAME_LIMIT = 300;
+const HEADER_VALUE_INPUT_LIMIT = 4_000;
+const ANCHOR_HTML_LIMIT = 2_000;
+const URL_INPUT_LIMIT = 2_000;
+const LINK_DOMAIN_LIMIT = 20;
+const ADDRESS_TEXT_LIMIT = 2_000;
+const TRUNCATED_HEADERS = "[more headers truncated]";
 /** Whole state, in characters; about 10-13k tokens, well under Jev's 32k-token context. */
 export const STATE_CHAR_LIMIT = 40_000;
 
@@ -132,19 +161,20 @@ export function htmlToText(html: string): string {
 	return normalizeText(
 		decodeEntities(
 			html
-				.replace(/<!--[\s\S]*?-->/g, " ")
+				.slice(0, BODY_INPUT_LIMIT)
+				.replace(/<!--[\s\S]*?(?:-->|$)/g, " ")
 				.replace(
-					/<(script|style|head|title|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,
+					/<(script|style|head|title|noscript)\b[^<>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi,
 					" ",
 				)
 				.replace(/<br\s*\/?>/gi, "\n")
-				.replace(/<li\b[^>]*>/gi, "\n- ")
+				.replace(/<li\b[^<>]*>/gi, "\n- ")
 				.replace(
-					/<\/?(p|div|tr|table|thead|tbody|tfoot|ul|ol|h[1-6]|section|article|header|footer|blockquote|hr|pre|center|form|fieldset)\b[^>]*>/gi,
+					/<\/?(p|div|tr|table|thead|tbody|tfoot|ul|ol|h[1-6]|section|article|header|footer|blockquote|hr|pre|center|form|fieldset)\b[^<>]*>/gi,
 					"\n",
 				)
-				.replace(/<\/?(td|th)\b[^>]*>/gi, " ")
-				.replace(/<[^>]*>/g, ""),
+				.replace(/<\/?(td|th)\b[^<>]*>/gi, " ")
+				.replace(/<[^<>]*>/g, ""),
 		),
 	);
 }
@@ -182,17 +212,26 @@ function trimSignature(name: string, value: string): string {
 
 function headerLines(lines: Array<[string, string]>, limit: number): string {
 	let out = "";
-	for (const [name, rawValue] of lines) {
+	for (const [index, [rawName, rawValue]] of lines.entries()) {
+		const name = rawName.slice(0, 200);
 		const value = cap(
 			trimSignature(
 				name,
-				decodeEncodedWords(rawValue.replace(/\s+/g, " ").trim()),
+				decodeEncodedWords(
+					rawValue
+						.slice(0, HEADER_VALUE_INPUT_LIMIT)
+						.replace(/\s+/g, " ")
+						.trim(),
+				),
 			),
 			HEADER_VALUE_LIMIT,
 		);
 		const line = `${name}: ${value}\n`;
-		if (out.length + line.length > limit) {
-			out += "[more headers truncated]\n";
+		const reserve = index < lines.length - 1 ? TRUNCATED_HEADERS.length : 0;
+		if (out.length + line.length + reserve > limit) {
+			if (out.length + TRUNCATED_HEADERS.length <= limit) {
+				out += TRUNCATED_HEADERS;
+			}
 			break;
 		}
 		out += line;
@@ -239,14 +278,19 @@ function renderParsedHeaderValue(value: unknown): string[] {
 
 function addressText(data: string | null): string {
 	const parsed = parseJson(data);
-	if (isRecord(parsed) && typeof parsed.text === "string") return parsed.text;
-	return addressesOf(data)
-		.map((a) => (a.name ? `${a.name} <${a.address}>` : a.address))
-		.join(", ");
+	if (isRecord(parsed) && typeof parsed.text === "string") {
+		return cap(parsed.text, ADDRESS_TEXT_LIMIT);
+	}
+	return cap(
+		addressesOf(data)
+			.map((a) => (a.name ? `${a.name} <${a.address}>` : a.address))
+			.join(", "),
+		ADDRESS_TEXT_LIMIT,
+	);
 }
 
 /** Headers from the parsed headers JSON, or the parsed address fields as a last resort. */
-function fallbackHeaders(email: StructuredEmail): Array<[string, string]> {
+function fallbackHeaders(email: JevStateEmail): Array<[string, string]> {
 	const parsed = parseJson(email.headers);
 	if (isRecord(parsed) && Object.keys(parsed).length > 0) {
 		return Object.entries(parsed).flatMap(([name, value]) =>
@@ -288,9 +332,9 @@ function addressesOf(data: string | null): Address[] {
 		}
 		const name =
 			typeof addr.name === "string" && addr.name.trim()
-				? addr.name.trim()
+				? addr.name.slice(0, DISPLAY_NAME_LIMIT).trim()
 				: null;
-		return [{ name, address: addr.address.trim() }];
+		return [{ name, address: addr.address.slice(0, 320).trim() }];
 	});
 }
 
@@ -358,8 +402,7 @@ export function extractLinks(
 	const links: JevEmailLink[] = [];
 	const seen = new Set<string>();
 	const add = (rawUrl: string, rawText: string) => {
-		if (links.length >= limit) return;
-		const url = decodeEntities(rawUrl).trim();
+		const url = decodeEntities(rawUrl.slice(0, URL_INPUT_LIMIT)).trim();
 		const domain = linkDomain(url);
 		if (!domain || seen.has(url)) return;
 		seen.add(url);
@@ -369,13 +412,22 @@ export function extractLinks(
 			domain,
 		});
 	};
-	for (const match of html.matchAll(
-		/<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a\s*>/gi,
-	)) {
-		add(match[1] ?? match[2] ?? match[3] ?? "", htmlToText(match[4] ?? ""));
+	for (const match of html
+		.slice(0, BODY_INPUT_LIMIT)
+		.matchAll(
+			/<a\b[^<>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s<>]+))[^<>]*>([\s\S]*?)(?:<\/a\s*>|$)/gi,
+		)) {
+		if (links.length >= limit) break;
+		add(
+			match[1] ?? match[2] ?? match[3] ?? "",
+			htmlToText((match[4] ?? "").slice(0, ANCHOR_HTML_LIMIT)),
+		);
 	}
-	for (const match of text.matchAll(/https?:\/\/[^\s<>"'()[\]]+/gi)) {
-		add(match[0].replace(/[.,;:!?]+$/, ""), "");
+	for (const match of text
+		.slice(0, BODY_INPUT_LIMIT)
+		.matchAll(/https?:\/\/[^\s<>"'()[\]]+/gi)) {
+		if (links.length >= limit) break;
+		add(match[0].slice(0, URL_INPUT_LIMIT).replace(/[.,;:!?]+$/, ""), "");
 	}
 	return links;
 }
@@ -421,11 +473,8 @@ function verdict(value: string | null | undefined): string | null {
 	return value ? value.toUpperCase() : null;
 }
 
-const DOMAIN_IN_TEXT =
-	/^(?:https?:\/\/)?(?:www\.)?((?:[a-z0-9-]+\.)+[a-z]{2,})(?:[/:?#]\S*)?$/i;
-
 export function computeFacts(
-	email: StructuredEmail,
+	email: JevStateEmail,
 	links: JevEmailLink[],
 	verdicts: SesVerdicts | null,
 ): JevEmailFacts {
@@ -441,15 +490,9 @@ export function computeFacts(
 			return !!domain && registrableDomain(domain) !== sender;
 		});
 
-	const linkDomainsDiffer =
-		!!sender && links.some((link) => registrableDomain(link.domain) !== sender);
-
-	const linkTextShowsOtherDomain = links.some((link) => {
-		const shown = DOMAIN_IN_TEXT.exec(link.text.trim());
-		return (
-			!!shown && registrableDomain(shown[1]) !== registrableDomain(link.domain)
-		);
-	});
+	const linkDomains = [
+		...new Set(links.map((link) => registrableDomain(link.domain))),
+	].slice(0, LINK_DOMAIN_LIMIT);
 
 	const nameAddresses =
 		from?.name?.match(/[^\s<>"'()@]+@[^\s<>"'()@]+\.[a-z]{2,}/gi) ?? [];
@@ -466,9 +509,9 @@ export function computeFacts(
 		dmarc: verdict(verdicts?.dmarcVerdict),
 		ses_spam: verdict(verdicts?.spamVerdict),
 		ses_virus: verdict(verdicts?.virusVerdict),
+		sender_domain: sender,
+		link_domains: linkDomains,
 		reply_to_differs_from_sender: replyToDiffers,
-		link_domains_differ_from_sender: linkDomainsDiffer,
-		link_text_shows_other_domain: linkTextShowsOtherDomain,
 		display_name_contains_other_address: displayNameOther,
 	};
 }
@@ -478,7 +521,7 @@ export function computeFacts(
  * them), used to retry after Jev rejects a request as too large.
  */
 export function buildJevEmailState(
-	email: StructuredEmail,
+	email: JevStateEmail,
 	verdicts: SesVerdicts | null,
 	scale = 1,
 ): JevEmailState {
@@ -489,21 +532,26 @@ export function buildJevEmailState(
 		fallbackHeaders(email);
 	const headers = headerLines(headerSource, limit(HEADERS_LIMIT));
 
-	const html = email.htmlBody || "";
-	const fullText = normalizeText(email.textBody || "");
+	const html = (email.htmlBody || "").slice(0, BODY_INPUT_LIMIT);
+	const rawText = (email.textBody || "").slice(0, BODY_INPUT_LIMIT);
+	const fullText = normalizeText(rawText);
 	const fullHtmlText = html ? htmlToText(html) : "";
-	const links = extractLinks(html, email.textBody || "", limit(LINK_LIMIT));
+	const links = extractLinks(html, rawText, limit(LINK_LIMIT));
 	const facts = computeFacts(email, links, verdicts);
 
-	const from = addressesOf(email.fromData)
-		.map((a) => (a.name ? `${a.name} <${a.address}>` : a.address))
-		.join(", ");
+	const from = cap(
+		addressesOf(email.fromData)
+			.map((a) => (a.name ? `${a.name} <${a.address}>` : a.address))
+			.join(", "),
+		ADDRESS_TEXT_LIMIT,
+	);
 
 	const state: JevEmailState = {
 		email: {
 			from,
 			to: addressText(email.toData) || email.recipient || "",
-			subject: email.subject || "",
+			delivered_to: email.recipient || "",
+			subject: cap(email.subject || "", 1_000),
 			headers,
 			text: cap(fullText, limit(TEXT_LIMIT)),
 			...(htmlAddsContent(fullText, fullHtmlText)
