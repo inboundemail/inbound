@@ -20,7 +20,7 @@ function buildNotification(): SnsNotification {
 		Timestamp: "2026-08-08T19:20:00.000Z",
 		SignatureVersion: "2",
 		Signature: "",
-		SigningCertURL: `https://sns.${region}.amazonaws.com/SimpleNotificationService-test.pem`,
+		SigningCertURL: `https://sns.${region}.amazonaws.com/SimpleNotificationService-9c6465fa7f48f5cacd23014631ec1136.pem`,
 	};
 }
 
@@ -72,6 +72,19 @@ describe("SNS verification", () => {
 		expect(
 			await verifySnsNotification(
 				{ ...buildNotification(), SigningCertURL: "https://example.com/cert.pem" },
+				{
+					region,
+					accountId,
+					getCertificate: async () => "unused",
+				},
+			),
+		).toBe(false);
+		expect(
+			await verifySnsNotification(
+				{
+					...buildNotification(),
+					SigningCertURL: `https://sns.${region}.amazonaws.com/attacker/cert.pem`,
+				},
 				{
 					region,
 					accountId,

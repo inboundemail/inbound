@@ -18,10 +18,33 @@ export interface SnsNotification {
 interface VerifySnsOptions {
 	region: string;
 	accountId: string;
+	allowedTopicArns?: readonly string[];
 	getCertificate?: (url: string) => Promise<string>;
 }
 
 const certificateCache = new Map<string, string>();
+const MAX_CACHED_CERTIFICATES = 20;
+const SIGNING_CERT_PATH = /^\/SimpleNotificationService-[0-9a-f]+\.pem$/;
+
+export function isTrustedSnsSigningCertUrl(
+	value: string,
+	region: string,
+): boolean {
+	if (!isTrustedSnsUrl(value, region)) return false;
+	try {
+		const url = new URL(value);
+		return (
+			SIGNING_CERT_PATH.test(url.pathname) &&
+			url.search === "" &&
+			url.hash === "" &&
+			url.port === "" &&
+			url.username === "" &&
+			url.password === ""
+		);
+	} catch {
+		return false;
+	}
+}
 
 export function isTrustedSnsUrl(value: string, region: string): boolean {
 	try {
@@ -92,6 +115,11 @@ async function fetchCertificate(url: string): Promise<string> {
 	}
 
 	const certificate = await response.text();
+	while (certificateCache.size >= MAX_CACHED_CERTIFICATES) {
+		const oldest = certificateCache.keys().next();
+		if (oldest.done) break;
+		certificateCache.delete(oldest.value);
+	}
 	certificateCache.set(url, certificate);
 	return certificate;
 }
@@ -100,9 +128,18 @@ export async function verifySnsNotification(
 	message: SnsNotification,
 	options: VerifySnsOptions,
 ): Promise<boolean> {
+	if (typeof message.TopicArn !== "string") {
+		return false;
+	}
+
+	const topicAllowed = options.allowedTopicArns
+		? options.allowedTopicArns.includes(message.TopicArn)
+		: isExpectedSnsTopic(message.TopicArn, options.region, options.accountId);
+
 	if (
-		!isTrustedSnsUrl(message.SigningCertURL, options.region) ||
-		!isExpectedSnsTopic(message.TopicArn, options.region, options.accountId)
+		typeof message.SigningCertURL !== "string" ||
+		!isTrustedSnsSigningCertUrl(message.SigningCertURL, options.region) ||
+		!topicAllowed
 	) {
 		return false;
 	}
