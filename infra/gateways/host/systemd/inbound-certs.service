@@ -1,0 +1,11 @@
+[Unit]
+Description=Issue or renew Inbound gateway TLS certificates (lego, Route 53 DNS-01)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/inbound/host-runtime.env
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/inbound-certs all
+TimeoutStartSec=45min
+Nice=10

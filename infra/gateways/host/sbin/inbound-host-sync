@@ -1,0 +1,17 @@
+#!/bin/bash
+# Re-applies bootstrap.sh when the stack has published a new host bundle. --force re-applies regardless.
+set -euo pipefail
+. /etc/inbound/host.env
+export AWS_REGION AWS_DEFAULT_REGION="$AWS_REGION" PATH="$PATH:/snap/bin"
+
+url="$(aws ssm get-parameter --name "$PARAMETER_PREFIX/host/bundle-url" --query Parameter.Value --output text)"
+if [ "${1:-}" != --force ] && [ "$url" = "$(cat /etc/inbound/host-bundle 2>/dev/null || true)" ]; then
+	echo "host bundle up to date"
+	exit 0
+fi
+
+dir="$(mktemp -d)"
+trap 'rm -rf "$dir"' EXIT
+aws s3 cp "$url" "$dir/host.zip" --only-show-errors
+python3 -m zipfile -e "$dir/host.zip" "$dir/host"
+bash "$dir/host/bootstrap.sh" "$url"

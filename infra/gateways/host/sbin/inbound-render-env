@@ -1,0 +1,82 @@
+#!/bin/bash
+# Renders /etc/inbound/<gateway>-gateway.env from SSM: host defaults, then shared/*, then <gateway>/*.
+# Later lines win in systemd EnvironmentFile. Values are never printed. Only the variables the gateway reads in
+# packages/<gateway>-gateway/src/config.ts are rendered; hostnames, ports, TLS paths and plaintext/insecure-auth
+# switches are host-managed and cannot be set from SSM.
+set -euo pipefail
+. /etc/inbound/host.env
+export AWS_REGION AWS_DEFAULT_REGION="$AWS_REGION" PATH="$PATH:/snap/bin"
+
+gateway="${1:-}"
+case "$gateway" in
+smtp)
+	required=(MAILBOX_GATEWAY_AUTH_SECRET)
+	allowed=(
+		INBOUND_API_BASE_URL MAILBOX_GATEWAY_AUTH_SECRET INBOUND_SEND_PATH INBOUND_RAW_SEND_PATH
+		SMTP_MAX_MESSAGE_BYTES SMTP_MAX_RECIPIENTS SMTP_TLS_HANDSHAKE_TIMEOUT_MS
+		SMTP_AUTH_FAILURE_WINDOW_MS SMTP_AUTH_FAILURE_LIMIT SMTP_AUTH_FAILURE_IP_LIMIT SMTP_MAX_AUTH_FAILURE_RECORDS
+		SMTP_AUTH_REQUEST_TIMEOUT_MS SMTP_SEND_REQUEST_TIMEOUT_MS SMTP_SOCKET_TIMEOUT_MS
+		SMTP_MAX_CONNECTIONS SMTP_MAX_CONNECTIONS_PER_IP SMTP_MAX_CONCURRENT_DATA SMTP_MAX_DATA_QUEUE
+	)
+	defaults=(
+		"SMTP_HOSTNAME=$SMTP_HOSTNAME"
+		"SMTP_TLS_CERT_PATH=/etc/inbound/tls/smtp/fullchain.pem"
+		"SMTP_TLS_KEY_PATH=/etc/inbound/tls/smtp/privkey.pem"
+	)
+	;;
+imap)
+	required=(DATABASE_URL MAILBOX_GATEWAY_AUTH_SECRET)
+	allowed=(
+		DATABASE_URL MAILBOX_GATEWAY_AUTH_SECRET INBOUND_API_BASE_URL
+		IMAP_MAX_CONNECTIONS IMAP_MAX_CONNECTIONS_PER_IP IMAP_AUTH_FAILURE_LIMIT IMAP_AUTH_FAILURE_WINDOW_MS
+		IMAP_API_TIMEOUT_MS IMAP_MAX_MESSAGE_BYTES IMAP_APPEND_MAX_BYTES_PER_USER IMAP_APPEND_MAX_MESSAGES_PER_USER
+	)
+	defaults=(
+		"IMAP_HOSTNAME=$IMAP_HOSTNAME"
+		"IMAP_TLS_CERT_PATH=/etc/inbound/tls/imap/fullchain.pem"
+		"IMAP_TLS_KEY_PATH=/etc/inbound/tls/imap/privkey.pem"
+	)
+	# IMAP_ALLOW_PLAINTEXT opens 143; with TLS configured it offers STARTTLS and LOGINDISABLED until TLS.
+	[ "$IMAP_STARTTLS_PORT_ENABLED" = true ] && defaults+=("IMAP_ALLOW_PLAINTEXT=true")
+	;;
+*)
+	echo "usage: inbound-render-env smtp|imap" >&2
+	exit 2
+	;;
+esac
+
+fetch() {
+	aws ssm get-parameters-by-path --path "$PARAMETER_PREFIX/$1" --with-decryption \
+		--query 'Parameters[].{name: Name, value: Value}' --output json
+}
+shared_params="$(fetch shared)"
+gateway_params="$(fetch "$gateway")"
+allowed_json="$(printf '%s\n' "${allowed[@]}" | jq -R . | jq -s .)"
+params="$(jq -s --argjson allowed "$allowed_json" \
+	'add | map(.name |= split("/")[-1]) | map(select(.name as $n | $allowed | index($n)))' <<<"$shared_params$gateway_params")"
+ignored="$(jq -r --argjson allowed "$allowed_json" \
+	'map(.name | split("/")[-1]) | map(select(. as $n | $allowed | index($n) | not)) | unique | join(", ")' <<<"$gateway_params")"
+[ -z "$ignored" ] || echo "ignoring $PARAMETER_PREFIX/$gateway parameters the $gateway gateway does not read: $ignored" >&2
+
+missing=()
+for name in "${required[@]}"; do
+	jq -e --arg n "$name" 'any(.[]; .name == $n and .value != "")' <<<"$params" >/dev/null || missing+=("$name")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+	echo "missing SSM parameters for $gateway: ${missing[*]} (under $PARAMETER_PREFIX/shared or $PARAMETER_PREFIX/$gateway)" >&2
+	exit 1
+fi
+
+target="/etc/inbound/${gateway}-gateway.env"
+tmp="$(mktemp "/etc/inbound/.${gateway}-gateway.env.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+chmod 0640 "$tmp"
+chown "root:${gateway}gw" "$tmp"
+{
+	printf '%s\n' "# Rendered by inbound-render-env from SSM $PARAMETER_PREFIX. Do not edit."
+	printf '%s\n' "${defaults[@]}"
+	jq -r '.[] | "\(.name)=\"\(.value | gsub("(?<c>[\"\\\\`$])"; "\\\(.c)"))\""' <<<"$params"
+} > "$tmp"
+mv -f "$tmp" "$target"
+trap - EXIT
+echo "rendered $target ($(jq -r 'map(.name) | unique | join(", ")' <<<"$params"))"

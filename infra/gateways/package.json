@@ -1,0 +1,22 @@
+{
+  "name": "@inboundemail/gateway-infra",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "deploy": "cdk deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "aws-cdk": "2.1146.0",
+    "typescript": "~7.0.2"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.274.0",
+    "constructs": "^10.8.1"
+  }
+}

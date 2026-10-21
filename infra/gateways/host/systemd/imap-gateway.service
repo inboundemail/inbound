@@ -1,0 +1,53 @@
+[Unit]
+Description=Inbound IMAP gateway (imap.inboundemail.com)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/inbound/current-imap
+ConditionPathExists=/etc/inbound/tls/imap/fullchain.pem
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=imapgw
+Group=imapgw
+WorkingDirectory=/opt/inbound/current-imap
+EnvironmentFile=/etc/inbound/imap-gateway.env
+ExecStart=/usr/local/bin/node src/index.ts
+Restart=always
+RestartSec=2
+RestartSteps=6
+RestartMaxDelaySec=60
+TimeoutStopSec=15
+
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+IPAddressDeny=169.254.169.254/32 fd00:ec2::254/128
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+UMask=0077
+LimitNOFILE=65536
+
+MemoryHigh=1000M
+MemoryMax=1200M
+MemorySwapMax=0
+OOMPolicy=stop
+OOMScoreAdjust=200
+
+[Install]
+WantedBy=multi-user.target

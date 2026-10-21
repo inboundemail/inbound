@@ -1,0 +1,86 @@
+#!/bin/bash
+# Issues or renews the gateway certificates with lego (Route 53 DNS-01 via the _acme-challenge CNAME),
+# then installs changed certificates for the gateway services.
+# usage: inbound-certs [smtp|imap|all] [--no-random-sleep]
+set -euo pipefail
+. /etc/inbound/host.env
+. /etc/inbound/host-runtime.env
+export AWS_REGION AWS_HOSTED_ZONE_ID="$ACME_ZONE_ID" AWS_PROPAGATION_TIMEOUT=300 AWS_POLLING_INTERVAL=5
+
+target="${1:-all}"
+case "$target" in
+smtp | imap) gateways=("$target") ;;
+all) gateways=(smtp imap) ;;
+*)
+	echo "usage: inbound-certs [smtp|imap|all] [--no-random-sleep]" >&2
+	exit 2
+	;;
+esac
+extra=()
+[ "${2:-}" = --no-random-sleep ] && extra+=(--no-random-sleep)
+
+if [ "${INBOUND_CERTS_LOCK_HELD:-}" != 1 ]; then
+	exec 9>/run/inbound-certs.lock
+	flock -w 1800 9
+fi
+
+link_files() {
+	local dst="$1" file
+	for file in fullchain.pem privkey.pem; do
+		[ "$(readlink "$dst/$file" 2>/dev/null)" = "live/$file" ] && continue
+		ln -sfn "live/$file" "$dst/.$file.new"
+		mv -T "$dst/.$file.new" "$dst/$file"
+	done
+}
+
+install_cert() {
+	local gateway="$1" name="$2"
+	local src="/var/lib/lego/certificates/$name" dst="/etc/inbound/tls/$gateway" group="${gateway}gw"
+	[ -s "$src.crt" ] && [ -s "$src.key" ] || { echo "no certificate for $name in /var/lib/lego"; return 1; }
+	if cmp -s "$src.crt" "$dst/live/fullchain.pem" && cmp -s "$src.key" "$dst/live/privkey.pem"; then
+		link_files "$dst"
+		return 0
+	fi
+	[ "$(openssl x509 -in "$src.crt" -noout -pubkey | sha256sum)" = "$(openssl pkey -in "$src.key" -pubout | sha256sum)" ] ||
+		{ echo "certificate and key for $name do not match; not installing"; return 1; }
+
+	local version
+	version="$(date -u +%Y%m%dT%H%M%SZ)-$(openssl x509 -in "$src.crt" -noout -serial | cut -d= -f2)"
+	install -d -m 0750 -o root -g "$group" "$dst/versions" "$dst/versions/$version"
+	install -m 0640 -o root -g "$group" "$src.key" "$dst/versions/$version/privkey.pem"
+	install -m 0640 -o root -g "$group" "$src.crt" "$dst/versions/$version/fullchain.pem"
+	ln -sfn "versions/$version" "$dst/.live.new"
+	mv -T "$dst/.live.new" "$dst/live"
+	link_files "$dst"
+	echo "installed new certificate for $name ($(openssl x509 -in "$dst/live/fullchain.pem" -noout -enddate))"
+	find "$dst/versions" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -r | tail -n +4 |
+		while read -r old; do rm -rf "${dst:?}/versions/$old"; done
+
+	local unit="${gateway}-gateway.service"
+	[ -L "/opt/inbound/current-$gateway" ] || return 0
+	if ! systemctl is-active --quiet "$unit"; then
+		systemctl start "$unit"
+	elif [ "$gateway" = smtp ]; then
+		systemctl restart "$unit"
+	else
+		echo "$unit hot-reloads its certificate within 12h; not restarting"
+	fi
+}
+
+rc=0
+for gateway in "${gateways[@]}"; do
+	hostname_var="${gateway^^}_HOSTNAME"
+	name="${!hostname_var}"
+	args=(
+		run --accept-tos --server "$ACME_SERVER" --account-id inbound-gateways
+		--path /var/lib/lego --dns route53 --domains "$name" --cert.name "$name"
+		--key-type "$ACME_KEY_TYPE" --renew-days "$ACME_RENEW_DAYS" --log.format text
+	)
+	[ -n "$ACME_EMAIL" ] && args+=(--email "$ACME_EMAIL")
+	if ! timeout 1200 /usr/local/bin/lego "${args[@]}" "${extra[@]}"; then
+		echo "lego failed for $name" >&2
+		rc=1
+	fi
+	install_cert "$gateway" "$name" || rc=1
+done
+exit "$rc"

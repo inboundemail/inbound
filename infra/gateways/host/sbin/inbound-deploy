@@ -1,0 +1,189 @@
+#!/bin/bash
+# usage: inbound-deploy smtp|imap|both releases/<gateway>-<sha>.tar.gz <sha256>
+set -euo pipefail
+umask 022
+. /etc/inbound/host.env
+. /etc/inbound/host-runtime.env
+export AWS_REGION AWS_DEFAULT_REGION="$AWS_REGION" PATH="/usr/local/bin:$PATH:/snap/bin"
+
+log() { echo "[deploy $(date -u +%H:%M:%S)] $*"; }
+fail() {
+	log "ERROR: $*"
+	exit 1
+}
+
+gateway="${1:-}" key="${2:-}" sha256="${3:-}"
+[[ "$gateway" =~ ^(smtp|imap|both)$ ]] || fail "invalid gateway: $gateway"
+[[ "$key" =~ ^releases/${gateway}-([0-9a-f]{40}(-dirty[0-9]{1,12})?)\.tar\.gz$ ]] || fail "invalid artifact key for $gateway: $key"
+revision="${BASH_REMATCH[1]}"
+[[ "$sha256" =~ ^[0-9a-f]{64}$ ]] || fail "invalid sha256"
+if [ "$gateway" = both ]; then gateways=(smtp imap); else gateways=("$gateway"); fi
+
+exec 9>/run/inbound-deploy.lock
+flock -n 9 || fail "another deploy is running"
+
+held_snaps=(amazon-ssm-agent aws-cli)
+snap refresh --hold=1h "${held_snaps[@]}" >/dev/null 2>&1 || log "could not hold snap refreshes (continuing)"
+
+declare -A ports=([smtp]="465 587" [imap]="993")
+[ "$IMAP_STARTTLS_PORT_ENABLED" = true ] && ports[imap]="993 143"
+declare -A starttls=([587]=smtp [143]=imap)
+
+work="$(mktemp -d /opt/inbound/staging/.incoming.XXXXXX)"
+trap 'rm -rf "$work"; snap refresh --unhold "${held_snaps[@]}" >/dev/null 2>&1 || true' EXIT
+chmod 0755 "$work"
+
+log "downloading s3://$ARTIFACT_BUCKET/$key"
+aws s3 cp "s3://$ARTIFACT_BUCKET/$key" "$work/artifact.tar.gz" --only-show-errors
+echo "$sha256  $work/artifact.tar.gz" | sha256sum -c --quiet - || fail "artifact sha256 mismatch"
+mkdir "$work/src"
+tar -xzf "$work/artifact.tar.gz" -C "$work/src" --no-same-owner --no-same-permissions
+chown -R inboundbuild:inboundbuild "$work/src"
+
+prepare_release() {
+	local gw="$1"
+	local release="/opt/inbound/releases/$gw-$revision" pkg="$work/src/$gw-gateway"
+	[ -d "$pkg" ] || fail "artifact has no $gw-gateway/ directory"
+	[ -f "$pkg/bun.lock" ] || fail "$gw-gateway/bun.lock missing from artifact"
+	if [ -f "$release/.installed" ] && diff -rq --exclude=node_modules --exclude=.installed "$pkg" "$release" >/dev/null; then
+		log "$gw: release $gw-$revision already installed, reusing"
+		return 0
+	fi
+	[ "$(readlink -f "/opt/inbound/current-$gw" 2>/dev/null)" != "$release" ] ||
+		fail "$release is live with different contents; refusing to overwrite"
+
+	log "$gw: installing production dependencies"
+	(cd "$pkg" && systemd-run --scope --quiet --collect -p MemoryMax=512M -p MemorySwapMax=1G \
+		runuser -u inboundbuild -- env HOME=/var/lib/inbound-build \
+		bun install --frozen-lockfile --production --ignore-scripts --no-progress) ||
+		fail "$gw: bun install failed"
+	chown -R root:root "$pkg"
+	chmod -R u=rwX,go=rX "$pkg"
+	printf '%s\n' "$sha256" > "$pkg/.installed"
+	rm -rf "$release"
+	mv "$pkg" "$release"
+}
+
+switch_to() {
+	local gw="$1" target="$2"
+	ln -sfn "$target" "/opt/inbound/.current-$gw.new"
+	mv -T "/opt/inbound/.current-$gw.new" "/opt/inbound/current-$gw"
+}
+
+healthy() {
+	local gw="$1" since="$2" unit="$1-gateway.service" hostname_var="${1^^}_HOSTNAME"
+	local name="${!hostname_var}" port restarts
+	restarts="$(systemctl show -P NRestarts "$unit")"
+	for _ in $(seq 1 30); do
+		sleep 1
+		[ "$(systemctl show -P NRestarts "$unit")" = "$restarts" ] || { log "$gw: service is crash-looping"; return 1; }
+		systemctl is-active --quiet "$unit" || continue
+		local ok=1
+		for port in ${ports[$gw]}; do
+			[ -n "$(ss -Hltn "sport = :$port")" ] || ok=0
+			journalctl -u "$unit" --no-pager -o cat --since "@$since" | grep "listening on :$port" >/dev/null || ok=0
+		done
+		[ "$ok" = 1 ] && break
+	done
+	[ "${ok:-0}" = 1 ] || { log "$gw: not listening on ${ports[$gw]} after 30s"; return 1; }
+	for port in ${ports[$gw]}; do
+		local tls_args=(-connect "127.0.0.1:$port" -servername "$name" -brief)
+		[ -n "${starttls[$port]:-}" ] && tls_args+=(-starttls "${starttls[$port]}")
+		timeout 10 openssl s_client "${tls_args[@]}" </dev/null >/dev/null 2>&1 ||
+			{ log "$gw: TLS handshake failed on :$port"; return 1; }
+	done
+	sleep 3
+	systemctl is-active --quiet "$unit" && [ "$(systemctl show -P NRestarts "$unit")" = "$restarts" ] ||
+		{ log "$gw: service restarted during health check"; return 1; }
+}
+
+restart_and_check() {
+	local gw="$1" since
+	since="$(date +%s)"
+	systemctl restart "$gw-gateway.service"
+	if healthy "$gw" "$since"; then
+		log "$gw: healthy on ${ports[$gw]}"
+		return 0
+	fi
+	unit_status "$gw" "$since"
+	return 1
+}
+
+unit_status() {
+	local unit="$1-gateway.service" since="$2"
+	log "$1: $(systemctl show -P ActiveState "$unit")/$(systemctl show -P SubState "$unit") result=$(systemctl show -P Result "$unit") exit=$(systemctl show -P ExecMainStatus "$unit") restarts=$(systemctl show -P NRestarts "$unit")"
+	log "$1: last log lines (redacted; full log: journalctl -u $unit)"
+	journalctl -u "$unit" --no-pager -o cat --since "@$since" | tail -20 | redact_log
+}
+
+redact_log() {
+	sed -E \
+		-e 's#[a-zA-Z][a-zA-Z0-9+.-]*://[^/@[:space:]]+@#<url-with-credentials>@#g' \
+		-e 's#[^[:space:]<>"]+@[^[:space:]<>"]+#<address>#g' \
+		-e 's#((pass(word|wd)?|secret|token|auth[a-z_]*|api[_-]?key|bearer|credential[a-z]*|cookie|user(name)?)["]?[[:space:]]*[:=][[:space:]]*)[^[:space:],}]+#\1<redacted>#Ig' \
+		-e 's#(bearer|basic)[[:space:]]+[A-Za-z0-9._~+/=-]+#\1 <redacted>#Ig' \
+		-e 's#[A-Za-z0-9_+=-]{32,}#<redacted>#g' \
+		-e 's#^(.{300}).*#\1...#'
+}
+
+for gw in "${gateways[@]}"; do
+	prepare_release "$gw"
+done
+
+exec 8>/run/inbound-certs.lock
+if ! flock -n 8; then
+	log "waiting for inbound-certs to finish"
+	flock -w 900 8 || fail "inbound-certs still running after 15 minutes"
+fi
+
+for gw in "${gateways[@]}"; do
+	if [ ! -s "/etc/inbound/tls/$gw/fullchain.pem" ]; then
+		log "$gw: no certificate yet, issuing"
+		INBOUND_CERTS_LOCK_HELD=1 /usr/local/sbin/inbound-certs "$gw" --no-random-sleep ||
+			fail "$gw: certificate issuance failed (check the _acme-challenge CNAME)"
+	fi
+	/usr/local/sbin/inbound-render-env "$gw" || fail "$gw: env render failed"
+done
+
+declare -A previous=()
+switched=()
+rollback() {
+	local gw
+	for gw in "${switched[@]}"; do
+		if [ -n "${previous[$gw]}" ] && [ -d "${previous[$gw]}" ]; then
+			log "$gw: rolling back to $(basename "${previous[$gw]}")"
+			switch_to "$gw" "${previous[$gw]}"
+			restart_and_check "$gw" || log "$gw: ROLLBACK ALSO UNHEALTHY, needs manual attention"
+		else
+			log "$gw: no previous release to roll back to, stopping"
+			rm -f "/opt/inbound/current-$gw"
+			systemctl stop "$gw-gateway.service" || true
+		fi
+	done
+}
+
+for gw in "${gateways[@]}"; do
+	previous[$gw]=""
+	[ -L "/opt/inbound/current-$gw" ] && previous[$gw]="$(readlink -f "/opt/inbound/current-$gw")"
+	switch_to "$gw" "/opt/inbound/releases/$gw-$revision"
+	switched+=("$gw")
+	log "$gw: switched current-$gw -> $gw-$revision (previous: ${previous[$gw]:-none})"
+	if ! restart_and_check "$gw"; then
+		rollback
+		fail "$gw: deploy of $revision failed, rolled back"
+	fi
+done
+
+exec 8>&-
+
+for gw in "${gateways[@]}"; do
+	keep="$(readlink -f "/opt/inbound/current-$gw")"
+	find /opt/inbound/releases -mindepth 1 -maxdepth 1 -type d -name "$gw-*" -printf '%T@ %p\n' |
+		sort -rn | cut -d' ' -f2- | { grep -vxF "$keep" || true; } | tail -n +"$KEEP_RELEASES" |
+		while read -r old; do
+			log "$gw: pruning $(basename "$old")"
+			rm -rf "$old"
+		done
+done
+
+log "deployed ${gateways[*]} at $revision"

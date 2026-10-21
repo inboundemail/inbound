@@ -1,0 +1,74 @@
+name: Deploy gateway host
+
+# Consolidated gateway host (infra/gateways). Manual only until DNS cutover; the old boxes
+# keep deploying through deploy-gateways.yml.
+on:
+  workflow_dispatch:
+    inputs:
+      gateway:
+        description: Gateway to deploy
+        type: choice
+        options: [both, smtp, imap]
+        default: both
+
+concurrency:
+  group: deploy-gateway-host
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: true
+      matrix:
+        gateway: ${{ fromJSON(inputs.gateway == 'both' && '["smtp","imap"]' || format('["{0}"]', inputs.gateway)) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+      - name: Test
+        working-directory: packages/${{ matrix.gateway }}-gateway
+        run: |
+          bun install --frozen-lockfile
+          bun test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GATEWAY: ${{ inputs.gateway }}
+      GATEWAY_HOST_INSTANCE_ID: ${{ vars.GATEWAY_HOST_INSTANCE_ID }}
+      GATEWAY_ARTIFACT_BUCKET: ${{ vars.GATEWAY_ARTIFACT_BUCKET }}
+      GATEWAY_HOST_IP: ${{ vars.GATEWAY_HOST_IP }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Check configuration
+        run: |
+          for name in GATEWAY_HOST_INSTANCE_ID GATEWAY_ARTIFACT_BUCKET GATEWAY_HOST_IP; do
+            [ -n "${!name}" ] || { echo "::error::set the $name variable on the production environment"; exit 1; }
+          done
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: arn:aws:iam::375612485665:role/github-gateway-host-deploy
+          aws-region: us-east-2
+      - name: Build artifact
+        id: build
+        run: bash infra/gateways/scripts/build-artifact.sh "$GATEWAY" "$RUNNER_TEMP" | tee -a "$GITHUB_OUTPUT"
+      - name: Deploy
+        run: bash infra/gateways/scripts/deploy.sh "$GATEWAY" "${{ steps.build.outputs.artifact }}"
+      - name: Verify
+        run: bash infra/gateways/scripts/verify.sh "$GATEWAY_HOST_IP" "$GATEWAY"
