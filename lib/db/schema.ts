@@ -451,6 +451,9 @@ export const structuredEmails = pgTable(
 		guardBlockedIdx: index("structured_emails_guard_blocked_idx").on(
 			table.guardBlocked,
 		),
+		lowerRecipientIdx: index("structured_emails_lower_recipient_idx")
+			.on(sql`lower(${table.recipient})`, table.createdAt)
+			.where(sql`${table.rawContent} is not null`),
 	}),
 );
 
@@ -1267,6 +1270,10 @@ export const imapMailboxMessages = pgTable(
 		appendedReferenceIdx: index(
 			"imap_mailbox_messages_appended_reference_idx",
 		).on(table.rawSource, table.structuredEmailId),
+		mailboxModseqIdx: index("imap_mailbox_messages_mailbox_modseq_idx").on(
+			table.mailboxId,
+			table.modseq,
+		),
 	}),
 );
 

@@ -526,13 +526,6 @@
       "when": 1790887807869,
       "tag": "0074_wildcard_subdomains",
       "breakpoints": true
-    },
-    {
-      "idx": 75,
-      "version": "7",
-      "when": 1792621230666,
-      "tag": "0075_jev_classification",
-      "breakpoints": true
     }
   ]
 }

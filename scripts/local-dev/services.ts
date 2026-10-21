@@ -30,15 +30,12 @@ export function removeServices() {
 	run([...COMPOSE, "down", "-v"]);
 }
 
-function schemaSql() {
-	return run(["bunx", "drizzle-kit", "export", "--dialect=postgresql", "--schema=./lib/db/schema.ts"]);
+function migrate(databaseName: string) {
+	return run(["bun", "scripts/db/migrate.ts", "local", databaseName]);
 }
 
 export function ensureSchema(databaseName = LOCAL_DB_NAME) {
-	const hasSchema = psql("select to_regclass('public.\"user\"') is not null;", databaseName);
-	if (hasSchema === "t") return false;
-	psql(schemaSql(), databaseName);
-	return true;
+	return !migrate(databaseName).includes("No pending migrations.");
 }
 
 export function recreateDatabase(databaseName: string) {
@@ -47,7 +44,7 @@ export function recreateDatabase(databaseName: string) {
 	}
 	psql(`drop database if exists "${databaseName}" with (force);`, "postgres");
 	psql(`create database "${databaseName}";`, "postgres");
-	psql(schemaSql(), databaseName);
+	migrate(databaseName);
 }
 
 export async function flushRedis() {

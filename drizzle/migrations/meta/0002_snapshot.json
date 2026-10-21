@@ -1,6 +1,6 @@
 {
-  "id": "d029d654-5dce-4b37-b05f-f136e6c7acdd",
-  "prevId": "d5e59c3d-1cc8-4720-b0e7-e1bef1672102",
+  "id": "293dec08-d198-41ad-972f-8efbcf15c6c5",
+  "prevId": "5ad298cf-d9d3-486d-854a-fd7bc51fbfb8",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2555,6 +2555,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "imap_mailbox_messages_mailbox_modseq_idx": {
+          "name": "imap_mailbox_messages_mailbox_modseq_idx",
+          "columns": [
+            {
+              "expression": "mailbox_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "modseq",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2591,6 +2612,60 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.imap_mailbox_removals": {
+      "name": "imap_mailbox_removals",
+      "schema": "",
+      "columns": {
+        "credential_id": {
+          "name": "credential_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "structured_email_id": {
+          "name": "structured_email_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "removed_at": {
+          "name": "removed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "imap_mailbox_removals_credential_id_imap_credentials_id_fk": {
+          "name": "imap_mailbox_removals_credential_id_imap_credentials_id_fk",
+          "tableFrom": "imap_mailbox_removals",
+          "tableTo": "imap_credentials",
+          "columnsFrom": [
+            "credential_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "imap_mailbox_removals_credential_id_structured_email_id_pk": {
+          "name": "imap_mailbox_removals_credential_id_structured_email_id_pk",
+          "columns": [
+            "credential_id",
+            "structured_email_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -5705,6 +5780,28 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "structured_emails_lower_recipient_idx": {
+          "name": "structured_emails_lower_recipient_idx",
+          "columns": [
+            {
+              "expression": "lower(\"recipient\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"structured_emails\".\"raw_content\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
