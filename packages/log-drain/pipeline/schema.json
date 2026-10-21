@@ -1,0 +1,169 @@
+{
+	"fields": [
+		{
+			"name": "ts",
+			"type": "int64",
+			"required": true
+		},
+		{
+			"name": "id",
+			"type": "string",
+			"required": true
+		},
+		{
+			"name": "level",
+			"type": "string",
+			"required": true
+		},
+		{
+			"name": "source",
+			"type": "string",
+			"required": true
+		},
+		{
+			"name": "type",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "message",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "request_id",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "trace_id",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "span_id",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "host",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "path",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "route",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "entrypoint",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "status",
+			"type": "int32",
+			"required": false
+		},
+		{
+			"name": "method",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "req_path",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "client_ip",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "user_agent",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "referer",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "region",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "cache",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "path_type",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "waf_action",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "response_bytes",
+			"type": "int64",
+			"required": false
+		},
+		{
+			"name": "duration_ms",
+			"type": "float64",
+			"required": false
+		},
+		{
+			"name": "deployment_id",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "project_id",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "project_name",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "environment",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "branch",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "build_id",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "edge_type",
+			"type": "string",
+			"required": false
+		},
+		{
+			"name": "destination",
+			"type": "string",
+			"required": false
+		}
+	]
+}

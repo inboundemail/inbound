@@ -1,0 +1,4 @@
+VERCEL_DRAIN_SECRET=replace-with-drain-signature-secret
+VERCEL_VERIFY_TOKEN=replace-with-vercel-verification-code
+QUERY_TOKEN=replace-with-random-string-at-least-32-chars
+EMAIL_HASH_KEY=replace-with-random-string

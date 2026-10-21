@@ -1,0 +1,81 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "inbound-log-drain",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-10-15",
+	"compatibility_flags": ["nodejs_compat"],
+	"workers_dev": true,
+	"limits": {
+		"cpu_ms": 30000
+	},
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 0.01
+	},
+	"triggers": {
+		"crons": ["17 3 * * *"]
+	},
+	"vars": {
+		"LOG_PREFIX": "logs/",
+		"RETENTION_DAYS": "30",
+		"MAX_QUERY_HOURS": "24",
+		"MAX_MESSAGE_CHARS": "32768",
+		"MAX_SCAN_MB": "1024",
+		"MAX_SCAN_OBJECTS": "5000",
+		"INGEST_LAG_MINUTES": "60",
+		"AE_DATASET": "inbound_requests",
+		"METRICS_SAMPLE_RATE": "1",
+		"CF_ACCOUNT_ID": ""
+	},
+	"r2_buckets": [
+		{
+			"binding": "LOGS",
+			"bucket_name": "inbound-logs"
+		}
+	],
+	"pipelines": [
+		{
+			"binding": "LOG_STREAM",
+			"stream": "REPLACE_WITH_STREAM_ID"
+		}
+	],
+	"analytics_engine_datasets": [
+		{
+			"binding": "METRICS",
+			"dataset": "inbound_requests"
+		}
+	],
+	"env": {
+		"local": {
+			"name": "inbound-log-drain-local",
+			"workers_dev": false,
+			"triggers": {
+				"crons": ["17 3 * * *"]
+			},
+			"vars": {
+				"LOG_PREFIX": "logs/",
+				"RETENTION_DAYS": "30",
+				"MAX_QUERY_HOURS": "24",
+				"MAX_MESSAGE_CHARS": "32768",
+				"MAX_SCAN_MB": "1024",
+				"MAX_SCAN_OBJECTS": "5000",
+				"INGEST_LAG_MINUTES": "60",
+				"AE_DATASET": "inbound_requests_local",
+				"METRICS_SAMPLE_RATE": "1",
+				"CF_ACCOUNT_ID": ""
+			},
+			"r2_buckets": [
+				{
+					"binding": "LOGS",
+					"bucket_name": "inbound-logs-local"
+				}
+			],
+			"analytics_engine_datasets": [
+				{
+					"binding": "METRICS",
+					"dataset": "inbound_requests_local"
+				}
+			]
+		}
+	}
+}

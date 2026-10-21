@@ -1,0 +1,20 @@
+{
+  "name": "inbound-log-drain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --env local",
+    "types": "wrangler types --include-env=false src/worker-runtime.d.ts",
+    "typecheck": "wrangler types --include-env=false src/worker-runtime.d.ts && tsc --noEmit -p tsconfig.json",
+    "test": "wrangler types --include-env=false src/worker-runtime.d.ts && vitest run",
+    "smoke": "bun run scripts/send-sample.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.6",
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.0",
+    "wrangler": "4.151.3"
+  }
+}
