@@ -14,10 +14,13 @@
 | SDK tests | `bun run test-sdk` |
 | Lint | `bun run lint` |
 | Generate OpenAPI | `bun run generate:openapi` |
+| New DB migration | `bun run db:generate --name <change>` |
+| Check migrations match schema | `bun run db:check` |
 
 ### Restricted Commands
 - `bun run dev` / `bun run build` - Ask before running
-- `bunx drizzle-kit generate/push` - Prompt user to run manually
+- `bun run db:migrate:prod` / `db:baseline:prod` - User runs these; prepare the command and say so
+- `drizzle-kit push` / `drizzle-kit export` - Never use against or to build any database
 - `npx tsc` - Never run (breaks project state)
 
 ## Package Manager
@@ -35,7 +38,8 @@ app/api/
 │   └── [[...slugs]]/route.ts
 └── v2/                    # Legacy Next.js routes
 
-lib/db/schema.ts           # Drizzle schema (type source of truth)
+lib/db/schema.ts           # Drizzle schema (source of truth)
+drizzle/migrations/        # Numbered SQL migrations (drizzle/archive is history, never applied)
 features/                  # Feature-specific logic
 ```
 
@@ -62,6 +66,14 @@ import type { InferSelectModel } from "drizzle-orm";
 - **Drizzle ORM only** - No raw SQL
 - **Use `structuredEmails`** - NOT deprecated `receivedEmails`/`parsedEmails`
 - Always scope queries by `userId` for multi-tenant safety
+
+### Database Changes
+- `lib/db/schema.ts` is the source of truth. Every schema change ships as a numbered SQL file in `drizzle/migrations/`, created with `bun run db:generate --name <change>` (or `--custom` for SQL drizzle can't express, like triggers), reviewed and committed in the same PR. Hand-edit the SQL when needed, e.g. to backfill a new column.
+- Pending migrations run in one transaction, so `CREATE INDEX CONCURRENTLY` can't go in a migration file. For an index on a large table, ask the user.
+- Never edit or renumber a migration that has been applied anywhere; add a new one. If main gained a migration since you generated yours, delete yours and regenerate it on top.
+- Apply order: `bun run db:migrate:preview <branch>` for the PR's Vercel preview database, then `bun run db:migrate:prod` before merging or deploying code that depends on the change (code that selects whole rows breaks while a column is missing). Ship additive changes first (nullable column or new table, deploy, backfill), and constraints or drops in a later migration.
+- Agents may generate migrations and apply them with `db:migrate:local` and `db:migrate:preview` (needs a `vercel link`ed checkout and `PROD_DATABASE_HOST` so it can refuse the production host). Production is applied by the user: prepare the `db:migrate:prod` command and say so.
+- `bun run db:check` must pass (CI runs it).
 
 ### Naming Conventions
 - Files: `kebab-case.ts`
@@ -160,7 +172,7 @@ All list endpoints return:
 2. Don't use deprecated tables (`receivedEmails`/`parsedEmails`)
 3. Don't forget user scoping in DB queries
 4. Don't use `t.Union()` for Elysia responses
-5. Don't run drizzle-kit commands directly
+5. Don't change the database schema without a migration in `drizzle/migrations/`
 
 ## User Ban System
 
