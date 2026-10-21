@@ -6,9 +6,7 @@ import { AutumnProvider } from "autumn-js/react";
 import Script from "next/script";
 import { OPENAI_ADS_PIXEL_ID } from "@/lib/analytics/openai-ads";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
-import { AnalyticsTracker } from "@/components/analytics/analytics-tracker";
 import { QueryProvider } from "@/components/providers/query-provider";
-import { RealtimeProvider } from "@/components/providers/realtime-provider";
 
 const outfit = Outfit({
 	variable: "--font-outfit",
@@ -250,16 +248,13 @@ export default function RootLayout({
 
 				<NuqsAdapter>
 					<QueryProvider>
-						<RealtimeProvider>
-							<AutumnProvider
-								backendUrl={process.env.NEXT_PUBLIC_APP_URL || ""}
-							>
-								{children}
-							</AutumnProvider>
-						</RealtimeProvider>
+						<AutumnProvider
+							backendUrl={process.env.NEXT_PUBLIC_APP_URL || ""}
+						>
+							{children}
+						</AutumnProvider>
 					</QueryProvider>
 				</NuqsAdapter>
-				<AnalyticsTracker />
 			</body>
 		</html>
 	);

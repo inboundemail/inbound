@@ -10,8 +10,6 @@
  * Used by components like AppSidebar, NavMain, NavSecondary, and the NavigationContext
  * to provide consistent navigation experience across the application.
  */
-import { guardAccessFlag } from "@/app/actions/feature-flags";
-import ChartTrendUp from "@/components/icons/chart-trend-up";
 import EmailFlow from "@/components/icons/email-flow";
 import EnvelopeOpen from "@/components/icons/envelope-open";
 import Gear2 from "@/components/icons/gear-2";
@@ -83,14 +81,7 @@ export const navigationConfig: NavigationConfig = {
 	],
 	secondary: [],
 	features: [],
-	admin: [
-		{
-			title: "Analytics",
-			url: "/admin/analytics",
-			icon: ChartTrendUp,
-			description: "Visitors, signups, clicks and heatmaps",
-		},
-	],
+	admin: [],
 };
 
 // Helper function to get page title from URL
@@ -235,28 +226,3 @@ export function filterNavigationByFeatureFlags(
 	});
 }
 
-/**
- * Check if user has access to Guard feature
- * Server action that can be called from client components
- */
-export async function checkGuardAccess(): Promise<boolean> {
-	const hasAccess = await guardAccessFlag();
-	return hasAccess;
-}
-
-/**
- * Filter navigation items based on Guard access
- * Client-side helper that removes Guard if access is disabled
- */
-export function filterGuardNavigation(
-	items: NavigationItem[],
-	hasGuardAccess: boolean,
-): NavigationItem[] {
-	return items.filter((item) => {
-		// Hide Guard if flag is false
-		if (item.url === "/guard" && !hasGuardAccess) {
-			return false;
-		}
-		return true;
-	});
-}

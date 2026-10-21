@@ -26,14 +26,12 @@ export interface DailyUsageEmailProps {
     uniqueRecipients: number;
   };
   topUsers: TopUserRow[];
-  insights?: string[];
 }
 
 export const DailyUsageSummaryEmail = ({
   dateLabel = "2025-01-01",
   totals = { sent: 0, received: 0, uniqueSenders: 0, uniqueRecipients: 0 },
   topUsers = [ { userEmail: "test@example.com", userName: "Test User", sent: 100, received: 200, total: 300 } ],
-  insights = [ "Test Insight 1", "Test Insight 2", "Test Insight 3" ],
 }: DailyUsageEmailProps) => (
   <Html>
     <Head />
@@ -52,15 +50,6 @@ export const DailyUsageSummaryEmail = ({
           <Text className="m-0 text-sm leading-6">Received: {(totals?.received || 0).toLocaleString()}</Text>
           <Text className="m-0 text-sm leading-6">Unique senders: {(totals?.uniqueSenders || 0).toLocaleString()}</Text>
           <Text className="m-0 text-sm leading-6">Unique recipients: {(totals?.uniqueRecipients || 0).toLocaleString()}</Text>
-
-          {insights.length > 0 && (
-            <>
-              <Text className="mt-6 text-sm font-semibold leading-6">AI Insights</Text>
-              {insights.map((insight, idx) => (
-                <Text key={idx} className="m-0 text-sm leading-6">- {insight}</Text>
-              ))}
-            </>
-          )}
 
           <Text className="mt-6 text-sm font-semibold leading-6">Top Users</Text>
           {topUsers.length === 0 ? (

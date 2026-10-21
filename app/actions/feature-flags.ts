@@ -5,7 +5,6 @@ import { headers } from "next/headers"
 import { db } from '@/lib/db'
 import { user } from '@/lib/db/auth-schema'
 import { eq } from 'drizzle-orm'
-import { flag } from "flags/next";
 
 /**
  * Add a feature flag to a user
@@ -191,36 +190,4 @@ export async function getUserFeatureFlags(userId?: string) {
       details: error instanceof Error ? error.message : 'Unknown error'
     }
   }
-} 
-
-// Vercel Flags SDK (Migrate Over to this)
-
-// app/flags.tsx
-
-export const guardAccessFlag = flag<boolean>({
-  key: "access-to-guard",
-  defaultValue: true,
-  description: "Enable access to Guard email security features",
-  decide(): boolean | Promise<boolean> {
-    // Return undefined to let Vercel handle the decision
-    // This allows the flag to be overridden via Vercel toolbar/dashboard
-    return true;
-  },
-});
-
-export const guardModelFlag = flag<string>({
-  key: "guard-model",
-  defaultValue: "openai/gpt-5-nano",
-  description: "Model to use for Guard email analysis",
-  options: [
-    { value: "openai/gpt-5-mini", label: "GPT-5 Mini" },
-    { value: "openai/gpt-5-pro", label: "GPT-5" },
-    { value: "openai/gpt-5-nano", label: "GPT-5 Nano" },
-  ],
-  // The decide function receives context that can include overrides
-  decide({ cookies, headers }): string | Promise<string> {
-    // Vercel will automatically handle toolbar overrides
-    // Just return undefined to use the default/override behavior
-    return "openai/gpt-5-nano";
-  },
-});
+}

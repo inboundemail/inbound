@@ -3,10 +3,9 @@ import { sql } from "drizzle-orm";
 import DailyUsageSummaryEmail from "@/emails/daily-usage-summary";
 import { render } from "@react-email/render";
 import Inbound from "inboundemail";
-import { generateObject } from "ai";
-import { z } from "zod";
-import { getModel } from "@/lib/ai/provider";
 import { assertCronAuthorized } from "@/lib/security/cron-auth";
+
+export const maxDuration = 300;
 
 export async function GET(request: Request) {
 	const unauthorizedResponse = assertCronAuthorized(request, "daily-usage");
@@ -42,7 +41,7 @@ export async function GET(request: Request) {
       WHERE created_at BETWEEN ${start} AND ${end}
         AND recipient IS NOT NULL)::int AS unique_recipients
   `);
-	const totalsRow: any = totalsRes.rows[0] || {
+	const totalsRow: Record<string, unknown> = totalsRes.rows[0] || {
 		sent: 0,
 		received: 0,
 		unique_senders: 0,
@@ -73,28 +72,13 @@ export async function GET(request: Request) {
     ORDER BY total DESC
     LIMIT 10
   `);
-	const topUsers = (topUsersRes.rows as any[]).map((r) => ({
+	const topUsers = (topUsersRes.rows as Record<string, unknown>[]).map((r) => ({
 		userEmail: r.user_email as string,
 		userName: (r.user_name ?? null) as string | null,
 		sent: Number(r.sent || 0),
 		received: Number(r.received || 0),
 		total: Number(r.total || 0),
 	}));
-
-	// Optional AI insights using Vercel AI SDK generateObject
-	let insights: string[] = [];
-	try {
-		if (process.env.OPENAI_API_KEY) {
-			const result = await generateObject({
-				model: getModel("gpt-4o"),
-				schema: z.object({ insights: z.array(z.string()).max(8) }),
-				prompt: `You are an email analytics assistant. Given today's usage metrics, produce concise insights (max 8 bullet points).\n\nTotals: sent=${totalsRow.sent}, received=${totalsRow.received}, uniqueSenders=${totalsRow.unique_senders}, uniqueRecipients=${totalsRow.unique_recipients}.\nTop users (email: sent/received/total):\n${topUsers.map((u) => `${u.userEmail}: ${u.sent}/${u.received}/${u.total}`).join("\n")}`,
-			});
-			insights = (result.object as any).insights || [];
-		}
-	} catch (e) {
-		console.error("AI insights generation failed:", e);
-	}
 
 	const html = await render(
 		DailyUsageSummaryEmail({
@@ -110,7 +94,6 @@ export async function GET(request: Request) {
 				uniqueRecipients: Number(totalsRow.unique_recipients || 0),
 			},
 			topUsers,
-			insights,
 		}),
 	);
 

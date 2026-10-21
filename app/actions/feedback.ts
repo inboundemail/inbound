@@ -1,21 +1,14 @@
 "use server";
 
-import { LinearClient } from "@linear/sdk";
 import { render } from "@react-email/render";
 import Inbound from "inboundemail";
 import { headers } from "next/headers";
 import FeedbackEmail from "@/emails/feedback";
 import { auth } from "@/lib/auth/auth";
 
-// Initialize clients
 const inbound = new Inbound({
 	apiKey: process.env.INBOUND_API_KEY!,
 });
-const linear = process.env.LINEAR_API_KEY
-	? new LinearClient({
-			apiKey: process.env.LINEAR_API_KEY,
-		})
-	: null;
 
 export interface FeedbackData {
 	feedback: string;
@@ -122,32 +115,6 @@ export async function sendFeedbackAction(
 				{ name: "user_id", value: session.user.id },
 			],
 		});
-
-		// Optionally add request to Linear (if configured properly)
-		try {
-			if (linear && process.env.LINEAR_TEAM_ID) {
-				await linear.createIssue({
-					title: `New Feedback from ${session.user.name || session.user.email} - inbound`,
-					description: data.feedback.trim(),
-					teamId: process.env.LINEAR_TEAM_ID,
-					priority: 3,
-				});
-				console.log(
-					`✅ sendFeedbackAction - Linear issue created successfully`,
-				);
-			} else {
-				console.log(
-					`⚠️ sendFeedbackAction - Linear integration skipped (missing configuration)`,
-				);
-			}
-		} catch (linearError) {
-			// Don't fail the entire feedback submission if Linear fails
-			console.error(
-				"⚠️ sendFeedbackAction - Linear integration failed:",
-				linearError,
-			);
-			console.log("   📧 Feedback email was still sent successfully");
-		}
 
 		console.log(
 			`✅ sendFeedbackAction - Feedback email sent successfully from ${session.user.email}`,

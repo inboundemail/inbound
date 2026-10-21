@@ -5,8 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { CopyPromptButton } from "@/components/marketing/copy-prompt-button";
 import { Dither } from "@/components/marketing/dither";
+import { ExampleInbox } from "@/components/marketing/example-inbox";
 import { HomeCta } from "@/components/marketing/home-cta";
-import { InboxHint, LiveInbox } from "@/components/marketing/live-inbox";
 import { Mark } from "@/components/marketing/mark";
 import { footerGroups } from "@/components/marketing-nav";
 import { auth } from "@/lib/auth/auth";
@@ -131,14 +131,13 @@ export default async function Page() {
 							</Link>
 							<CopyPromptButton />
 						</div>
-						<InboxHint />
 					</div>
 
 					<div
 						data-dither-anchor
 						className="relative mt-28 pb-40 sm:mt-36 sm:pb-56"
 					>
-						<LiveInbox />
+						<ExampleInbox />
 					</div>
 				</div>
 			</section>
