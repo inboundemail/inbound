@@ -29,6 +29,7 @@
     "db:migrate:prod": "bun run scripts/db/migrate.ts prod",
     "db:baseline:prod": "bun run scripts/db/baseline.ts prod",
     "db:baseline:preview": "bun run scripts/db/baseline.ts preview",
+    "db:baseline:local": "bun run scripts/db/baseline.ts local",
     "deploy:email": "bun run scripts/deploy-email-system.ts",
     "deploy:quick": "bun run scripts/quick-deploy.ts",
     "deploy:lambda": "bun run scripts/deploy-lambda.ts",
