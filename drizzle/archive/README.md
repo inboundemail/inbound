@@ -1,0 +1,3 @@
+# Archived migration history
+
+These files are the migration history from before October 2026. They are kept for reference only and are never applied. The chain was broken: it had more SQL files than journal entries, duplicate numbers (0044, 0048, 0050, 0054, 0059, 0060), hand-written files outside the journal, a journal entry with no file and missing snapshots, and production was updated with `drizzle-kit push` instead, so `drizzle.__drizzle_migrations` stayed empty. `schema.ts` and `relations.ts` are an old `drizzle-kit pull` output. The live history starts again at `drizzle/migrations/0000_baseline.sql`, which reproduces the production schema as of 2026-10-21.
