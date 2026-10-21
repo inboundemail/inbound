@@ -20,7 +20,7 @@ async function main() {
 	}
 
 	startServices();
-	if (ensureSchema()) console.log("Applied lib/db/schema.ts to the local database.");
+	if (ensureSchema()) console.log("Applied pending migrations from drizzle/migrations to the local database.");
 
 	const env = buildLocalEnv({ appUrl });
 

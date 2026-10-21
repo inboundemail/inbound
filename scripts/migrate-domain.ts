@@ -5,7 +5,7 @@ import {
   emailAddresses,
   sentEmails,
   emailThreads,
-} from "../drizzle/schema";
+} from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import * as readline from "readline";
 

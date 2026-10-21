@@ -81,7 +81,7 @@ async function cleanupDuplicateDeliveries() {
   
   if (remaining === '0') {
     console.log('✅ All duplicates cleaned up! You can now safely add the unique constraint.')
-    console.log('\nRun: bunx drizzle-kit push')
+    console.log('\nAdd the constraint with a migration: bun run db:generate --name <change>')
   } else {
     console.log(`⚠️  Warning: ${remaining} duplicates still remain. Please investigate.`)
   }
