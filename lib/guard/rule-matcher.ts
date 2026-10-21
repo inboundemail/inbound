@@ -329,7 +329,7 @@ function checkEmailCriteria(
  */
 export const AI_RULE_THRESHOLD = 0.6;
 const AI_BODY_LIMIT = 6000;
-const AI_PROMPT_LIMIT = 2000;
+const AI_PROMPT_LIMIT = 20000;
 const AI_EVALUATION_FAILED = 'AI prompt evaluation failed';
 
 interface AiRuleAnswer {
@@ -342,9 +342,11 @@ function normalizeAiPrompt(config: AiPromptRuleConfig | null | undefined): strin
     return null;
   }
   const prompt = config.prompt
-    .replace(/[\u0000-\u001f\u007f]/g, ' ')
-    .replace(/[“”„‟"`]/g, "'")
-    .replace(/\s+/g, ' ')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim()
     .slice(0, AI_PROMPT_LIMIT);
   return prompt || null;
@@ -353,10 +355,13 @@ function normalizeAiPrompt(config: AiPromptRuleConfig | null | undefined): strin
 function aiRuleQuestion(prompt: string): JevNoulQuestion {
   return {
     type: 'noul',
-    instructions: `Does this rule apply to \`email\`? Rule: “${prompt}”`,
+    instructions: {
+      question: 'Should this rule trigger for `email`?',
+      rule: prompt,
+    },
     criteria: {
-      true: 'The rule clearly applies to this email',
-      false: 'The rule does not apply to this email, or it is unclear whether it applies',
+      true: 'The rule clearly says to trigger for this email',
+      false: 'The rule does not trigger for this email, or it is unclear whether it does',
     },
   };
 }
@@ -438,10 +443,14 @@ async function askJevAboutRules(
   return answers;
 }
 
-function aiRuleMatch(answer: AiRuleAnswer): CheckRuleMatchSuccess {
+function aiRuleMatch(answer: AiRuleAnswer, ruleName?: string): CheckRuleMatchSuccess {
+  const percent = Math.round(answer.probability * 100);
+  const matched = answer.probability >= AI_RULE_THRESHOLD;
   return {
-    matched: answer.probability >= AI_RULE_THRESHOLD,
-    reason: `Jev: ${Math.round(answer.probability * 100)}% match`,
+    matched,
+    reason: ruleName && matched
+      ? `Matched rule "${ruleName}" (Jev ${percent}%)`
+      : `Jev: ${percent}% match`,
     matchDetails: [{ criteria: 'ai_prompt', value: String(Math.round(answer.probability * 1000) / 1000) }],
   };
 }
@@ -571,7 +580,7 @@ export async function evaluateGuardRules(
             matchResult = { matched: false, error: 'Invalid AI prompt configuration' };
           } else {
             aiAnswer = (await getAiAnswers())?.get(rule.id);
-            matchResult = aiAnswer ? aiRuleMatch(aiAnswer) : { matched: false, error: AI_EVALUATION_FAILED };
+            matchResult = aiAnswer ? aiRuleMatch(aiAnswer, rule.name) : { matched: false, error: AI_EVALUATION_FAILED };
           }
         } else {
           continue;

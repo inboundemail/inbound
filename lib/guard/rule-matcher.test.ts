@@ -103,7 +103,10 @@ function buildRule(overrides: Partial<GuardRule>): GuardRule {
 type JevRequest = {
 	model: string;
 	state: { email: Record<string, unknown> };
-	questions: Record<string, { type: string; instructions: string }>;
+	questions: Record<
+		string,
+		{ type: string; instructions: { question: string; rule: string } }
+	>;
 };
 
 function jevResponse(answers: Record<string, number>, init: ResponseInit = {}) {
@@ -192,9 +195,10 @@ describe("guard AI prompt rules (Jev)", () => {
 		expect(requests).toHaveLength(1);
 		expect(requests[0].model).toBe("jev-1.13.0");
 		expect(requests[0].questions.rule_0.type).toBe("noul");
-		expect(requests[0].questions.rule_0.instructions).toContain(
-			"“Cold sales outreach”",
-		);
+		expect(requests[0].questions.rule_0.instructions).toEqual({
+			question: "Should this rule trigger for `email`?",
+			rule: "Cold sales outreach",
+		});
 		expect(requests[0].state.email).toEqual({
 			from: "Sam Seller <sam@vendor.example>",
 			to: ["inbox-b@example.com"],
@@ -220,6 +224,7 @@ describe("guard AI prompt rules (Jev)", () => {
 		rules = [
 			buildRule({
 				id: "ai_low",
+				name: "Sales pitches",
 				priority: 1,
 				actions: JSON.stringify({ action: "block" }),
 			}),
@@ -248,13 +253,13 @@ describe("guard AI prompt rules (Jev)", () => {
 
 		expect(requests).toHaveLength(1);
 		expect(Object.keys(requests[0].questions)).toEqual(["rule_0", "rule_1"]);
-		expect(requests[0].questions.rule_0.instructions).toContain(
+		expect(requests[0].questions.rule_0.instructions.rule).toBe(
 			"A personal note from a friend",
 		);
 		expect(result).toMatchObject({
 			shouldBlock: true,
 			action: "block",
-			reason: "Jev: 92% match",
+			reason: 'Matched rule "Sales pitches" (Jev 92%)',
 			metadata: {
 				ruleType: "ai_prompt",
 				jevModel: "jev-1.13.0",
@@ -361,5 +366,112 @@ describe("guard AI prompt rules (Jev)", () => {
 			action: "allow",
 		});
 		expect(requests).toHaveLength(3);
+	});
+
+	it("keeps newlines in multi-line rules and passes quotes through as data", async () => {
+		rules = [
+			buildRule({
+				id: "rule_ai",
+				config: JSON.stringify({
+					mode: "advanced",
+					prompt:
+						'If the email is "spam":\r\n- sales pitches\u0007\n- crypto offers ',
+				}),
+			}),
+		];
+		responses.push(() => jevResponse({ rule_0: 0.2 }));
+
+		await checkRuleMatch("rule_ai", "email_1", "user_1");
+
+		expect(requests[0].questions.rule_0.instructions.rule).toBe(
+			'If the email is "spam":\n- sales pitches\n- crypto offers',
+		);
+	});
+
+	it("maps answers back to the right rules when an invalid AI rule sits between valid ones", async () => {
+		rules = [
+			buildRule({
+				id: "ai_first",
+				priority: 10,
+				config: JSON.stringify({ mode: "simple", prompt: "First rule" }),
+			}),
+			buildRule({
+				id: "ai_invalid",
+				priority: 5,
+				config: JSON.stringify({ mode: "simple", prompt: "   " }),
+			}),
+			buildRule({
+				id: "ai_third",
+				name: "Third",
+				priority: 1,
+				config: JSON.stringify({ mode: "simple", prompt: "Third rule" }),
+			}),
+		];
+		responses.push(() => jevResponse({ rule_0: 0.1, rule_1: 0.9 }));
+
+		const result = await evaluateGuardRules("email_1", "user_1");
+
+		expect(requests).toHaveLength(1);
+		expect(Object.keys(requests[0].questions)).toEqual(["rule_0", "rule_1"]);
+		expect(requests[0].questions.rule_1.instructions.rule).toBe("Third rule");
+		expect(result.matchedRule?.id).toBe("ai_third");
+		expect(result.metadata).toMatchObject({ jevProbability: 0.9 });
+	});
+
+	it("fails only the rule whose answer is missing and still evaluates the rest", async () => {
+		rules = [
+			buildRule({
+				id: "ai_missing",
+				priority: 10,
+				config: JSON.stringify({ mode: "simple", prompt: "Missing answer" }),
+				actions: JSON.stringify({ action: "allow" }),
+			}),
+			buildRule({
+				id: "ai_answered",
+				priority: 1,
+				config: JSON.stringify({ mode: "simple", prompt: "Answered" }),
+			}),
+		];
+		responses.push(() => jevResponse({ rule_1: 0.8 }));
+
+		const result = await evaluateGuardRules("email_1", "user_1");
+
+		expect(requests).toHaveLength(1);
+		expect(result).toMatchObject({ shouldBlock: true, action: "block" });
+		expect(result.matchedRule?.id).toBe("ai_answered");
+	});
+
+	it("retries a network error before answering", async () => {
+		rules = [buildRule({ id: "rule_ai" })];
+		responses.push(
+			() => {
+				throw new TypeError("fetch failed");
+			},
+			() => jevResponse({ rule_0: 0.7 }),
+		);
+
+		await expect(
+			checkRuleMatch("rule_ai", "email_1", "user_1"),
+		).resolves.toMatchObject({ matched: true });
+		expect(requests).toHaveLength(2);
+	});
+
+	it("reports a timeout while reading the response as a timeout and fails open", async () => {
+		rules = [buildRule({ id: "rule_ai" })];
+		responses.push(() => {
+			const response = jevResponse({ rule_0: 0.9 });
+			response.json = () =>
+				Promise.reject(new DOMException("timed out", "TimeoutError"));
+			return response;
+		});
+
+		await expect(evaluateGuardRules("email_1", "user_1")).resolves.toEqual({
+			shouldBlock: false,
+			action: "allow",
+		});
+		expect(requests).toHaveLength(1);
+		expect(errorSpy).toHaveBeenCalledWith(
+			"🛡️ Guard - Jev evaluation failed (timeout)",
+		);
 	});
 });

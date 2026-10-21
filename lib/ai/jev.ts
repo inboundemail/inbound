@@ -8,14 +8,14 @@
 export const JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 export const DEFAULT_JEV_MODEL = "jev-1.13.0";
 
-const TOTAL_BUDGET_MS = 10_000;
+const TOTAL_BUDGET_MS = 4_000;
 const MAX_ATTEMPTS = 3;
 const BASE_BACKOFF_MS = 500;
 const MAX_JITTER_MS = 250;
 
 export interface JevNoulQuestion {
 	type: "noul";
-	instructions: string;
+	instructions: string | Record<string, unknown>;
 	criteria?: { true: string; false: string };
 }
 
@@ -67,6 +67,13 @@ function retryAfterMs(header: string | null): number | undefined {
 	return Number.isNaN(date) ? undefined : Math.max(0, date - Date.now());
 }
 
+function isTimeout(error: unknown): boolean {
+	return (
+		error instanceof Error &&
+		(error.name === "TimeoutError" || error.name === "AbortError")
+	);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -97,7 +104,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
  * Ask Jev one or more noul questions about `state` in a single request.
  * Retries 429, 529 and other 5xx responses (and network errors) with
- * exponential backoff and jitter, within a 10s total budget.
+ * exponential backoff and jitter, within a 4s total budget.
  */
 export async function askJev(
 	state: Record<string, unknown>,
@@ -134,8 +141,8 @@ export async function askJev(
 				let json: unknown;
 				try {
 					json = await response.json();
-				} catch {
-					throw new JevError("invalid_response");
+				} catch (error) {
+					throw new JevError(isTimeout(error) ? "timeout" : "invalid_response");
 				}
 				return parseResult(json);
 			}
@@ -146,10 +153,7 @@ export async function askJev(
 			waitMs = retryAfterMs(response.headers.get("retry-after")) ?? waitMs;
 		} catch (error) {
 			if (error instanceof JevError) throw error;
-			if (
-				error instanceof Error &&
-				(error.name === "TimeoutError" || error.name === "AbortError")
-			) {
+			if (isTimeout(error)) {
 				throw new JevError("timeout");
 			}
 			failure = new JevError("network");
