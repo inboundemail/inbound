@@ -24,7 +24,7 @@ import {
 	webhookDeliveries,
 } from "@/lib/db/schema";
 import { getOrCreateVerificationToken } from "@/lib/webhooks/verification";
-import { evaluateGuardRules } from "../guard/rule-matcher";
+import { evaluateInboundEmail } from "@/lib/guard/rule-matcher";
 import { isDsn } from "@/lib/email-management/dsn-parser";
 import { envelopeRecipientsOf } from "@/lib/email-management/inbound-dedupe";
 import {
@@ -307,12 +307,20 @@ async function routeEmailWithResult(
 			);
 		}
 
+		// 🛡️ Jev classification for every inbound email (unless JEV_CLASSIFICATION=off), plus Guard
+		// rules when inbound_guard is enabled, in one request. Never throws; failures allow the email.
+		const inbound = await evaluateInboundEmail(
+			emailData.structuredId,
+			emailData.userId,
+			{ guard: guardFeatureEnabled },
+		);
+
 		if (guardFeatureEnabled) {
 			// 🛡️ GUARD: Evaluate Guard rules before routing
-			const guardResult = await evaluateGuardRules(
-				emailData.structuredId,
-				emailData.userId,
-			);
+			const guardResult = inbound.guard ?? {
+				shouldBlock: false,
+				action: "allow" as const,
+			};
 
 			if (guardResult.shouldBlock) {
 				console.log(

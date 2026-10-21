@@ -8,7 +8,7 @@
 export const JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 export const DEFAULT_JEV_MODEL = "jev-1.13.0";
 
-const TOTAL_BUDGET_MS = 4_000;
+export const TOTAL_BUDGET_MS = 4_000;
 const MAX_ATTEMPTS = 3;
 const BASE_BACKOFF_MS = 500;
 const MAX_JITTER_MS = 250;
@@ -19,13 +19,35 @@ export interface JevNoulQuestion {
 	criteria?: { true: string; false: string };
 }
 
+export interface JevScoreQuestion {
+	type: "score";
+	instructions: string | Record<string, unknown>;
+	criteria: string[];
+}
+
+export type JevQuestion = JevNoulQuestion | JevScoreQuestion;
+
 export interface JevNoulAnswer {
 	noul: number;
 }
 
+export interface JevScoreAnswer {
+	score: number;
+	confidence: number;
+	probabilities: Record<string, number>;
+}
+
+export type JevAnswer = JevNoulAnswer | JevScoreAnswer;
+
 export interface JevResult {
 	model: string;
-	answers: Record<string, JevNoulAnswer | undefined>;
+	answers: Record<string, JevAnswer | undefined>;
+	inputTokens?: number;
+}
+
+export interface AskJevOptions {
+	/** Absolute deadline (ms since epoch) shared with other calls. Defaults to now + 4s. */
+	deadline?: number;
 }
 
 export type JevErrorCode =
@@ -86,36 +108,73 @@ function parseResult(body: unknown): JevResult {
 	) {
 		throw new JevError("invalid_response");
 	}
-	const answers: Record<string, JevNoulAnswer | undefined> = {};
+	const answers: Record<string, JevAnswer | undefined> = {};
 	for (const [id, answer] of Object.entries(body.answers)) {
-		if (
-			isRecord(answer) &&
-			typeof answer.noul === "number" &&
-			Number.isFinite(answer.noul)
-		) {
-			answers[id] = { noul: Math.min(1, Math.max(0, answer.noul)) };
+		if (!isRecord(answer)) continue;
+		if (isFiniteNumber(answer.noul)) {
+			answers[id] = { noul: clamp01(answer.noul) };
+		} else if (isFiniteNumber(answer.score)) {
+			const probabilities: Record<string, number> = {};
+			if (isRecord(answer.probabilities)) {
+				for (const [level, p] of Object.entries(answer.probabilities)) {
+					if (isFiniteNumber(p)) probabilities[level] = clamp01(p);
+				}
+			}
+			answers[id] = {
+				score: Math.max(0, answer.score),
+				confidence: isFiniteNumber(answer.confidence)
+					? clamp01(answer.confidence)
+					: 0,
+				probabilities,
+			};
 		}
 	}
-	return { model: body.model, answers };
+	const usage = isRecord(body.usage) ? body.usage : undefined;
+	return {
+		model: body.model,
+		answers,
+		...(usage && isFiniteNumber(usage.input_tokens)
+			? { inputTokens: usage.input_tokens }
+			: {}),
+	};
+}
+
+function isFiniteNumber(value: unknown): value is number {
+	return typeof value === "number" && Number.isFinite(value);
+}
+
+function clamp01(value: number): number {
+	return Math.min(1, Math.max(0, value));
+}
+
+export function noulOf(answer: JevAnswer | undefined): number | undefined {
+	return answer && "noul" in answer ? answer.noul : undefined;
+}
+
+export function scoreOf(
+	answer: JevAnswer | undefined,
+): JevScoreAnswer | undefined {
+	return answer && "score" in answer ? answer : undefined;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Ask Jev one or more noul questions about `state` in a single request.
+ * Ask Jev one or more questions about `state` in a single request.
  * Retries 429, 529 and other 5xx responses (and network errors) with
- * exponential backoff and jitter, within a 4s total budget.
+ * exponential backoff and jitter, within a 4s total budget (or the given deadline).
  */
 export async function askJev(
 	state: Record<string, unknown>,
-	questions: Record<string, JevNoulQuestion>,
+	questions: Record<string, JevQuestion>,
+	options: AskJevOptions = {},
 ): Promise<JevResult> {
 	const apiKey = process.env.TYPESAFE_API_KEY?.trim();
 	if (!apiKey) {
 		throw new JevError("missing_api_key");
 	}
 
-	const deadline = Date.now() + TOTAL_BUDGET_MS;
+	const deadline = options.deadline ?? Date.now() + TOTAL_BUDGET_MS;
 	const body = JSON.stringify({ model: getJevModel(), state, questions });
 
 	for (let attempt = 1; ; attempt++) {

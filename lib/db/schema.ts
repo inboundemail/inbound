@@ -424,6 +424,7 @@ export const structuredEmails = pgTable(
 		guardRuleId: varchar("guard_rule_id", { length: 255 }), // ID of the guard rule that triggered
 		guardAction: varchar("guard_action", { length: 50 }), // 'block', 'flag', 'label'
 		guardMetadata: text("guard_metadata"), // Additional Guard metadata as JSON
+		jevClassification: text("jev_classification"), // Jev inbound classification JSON (internal; not exposed in the API)
 
 		// User and timestamps
 		userId: varchar("user_id", { length: 255 }).notNull(),
