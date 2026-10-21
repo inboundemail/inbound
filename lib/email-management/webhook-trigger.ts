@@ -440,7 +440,9 @@ export async function triggerEmailAction(
 				method: "POST",
 				headers,
 				body: payloadString,
-				signal: AbortSignal.timeout((webhook.timeout || 30) * 1000),
+				signal: AbortSignal.timeout(
+					Math.min(Math.max(Number(webhook.timeout) || 30, 1), 30) * 1000,
+				),
 			});
 
 			deliveryTime = Date.now() - startTime;

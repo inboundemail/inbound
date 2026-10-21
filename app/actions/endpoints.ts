@@ -2,7 +2,10 @@
 
 import { readTextLimited, safeFetch } from "@/lib/security/safe-fetch";
 import { validateWebhookUrl } from "@/app/api/e2/endpoints/url-validation";
-import { validateForwardFromAddress } from "@/app/api/e2/endpoints/validation";
+import {
+	validateForwardFromAddress,
+	validateWebhookTimeout,
+} from "@/app/api/e2/endpoints/validation";
 import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { headers } from "next/headers";
@@ -103,6 +106,10 @@ export async function createEndpoint(data: CreateEndpointData) {
 				validateWebhookUrl(data.config.url);
 			} catch (error) {
 				return { success: false, error: (error as Error).message };
+			}
+			const timeoutResult = validateWebhookTimeout(data.config);
+			if (!timeoutResult.valid) {
+				return { success: false, error: timeoutResult.error };
 			}
 		}
 
@@ -216,6 +223,10 @@ export async function updateEndpoint(id: string, data: UpdateEndpointData) {
 				validateWebhookUrl(data.config.url);
 			} catch (error) {
 				return { success: false, error: (error as Error).message };
+			}
+			const timeoutResult = validateWebhookTimeout(data.config);
+			if (!timeoutResult.valid) {
+				return { success: false, error: timeoutResult.error };
 			}
 		}
 
@@ -586,7 +597,9 @@ export async function testEndpoint(id: string) {
 							timestamp: new Date().toISOString(),
 							message: "This is a test request from the Inbound Email service",
 						}),
-						signal: AbortSignal.timeout((config.timeout || 30) * 1000),
+						signal: AbortSignal.timeout(
+							Math.min(Math.max(Number(config.timeout) || 30, 1), 30) * 1000,
+						),
 					});
 
 					const responseTime = Date.now() - startTime;

@@ -396,7 +396,7 @@ export const testEndpoint = new Elysia().post(
 
 						const timeoutMs =
 							(Number.isFinite(Number(config.timeout))
-								? Math.max(1, Math.min(120, Number(config.timeout)))
+								? Math.max(1, Math.min(30, Number(config.timeout)))
 								: 30) * 1000;
 						const response = await safeFetch(effectiveUrl, {
 							method: "POST",
@@ -476,7 +476,7 @@ export const testEndpoint = new Elysia().post(
 
 						const timeoutMs2 =
 							(Number.isFinite(Number(config.timeout))
-								? Math.max(1, Math.min(120, Number(config.timeout)))
+								? Math.max(1, Math.min(30, Number(config.timeout)))
 								: 30) * 1000;
 						const response = await safeFetch(effectiveUrl, {
 							method: "POST",

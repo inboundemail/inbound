@@ -5,6 +5,8 @@ import { emailDomains } from "@/lib/db/schema";
 import { runDomainVerificationChecksInBatches } from "@/lib/domains-and-dns/domain-verification-check";
 import { assertCronAuthorized } from "@/lib/security/cron-auth";
 
+export const maxDuration = 300;
+
 // Process at most this many domains per run to stay within AWS SES rate
 // limits and cron execution windows. Adjust if the queue grows.
 const MAX_DOMAINS_PER_RUN = 100;

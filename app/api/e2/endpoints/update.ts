@@ -6,6 +6,7 @@ import { emailGroups, endpoints } from "@/lib/db/schema";
 import { generateNewWebhookVerificationToken } from "@/lib/webhooks/verification";
 import { validateAndRateLimit } from "../lib/auth";
 import {
+	clampWebhookTimeout,
 	validateEndpointConfig,
 	validateForwardFromAddress,
 } from "./validation";
@@ -18,7 +19,7 @@ const EndpointParamsSchema = t.Object({
 const WebhookConfigSchema = t.Object(
 	{
 		url: t.String(),
-		timeout: t.Optional(t.Number({ minimum: 1, maximum: 300 })),
+		timeout: t.Optional(t.Number({ minimum: 1, maximum: 30 })),
 		retryAttempts: t.Optional(t.Number({ minimum: 0, maximum: 10 })),
 		headers: t.Optional(
 			t.Record(t.String(), t.String(), {
@@ -274,7 +275,7 @@ export const updateEndpoint = new Elysia().put(
 			id: updatedEndpoint.id,
 			name: updatedEndpoint.name,
 			type: updatedEndpoint.type as "webhook" | "email" | "email_group",
-			config: JSON.parse(updatedEndpoint.config),
+			config: clampWebhookTimeout(JSON.parse(updatedEndpoint.config)),
 			isActive: updatedEndpoint.isActive || false,
 			description: updatedEndpoint.description,
 			userId: updatedEndpoint.userId,

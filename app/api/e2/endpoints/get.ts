@@ -9,6 +9,7 @@ import {
   emailDomains,
 } from "@/lib/db/schema";
 import { eq, and, desc, count } from "drizzle-orm";
+import { clampWebhookTimeout } from "@/app/api/e2/endpoints/validation";
 
 // Request/Response Types (OpenAPI-compatible)
 const EndpointParamsSchema = t.Object({
@@ -217,7 +218,7 @@ export const getEndpoint = new Elysia().get(
       id: endpoint.id,
       name: endpoint.name,
       type: endpoint.type as "webhook" | "email" | "email_group",
-      config: JSON.parse(endpoint.config),
+      config: clampWebhookTimeout(JSON.parse(endpoint.config)),
       isActive: endpoint.isActive || false,
       description: endpoint.description,
       userId: endpoint.userId,

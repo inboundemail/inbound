@@ -3,6 +3,7 @@ import { validateAndRateLimit } from "@/app/api/e2/lib/auth";
 import { db } from "@/lib/db";
 import { endpoints, emailGroups, endpointDeliveries } from "@/lib/db/schema";
 import { eq, and, desc, asc, count, ilike, inArray, max, or } from "drizzle-orm";
+import { clampWebhookTimeout } from "@/app/api/e2/endpoints/validation";
 
 // Request/Response Types (OpenAPI-compatible)
 const ListEndpointsQuery = t.Object({
@@ -231,7 +232,7 @@ export const listEndpoints = new Elysia().get(
         id: endpoint.id,
         name: endpoint.name,
         type: endpoint.type as "webhook" | "email" | "email_group",
-        config: JSON.parse(endpoint.config),
+        config: clampWebhookTimeout(JSON.parse(endpoint.config)),
         isActive: endpoint.isActive || false,
         description: endpoint.description,
         userId: endpoint.userId,

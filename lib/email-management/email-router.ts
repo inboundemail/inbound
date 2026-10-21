@@ -1138,7 +1138,7 @@ async function handleWebhookEndpoint(
 		// Parse endpoint configuration
 		const config = JSON.parse(endpoint.config);
 		const webhookUrl = config.url;
-		const timeout = config.timeout || 30;
+		const timeout = Math.min(Math.max(Number(config.timeout) || 30, 1), 30);
 		const retryAttempts = config.retryAttempts || 3;
 		const customHeaders = config.headers || {};
 

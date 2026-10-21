@@ -27,6 +27,8 @@ import {
 	normalizeRecipientForDedupe,
 } from "@/lib/email-management/inbound-dedupe";
 
+export const maxDuration = 300;
+
 interface ProcessedSESRecord extends SESRecord {
 	emailContent?: string | null;
 	s3Location?: {

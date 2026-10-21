@@ -124,7 +124,7 @@ export default function EndpointDetailsPage() {
 			const wc = cfg as WebhookConfig;
 			setWebhookConfig({
 				url: wc.url ?? "",
-				timeout: wc.timeout ?? 30,
+				timeout: Math.min(wc.timeout ?? 30, 30),
 				retryAttempts: wc.retryAttempts ?? 3,
 				headers: wc.headers ?? {},
 			});
@@ -260,9 +260,9 @@ export default function EndpointDetailsPage() {
 			}
 			if (
 				webhookConfig.timeout != null &&
-				(webhookConfig.timeout < 1 || webhookConfig.timeout > 300)
+				(webhookConfig.timeout < 1 || webhookConfig.timeout > 30)
 			) {
-				newErrors.timeout = "Timeout must be between 1 and 300 seconds";
+				newErrors.timeout = "Timeout must be between 1 and 30 seconds";
 			}
 			if (
 				webhookConfig.retryAttempts != null &&
@@ -691,7 +691,7 @@ export default function EndpointDetailsPage() {
 											id="timeout"
 											type="number"
 											min="1"
-											max="300"
+											max="30"
 											value={webhookConfig.timeout ?? ""}
 											onChange={(e) =>
 												setWebhookConfig((prev) => ({

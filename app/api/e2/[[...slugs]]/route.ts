@@ -572,6 +572,8 @@ const handler = (request: Request): Promise<Response> => {
 	return app.fetch(request);
 };
 
+export const maxDuration = 300;
+
 export const GET = handler;
 export const POST = handler;
 export const PUT = handler;

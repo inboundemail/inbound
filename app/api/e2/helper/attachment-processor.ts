@@ -32,6 +32,8 @@ export interface ProcessedAttachment {
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024 // 25MB per attachment (AWS SES limit)
 export const MAX_TOTAL_EMAIL_SIZE = 40 * 1024 * 1024 // 40MB total email size (industry standard)
 const MAX_ATTACHMENTS_COUNT = 20              // Reasonable limit for number of attachments
+const REMOTE_ATTACHMENT_TIMEOUT_MS = 30_000
+const REMOTE_ATTACHMENTS_DEADLINE_MS = 90_000
 
 // Comprehensive list of supported file types (excluding potentially dangerous ones)
 const ALLOWED_CONTENT_TYPES = [
@@ -133,9 +135,11 @@ const BLOCKED_EXTENSIONS = [
 /**
  * Fetch a file from a remote URL and convert to base64
  */
-async function fetchRemoteFile(url: string): Promise<{ content: string; contentType: string; size: number }> {
+async function fetchRemoteFile(url: string, deadline: number): Promise<{ content: string; contentType: string; size: number }> {
   console.log('📥 Fetching remote file:', url)
   
+  const controller = new AbortController()
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
   try {
     // Validate URL format
     const parsedUrl = new URL(url)
@@ -143,9 +147,13 @@ async function fetchRemoteFile(url: string): Promise<{ content: string; contentT
       throw new Error('Only HTTP and HTTPS URLs are supported')
     }
     
-    // Fetch with timeout and size limits
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+    const remainingMs = deadline - Date.now()
+    if (remainingMs <= 0) {
+      throw new Error(`Remote attachments exceeded the ${REMOTE_ATTACHMENTS_DEADLINE_MS / 1000} second total fetch limit`)
+    }
+    
+    // Fetch with timeout and size limits; the timeout also covers reading the body
+    timeoutId = setTimeout(() => controller.abort(), Math.min(REMOTE_ATTACHMENT_TIMEOUT_MS, remainingMs))
     
     const response = await safeFetch(parsedUrl, {
       signal: controller.signal,
@@ -153,8 +161,6 @@ async function fetchRemoteFile(url: string): Promise<{ content: string; contentT
         'User-Agent': 'InboundEmail-AttachmentFetcher/1.0'
       }
     })
-    
-    clearTimeout(timeoutId)
     
     if (!response.ok) {
       throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`)
@@ -194,6 +200,8 @@ async function fetchRemoteFile(url: string): Promise<{ content: string; contentT
       throw new Error(`Failed to fetch remote file: ${error.message}`)
     }
     throw new Error('Failed to fetch remote file: Unknown error')
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
 
@@ -388,6 +396,7 @@ export async function processAttachments(attachments: AttachmentInput[]): Promis
   
   const processed: ProcessedAttachment[] = []
   let totalSize = 0
+  const remoteFetchDeadline = Date.now() + REMOTE_ATTACHMENTS_DEADLINE_MS
   
   for (let i = 0; i < attachments.length; i++) {
     const attachment = attachments[i]
@@ -415,7 +424,7 @@ export async function processAttachments(attachments: AttachmentInput[]): Promis
     
     if (attachment.path) {
       // Remote file
-      processedContent = await fetchRemoteFile(attachment.path)
+      processedContent = await fetchRemoteFile(attachment.path, remoteFetchDeadline)
     } else if (attachment.content) {
       // Base64 content
       processedContent = processBase64Content(attachment.content, declaredContentType)

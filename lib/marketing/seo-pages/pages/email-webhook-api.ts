@@ -26,7 +26,7 @@ export const page: SeoPage = {
 		{
 			heading: "Configure an endpoint and send a test",
 			paragraphs: [
-				"Create a webhook endpoint in the dashboard or with POST /api/e2/endpoints. The config needs your HTTPS URL. You can set a timeout between 1 and 300 seconds (30 by default) and extra headers to send with every request.",
+				"Create a webhook endpoint in the dashboard or with POST /api/e2/endpoints. The config needs your HTTPS URL. You can set a timeout between 1 and 30 seconds (30 by default) and extra headers to send with every request.",
 				"Link the endpoint to an address with POST /api/e2/email-addresses, or enable catch-all on the domain. Then send a test payload with POST /api/e2/endpoints/:id/test, and finish by sending a real email from your own mail client.",
 				"For local development, expose your handler through an HTTPS tunnel and use the tunnel URL as the endpoint. Switch the endpoint to your production URL when you deploy.",
 			],

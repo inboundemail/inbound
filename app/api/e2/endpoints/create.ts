@@ -13,7 +13,7 @@ import {
 const WebhookConfigSchema = t.Object(
 	{
 		url: t.String(),
-		timeout: t.Optional(t.Number({ minimum: 1, maximum: 300 })),
+		timeout: t.Optional(t.Number({ minimum: 1, maximum: 30 })),
 		retryAttempts: t.Optional(t.Number({ minimum: 0, maximum: 10 })),
 		headers: t.Optional(
 			t.Record(t.String(), t.String(), {

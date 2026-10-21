@@ -3,6 +3,8 @@ import { type AwsStatsOutput, getAwsSesStats } from "@/lib/aws-ses/aws-stats-cor
 import { hourBucket, sendHarkNotification } from "@/lib/notifications/hark";
 import { assertCronAuthorized } from "@/lib/security/cron-auth";
 
+export const maxDuration = 300;
+
 const SLACK_ADMIN_WEBHOOK_URL = process.env.SLACK_ADMIN_WEBHOOK_URL;
 
 function toPercent(value: number, digits = 3): string {

@@ -90,6 +90,37 @@ export function validateEndpointConfig(
   }
 }
 
+export const MAX_WEBHOOK_TIMEOUT_SECONDS = 30;
+
+export function validateWebhookTimeout(config: unknown): ValidationResult {
+  const timeout = (config as { timeout?: unknown } | null)?.timeout;
+  if (
+    timeout != null &&
+    (typeof timeout !== "number" ||
+      !Number.isFinite(timeout) ||
+      timeout < 1 ||
+      timeout > MAX_WEBHOOK_TIMEOUT_SECONDS)
+  ) {
+    return {
+      valid: false,
+      error: "Timeout must be a number between 1 and 30 seconds",
+    };
+  }
+  return { valid: true };
+}
+
+/**
+ * Endpoints created before the 30 second cap may store a larger timeout;
+ * report the effective value so read-modify-write updates stay valid.
+ */
+export function clampWebhookTimeout<T>(config: T): T {
+  const timeout = (config as { timeout?: unknown } | null)?.timeout;
+  if (typeof timeout === "number" && timeout > MAX_WEBHOOK_TIMEOUT_SECONDS) {
+    return { ...(config as object), timeout: MAX_WEBHOOK_TIMEOUT_SECONDS } as T;
+  }
+  return config;
+}
+
 /**
  * Validates webhook endpoint configuration
  */
@@ -112,11 +143,11 @@ function validateWebhookConfig(config: any): ValidationResult {
     config.timeout &&
     (typeof config.timeout !== "number" ||
       config.timeout < 1 ||
-      config.timeout > 300)
+      config.timeout > 30)
   ) {
     return {
       valid: false,
-      error: "Timeout must be a number between 1 and 300 seconds",
+      error: "Timeout must be a number between 1 and 30 seconds",
     };
   }
 

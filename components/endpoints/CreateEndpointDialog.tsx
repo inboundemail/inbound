@@ -212,9 +212,9 @@ export function CreateEndpointDialog({
 				// URL is handled in basic step, so no validation needed here
 				if (
 					webhookConfig.timeout &&
-					(webhookConfig.timeout < 1 || webhookConfig.timeout > 300)
+					(webhookConfig.timeout < 1 || webhookConfig.timeout > 30)
 				) {
-					newErrors.timeout = "Timeout must be between 1 and 300 seconds";
+					newErrors.timeout = "Timeout must be between 1 and 30 seconds";
 				}
 
 				if (
@@ -777,7 +777,7 @@ export function CreateEndpointDialog({
 												id="timeout"
 												type="number"
 												min="1"
-												max="300"
+												max="30"
 												value={webhookConfig.timeout || ""}
 												onChange={(e) =>
 													setWebhookConfig((prev) => ({
