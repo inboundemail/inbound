@@ -2010,7 +2010,7 @@ describe("E2 API - Email E2E", () => {
 	);
 
 	it(
-		"delivers only to the real address when a display name contains angle brackets",
+		"rejects addresses whose display name contains angle brackets",
 		async () => {
 			const token = makeToken("redirect");
 			const subject = `E2E Recipient Redirect ${token}`;
@@ -2023,13 +2023,24 @@ describe("E2 API - Email E2E", () => {
 					text: `Redirect check ${token}`,
 				}),
 			});
-			expect(sent.response.status).toBe(200);
+			expect(sent.response.status).toBe(400);
+
+			const spoofedFrom = await apiJson<SendEmailResponse>("/emails", {
+				method: "POST",
+				body: JSON.stringify({
+					from: `"<agent@inbnd.dev>" <${E2E_SENDER_ADDRESS}>`,
+					to: E2E_RECIPIENT_ADDRESS,
+					subject,
+					text: `Redirect check ${token}`,
+				}),
+			});
+			expect(spoofedFrom.response.status).toBe(400);
 
 			await sleep(1000);
 			const message = (mailServer?.messages ?? []).find((item) =>
 				item.raw.includes(subject),
 			);
-			expect(message?.recipients).toEqual([E2E_RECIPIENT_ADDRESS]);
+			expect(message).toBeUndefined();
 		},
 		TEST_TIMEOUT_MS,
 	);

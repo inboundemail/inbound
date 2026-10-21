@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { blockedEmails, emailDomains, emailAddresses } from '@/lib/db/schema'
 import { eq, and, inArray, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
+import { parseMailbox } from '@/lib/email-management/agent-email-helper'
 
 /**
  * Extract domain from email address
@@ -37,38 +38,43 @@ export async function isEmailBlocked(emailAddress: string, options: { throwOnErr
 export async function checkRecipientsAgainstBlocklist(
   recipients: string[]
 ): Promise<{ hasBlockedRecipients: boolean; blockedAddresses: string[] }> {
-  try {
-    if (!recipients || recipients.length === 0) {
-      return { hasBlockedRecipients: false, blockedAddresses: [] }
-    }
-
-    // Normalize all email addresses
-    const normalizedRecipients = recipients.map(email => {
-      // Extract email from "Name <email@domain.com>" format if needed
-      const match = email.match(/<([^>]+)>/)
-      const extracted = match ? match[1] : email
-      return extracted.toLowerCase().trim()
-    })
-
-    const blockedResults = await db
-      .select({ emailAddress: blockedEmails.emailAddress })
-      .from(blockedEmails)
-      .where(inArray(sql`lower(${blockedEmails.emailAddress})`, normalizedRecipients))
-
-    // Create a set of blocked addresses for efficient lookup
-    const blockedSet = new Set(blockedResults.map(r => r.emailAddress.toLowerCase()))
-
-    // Find which recipients are blocked
-    const blockedAddresses = normalizedRecipients.filter(email => blockedSet.has(email))
-
-    return {
-      hasBlockedRecipients: blockedAddresses.length > 0,
-      blockedAddresses
-    }
-  } catch (error) {
-    console.error('Error checking recipients against blocklist:', error)
-    // On error, allow sending (don't block due to DB error)
+  if (!recipients || recipients.length === 0) {
     return { hasBlockedRecipients: false, blockedAddresses: [] }
+  }
+
+  // Normalize with the same strict parser used for delivery; anything that is
+  // not exactly one mailbox is treated as blocked.
+  const unparseable: string[] = []
+  const normalizedRecipients: string[] = []
+  for (const email of recipients) {
+    const parsed = parseMailbox(email)
+    if (parsed.ok) {
+      normalizedRecipients.push(parsed.mailbox.address.toLowerCase())
+    } else {
+      unparseable.push(String(email).toLowerCase().trim())
+    }
+  }
+
+  let dbBlocked: string[] = []
+  if (normalizedRecipients.length > 0) {
+    try {
+      const blockedResults = await db
+        .select({ emailAddress: blockedEmails.emailAddress })
+        .from(blockedEmails)
+        .where(inArray(sql`lower(${blockedEmails.emailAddress})`, normalizedRecipients))
+
+      const blockedSet = new Set(blockedResults.map(r => r.emailAddress.toLowerCase()))
+      dbBlocked = normalizedRecipients.filter(email => blockedSet.has(email))
+    } catch (error) {
+      console.error('Error checking recipients against blocklist:', error)
+      // On DB error, allow parseable recipients (don't block due to DB error)
+    }
+  }
+
+  const blockedAddresses = unparseable.concat(dbBlocked)
+  return {
+    hasBlockedRecipients: blockedAddresses.length > 0,
+    blockedAddresses
   }
 }
 

@@ -5,7 +5,10 @@ import { db } from "@/lib/db";
 import { emailGroups, endpoints } from "@/lib/db/schema";
 import { generateNewWebhookVerificationToken } from "@/lib/webhooks/verification";
 import { validateAndRateLimit } from "../lib/auth";
-import { validateEndpointConfig } from "./validation";
+import {
+	validateEndpointConfig,
+	validateForwardFromAddress,
+} from "./validation";
 
 // Request/Response Types (OpenAPI-compatible)
 const EndpointParamsSchema = t.Object({
@@ -160,6 +163,24 @@ export const updateEndpoint = new Elysia().put(
 			console.log("✅ Configuration validation passed");
 		}
 
+		let normalizedFromAddress: string | undefined;
+		if (body.config) {
+			const fromAddressResult = await validateForwardFromAddress(
+				userId,
+				existingEndpoint[0].type,
+				body.config,
+			);
+			if (!fromAddressResult.valid) {
+				console.log("❌ Invalid from address:", fromAddressResult.error);
+				set.status = 400;
+				return {
+					error: "Invalid configuration",
+					details: fromAddressResult.error,
+				};
+			}
+			normalizedFromAddress = fromAddressResult.fromAddress;
+		}
+
 		// Prepare update data
 		const updateData: Partial<typeof endpoints.$inferInsert> = {
 			updatedAt: new Date(),
@@ -183,7 +204,11 @@ export const updateEndpoint = new Elysia().put(
 				}
 				updateData.config = JSON.stringify(updatedConfig);
 			} else {
-				updateData.config = JSON.stringify(body.config);
+				updateData.config = JSON.stringify(
+					normalizedFromAddress
+						? { ...body.config, fromAddress: normalizedFromAddress }
+						: body.config,
+				);
 			}
 		}
 		if (

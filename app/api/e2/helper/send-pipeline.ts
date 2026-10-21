@@ -21,9 +21,9 @@ import { db } from "@/lib/db";
 import { SENT_EMAIL_STATUS, sentEmails } from "@/lib/db/schema";
 import { getRootDomain, isSubdomain } from "@/lib/domains-and-dns/domain-utils";
 import {
-	canUserSendFromEmail,
-	extractDomain,
-	extractEmailAddress,
+	fromAddressMatchesSender,
+	parseMailbox,
+	resolveSender,
 } from "@/lib/email-management/agent-email-helper";
 import { checkRecipientsAgainstBlocklist } from "@/lib/email-management/email-blocking";
 import {
@@ -98,6 +98,26 @@ export interface AuthorizedSender {
 	fromAddress: string;
 	fromDomain: string;
 	isAgentEmail: boolean;
+	fromName: string | null;
+	formattedFrom: string;
+	recipients: { to: string[]; cc: string[]; bcc: string[] };
+}
+
+function parseRecipientList(
+	values: string[],
+): { addresses: string[] } | { invalid: string } {
+	const addresses: string[] = [];
+	for (const value of values) {
+		const parsed = parseMailbox(value);
+		if (!parsed.ok) return { invalid: value };
+		addresses.push(parsed.mailbox.address);
+	}
+	return { addresses };
+}
+
+function invalidRecipient(value: string): { response: SendResponse } {
+	console.log("⚠️ Invalid email format:", value);
+	return { response: sendError(400, `Invalid email format: ${value}`) };
 }
 
 /**
@@ -113,8 +133,18 @@ export async function authorizeOutboundSend(input: {
 	bcc: string[];
 }): Promise<AuthorizedSender | { response: SendResponse }> {
 	const { userId, senderPolicy, from } = input;
-	const fromAddress = extractEmailAddress(from);
-	const fromDomain = extractDomain(from);
+	const resolved = resolveSender(from);
+	if (!resolved.ok) {
+		console.log("⚠️ Invalid from address:", resolved.error);
+		return { response: sendError(400, `Invalid from address: ${resolved.error}`) };
+	}
+	const {
+		address: fromAddress,
+		domain: fromDomain,
+		isAgentEmail,
+		name: fromName,
+		formatted: formattedFrom,
+	} = resolved.sender;
 	if (senderPolicy && !senderPolicyAllowsAddress(senderPolicy, fromAddress)) {
 		return {
 			response: sendError(403, "This credential cannot send from that address"),
@@ -127,7 +157,32 @@ export async function authorizeOutboundSend(input: {
 		domain: fromDomain,
 	});
 
-	const { isAgentEmail } = canUserSendFromEmail(from);
+	const allRecipients = [...input.to, ...input.cc, ...input.bcc];
+	if (allRecipients.length === 0) {
+		return {
+			response: sendError(
+				400,
+				"At least one recipient is required in to, cc, or bcc",
+			),
+		};
+	}
+
+	const to = parseRecipientList(input.to);
+	if ("invalid" in to) return invalidRecipient(to.invalid);
+	const cc = parseRecipientList(input.cc);
+	if ("invalid" in cc) return invalidRecipient(cc.invalid);
+	const bcc = parseRecipientList(input.bcc);
+	if ("invalid" in bcc) return invalidRecipient(bcc.invalid);
+	const recipients = {
+		to: to.addresses,
+		cc: cc.addresses,
+		bcc: bcc.addresses,
+	};
+	const recipientAddresses = [
+		...recipients.to,
+		...recipients.cc,
+		...recipients.bcc,
+	];
 
 	if (isAgentEmail) {
 		console.log("✅ Using agent@inbnd.dev - allowed for all users");
@@ -135,13 +190,12 @@ export async function authorizeOutboundSend(input: {
 		console.log("🔍 Running outbound security guard for:", fromDomain);
 	}
 
-	const allRecipients = [...input.to, ...input.cc, ...input.bcc];
 	const outboundGuard = await enforceOutboundSendGuard({
 		userId,
 		fromAddress,
 		fromDomain,
 		isAgentEmail,
-		recipients: allRecipients,
+		recipients: recipientAddresses,
 	});
 	if (!outboundGuard.allowed) {
 		console.log("🚫 Outbound send blocked:", {
@@ -158,27 +212,9 @@ export async function authorizeOutboundSend(input: {
 		};
 	}
 
-	const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-	if (allRecipients.length === 0) {
-		return {
-			response: sendError(
-				400,
-				"At least one recipient is required in to, cc, or bcc",
-			),
-		};
-	}
-
-	for (const email of allRecipients) {
-		const address = extractEmailAddress(email);
-		if (!emailRegex.test(address)) {
-			console.log("⚠️ Invalid email format:", email);
-			return { response: sendError(400, `Invalid email format: ${email}`) };
-		}
-	}
-
 	console.log("🔍 Checking recipients against blocklist");
-	const blocklistCheck = await checkRecipientsAgainstBlocklist(allRecipients);
+	const blocklistCheck =
+		await checkRecipientsAgainstBlocklist(recipientAddresses);
 	if (blocklistCheck.hasBlockedRecipients) {
 		console.log(
 			`🚫 Blocked recipients found: ${blocklistCheck.blockedAddresses.join(", ")}`,
@@ -191,7 +227,14 @@ export async function authorizeOutboundSend(input: {
 		};
 	}
 
-	return { fromAddress, fromDomain, isAgentEmail };
+	return {
+		fromAddress,
+		fromDomain,
+		isAgentEmail,
+		fromName,
+		formattedFrom,
+		recipients,
+	};
 }
 
 export async function checkEmailSendAllowance(
@@ -255,6 +298,19 @@ export async function deliverSentEmail(input: {
 	evaluation: EmailEvaluationData;
 }): Promise<SendResponse> {
 	const { userId, idempotencyKey, sender } = input;
+	if (
+		!fromAddressMatchesSender(input.fromEmailAddress, {
+			address: sender.fromAddress,
+			domain: sender.fromDomain,
+			isAgentEmail: sender.isAgentEmail,
+		})
+	) {
+		console.error("🚫 FromEmailAddress does not match the authorized sender", {
+			userId,
+			fromDomain: sender.fromDomain,
+		});
+		return sendError(400, "From address does not match the authorized sender");
+	}
 	const emailId = nanoid();
 	console.log("💾 Creating sent email record:", emailId);
 

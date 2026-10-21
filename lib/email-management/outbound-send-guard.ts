@@ -1,5 +1,8 @@
 import { and, count, eq, gte, isNull, or } from "drizzle-orm";
-import { pauseTenantSending } from "@/lib/aws-ses/aws-ses-tenants";
+import {
+	getUserTenant,
+	pauseTenantSending,
+} from "@/lib/aws-ses/aws-ses-tenants";
 import { db } from "@/lib/db";
 import { user } from "@/lib/db/auth-schema";
 import {
@@ -9,12 +12,16 @@ import {
 	sentEmails,
 	sesTenants,
 } from "@/lib/db/schema";
-import { getRootDomain, isSubdomain } from "@/lib/domains-and-dns/domain-utils";
+import { getRootDomain } from "@/lib/domains-and-dns/domain-utils";
 import {
 	checkUnpaidManagedRecipients,
 	hasPaidPlan,
 	MANAGED_DOMAIN_KIND,
 } from "@/lib/domains-and-dns/managed-domain";
+import {
+	AGENT_EMAIL_ADDRESS,
+	parseMailbox,
+} from "@/lib/email-management/agent-email-helper";
 import { sendHarkNotification } from "@/lib/notifications/hark";
 
 type GuardReasonCode =
@@ -25,6 +32,7 @@ type GuardReasonCode =
 	| "sender_address_disabled"
 	| "hourly_send_limit_exceeded"
 	| "managed_domain_unpaid"
+	| "invalid_from_address"
 	| "guard_check_failed";
 
 export interface OutboundSendGuardResult {
@@ -33,6 +41,8 @@ export interface OutboundSendGuardResult {
 	error?: string;
 	reasonCode?: GuardReasonCode;
 	resolvedDomain?: string;
+	/** Recipients refused by the unpaid managed-domain restriction. */
+	blockedRecipients?: string[];
 }
 
 interface OutboundSendGuardInput {
@@ -272,10 +282,88 @@ function deny(
 	};
 }
 
+/**
+ * The verified domain owned by `userId` that authorizes sending from
+ * `fromDomain`: the exact domain, or its verified root for a subdomain.
+ */
+export async function findVerifiedSendingDomain(
+	userId: string,
+	fromDomain: string,
+) {
+	const select = (domain: string) =>
+		db
+			.select({
+				id: emailDomains.id,
+				domain: emailDomains.domain,
+				tenantId: emailDomains.tenantId,
+				kind: emailDomains.kind,
+			})
+			.from(emailDomains)
+			.where(
+				and(
+					eq(emailDomains.userId, userId),
+					eq(emailDomains.domain, domain),
+					eq(emailDomains.status, "verified"),
+				),
+			)
+			.limit(1);
+
+	const normalizedDomain = fromDomain.toLowerCase().replace(/\.$/, "");
+	const rootDomain = getRootDomain(normalizedDomain);
+	if (
+		!rootDomain ||
+		(normalizedDomain !== rootDomain &&
+			!normalizedDomain.endsWith(`.${rootDomain}`))
+	) {
+		return null;
+	}
+
+	const labels = normalizedDomain.split(".");
+	const rootLabelCount = rootDomain.split(".").length;
+	for (let start = 0; labels.length - start >= rootLabelCount; start++) {
+		const [match] = await select(labels.slice(start).join("."));
+		if (match) return match;
+	}
+
+	return null;
+}
+
+/**
+ * Creates the user's SES tenant when none exists yet. Older accounts only got a
+ * tenant on domain verification, so paths like forwarding call this before the
+ * guard. An existing tenant is left untouched, so paused or suspended tenants
+ * stay blocked by the guard.
+ */
+export async function ensureUserSendingTenant(userId: string): Promise<void> {
+	const [existing] = await db
+		.select({ id: sesTenants.id })
+		.from(sesTenants)
+		.where(eq(sesTenants.userId, userId))
+		.limit(1);
+	if (existing) return;
+
+	const result = await getUserTenant(userId);
+	if (!result.success) {
+		console.error(
+			`❌ ensureUserSendingTenant - Could not create SES tenant for user ${userId}: ${result.error ?? "unknown error"}`,
+		);
+	}
+}
+
 export async function enforceOutboundSendGuard(
 	input: OutboundSendGuardInput,
 ): Promise<OutboundSendGuardResult> {
 	const { userId, fromAddress, fromDomain, isAgentEmail, recipients } = input;
+
+	const parsedFrom = parseMailbox(fromAddress);
+	if (
+		!parsedFrom.ok ||
+		parsedFrom.mailbox.domain !== fromDomain.toLowerCase() ||
+		isAgentEmail !==
+			(parsedFrom.mailbox.address.toLowerCase() === AGENT_EMAIL_ADDRESS)
+	) {
+		return deny(400, "Invalid from address", "invalid_from_address");
+	}
 
 	try {
 		const [userRecord] = await db
@@ -407,44 +495,7 @@ export async function enforceOutboundSendGuard(
 			return { allowed: true, statusCode: 200 };
 		}
 
-		let [verifiedDomain] = await db
-			.select({
-				id: emailDomains.id,
-				domain: emailDomains.domain,
-				tenantId: emailDomains.tenantId,
-				kind: emailDomains.kind,
-			})
-			.from(emailDomains)
-			.where(
-				and(
-					eq(emailDomains.userId, userId),
-					eq(emailDomains.domain, fromDomain),
-					eq(emailDomains.status, "verified"),
-				),
-			)
-			.limit(1);
-
-		if (!verifiedDomain && isSubdomain(fromDomain)) {
-			const rootDomain = getRootDomain(fromDomain);
-			if (rootDomain) {
-				[verifiedDomain] = await db
-					.select({
-						id: emailDomains.id,
-						domain: emailDomains.domain,
-						tenantId: emailDomains.tenantId,
-						kind: emailDomains.kind,
-					})
-					.from(emailDomains)
-					.where(
-						and(
-							eq(emailDomains.userId, userId),
-							eq(emailDomains.domain, rootDomain),
-							eq(emailDomains.status, "verified"),
-						),
-					)
-					.limit(1);
-			}
-		}
+		const verifiedDomain = await findVerifiedSendingDomain(userId, fromDomain);
 
 		if (!verifiedDomain) {
 			return deny(
@@ -470,11 +521,14 @@ export async function enforceOutboundSendGuard(
 				recipients: recipients ?? [],
 			});
 			if (!recipientCheck.allowed) {
-				return deny(
-					403,
-					`Until you subscribe, ${verifiedDomain.domain} can only send to your account email or reply to people who emailed it in the last 24 hours. Subscribe at https://inbound.new/welcome to send to anyone.`,
-					"managed_domain_unpaid",
-				);
+				return {
+					...deny(
+						403,
+						`Until you subscribe, ${verifiedDomain.domain} can only send to your account email or reply to people who emailed it in the last 24 hours. Subscribe at https://inbound.new/welcome to send to anyone.`,
+						"managed_domain_unpaid",
+					),
+					blockedRecipients: recipientCheck.blocked,
+				};
 			}
 		}
 

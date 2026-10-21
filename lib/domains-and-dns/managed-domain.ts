@@ -8,6 +8,7 @@ import {
 import { db } from "@/lib/db";
 import { user } from "@/lib/db/auth-schema";
 import { emailDomains, structuredEmails } from "@/lib/db/schema";
+import { parseMailbox } from "@/lib/email-management/agent-email-helper";
 
 /**
  * Managed domains: every user can get `<slug>.inbnd.dev` instantly, with no DNS
@@ -153,9 +154,9 @@ export async function hasPaidPlan(userId: string): Promise<boolean> {
 	);
 }
 
-function bareAddress(value: string): string {
-	const match = value.match(/<([^>]+)>/);
-	return (match ? match[1] : value).trim().toLowerCase();
+function bareAddress(value: string): string | null {
+	const parsed = parseMailbox(value);
+	return parsed.ok ? parsed.mailbox.address.toLowerCase() : null;
 }
 
 /**
@@ -169,7 +170,15 @@ export async function checkUnpaidManagedRecipients(params: {
 	domain: string;
 	recipients: string[];
 }): Promise<{ allowed: true } | { allowed: false; blocked: string[] }> {
-	const recipients = [...new Set(params.recipients.map(bareAddress).filter(Boolean))];
+	const unparseable = params.recipients.filter((value) => !bareAddress(value));
+	if (unparseable.length > 0) return { allowed: false, blocked: unparseable };
+	const recipients = [
+		...new Set(
+			params.recipients
+				.map(bareAddress)
+				.filter((address): address is string => Boolean(address)),
+		),
+	];
 	if (recipients.length === 0) return { allowed: false, blocked: [] };
 
 	const accountEmail = params.userEmail.toLowerCase();

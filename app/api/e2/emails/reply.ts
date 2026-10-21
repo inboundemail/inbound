@@ -8,7 +8,10 @@ import {
 	checkIdempotencyKey,
 	readIdempotencyKey,
 } from "@/app/api/e2/helper/idempotency";
-import { findUnsafeHeaderInput } from "@/app/api/e2/helper/header-safety";
+import {
+	findUnsafeHeaderInput,
+	stripHeaderBreaks,
+} from "@/app/api/e2/helper/header-safety";
 import { buildSentEmailTags } from "@/app/api/e2/helper/ses-email-tags";
 import {
 	getTenantSendingInfoForDomainOrParent,
@@ -23,10 +26,10 @@ import {
 } from "@/lib/db/schema";
 import { getRootDomain, isSubdomain } from "@/lib/domains-and-dns/domain-utils";
 import {
-	canUserSendFromEmail,
-	extractDomain,
-	extractEmailAddress,
-	extractEmailName,
+	formatMailbox,
+	fromAddressMatchesSender,
+	parseMailbox,
+	resolveSender,
 } from "@/lib/email-management/agent-email-helper";
 import { checkRecipientsAgainstBlocklist } from "@/lib/email-management/email-blocking";
 import { evaluateSending } from "@/lib/email-management/email-evaluation";
@@ -119,19 +122,6 @@ const ReplyEmailErrorResponse = t.Object({
 function toArray(value: string | string[] | undefined): string[] {
 	if (!value) return [];
 	return Array.isArray(value) ? value : [value];
-}
-
-function formatSenderAddress(email: string, name?: string): string {
-	if (!name) return email;
-
-	const escapedName = name.replace(/"/g, '\\"');
-	const needsQuotes = /[,<>()[\]:;@\\"]/.test(name);
-
-	if (needsQuotes) {
-		return `"${escapedName}" <${email}>`;
-	} else {
-		return `${escapedName} <${email}>`;
-	}
 }
 
 function formatEmailDate(date: Date): string {
@@ -327,44 +317,24 @@ export const replyToEmail = new Elysia().post(
 			};
 		}
 
-		// Extract and validate email components
-		let fromAddress: string;
-		let fromDomain: string;
-		let senderName: string | undefined;
-
-		try {
-			fromAddress = extractEmailAddress(body.from);
-
-			if (!fromAddress) {
-				set.status = 400;
-				return { error: "Could not extract email address from 'from' field" };
-			}
-
-			const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-			if (!emailRegex.test(fromAddress)) {
-				set.status = 400;
-				return { error: "Invalid email address format" };
-			}
-
-			fromDomain = extractDomain(body.from);
-			if (!fromDomain) {
-				set.status = 400;
-				return { error: "Could not extract domain from email address" };
-			}
-
-			senderName = extractEmailName(body.from) || undefined;
-		} catch (extractionError) {
-			console.error("Email extraction error:", extractionError);
+		const resolvedSender = resolveSender(body.from);
+		if (!resolvedSender.ok) {
 			set.status = 400;
-			return { error: "Failed to process email address" };
+			return { error: `Invalid from address: ${resolvedSender.error}` };
 		}
+		const {
+			address: fromAddress,
+			domain: fromDomain,
+			name: senderName,
+			isAgentEmail,
+			formatted: formattedFromAddress,
+		} = resolvedSender.sender;
 
 		if (senderPolicy && !senderPolicyAllowsAddress(senderPolicy, fromAddress)) {
 			set.status = 403;
 			return { error: "This credential cannot send from that address" };
 		}
 
-		const formattedFromAddress = formatSenderAddress(fromAddress, senderName);
 		console.log(`📧 [${requestId}] From address components:`, {
 			rawFrom: body.from,
 			extractedAddress: fromAddress,
@@ -390,37 +360,80 @@ export const replyToEmail = new Elysia().post(
 			return { error: "Cannot determine recipient email address" };
 		}
 
+		const originalSenderMailbox = (): string => {
+			const name = originalFromData?.addresses?.[0]?.name;
+			return formatMailbox({
+				name: typeof name === "string" ? name : null,
+				address: String(originalSenderAddress),
+			});
+		};
+
 		// Build recipient list based on reply_all flag
-		let toAddresses: string[] = [];
+		let requestedToAddresses: string[] = [];
+		let inheritedCcAddresses: string[] = [];
 
 		if (body.to) {
-			toAddresses = toArray(body.to);
+			requestedToAddresses = toArray(body.to);
 		} else if (body.reply_all) {
 			console.log("📧 Reply All requested - including original CC recipients");
 
-			const originalSender = originalFromData?.text || originalSenderAddress;
-			if (originalSender) {
-				toAddresses.push(originalSender);
+			if (originalSenderAddress) {
+				requestedToAddresses.push(originalSenderMailbox());
 			}
 
-			const originalCcEmails = extractEmailsFromParsedData(original.ccData);
-
-			for (const ccEmail of originalCcEmails) {
-				if (ccEmail.toLowerCase() !== fromAddress.toLowerCase()) {
-					toAddresses.push(ccEmail);
-				}
-			}
-
-			toAddresses = [...new Set(toAddresses)];
+			inheritedCcAddresses = extractEmailsFromParsedData(original.ccData);
 		} else {
-			toAddresses = [originalFromData?.text || originalSenderAddress];
+			requestedToAddresses = [originalSenderMailbox()];
 		}
 
-		const subject = body.subject || `Re: ${original.subject || "No Subject"}`;
+		const subject =
+			body.subject ||
+			`Re: ${stripHeaderBreaks(original.subject || "") || "No Subject"}`;
+
+		const toAddresses: string[] = [];
+		const toRecipientAddresses: string[] = [];
+		const seenRecipients = new Set<string>();
+		const addRecipient = (mailbox: {
+			name: string | null;
+			address: string;
+		}) => {
+			const key = mailbox.address.toLowerCase();
+			if (seenRecipients.has(key)) return;
+			seenRecipients.add(key);
+			toAddresses.push(formatMailbox(mailbox));
+			toRecipientAddresses.push(mailbox.address);
+		};
+
+		for (const email of requestedToAddresses) {
+			const parsed = parseMailbox(email);
+			if (!parsed.ok) {
+				console.log("⚠️ Invalid email format:", email);
+				set.status = 400;
+				return { error: `Invalid email format: ${email}` };
+			}
+			addRecipient(parsed.mailbox);
+		}
+
+		for (const ccEmail of inheritedCcAddresses) {
+			const parsed = parseMailbox(ccEmail);
+			if (!parsed.ok) {
+				console.warn(
+					`⚠️ Skipping unparseable CC address inherited from original email: ${JSON.stringify(ccEmail)} (${parsed.error})`,
+				);
+				continue;
+			}
+			if (parsed.mailbox.address.toLowerCase() === fromAddress.toLowerCase()) {
+				continue;
+			}
+			addRecipient(parsed.mailbox);
+		}
+
+		if (toRecipientAddresses.length === 0) {
+			set.status = 400;
+			return { error: "Cannot determine recipient email address" };
+		}
 
 		// Check if this is the agent email (not allowed for replies)
-		const { isAgentEmail } = canUserSendFromEmail(body.from);
-
 		if (isAgentEmail) {
 			console.log("❌ Agent email cannot be used for replies");
 			set.status = 400;
@@ -436,7 +449,7 @@ export const replyToEmail = new Elysia().post(
 			fromAddress,
 			fromDomain,
 			isAgentEmail,
-			recipients: toAddresses,
+			recipients: toRecipientAddresses,
 		});
 		if (!outboundGuard.allowed) {
 			console.log("🚫 Reply blocked by outbound guard:", {
@@ -449,21 +462,11 @@ export const replyToEmail = new Elysia().post(
 			return { error: outboundGuard.error || "Email send blocked" };
 		}
 
-		// Validate email addresses
-		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-		for (const email of toAddresses) {
-			const address = extractEmailAddress(email);
-			if (!emailRegex.test(address)) {
-				console.log("⚠️ Invalid email format:", email);
-				set.status = 400;
-				return { error: `Invalid email format: ${email}` };
-			}
-		}
-
 		// Check if any recipients are on the blocklist (hard bounces)
 		// This prevents replying to addresses that previously bounced
 		console.log("🔍 Checking reply recipients against blocklist");
-		const blocklistCheck = await checkRecipientsAgainstBlocklist(toAddresses);
+		const blocklistCheck =
+			await checkRecipientsAgainstBlocklist(toRecipientAddresses);
 		if (blocklistCheck.hasBlockedRecipients) {
 			console.log(
 				`🚫 Blocked recipients found: ${blocklistCheck.blockedAddresses.join(", ")}`,
@@ -520,7 +523,7 @@ export const replyToEmail = new Elysia().post(
 		// Build threading headers
 		const formatMessageId = (id: string) => {
 			if (!id) return "";
-			id = id.trim();
+			id = stripHeaderBreaks(id);
 			if (!id.startsWith("<")) id = `<${id}`;
 			if (!id.endsWith(">")) id = `${id}>`;
 			return id;
@@ -773,13 +776,36 @@ export const replyToEmail = new Elysia().post(
 				};
 			}
 
+			if (
+				!fromAddressMatchesSender(formattedFromAddress, {
+					address: fromAddress,
+					domain: fromDomain,
+					isAgentEmail,
+				})
+			) {
+				console.error(
+					`🚫 FromEmailAddress does not match the authorized sender for reply ${replyEmailId}`,
+				);
+				await db
+					.update(sentEmails)
+					.set({
+						status: SENT_EMAIL_STATUS.FAILED,
+						failureReason: "From address does not match the authorized sender",
+						updatedAt: new Date(),
+					})
+					.where(eq(sentEmails.id, replyEmailId));
+
+				set.status = 400;
+				return { error: "From address does not match the authorized sender" };
+			}
+
 			const sesCommand = new SendEmailCommand({
 				FromEmailAddress: formattedFromAddress,
 				...(tenantSendingInfo.identityArn && {
 					FromEmailAddressIdentityArn: tenantSendingInfo.identityArn,
 				}),
 				Destination: {
-					ToAddresses: toAddresses.map(extractEmailAddress),
+					ToAddresses: toRecipientAddresses,
 				},
 				Content: {
 					Raw: {

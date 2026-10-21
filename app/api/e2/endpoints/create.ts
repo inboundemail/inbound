@@ -4,7 +4,10 @@ import { db } from "@/lib/db";
 import { emailGroups, endpoints } from "@/lib/db/schema";
 import { generateNewWebhookVerificationToken } from "@/lib/webhooks/verification";
 import { validateAndRateLimit } from "../lib/auth";
-import { validateEndpointConfig } from "./validation";
+import {
+	validateEndpointConfig,
+	validateForwardFromAddress,
+} from "./validation";
 
 // Request/Response Types (OpenAPI-compatible)
 const WebhookConfigSchema = t.Object(
@@ -127,9 +130,27 @@ export const createEndpoint = new Elysia().post(
 			};
 		}
 
+		const fromAddressResult = await validateForwardFromAddress(
+			userId,
+			body.type,
+			body.config,
+		);
+		if (!fromAddressResult.valid) {
+			console.log("❌ Invalid from address:", fromAddressResult.error);
+			set.status = 400;
+			return {
+				error: "Invalid configuration",
+				details: fromAddressResult.error,
+			};
+		}
+
 		// For webhook endpoints, generate a verificationToken at creation time
 		// so it's immediately available via the API
 		const configToStore = { ...body.config };
+		if (fromAddressResult.fromAddress) {
+			(configToStore as Record<string, unknown>).fromAddress =
+				fromAddressResult.fromAddress;
+		}
 		if (body.type === "webhook") {
 			(configToStore as Record<string, unknown>).verificationToken =
 				generateNewWebhookVerificationToken();

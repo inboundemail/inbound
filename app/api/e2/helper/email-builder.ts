@@ -5,6 +5,12 @@
  */
 
 import { nanoid } from 'nanoid'
+import { findUnsafeCustomHeader, isReservedHeaderName } from '@/app/api/e2/helper/header-safety'
+import {
+  extractDomain as extractMailboxDomain,
+  formatMailbox,
+  parseMailbox,
+} from '@/lib/email-management/agent-email-helper'
 import type { ProcessedAttachment } from './attachment-processor'
 
 export interface EmailMessageParams {
@@ -28,8 +34,27 @@ export interface EmailMessageParams {
  * Extract domain from email address
  */
 function extractDomain(email: string): string {
-  const match = email.match(/@([^>]+)/)
-  return match ? match[1] : 'localhost'
+  return extractMailboxDomain(email) || 'localhost'
+}
+
+/**
+ * Formats an address list header from strictly parsed mailboxes, so the
+ * header shows exactly the addresses mail is delivered to.
+ */
+function formatAddressList(field: string, values: string[]): string {
+  return values
+    .map((value) => {
+      const parsed = parseMailbox(value)
+      if (!parsed.ok) throw new Error(`Invalid ${field} address: ${parsed.error}`)
+      return formatMailbox(parsed.mailbox)
+    })
+    .join(', ')
+}
+
+function assertSafeHeaderText(field: string, value: string): void {
+  if (/[\r\n\u0000]/.test(value)) {
+    throw new Error(`${field} must not contain line breaks or control characters`)
+  }
 }
 
 /**
@@ -106,13 +131,26 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
   
   console.log(`📧 Email structure: CID=${hasCidAttachments}, Regular=${hasRegularAttachments}, Text=${hasText}, HTML=${hasHtml}`)
   
-  // Check if Message-ID is provided in custom headers
-  const hasCustomMessageId = customHeaders && 
-    Object.keys(customHeaders).some(key => key.toLowerCase() === 'message-id')
-  
+  assertSafeHeaderText('from', from)
+  assertSafeHeaderText('subject', subject)
+  for (const value of [messageId, inReplyTo, ...(references ?? [])]) {
+    if (value) assertSafeHeaderText('Message reference', value)
+  }
+
+  const safeCustomHeaders: Array<[string, string]> = []
+  for (const [key, value] of Object.entries(customHeaders ?? {})) {
+    if (isReservedHeaderName(key)) {
+      console.warn(`⚠️ Skipping reserved custom header: ${key}`)
+      continue
+    }
+    const unsafe = findUnsafeCustomHeader(key, value)
+    if (unsafe) throw new Error(unsafe)
+    safeCustomHeaders.push([key, value])
+  }
+
   // Ensure Message-ID has angle brackets and proper format
   let formattedMessageId = ''
-  if (!hasCustomMessageId && messageId) {
+  if (messageId) {
     // Check if messageId already contains @ (full format) or needs domain appended
     if (messageId.includes('@')) {
       // Already has domain, just ensure angle brackets
@@ -145,11 +183,10 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
   // Build headers
   const headers = [
     `From: ${from}`,
-    `To: ${to.length > 0 ? to.join(', ') : 'undisclosed-recipients:;'}`,
-    cc && cc.length > 0 ? `Cc: ${cc.join(', ')}` : null,
-    replyTo && replyTo.length > 0 ? `Reply-To: ${replyTo.join(', ')}` : null,
+    `To: ${to.length > 0 ? formatAddressList('to', to) : 'undisclosed-recipients:;'}`,
+    cc && cc.length > 0 ? `Cc: ${formatAddressList('cc', cc)}` : null,
+    replyTo && replyTo.length > 0 ? `Reply-To: ${formatAddressList('reply_to', replyTo)}` : null,
     `Subject: ${subject}`,
-    // Only add Message-ID if not provided in custom headers
     formattedMessageId ? `Message-ID: ${formattedMessageId}` : null,
     formattedInReplyTo ? `In-Reply-To: ${formattedInReplyTo}` : null,
     formattedReferences.length > 0 ? `References: ${formattedReferences.join(' ')}` : null,
@@ -157,11 +194,8 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
     'MIME-Version: 1.0',
   ].filter((header): header is string => header !== null)
   
-  // Add custom headers
-  if (customHeaders) {
-    for (const [key, value] of Object.entries(customHeaders)) {
-      headers.push(`${key}: ${value}`)
-    }
+  for (const [key, value] of safeCustomHeaders) {
+    headers.push(`${key}: ${value}`)
   }
   
   const messageParts: string[] = []

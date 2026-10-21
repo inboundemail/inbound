@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/pg-proxy";
 import { ModuleKind, transpileModule } from "typescript";
 import * as authSchema from "@/lib/db/auth-schema";
 import * as schema from "@/lib/db/schema";
+import * as agentEmailHelper from "@/lib/email-management/agent-email-helper";
 
 const NOW = Date.parse("2026-09-05T12:00:00.000Z");
 const MINUTE = 60 * 1000;
@@ -66,6 +67,7 @@ function setup() {
 		"@/lib/db": { db },
 		"@/lib/db/schema": schema,
 		"@/lib/db/auth-schema": authSchema,
+		"@/lib/email-management/agent-email-helper": agentEmailHelper,
 		nanoid: { nanoid: unexpectedCall },
 		"@/lib/aws-ses/aws-stats-core": { getAwsSesStats: unexpectedCall },
 		"@/lib/notifications/hark": {

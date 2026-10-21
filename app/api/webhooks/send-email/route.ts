@@ -20,13 +20,18 @@ import {
 } from "@/lib/db/schema";
 import { getRootDomain, isSubdomain } from "@/lib/domains-and-dns/domain-utils";
 import {
-	canUserSendFromEmail,
-	extractEmailAddress,
+	fromAddressMatchesSender,
+	parseMailbox,
+	resolveSender,
 } from "@/lib/email-management/agent-email-helper";
 import { evaluateSending } from "@/lib/email-management/email-evaluation";
 import { enforceOutboundSendGuard } from "@/lib/email-management/outbound-send-guard";
 import { checkSendingSpike } from "@/lib/email-management/sending-spike-detector";
 import { buildRawEmailMessage } from "../../e2/helper/email-builder";
+import {
+	findUnsafeCustomHeader,
+	isReservedHeaderName,
+} from "@/app/api/e2/helper/header-safety";
 
 /**
  * POST /api/webhooks/send-email
@@ -84,6 +89,54 @@ interface StoredAttachment {
 	[key: string]: unknown;
 }
 
+function parseAddressList(values: unknown): string[] | null {
+	if (!Array.isArray(values)) return null;
+	const addresses: string[] = [];
+	for (const value of values) {
+		if (typeof value !== "string") return null;
+		const parsed = parseMailbox(value);
+		if (!parsed.ok) return null;
+		addresses.push(parsed.mailbox.address);
+	}
+	return addresses;
+}
+
+function parseDestination(
+	to: unknown,
+	cc: unknown,
+	bcc: unknown,
+): { to: string[]; cc: string[]; bcc: string[] } | null {
+	const toList = parseAddressList(to);
+	const ccList = parseAddressList(cc);
+	const bccList = parseAddressList(bcc);
+	if (!toList || !ccList || !bccList) return null;
+	if (toList.length + ccList.length + bccList.length === 0) return null;
+	return { to: toList, cc: ccList, bcc: bccList };
+}
+
+function findUnsafeStoredContent(
+	subject: unknown,
+	replyTo: unknown,
+	headers: unknown,
+): string | null {
+	if (typeof subject !== "string" || /[\r\n\u0000]/.test(subject)) {
+		return "invalid subject";
+	}
+	if (!parseAddressList(replyTo)) return "invalid reply-to address";
+	if (headers !== undefined && headers !== null) {
+		if (typeof headers !== "object" || Array.isArray(headers)) {
+			return "invalid custom headers";
+		}
+		for (const [name, value] of Object.entries(headers)) {
+			if (isReservedHeaderName(name)) continue;
+			if (typeof value !== "string" || findUnsafeCustomHeader(name, value)) {
+				return `invalid custom header ${JSON.stringify(name)}`;
+			}
+		}
+	}
+	return null;
+}
+
 export async function POST(request: NextRequest) {
 	console.log("📨 QStash Webhook - Received scheduled email request");
 
@@ -98,10 +151,22 @@ export async function POST(request: NextRequest) {
 		// Get raw body for signature verification
 		const body = await request.text();
 
+		const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+		if (!appUrl) {
+			console.error(
+				"❌ QStash Webhook - NEXT_PUBLIC_APP_URL is not configured; cannot verify destination URL",
+			);
+			return NextResponse.json(
+				{ error: "Webhook is not configured" },
+				{ status: 500 },
+			);
+		}
+
 		try {
 			await qstashReceiver.verify({
 				signature,
 				body,
+				url: `${appUrl}/api/webhooks/send-email`,
 			});
 			console.log("✅ QStash signature verified");
 		} catch (verifyError) {
@@ -199,14 +264,39 @@ async function handleScheduledEmail(payload: QStashPayload) {
 			return NextResponse.json({ message: "Email is paused" }, { status: 200 });
 		}
 
-		const scheduledFromAddress = extractEmailAddress(
-			scheduledEmail.fromAddress,
-		);
-		const { isAgentEmail } = canUserSendFromEmail(scheduledEmail.fromAddress);
+		const resolvedScheduledSender = resolveSender(scheduledEmail.fromAddress);
+		if (
+			!resolvedScheduledSender.ok ||
+			resolvedScheduledSender.sender.domain !==
+				scheduledEmail.fromDomain.toLowerCase()
+		) {
+			const reason = resolvedScheduledSender.ok
+				? "From address does not match the stored sender domain"
+				: `Invalid from address: ${resolvedScheduledSender.error}`;
+			console.log(
+				`🚫 Blocking scheduled email ${scheduledEmailId}: ${reason}`,
+			);
+			await db
+				.update(scheduledEmails)
+				.set({
+					status: SCHEDULED_EMAIL_STATUS.FAILED,
+					lastError: `Email blocked: ${reason}`,
+					updatedAt: new Date(),
+				})
+				.where(eq(scheduledEmails.id, scheduledEmailId));
+
+			return NextResponse.json(
+				{ error: reason, reason: "invalid_from_address" },
+				{ status: 200 },
+			);
+		}
+		const scheduledSender = resolvedScheduledSender.sender;
+		const scheduledFromAddress = scheduledSender.address;
+		const isAgentEmail = scheduledSender.isAgentEmail;
 		const scheduledGuard = await enforceOutboundSendGuard({
 			userId: scheduledEmail.userId,
 			fromAddress: scheduledFromAddress,
-			fromDomain: scheduledEmail.fromDomain,
+			fromDomain: scheduledSender.domain,
 			isAgentEmail,
 		});
 		if (!scheduledGuard.allowed) {
@@ -255,9 +345,55 @@ async function handleScheduledEmail(payload: QStashPayload) {
 		const replyToAddresses = scheduledEmail.replyToAddresses
 			? JSON.parse(scheduledEmail.replyToAddresses)
 			: [];
+		const scheduledDestination = parseDestination(
+			toAddresses,
+			ccAddresses,
+			bccAddresses,
+		);
+		if (!scheduledDestination) {
+			console.log(
+				`🚫 Blocking scheduled email ${scheduledEmailId}: invalid recipient address`,
+			);
+			await db
+				.update(scheduledEmails)
+				.set({
+					status: SCHEDULED_EMAIL_STATUS.FAILED,
+					lastError: "Email blocked: invalid recipient address",
+					updatedAt: new Date(),
+				})
+				.where(eq(scheduledEmails.id, scheduledEmailId));
+
+			return NextResponse.json(
+				{ error: "Invalid recipient address", reason: "invalid_recipient" },
+				{ status: 200 },
+			);
+		}
 		const headers = scheduledEmail.headers
 			? JSON.parse(scheduledEmail.headers)
 			: undefined;
+		const scheduledUnsafeContent = findUnsafeStoredContent(
+			scheduledEmail.subject,
+			replyToAddresses,
+			headers,
+		);
+		if (scheduledUnsafeContent) {
+			console.log(
+				`🚫 Blocking scheduled email ${scheduledEmailId}: ${scheduledUnsafeContent}`,
+			);
+			await db
+				.update(scheduledEmails)
+				.set({
+					status: SCHEDULED_EMAIL_STATUS.FAILED,
+					lastError: `Email blocked: ${scheduledUnsafeContent}`,
+					updatedAt: new Date(),
+				})
+				.where(eq(scheduledEmails.id, scheduledEmailId));
+
+			return NextResponse.json(
+				{ error: scheduledUnsafeContent, reason: "invalid_message" },
+				{ status: 200 },
+			);
+		}
 		const rawAttachments = scheduledEmail.attachments
 			? JSON.parse(scheduledEmail.attachments)
 			: [];
@@ -333,9 +469,9 @@ async function handleScheduledEmail(payload: QStashPayload) {
 		const sentEmailId = nanoid();
 		const sentEmailData = {
 			id: sentEmailId,
-			from: scheduledEmail.fromAddress,
+			from: scheduledSender.formatted,
 			fromAddress: scheduledFromAddress,
-			fromDomain: scheduledEmail.fromDomain,
+			fromDomain: scheduledSender.domain,
 			to: JSON.stringify(toAddresses),
 			cc: ccAddresses.length > 0 ? JSON.stringify(ccAddresses) : null,
 			bcc: bccAddresses.length > 0 ? JSON.stringify(bccAddresses) : null,
@@ -362,7 +498,7 @@ async function handleScheduledEmail(payload: QStashPayload) {
 		// Build raw email message
 		console.log("📧 Building raw email message for scheduled email");
 		const rawMessage = buildRawEmailMessage({
-			from: scheduledEmail.fromAddress,
+			from: scheduledSender.formatted,
 			to: toAddresses,
 			cc: ccAddresses.length > 0 ? ccAddresses : undefined,
 			bcc: bccAddresses.length > 0 ? bccAddresses : undefined,
@@ -376,7 +512,7 @@ async function handleScheduledEmail(payload: QStashPayload) {
 		});
 
 		// Get the tenant sending info (identity ARN, configuration set, and tenant name) for tenant-level tracking
-		const fromDomain = scheduledEmail.fromDomain;
+		const fromDomain = scheduledSender.domain;
 
 		let tenantSendingInfo: TenantSendingInfo = {
 			identityArn: null,
@@ -433,20 +569,51 @@ async function handleScheduledEmail(payload: QStashPayload) {
 		// Send via AWS SES using SESv2 SendEmailCommand with TenantName
 		// Per AWS docs: https://docs.aws.amazon.com/ses/latest/dg/tenants.html
 		// Use full fromAddress (with display name) for proper sender name display
+		const scheduledFromEmailAddress = scheduledSender.formatted;
+		if (
+			!fromAddressMatchesSender(scheduledFromEmailAddress, {
+				address: scheduledFromAddress,
+				domain: fromDomain,
+				isAgentEmail,
+			})
+		) {
+			const reason = "From address does not match the authorized sender";
+			console.error(`🚫 Blocking scheduled email ${scheduledEmailId}: ${reason}`);
+			await db
+				.update(sentEmails)
+				.set({
+					status: SENT_EMAIL_STATUS.FAILED,
+					failureReason: reason,
+					updatedAt: new Date(),
+				})
+				.where(eq(sentEmails.id, createdSentEmail.id));
+			await db
+				.update(scheduledEmails)
+				.set({
+					status: SCHEDULED_EMAIL_STATUS.FAILED,
+					lastError: `Email blocked: ${reason}`,
+					updatedAt: new Date(),
+				})
+				.where(eq(scheduledEmails.id, scheduledEmailId));
+			return NextResponse.json(
+				{ error: reason, reason: "invalid_from_address" },
+				{ status: 200 },
+			);
+		}
 		const rawCommand = new SendEmailCommand({
-			FromEmailAddress: scheduledEmail.fromAddress,
+			FromEmailAddress: scheduledFromEmailAddress,
 			...(tenantSendingInfo.identityArn && {
 				FromEmailAddressIdentityArn: tenantSendingInfo.identityArn,
 			}),
 			Destination: {
-				ToAddresses: toAddresses.map(extractEmailAddress),
+				ToAddresses: scheduledDestination.to,
 				CcAddresses:
-					ccAddresses.length > 0
-						? ccAddresses.map(extractEmailAddress)
+					scheduledDestination.cc.length > 0
+						? scheduledDestination.cc
 						: undefined,
 				BccAddresses:
-					bccAddresses.length > 0
-						? bccAddresses.map(extractEmailAddress)
+					scheduledDestination.bcc.length > 0
+						? scheduledDestination.bcc
 						: undefined,
 			},
 			Content: {
@@ -623,14 +790,36 @@ async function handleBatchEmail(
 		console.log("⚠️ Email previously failed, retrying:", emailId);
 	}
 
-	const batchFromAddress = extractEmailAddress(sentEmail.from);
-	const { isAgentEmail: batchIsAgentEmail } = canUserSendFromEmail(
-		sentEmail.from,
-	);
+	const resolvedBatchSender = resolveSender(sentEmail.from);
+	if (
+		!resolvedBatchSender.ok ||
+		resolvedBatchSender.sender.domain !== sentEmail.fromDomain.toLowerCase()
+	) {
+		const reason = resolvedBatchSender.ok
+			? "From address does not match the stored sender domain"
+			: `Invalid from address: ${resolvedBatchSender.error}`;
+		console.log(`🚫 Blocking batch email ${emailId}: ${reason}`);
+		await db
+			.update(sentEmails)
+			.set({
+				status: SENT_EMAIL_STATUS.FAILED,
+				failureReason: `Email blocked: ${reason}`,
+				updatedAt: new Date(),
+			})
+			.where(eq(sentEmails.id, emailId));
+
+		return NextResponse.json(
+			{ error: reason, reason: "invalid_from_address" },
+			{ status: 200 },
+		);
+	}
+	const batchSender = resolvedBatchSender.sender;
+	const batchFromAddress = batchSender.address;
+	const batchIsAgentEmail = batchSender.isAgentEmail;
 	const batchGuard = await enforceOutboundSendGuard({
 		userId: effectiveUserId,
 		fromAddress: batchFromAddress,
-		fromDomain: sentEmail.fromDomain,
+		fromDomain: batchSender.domain,
 		isAgentEmail: batchIsAgentEmail,
 	});
 	if (!batchGuard.allowed) {
@@ -666,9 +855,51 @@ async function handleBatchEmail(
 		const replyToAddresses = sentEmail.replyTo
 			? JSON.parse(sentEmail.replyTo)
 			: [];
+		const batchDestination = parseDestination(
+			toAddresses,
+			ccAddresses,
+			bccAddresses,
+		);
+		if (!batchDestination) {
+			console.log(`🚫 Blocking batch email ${emailId}: invalid recipient address`);
+			await db
+				.update(sentEmails)
+				.set({
+					status: SENT_EMAIL_STATUS.FAILED,
+					failureReason: "Email blocked: invalid recipient address",
+					updatedAt: new Date(),
+				})
+				.where(eq(sentEmails.id, emailId));
+
+			return NextResponse.json(
+				{ error: "Invalid recipient address", reason: "invalid_recipient" },
+				{ status: 200 },
+			);
+		}
 		const headers = sentEmail.headers
 			? JSON.parse(sentEmail.headers)
 			: undefined;
+		const batchUnsafeContent = findUnsafeStoredContent(
+			sentEmail.subject,
+			replyToAddresses,
+			headers,
+		);
+		if (batchUnsafeContent) {
+			console.log(`🚫 Blocking batch email ${emailId}: ${batchUnsafeContent}`);
+			await db
+				.update(sentEmails)
+				.set({
+					status: SENT_EMAIL_STATUS.FAILED,
+					failureReason: `Email blocked: ${batchUnsafeContent}`,
+					updatedAt: new Date(),
+				})
+				.where(eq(sentEmails.id, emailId));
+
+			return NextResponse.json(
+				{ error: batchUnsafeContent, reason: "invalid_message" },
+				{ status: 200 },
+			);
+		}
 		const rawAttachments = sentEmail.attachments
 			? JSON.parse(sentEmail.attachments)
 			: [];
@@ -743,7 +974,7 @@ async function handleBatchEmail(
 		// Build raw email message
 		console.log("📧 Building raw email message for batch email");
 		const rawMessage = buildRawEmailMessage({
-			from: sentEmail.from,
+			from: batchSender.formatted,
 			to: toAddresses,
 			cc: ccAddresses.length > 0 ? ccAddresses : undefined,
 			bcc: bccAddresses.length > 0 ? bccAddresses : undefined,
@@ -757,7 +988,7 @@ async function handleBatchEmail(
 		});
 
 		// Get the tenant sending info (identity ARN, configuration set, and tenant name) for tenant-level tracking
-		const batchFromDomain = sentEmail.fromDomain;
+		const batchFromDomain = batchSender.domain;
 
 		let batchTenantInfo: TenantSendingInfo = {
 			identityArn: null,
@@ -814,21 +1045,40 @@ async function handleBatchEmail(
 		// Send via AWS SES using SESv2 SendEmailCommand with TenantName
 		// Per AWS docs: https://docs.aws.amazon.com/ses/latest/dg/tenants.html
 		// Use sentEmail.from (with display name) for proper sender name display
+		const batchFromEmailAddress = batchSender.formatted;
+		if (
+			!fromAddressMatchesSender(batchFromEmailAddress, {
+				address: batchFromAddress,
+				domain: batchFromDomain,
+				isAgentEmail: batchIsAgentEmail,
+			})
+		) {
+			const reason = "From address does not match the authorized sender";
+			console.error(`🚫 Blocking batch email ${emailId}: ${reason}`);
+			await db
+				.update(sentEmails)
+				.set({
+					status: SENT_EMAIL_STATUS.FAILED,
+					failureReason: reason,
+					updatedAt: new Date(),
+				})
+				.where(eq(sentEmails.id, emailId));
+			return NextResponse.json(
+				{ error: reason, reason: "invalid_from_address" },
+				{ status: 200 },
+			);
+		}
 		const rawCommand = new SendEmailCommand({
-			FromEmailAddress: sentEmail.from,
+			FromEmailAddress: batchFromEmailAddress,
 			...(batchTenantInfo.identityArn && {
 				FromEmailAddressIdentityArn: batchTenantInfo.identityArn,
 			}),
 			Destination: {
-				ToAddresses: toAddresses.map(extractEmailAddress),
+				ToAddresses: batchDestination.to,
 				CcAddresses:
-					ccAddresses.length > 0
-						? ccAddresses.map(extractEmailAddress)
-						: undefined,
+					batchDestination.cc.length > 0 ? batchDestination.cc : undefined,
 				BccAddresses:
-					bccAddresses.length > 0
-						? bccAddresses.map(extractEmailAddress)
-						: undefined,
+					batchDestination.bcc.length > 0 ? batchDestination.bcc : undefined,
 			},
 			Content: {
 				Raw: {

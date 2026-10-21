@@ -3,11 +3,61 @@
  * Consolidates validation logic from v2 endpoint routes
  */
 
+import { resolveSender } from "@/lib/email-management/agent-email-helper";
+import { findVerifiedSendingDomain } from "@/lib/email-management/outbound-send-guard";
 import { validateWebhookUrl } from "./url-validation";
 
 export interface ValidationResult {
   valid: boolean;
   error?: string;
+}
+
+/**
+ * Validates the optional `fromAddress` of an email forwarding endpoint: it must
+ * be a single mailbox on a verified domain owned by `userId`. Returns the
+ * normalized address to store.
+ */
+export async function validateForwardFromAddress(
+  userId: string,
+  type: string,
+  config: unknown
+): Promise<
+  { valid: true; fromAddress?: string } | { valid: false; error: string }
+> {
+  if (type !== "email" && type !== "email_group") return { valid: true };
+  if (!config || typeof config !== "object") return { valid: true };
+
+  const fromAddress = (config as { fromAddress?: unknown }).fromAddress;
+  if (fromAddress === undefined || fromAddress === null || fromAddress === "") {
+    return { valid: true };
+  }
+  if (typeof fromAddress !== "string") {
+    return { valid: false, error: "From address must be a string" };
+  }
+
+  const resolved = resolveSender(fromAddress);
+  if (!resolved.ok) {
+    return { valid: false, error: `Invalid from address: ${resolved.error}` };
+  }
+  if (resolved.sender.isAgentEmail) {
+    return {
+      valid: false,
+      error: "From address must use a verified domain you own",
+    };
+  }
+
+  const verifiedDomain = await findVerifiedSendingDomain(
+    userId,
+    resolved.sender.domain
+  );
+  if (!verifiedDomain) {
+    return {
+      valid: false,
+      error: `From address must use a verified domain you own: ${resolved.sender.domain}`,
+    };
+  }
+
+  return { valid: true, fromAddress: resolved.sender.address };
 }
 
 /**

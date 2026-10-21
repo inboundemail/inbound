@@ -2,6 +2,7 @@
 
 import { readTextLimited, safeFetch } from "@/lib/security/safe-fetch";
 import { validateWebhookUrl } from "@/app/api/e2/endpoints/url-validation";
+import { validateForwardFromAddress } from "@/app/api/e2/endpoints/validation";
 import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { headers } from "next/headers";
@@ -105,9 +106,22 @@ export async function createEndpoint(data: CreateEndpointData) {
 			}
 		}
 
+		const fromAddressResult = await validateForwardFromAddress(
+			session.user.id,
+			data.type,
+			data.config,
+		);
+		if (!fromAddressResult.valid) {
+			return { success: false, error: fromAddressResult.error };
+		}
+
 		// For webhook endpoints, generate a verificationToken at creation time
 		// so it's immediately available via the API
 		const configToStore = { ...data.config };
+		if (fromAddressResult.fromAddress) {
+			(configToStore as Record<string, unknown>).fromAddress =
+				fromAddressResult.fromAddress;
+		}
 		if (data.type === "webhook") {
 			(configToStore as Record<string, unknown>).verificationToken =
 				generateNewWebhookVerificationToken();
@@ -205,6 +219,19 @@ export async function updateEndpoint(id: string, data: UpdateEndpointData) {
 			}
 		}
 
+		let normalizedFromAddress: string | undefined;
+		if (data.config !== undefined) {
+			const fromAddressResult = await validateForwardFromAddress(
+				session.user.id,
+				effectiveType,
+				data.config,
+			);
+			if (!fromAddressResult.valid) {
+				return { success: false, error: fromAddressResult.error };
+			}
+			normalizedFromAddress = fromAddressResult.fromAddress;
+		}
+
 		// Prepare update data
 		const updateData: any = {
 			updatedAt: new Date(),
@@ -229,7 +256,11 @@ export async function updateEndpoint(id: string, data: UpdateEndpointData) {
 				}
 				updateData.config = JSON.stringify(updatedConfig);
 			} else {
-				updateData.config = JSON.stringify(data.config);
+				updateData.config = JSON.stringify(
+					normalizedFromAddress
+						? { ...data.config, fromAddress: normalizedFromAddress }
+						: data.config,
+				);
 			}
 		}
 

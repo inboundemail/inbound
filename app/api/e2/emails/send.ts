@@ -18,7 +18,7 @@ import {
 import { authenticateEmailSend } from "@/app/api/e2/lib/send-auth";
 import { db } from "@/lib/db";
 import { SCHEDULED_EMAIL_STATUS, scheduledEmails } from "@/lib/db/schema";
-import { extractEmailAddress } from "@/lib/email-management/agent-email-helper";
+import { parseMailbox } from "@/lib/email-management/agent-email-helper";
 import {
 	formatScheduledDate,
 	type ParsedScheduleDate,
@@ -87,34 +87,6 @@ const ErrorResponse = t.Object({
 function toArray(value: string | string[] | undefined): string[] {
 	if (!value) return [];
 	return Array.isArray(value) ? value : [value];
-}
-
-function parseEmailWithName(emailString: string): {
-	email: string;
-	name?: string;
-} {
-	const match = emailString.match(/^(.+?)\s*<([^>]+)>$/);
-	if (match) {
-		return {
-			name: match[1].replace(/^["']|["']$/g, "").trim(),
-			email: match[2].trim(),
-		};
-	}
-	return { email: emailString.trim() };
-}
-
-function formatEmailWithName(email: string, name?: string): string {
-	if (name && name.trim()) {
-		const escapedName =
-			name.includes(",") ||
-			name.includes(";") ||
-			name.includes("<") ||
-			name.includes(">")
-				? `"${name.replace(/"/g, '\\"')}"`
-				: name;
-		return `${escapedName} <${email}>`;
-	}
-	return email;
 }
 
 // Check warmup limits for new accounts
@@ -207,6 +179,13 @@ export const sendEmail = new Elysia().post(
 		const ccAddresses = toArray(body.cc);
 		const bccAddresses = toArray(body.bcc);
 		const replyToAddresses = toArray(body.reply_to);
+		const invalidReplyTo = replyToAddresses.find(
+			(value) => !parseMailbox(value).ok,
+		);
+		if (invalidReplyTo !== undefined) {
+			set.status = 400;
+			return { error: `Invalid reply_to address: ${invalidReplyTo}` };
+		}
 
 		const sender = await authorizeOutboundSend({
 			userId,
@@ -220,7 +199,7 @@ export const sendEmail = new Elysia().post(
 			if (sender.response.status) set.status = sender.response.status;
 			return sender.response.body;
 		}
-		const { fromAddress, fromDomain } = sender;
+		const { fromAddress, fromDomain, formattedFrom, recipients } = sender;
 
 		// Process attachments
 		console.log("📎 Processing attachments");
@@ -261,7 +240,7 @@ export const sendEmail = new Elysia().post(
 				scheduledAt: parsedDate.date,
 				timezone: parsedDate.timezone,
 				status: SCHEDULED_EMAIL_STATUS.SCHEDULED,
-				fromAddress: body.from,
+				fromAddress: formattedFrom,
 				fromDomain,
 				toAddresses: JSON.stringify(toAddresses),
 				ccAddresses:
@@ -356,12 +335,7 @@ export const sendEmail = new Elysia().post(
 			}
 		}
 
-		const fromParsed = parseEmailWithName(body.from);
-		const sourceEmail = fromParsed.email;
-		const formattedFromAddress = formatEmailWithName(
-			sourceEmail,
-			fromParsed.name,
-		);
+		const formattedFromAddress = formattedFrom;
 
 		const delivery = await deliverSentEmail({
 			userId,
@@ -369,13 +343,9 @@ export const sendEmail = new Elysia().post(
 			unlimited: allowance.unlimited,
 			sender,
 			fromEmailAddress: formattedFromAddress,
-			destination: {
-				to: toAddresses.map(extractEmailAddress),
-				cc: ccAddresses.map(extractEmailAddress),
-				bcc: bccAddresses.map(extractEmailAddress),
-			},
+			destination: recipients,
 			record: {
-				from: body.from,
+				from: formattedFromAddress,
 				fromAddress,
 				fromDomain,
 				to: JSON.stringify(toAddresses),

@@ -1,6 +1,8 @@
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
 import type { ParsedEmailData } from './email-parser'
 import { generateEmailBannerHTML } from '@/components/email-banner'
+import { formatMailbox, parseMailbox } from '@/lib/email-management/agent-email-helper'
+import { stripHeaderBreaks } from '@/app/api/e2/helper/header-safety'
 
 export class EmailForwarder {
   private sesClient: SESv2Client
@@ -39,15 +41,23 @@ export class EmailForwarder {
     
     // Create display name in format: "Original Sender via Inbound" or custom sender name
     const displayName = options?.senderName || `${originalSenderName} via Inbound`
-    const fromAddressWithName = `${displayName} <${fromAddress}>`
+    const fromAddressWithName = formatMailbox({ name: displayName, address: fromAddress })
 
     console.log(`📧 EmailForwarder - Using from address: ${fromAddressWithName}`)
+
+    const recipients = toAddresses.map((value) => {
+      const parsed = parseMailbox(value)
+      if (!parsed.ok) throw new Error(`Invalid forward recipient: ${parsed.error}`)
+      return parsed.mailbox
+    })
+    const parsedReplyTo = parseMailbox(originalEmail.from?.addresses?.[0]?.address || '')
+    const replyTo = parsedReplyTo.ok ? parsedReplyTo.mailbox.address : fromAddress
 
     // Create raw email message maintaining original structure
     const rawMessage = await this.buildRawEmailMessage({
       from: fromAddressWithName,
-      to: toAddresses,
-      replyTo: originalEmail.from?.addresses?.[0]?.address || fromAddress,
+      to: recipients.map((mailbox) => formatMailbox(mailbox)),
+      replyTo,
       subject,
       originalEmail,
       includeAttachments: options?.includeAttachments ?? true,
@@ -68,7 +78,7 @@ export class EmailForwarder {
       FromEmailAddress: fromAddressWithName,
       ...(options?.sourceArn && { FromEmailAddressIdentityArn: options.sourceArn }),
       Destination: {
-        ToAddresses: toAddresses,
+        ToAddresses: recipients.map((mailbox) => mailbox.address),
       },
       Content: {
         Raw: {
@@ -116,10 +126,10 @@ export class EmailForwarder {
 
     // Add original message headers for threading (if available)
     if (params.originalEmail.messageId) {
-      headers.push(`In-Reply-To: ${params.originalEmail.messageId}`)
+      headers.push(`In-Reply-To: ${stripHeaderBreaks(params.originalEmail.messageId)}`)
     }
     if (params.originalEmail.references?.length) {
-      headers.push(`References: ${params.originalEmail.references.join(' ')}`)
+      headers.push(`References: ${stripHeaderBreaks(params.originalEmail.references.join(' '))}`)
     }
 
     // Check if we need multipart (attachments or both HTML and text)
@@ -279,8 +289,7 @@ export class EmailForwarder {
    * Encode email subject to handle special characters
    */
   private encodeSubject(subject: string): string {
-    // Basic implementation - in production you might want to use proper RFC 2047 encoding
-    return subject.replace(/[\r\n]/g, ' ').trim()
+    return stripHeaderBreaks(subject)
   }
 
   /**

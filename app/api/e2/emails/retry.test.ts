@@ -199,6 +199,20 @@ mock.module("@/lib/email-management/email-blocking", () => ({
 	checkRecipientsAgainstBlocklist: blocklist,
 	isEmailBlocked,
 }));
+const sendGuard = mock(
+	async (): Promise<{
+		allowed: boolean;
+		statusCode: number;
+		error?: string;
+		reasonCode?: string;
+		resolvedDomain?: string;
+	}> => ({ allowed: true, statusCode: 200, resolvedDomain: "example.test" }),
+);
+mock.module("@/lib/email-management/outbound-send-guard", () => ({
+	enforceOutboundSendGuard: sendGuard,
+	ensureUserSendingTenant: async () => undefined,
+	findVerifiedSendingDomain: async () => null,
+}));
 mock.module("@/lib/email-management/email-forwarder", () => ({
 	EmailForwarder: class {
 		forwardEmail = forward;
@@ -385,6 +399,12 @@ beforeEach(() => {
 	}));
 	forward.mockClear();
 	forward.mockImplementation(async () => undefined);
+	sendGuard.mockClear();
+	sendGuard.mockImplementation(async () => ({
+		allowed: true,
+		statusCode: 200,
+		resolvedDomain: "example.test",
+	}));
 	beforeSelect = undefined;
 	rows.set(getTableName(sesEvents), [
 		{ id: "ses-event", source: "envelope@example.test" },
@@ -798,7 +818,26 @@ describe("email recovery", () => {
 			await (await request({ delivery_id: "delivery" })).json(),
 		).toMatchObject({ success: true, delivery_id: "delivery" });
 		expect(forward).toHaveBeenCalledTimes(1);
+		expect(sendGuard).toHaveBeenLastCalledWith({
+			userId: "owner",
+			fromAddress: "inbox@example.test",
+			fromDomain: "example.test",
+			isAgentEmail: false,
+			recipients: ["destination@example.test"],
+		});
 		expect(storedDelivery()).toMatchObject({ attempts: 4, status: "success" });
+		sendGuard.mockImplementation(async () => ({
+			allowed: false,
+			statusCode: 403,
+			error: "Account suspended",
+			reasonCode: "user_banned",
+		}));
+		storedDelivery().status = "failed";
+		expect(
+			await (await request({ delivery_id: "delivery" })).json(),
+		).toMatchObject({ success: false, delivery_id: "delivery" });
+		expect(forward).toHaveBeenCalledTimes(1);
+		expect(storedDelivery()).toMatchObject({ attempts: 5, status: "failed" });
 		expect(network).not.toHaveBeenCalled();
 	});
 

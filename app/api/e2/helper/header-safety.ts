@@ -1,4 +1,5 @@
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000a-\u001f\u007f]/;
+const HEADER_BREAKS = /[\r\n\u0000]+/g;
 const HEADER_NAME = /^[!-9;-~]+$/;
 const RESERVED_HEADERS = new Set([
 	"from",
@@ -9,12 +10,13 @@ const RESERVED_HEADERS = new Set([
 	"reply-to",
 	"subject",
 	"date",
+	"message-id",
 	"mime-version",
-	"content-type",
-	"content-transfer-encoding",
-	"content-disposition",
 	"return-path",
+	"dkim-signature",
+	"received",
 ]);
+const RESERVED_HEADER_PREFIXES = ["content-", "x-ses-"];
 
 type OutgoingEmailInput = {
 	from?: string;
@@ -34,6 +36,37 @@ type OutgoingEmailInput = {
 function list(value: string | string[] | undefined): string[] {
 	if (!value) return [];
 	return Array.isArray(value) ? value : [value];
+}
+
+/**
+ * Replaces CR, LF and NUL with spaces, for header text that comes from
+ * received mail (forwarded or replied-to subjects) and can't be rejected.
+ */
+export function stripHeaderBreaks(value: string): string {
+	return value.replace(HEADER_BREAKS, " ").trim();
+}
+
+export function isReservedHeaderName(name: string): boolean {
+	const lower = name.toLowerCase();
+	return (
+		RESERVED_HEADERS.has(lower) ||
+		RESERVED_HEADER_PREFIXES.some((prefix) => lower.startsWith(prefix))
+	);
+}
+
+/**
+ * Returns an error message when a custom header could inject or override MIME
+ * headers (invalid field name, line breaks, reserved or SES control headers).
+ */
+export function findUnsafeCustomHeader(name: string, value: string): string | null {
+	if (!HEADER_NAME.test(name)) return `Invalid header name: ${name}`;
+	if (isReservedHeaderName(name)) {
+		return `Header ${name} cannot be set through headers`;
+	}
+	if (typeof value !== "string" || CONTROL_CHARACTERS.test(value)) {
+		return `Header ${name} must not contain line breaks or control characters`;
+	}
+	return null;
 }
 
 /**
@@ -61,14 +94,8 @@ export function findUnsafeHeaderInput(input: OutgoingEmailInput): string | null 
 	}
 
 	for (const [name, value] of Object.entries(input.headers ?? {})) {
-		const lower = name.toLowerCase();
-		if (!HEADER_NAME.test(name)) return `Invalid header name: ${name}`;
-		if (RESERVED_HEADERS.has(lower) || lower.startsWith("x-ses-")) {
-			return `Header ${name} cannot be set through headers`;
-		}
-		if (CONTROL_CHARACTERS.test(value)) {
-			return `Header ${name} must not contain line breaks or control characters`;
-		}
+		const unsafe = findUnsafeCustomHeader(name, value);
+		if (unsafe) return unsafe;
 	}
 	return null;
 }

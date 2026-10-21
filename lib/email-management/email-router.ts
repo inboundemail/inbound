@@ -31,6 +31,16 @@ import {
 	checkRecipientsAgainstBlocklist,
 	isEmailBlocked,
 } from "@/lib/email-management/email-blocking";
+import {
+	formatMailbox,
+	parseMailbox,
+	resolveSender,
+} from "@/lib/email-management/agent-email-helper";
+import {
+	enforceOutboundSendGuard,
+	ensureUserSendingTenant,
+	findVerifiedSendingDomain,
+} from "@/lib/email-management/outbound-send-guard";
 import { EmailForwarder } from "./email-forwarder";
 import type { ParsedEmailData } from "./email-parser";
 import { sanitizeHtml } from "./email-parser";
@@ -1543,6 +1553,46 @@ async function handleWebhookEndpoint(
 }
 
 /**
+ * Picks the sender for a forward: the endpoint's configured fromAddress when
+ * it is on a verified domain the endpoint owner owns, otherwise the address the
+ * email was received at. The outbound guard still authorizes the result.
+ */
+async function resolveForwardSender(
+	userId: string | null | undefined,
+	configuredFrom: unknown,
+	recipient: string | null | undefined,
+): Promise<{ userId: string; address: string; domain: string } | null> {
+	if (!userId) return null;
+
+	if (typeof configuredFrom === "string" && configuredFrom.trim()) {
+		const configured = resolveSender(configuredFrom);
+		if (
+			configured.ok &&
+			!configured.sender.isAgentEmail &&
+			(await findVerifiedSendingDomain(userId, configured.sender.domain))
+		) {
+			return {
+				userId,
+				address: configured.sender.address,
+				domain: configured.sender.domain,
+			};
+		}
+		console.warn(
+			`⚠️ handleEmailForwardEndpoint - Configured fromAddress is not on a verified domain owned by the user, falling back to the receiving address`,
+		);
+	}
+
+	if (!recipient) return null;
+	const received = resolveSender(recipient);
+	if (!received.ok || received.sender.isAgentEmail) return null;
+	return {
+		userId,
+		address: received.sender.address,
+		domain: received.sender.domain,
+	};
+}
+
+/**
  * Handle email forwarding endpoints (email and email_group types)
  */
 async function handleEmailForwardEndpoint(
@@ -1572,9 +1622,6 @@ async function handleEmailForwardEndpoint(
 		let toAddresses: string[] =
 			endpoint.type === "email_group" ? config.emails : [config.forwardTo];
 
-		// Use the original recipient as the from address (e.g., ryan@inbound.new)
-		const fromAddress = config.fromAddress || emailData.recipient;
-
 		// 🚫 BLOCKLIST CHECK: Prevent forwarding to addresses that previously bounced
 		// This avoids causing repeated bounces and reputation damage
 		const blocklistCheck = await checkRecipientsAgainstBlocklist(toAddresses);
@@ -1586,10 +1633,11 @@ async function handleEmailForwardEndpoint(
 			// Filter out blocked addresses
 			// Must use same normalization as checkRecipientsAgainstBlocklist: extract from angle brackets + lowercase
 			toAddresses = toAddresses.filter((addr: string) => {
-				const match = addr?.match(/<([^>]+)>/);
-				const extracted = match ? match[1] : addr;
-				const normalizedAddr = extracted?.toLowerCase()?.trim();
-				return !blocklistCheck.blockedAddresses.includes(normalizedAddr);
+				const parsed = parseMailbox(addr);
+				if (!parsed.ok) return false;
+				return !blocklistCheck.blockedAddresses.includes(
+					parsed.mailbox.address.toLowerCase(),
+				);
 			});
 
 			if (toAddresses.length === 0) {
@@ -1623,7 +1671,10 @@ async function handleEmailForwardEndpoint(
 		// Only check for loops if we have a valid recipient address
 		const loopingAddresses = recipientAddress
 			? toAddresses.filter((addr: string) => {
-					const targetAddr = addr?.toLowerCase()?.trim();
+					const parsedTarget = parseMailbox(addr);
+					const targetAddr = parsedTarget.ok
+						? parsedTarget.mailbox.address.toLowerCase()
+						: addr?.toLowerCase()?.trim();
 					// Both must be valid non-empty strings for a match
 					return targetAddr && targetAddr === recipientAddress;
 				})
@@ -1652,50 +1703,132 @@ async function handleEmailForwardEndpoint(
 			);
 		}
 
+		const sender = await resolveForwardSender(
+			emailData.userId,
+			config.fromAddress,
+			emailData.recipient,
+		);
+		if (!sender) {
+			console.error(
+				`🚫 handleEmailForwardEndpoint - No authorized sender address for email ${emailId}, not forwarding`,
+			);
+			return await recordDeliveryResult(
+				claim,
+				{
+					status: "failed",
+					responseData: JSON.stringify({
+						error: "NO_AUTHORIZED_SENDER",
+						message:
+							"No sender address on a verified domain you own is available for forwarding",
+					}),
+				},
+				"No authorized sender address for forwarding",
+			);
+		}
+		const fromAddress = sender.address;
+		const fromDomain = sender.domain;
+		const userId = sender.userId;
+
+		let recipientMailboxes = toAddresses.flatMap((addr: string) => {
+			const parsed = parseMailbox(addr);
+			return parsed.ok ? [parsed.mailbox] : [];
+		});
+
+		await ensureUserSendingTenant(userId);
+
+		const runGuard = () =>
+			enforceOutboundSendGuard({
+				userId,
+				fromAddress,
+				fromDomain,
+				isAgentEmail: false,
+				recipients: recipientMailboxes.map((mailbox) => mailbox.address),
+			});
+		let outboundGuard = await runGuard();
+		let droppedRecipients: string[] = [];
+		if (
+			!outboundGuard.allowed &&
+			outboundGuard.reasonCode === "managed_domain_unpaid" &&
+			outboundGuard.blockedRecipients &&
+			outboundGuard.blockedRecipients.length > 0
+		) {
+			const blocked = new Set(
+				outboundGuard.blockedRecipients.map((address) => address.toLowerCase()),
+			);
+			droppedRecipients = recipientMailboxes
+				.filter((mailbox) => blocked.has(mailbox.address.toLowerCase()))
+				.map((mailbox) => mailbox.address);
+			recipientMailboxes = recipientMailboxes.filter(
+				(mailbox) => !blocked.has(mailbox.address.toLowerCase()),
+			);
+			console.warn(
+				`⚠️ handleEmailForwardEndpoint - Dropping ${droppedRecipients.length} recipient(s) not allowed for an unpaid managed domain on email ${emailId}: ${droppedRecipients.join(", ")}`,
+			);
+			if (recipientMailboxes.length > 0) {
+				outboundGuard = await runGuard();
+			}
+		}
+		if (!outboundGuard.allowed || recipientMailboxes.length === 0) {
+			console.error(
+				`🚫 handleEmailForwardEndpoint - Forward of email ${emailId} blocked by outbound guard: ${outboundGuard.reasonCode}`,
+			);
+			return await recordDeliveryResult(
+				claim,
+				{
+					status: "failed",
+					responseData: JSON.stringify({
+						error: "OUTBOUND_SEND_BLOCKED",
+						reasonCode: outboundGuard.reasonCode,
+						message: outboundGuard.error || "Email send blocked",
+						fromAddress,
+						...(droppedRecipients.length > 0 && { droppedRecipients }),
+					}),
+				},
+				outboundGuard.error || "Forward blocked by outbound send guard",
+			);
+		}
+		toAddresses = recipientMailboxes.map((mailbox) => formatMailbox(mailbox));
+
 		console.log(
 			`📤 handleEmailForwardEndpoint - Forwarding to ${toAddresses.length} recipients from ${fromAddress}`,
 		);
 
 		// Get tenant sending info (identity ARN, configuration set, and tenant name) for tenant-level tracking
-		const fromDomain = fromAddress.split("@")[1];
-		let sourceArn: string | null = null;
-		let configurationSetName: string | null = null;
-		let tenantName: string | null = null;
-		if (fromDomain && emailData.userId) {
-			const tenantInfo = await getTenantSendingInfoForDomainOrParent(
-				emailData.userId,
-				fromDomain,
+		const {
+			identityArn: sourceArn,
+			configurationSetName,
+			tenantName,
+		} = await getTenantSendingInfoForDomainOrParent(
+			userId,
+			fromDomain,
+			outboundGuard.resolvedDomain,
+		);
+		if (sourceArn) {
+			console.log(
+				`✅ handleEmailForwardEndpoint - Got identity ARN for ${fromDomain}: ${sourceArn}`,
 			);
-			sourceArn = tenantInfo.identityArn;
-			configurationSetName = tenantInfo.configurationSetName;
-			tenantName = tenantInfo.tenantName;
-			if (sourceArn) {
-				console.log(
-					`✅ handleEmailForwardEndpoint - Got identity ARN for ${fromDomain}: ${sourceArn}`,
-				);
-			} else {
-				console.warn(
-					`⚠️ handleEmailForwardEndpoint - Could not get identity ARN for ${fromDomain}, email will be sent without tenant tracking`,
-				);
-			}
-			if (configurationSetName) {
-				console.log(
-					`📋 handleEmailForwardEndpoint - Using configuration set: ${configurationSetName}`,
-				);
-			} else {
-				console.warn(
-					`⚠️ handleEmailForwardEndpoint - No configuration set available for ${fromDomain}`,
-				);
-			}
-			if (tenantName) {
-				console.log(
-					`🏠 handleEmailForwardEndpoint - Using TenantName: ${tenantName}`,
-				);
-			} else {
-				console.warn(
-					`⚠️ handleEmailForwardEndpoint - No TenantName available - email will NOT appear in tenant dashboard!`,
-				);
-			}
+		} else {
+			console.warn(
+				`⚠️ handleEmailForwardEndpoint - Could not get identity ARN for ${fromDomain}, email will be sent without tenant tracking`,
+			);
+		}
+		if (configurationSetName) {
+			console.log(
+				`📋 handleEmailForwardEndpoint - Using configuration set: ${configurationSetName}`,
+			);
+		} else {
+			console.warn(
+				`⚠️ handleEmailForwardEndpoint - No configuration set available for ${fromDomain}`,
+			);
+		}
+		if (tenantName) {
+			console.log(
+				`🏠 handleEmailForwardEndpoint - Using TenantName: ${tenantName}`,
+			);
+		} else {
+			console.warn(
+				`⚠️ handleEmailForwardEndpoint - No TenantName available - email will NOT appear in tenant dashboard!`,
+			);
 		}
 
 		// Forward the email
@@ -1717,6 +1850,7 @@ async function handleEmailForwardEndpoint(
 					toAddresses,
 					fromAddress,
 					forwardedAt: new Date().toISOString(),
+					...(droppedRecipients.length > 0 && { droppedRecipients }),
 				}),
 			},
 			"Email forwarded successfully",
