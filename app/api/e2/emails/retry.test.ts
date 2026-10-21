@@ -189,8 +189,19 @@ const { isEmailBlocked } = await import(
 	"@/lib/email-management/email-blocking"
 );
 mock.module("autumn-js", () => ({ Autumn: { check: guardCheck } }));
+const inboundEvaluation = mock(
+	async (
+		_structuredEmailId: string,
+		_userId: string,
+		options: { guard: boolean; email?: unknown },
+	) => ({
+		guard: options.guard ? await guardRules() : null,
+		classification: null,
+	}),
+);
 mock.module("@/lib/guard/rule-matcher", () => ({
 	evaluateGuardRules: guardRules,
+	evaluateInboundEmail: inboundEvaluation,
 }));
 mock.module("@/lib/email-management/email-threader", () => ({
 	EmailThreader: { processEmailForThreading: threading },
@@ -391,6 +402,7 @@ beforeEach(() => {
 	}));
 	guardRules.mockClear();
 	guardRules.mockImplementation(async () => ({ shouldBlock: false }));
+	inboundEvaluation.mockClear();
 	threading.mockClear();
 	blocklist.mockClear();
 	blocklist.mockImplementation(async () => ({
@@ -635,6 +647,20 @@ describe("email recovery", () => {
 		}));
 		expect((await request({ endpoint_id: "chosen" })).status).toBe(400);
 		expect(network).not.toHaveBeenCalled();
+	});
+
+	test("inbound classification runs on retry even when Guard is disabled", async () => {
+		expect((await request({ delivery_id: "delivery" })).status).toBe(200);
+		expect(inboundEvaluation).toHaveBeenCalledTimes(1);
+		expect(inboundEvaluation.mock.calls[0]).toEqual([
+			"structured",
+			"owner",
+			{
+				guard: false,
+				email: expect.objectContaining({ id: "structured", userId: "owner" }),
+			},
+		]);
+		expect(guardRules).not.toHaveBeenCalled();
 	});
 
 	test("Guard feature lookup errors fail closed for manual retry", async () => {
