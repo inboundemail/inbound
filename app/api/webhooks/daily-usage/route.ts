@@ -6,9 +6,14 @@ import Inbound from "inboundemail";
 import { generateObject } from "ai";
 import { z } from "zod";
 import { getModel } from "@/lib/ai/provider";
+import { assertCronAuthorized } from "@/lib/security/cron-auth";
 
-// Vercel cron/webhook route. Secure by shared secret header if set.
-export async function GET() {
+export async function GET(request: Request) {
+	const unauthorizedResponse = assertCronAuthorized(request, "daily-usage");
+	if (unauthorizedResponse) {
+		return unauthorizedResponse;
+	}
+
 	const now = new Date();
 	const start = new Date(now);
 	start.setUTCHours(0, 0, 0, 0);

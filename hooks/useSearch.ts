@@ -31,7 +31,6 @@ export interface EndpointResult {
   type: string
   description?: string
   isActive: boolean
-  config: string
 }
 
 export interface EmailResult {

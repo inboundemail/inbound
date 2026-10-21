@@ -19,7 +19,8 @@ let mailboxIpRatelimit: Ratelimit | null = null;
 // Set to "true" ONLY in development environments
 // Production should ALWAYS fail closed (default behavior)
 const ALLOW_REQUESTS_WITHOUT_RATE_LIMIT =
-	process.env.ALLOW_REQUESTS_WITHOUT_RATE_LIMIT === "true";
+	process.env.ALLOW_REQUESTS_WITHOUT_RATE_LIMIT === "true" &&
+	process.env.NODE_ENV !== "production";
 
 if (
 	process.env.UPSTASH_REDIS_REST_URL &&
@@ -32,7 +33,8 @@ if (
 
 	// Rate limiter: 100 requests per second per account (overridable only in local dev)
 	const localDevLimit =
-		process.env.INBOUND_LOCAL_DEV === "true"
+		process.env.INBOUND_LOCAL_DEV === "true" &&
+		process.env.NODE_ENV !== "production"
 			? Number(process.env.E2_LOCAL_RATE_LIMIT_PER_SECOND)
 			: Number.NaN;
 	ratelimit = new Ratelimit({
@@ -305,12 +307,23 @@ function getMailboxAuthClientIp(request: Request): string {
 	return getClientIp(request);
 }
 
+let loggedMissingGatewaySecret = false;
+
 export function enforceMailboxGatewayAuthorization(
 	request: Request,
 	set: { status?: number | string; headers?: unknown },
 ): void {
-	if (!process.env.MAILBOX_GATEWAY_AUTH_SECRET) return;
-	if (hasValidGatewaySecret(request)) return;
+	if (!process.env.MAILBOX_GATEWAY_AUTH_SECRET) {
+		if (process.env.NODE_ENV !== "production") return;
+		if (!loggedMissingGatewaySecret) {
+			loggedMissingGatewaySecret = true;
+			console.error(
+				"🚨 CRITICAL: MAILBOX_GATEWAY_AUTH_SECRET is not configured. Mailbox gateway authentication requests are rejected (fail-closed).",
+			);
+		}
+	} else if (hasValidGatewaySecret(request)) {
+		return;
+	}
 
 	set.status = 403;
 	const headers = {

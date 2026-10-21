@@ -3,8 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { emailDomains } from "@/lib/db/schema";
 import { runDomainVerificationChecksInBatches } from "@/lib/domains-and-dns/domain-verification-check";
-
-const CRON_SECRET = process.env.CRON_SECRET;
+import { assertCronAuthorized } from "@/lib/security/cron-auth";
 
 // Process at most this many domains per run to stay within AWS SES rate
 // limits and cron execution windows. Adjust if the queue grows.
@@ -17,26 +16,6 @@ const MAX_DOMAINS_PER_RUN = 100;
 // cadence (see vercel.json) is the primary rate control; this throttle just
 // protects against unscheduled triggers colliding with scheduled runs.
 const MIN_SECONDS_SINCE_LAST_CHECK = 120;
-
-function assertCronAuthorized(request: Request): NextResponse | null {
-	if (!CRON_SECRET) {
-		console.error(
-			"[verify-pending-domains] CRON_SECRET is not configured; refusing to run public cron endpoint",
-		);
-		return NextResponse.json(
-			{ error: "Cron endpoint is not configured" },
-			{ status: 500 },
-		);
-	}
-
-	const authHeader = request.headers.get("authorization") || "";
-	const expected = `Bearer ${CRON_SECRET}`;
-	if (authHeader !== expected) {
-		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-	}
-
-	return null;
-}
 
 /**
  * Periodic verification sweep for domains waiting on SES verification.
@@ -54,7 +33,10 @@ function assertCronAuthorized(request: Request): NextResponse | null {
  * re-verification trigger so the user sees the error explicitly.
  */
 export async function GET(request: Request) {
-	const unauthorizedResponse = assertCronAuthorized(request);
+	const unauthorizedResponse = assertCronAuthorized(
+		request,
+		"verify-pending-domains",
+	);
 	if (unauthorizedResponse) {
 		return unauthorizedResponse;
 	}

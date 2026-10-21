@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateRequest } from "../../e2/helper/main";
+import { validateRequest } from "@/app/api/e2/helper/main";
 import { db } from "@/lib/db";
 import {
 	emailDomains,
@@ -45,7 +45,6 @@ export interface EndpointResult {
 	type: string;
 	description?: string;
 	isActive: boolean;
-	config: string; // JSON string
 }
 
 export interface EmailResult {
@@ -190,7 +189,6 @@ async function performPrimarySearch(
 				endpointType: endpoints.type,
 				endpointDescription: endpoints.description,
 				endpointIsActive: endpoints.isActive,
-				endpointConfig: endpoints.config,
 
 				// Relationship fields
 				addressDomainId: emailAddresses.domainId,
@@ -267,7 +265,6 @@ async function performPrimarySearch(
 					type: row.endpointType || "",
 					description: row.endpointDescription || undefined,
 					isActive: row.endpointIsActive || false,
-					config: row.endpointConfig || "",
 				});
 			}
 		}
@@ -280,7 +277,6 @@ async function performPrimarySearch(
 				type: endpoints.type,
 				description: endpoints.description,
 				isActive: endpoints.isActive,
-				config: endpoints.config,
 			})
 			.from(endpoints)
 			.where(
@@ -303,7 +299,6 @@ async function performPrimarySearch(
 					type: endpoint.type || "",
 					description: endpoint.description || undefined,
 					isActive: endpoint.isActive || false,
-					config: endpoint.config || "",
 				});
 			}
 		}

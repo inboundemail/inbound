@@ -1,10 +1,8 @@
-"use server";
-
 import { auth } from "@/lib/auth/auth";
 import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { user } from "@/lib/db/auth-schema";
+import { apikey, user } from "@/lib/db/auth-schema";
 import { sentEmails } from "@/lib/db/schema";
 import { eq, and, gte, sql } from "drizzle-orm";
 import { Ratelimit } from "@upstash/ratelimit";
@@ -73,15 +71,21 @@ export async function validateRequest(request: NextRequest) {
 
 		// If no session, try API key auth
 		if (!userId) {
-			const apiKey = request.headers
-				.get("Authorization")
-				?.replace("Bearer ", "");
+			const apiKey =
+				request.headers
+					.get("Authorization")
+					?.match(/^Bearer\s+(.+)$/i)?.[1]
+					?.trim() || "";
 
 			if (apiKey) {
 				const authApi = auth.api as {
-					verifyApiKey?: (input: { body: { key: string } }) => Promise<{
+					verifyApiKey?: (input: {
+						body: { key: string; configId: string };
+					}) => Promise<{
 						valid: boolean;
+						error?: { message?: string } | null;
 						key?: {
+							id?: string | null;
 							userId?: string | null;
 							referenceId?: string | null;
 						} | null;
@@ -92,12 +96,30 @@ export async function validateRequest(request: NextRequest) {
 					? await authApi.verifyApiKey({
 							body: {
 								key: apiKey,
+								configId: "default",
 							},
 						})
 					: null;
 
-				const apiKeyUserId =
-					apiKeyResult?.key?.userId ?? apiKeyResult?.key?.referenceId ?? null;
+				let apiKeyUserId: string | null = null;
+				if (apiKeyResult?.valid && !apiKeyResult.error && apiKeyResult.key) {
+					const verifiedKey = apiKeyResult.key;
+					apiKeyUserId = verifiedKey.userId ?? verifiedKey.referenceId ?? null;
+
+					if (!apiKeyUserId && verifiedKey.id) {
+						const [apiKeyRecord] = await db
+							.select({
+								referenceId: apikey.referenceId,
+								userId: apikey.userId,
+							})
+							.from(apikey)
+							.where(eq(apikey.id, verifiedKey.id))
+							.limit(1);
+
+						apiKeyUserId =
+							apiKeyRecord?.referenceId ?? apiKeyRecord?.userId ?? null;
+					}
+				}
 
 				if (apiKeyUserId) {
 					userId = apiKeyUserId;

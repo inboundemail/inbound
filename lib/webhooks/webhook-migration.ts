@@ -1,5 +1,3 @@
-"use server";
-
 /**
  * Webhook to Endpoints Migration System
  *

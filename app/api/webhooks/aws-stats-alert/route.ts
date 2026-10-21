@@ -1,23 +1,9 @@
 import { NextResponse } from "next/server";
 import { type AwsStatsOutput, getAwsSesStats } from "@/lib/aws-ses/aws-stats-core";
 import { hourBucket, sendHarkNotification } from "@/lib/notifications/hark";
+import { assertCronAuthorized } from "@/lib/security/cron-auth";
 
 const SLACK_ADMIN_WEBHOOK_URL = process.env.SLACK_ADMIN_WEBHOOK_URL;
-const CRON_SECRET = process.env.CRON_SECRET;
-
-function assertCronAuthorized(request: Request): NextResponse | null {
-	if (!CRON_SECRET) {
-		return null;
-	}
-
-	const authHeader = request.headers.get("authorization") || "";
-	const expected = `Bearer ${CRON_SECRET}`;
-	if (authHeader !== expected) {
-		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-	}
-
-	return null;
-}
 
 function toPercent(value: number, digits = 3): string {
 	return `${value.toFixed(digits)}%`;
@@ -198,7 +184,7 @@ async function sendWarningAlerts(
 }
 
 export async function GET(request: Request) {
-	const unauthorizedResponse = assertCronAuthorized(request);
+	const unauthorizedResponse = assertCronAuthorized(request, "aws-stats-alert");
 	if (unauthorizedResponse) {
 		return unauthorizedResponse;
 	}

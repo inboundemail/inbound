@@ -143,26 +143,29 @@ export async function skipOnboarding(userId: string) {
 
 export async function getOnboardingStatus(userId?: string) {
   try {
-    // Get user session if userId not provided
-    let targetUserId = userId
-    if (!targetUserId) {
-      const session = await auth.api.getSession({
-        headers: await headers()
-      })
+    const session = await auth.api.getSession({
+      headers: await headers()
+    })
 
-      if (!session?.user?.id) {
-        return { success: false, error: 'Unauthorized' }
-      }
-
-      targetUserId = session.user.id
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' }
     }
+
+    if (userId && userId !== session.user.id) {
+      return {
+        success: false,
+        error: 'Forbidden - can only read your own onboarding status'
+      }
+    }
+
+    const targetUserId = session.user.id
 
     console.log(`📋 Getting onboarding status for user ${targetUserId}`)
 
     const [onboarding] = await db
       .select()
       .from(userOnboarding)
-      .where(eq(userOnboarding.userId, targetUserId!))
+      .where(eq(userOnboarding.userId, targetUserId))
       .limit(1)
 
     if (!onboarding) {

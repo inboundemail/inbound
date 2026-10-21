@@ -6,6 +6,7 @@
  */
 
 import { randomBytes } from 'crypto'
+import { secretsEqual } from '@/lib/security/secret-compare'
 
 /**
  * Generate a new random verification token
@@ -48,7 +49,11 @@ export function verifyWebhookToken(config: any, token: string): boolean {
   if (!config.verificationToken || typeof config.verificationToken !== 'string') {
     return false // No token configured, cannot verifyg
   }
-  
-  return config.verificationToken === token
+
+  if (typeof token !== 'string' || token.length === 0) {
+    return false
+  }
+
+  return secretsEqual(config.verificationToken, token)
 }
 

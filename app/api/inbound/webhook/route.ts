@@ -133,7 +133,10 @@ async function checkAndTrackInboundTrigger(
 		return { allowed: true };
 	}
 
-	if (process.env.INBOUND_E2E_TEST_MODE === "true") {
+	if (
+		process.env.INBOUND_E2E_TEST_MODE === "true" &&
+		process.env.NODE_ENV !== "production"
+	) {
 		return { allowed: true };
 	}
 
