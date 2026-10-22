@@ -1480,6 +1480,100 @@ describe("E2 API - Email E2E", () => {
 	);
 
 	it(
+		"stores inbound mail with thousands of cid: references without inlining them",
+		async () => {
+			const token = makeToken("cid-bomb");
+			const subject = `E2E Cid Bomb ${token}`;
+			const image = Buffer.alloc(256 * 1024, 7)
+				.toString("base64")
+				.replace(/.{76}/g, "$&\r\n");
+			const raw = [
+				"From: cid-bomb@example.test",
+				`To: ${E2E_RECIPIENT_ADDRESS}`,
+				`Subject: ${subject}`,
+				`Message-ID: <${token}@example.test>`,
+				"MIME-Version: 1.0",
+				'Content-Type: multipart/related; boundary="r"',
+				"",
+				"--r",
+				"Content-Type: text/html; charset=utf-8",
+				"",
+				`<p>${'<img src="cid:logo">'.repeat(3000)}</p>`,
+				"--r",
+				"Content-Type: image/png",
+				"Content-Transfer-Encoding: base64",
+				"Content-ID: <logo>",
+				"",
+				image,
+				"--r--",
+				"",
+			].join("\r\n");
+
+			const startedAt = Date.now();
+			const response = await deliverInbound({
+				inboundWebhookUrl: `${LOCAL_BASE_URL}/api/inbound/webhook`,
+				serviceApiKey: LOCAL_SERVICE_API_KEY,
+				recipients: [E2E_RECIPIENT_ADDRESS],
+				sesMessageId: `ses-${token}`,
+				source: "cid-bomb@example.test",
+				raw,
+			});
+			expect(response.status).toBe(200);
+			expect(Date.now() - startedAt).toBeLessThan(30_000);
+
+			const [parseSuccess, htmlLength, keptCid, attachments] = psql(
+				`select parse_success, length(html_body), position('cid:logo' in html_body) > 0, attachments from structured_emails where subject = '${subject}' and user_id = '${PRIMARY_USER_ID}';`,
+				E2E_DATABASE,
+			).split("|");
+			expect(parseSuccess).toBe("t");
+			expect(Number(htmlLength)).toBeLessThan(100_000);
+			expect(keptCid).toBe("t");
+			expect(attachments).toContain('"contentId":"<logo>"');
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"stores large crafted HTML-only inbound mail with derived text without hanging",
+		async () => {
+			const token = makeToken("html-nest");
+			const subject = `E2E Nested Html ${token}`;
+			const raw = [
+				"From: html-nest@example.test",
+				`To: ${E2E_RECIPIENT_ADDRESS}`,
+				`Subject: ${subject}`,
+				`Message-ID: <${token}@example.test>`,
+				"MIME-Version: 1.0",
+				"Content-Type: text/html; charset=utf-8",
+				"",
+				`<p>Nested ${token}</p>${"<b>".repeat(150_000)}${"</i>".repeat(150_000)}`,
+				"",
+			].join("\r\n");
+
+			const startedAt = Date.now();
+			const response = await deliverInbound({
+				inboundWebhookUrl: `${LOCAL_BASE_URL}/api/inbound/webhook`,
+				serviceApiKey: LOCAL_SERVICE_API_KEY,
+				recipients: [E2E_RECIPIENT_ADDRESS],
+				sesMessageId: `ses-${token}`,
+				source: "html-nest@example.test",
+				raw,
+			});
+			expect(response.status).toBe(200);
+			expect(Date.now() - startedAt).toBeLessThan(30_000);
+
+			const [parseSuccess, textBody, htmlLength] = psql(
+				`select parse_success, text_body, length(html_body) from structured_emails where subject = '${subject}' and user_id = '${PRIMARY_USER_ID}';`,
+				E2E_DATABASE,
+			).split("|");
+			expect(parseSuccess).toBe("t");
+			expect(textBody).toBe(`Nested ${token}`);
+			expect(Number(htmlLength)).toBeGreaterThan(1_000_000);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
 		"enforces auth boundaries and blocks unauthorized reads",
 		async () => {
 			const result = await ensureRoundTrip();

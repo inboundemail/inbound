@@ -89,7 +89,7 @@ interface ParsedEmailData {
 export async function parseEmail(emailContent: string): Promise<ParsedEmailData> {
   try {
     // Parse the email
-    const parsed = await parseMailSafely(emailContent);
+    const parsed = await parseMailSafely(emailContent, { keepCidLinks: false });
     
     // Helper function to extract address info
     const extractAddressInfo = (addressObj: any): ParsedEmailAddress | null => {
@@ -221,15 +221,34 @@ function processInlineImages(html: string, attachments: Attachment[]): string {
   return processedHtml
 }
 
+const SCRIPT_OPEN = /<script\b/gi
+const SCRIPT_CLOSE = /<\/script>/gi
+
+function removeScriptBlocks(html: string): string {
+  const parts: string[] = []
+  let pos = 0
+  while (true) {
+    SCRIPT_OPEN.lastIndex = pos
+    const open = SCRIPT_OPEN.exec(html)
+    if (!open) break
+    SCRIPT_CLOSE.lastIndex = open.index + open[0].length
+    const close = SCRIPT_CLOSE.exec(html)
+    if (!close) break
+    parts.push(html.slice(pos, open.index))
+    pos = close.index + close[0].length
+  }
+  parts.push(html.slice(pos))
+  return parts.join('')
+}
+
 export function sanitizeHtml(html: string): string {
   if (!html) return ''
   
   // Basic HTML sanitization - remove script tags and dangerous attributes
   // Allow data: URLs for images but be restrictive about other uses
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/on\w+="[^"]*"/gi, '')
-    .replace(/on\w+='[^']*'/gi, '')
+  return removeScriptBlocks(html)
+    .replace(/on\w{1,64}="[^"]*"/gi, '')
+    .replace(/on\w{1,64}='[^']*'/gi, '')
     .replace(/javascript:/gi, '')
     .replace(/vbscript:/gi, '')
     // Only remove data: URLs that are NOT for images
