@@ -44,6 +44,6 @@
     ".next/**/*",
     "inbound-whop-app/**/*",
     "@inboundemail/**/*",
-    "packages/**/*"
+    "packages/**/*", "infra/**/*"
   ]
 }
