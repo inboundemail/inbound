@@ -1555,7 +1555,7 @@ describe("SmtpGateway DATA concurrency", () => {
 	});
 
 	it("releases the processing slot when parsing exceeds its deadline", async () => {
-		const { inspect } = gateway({
+		const { inspect, config } = gateway({
 			maxConcurrentData: 1,
 			maxDataQueue: 0,
 			parseTimeoutMs: 50,
@@ -1578,6 +1578,8 @@ describe("SmtpGateway DATA concurrency", () => {
 			expect(inspect.activeData).toBe(0);
 			expect(inspect.activeParses).toBe(0);
 		}
+		// Worker start-up alone can exceed 50 ms on slow CI runners.
+		config.parseTimeoutMs = 10_000;
 		await expect(
 			inspect.handleData(
 				dataStream(
