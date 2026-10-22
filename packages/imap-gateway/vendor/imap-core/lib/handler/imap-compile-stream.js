@@ -159,6 +159,8 @@ module.exports = (response, isLogging) => {
                         if (node.maxLength) {
                             len = Math.min(len, node.maxLength);
                         }
+                    } else if (Buffer.isBuffer(nodeValue)) {
+                        len = nodeValue.length;
                     } else {
                         len = (nodeValue || '').toString().length;
                     }

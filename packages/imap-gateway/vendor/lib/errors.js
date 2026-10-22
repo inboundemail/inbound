@@ -7,12 +7,9 @@ module.exports.notify = (...args) => {
 	return false;
 };
 
-module.exports.notifyConnection = (connection, err) => {
-	if (err instanceof Error) {
-		console.error("[imap-core]", err);
-	}
-	return false;
-};
+// Connection errors are client-driven and already logged as one line by the
+// connection logger; printing stacks here only floods the journal.
+module.exports.notifyConnection = () => false;
 
 module.exports.intercept = () => false;
 module.exports.gelf = {};

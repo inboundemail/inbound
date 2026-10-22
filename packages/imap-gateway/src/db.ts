@@ -58,6 +58,42 @@ interface MailStoreOptions {
 
 export class AppendQuotaError extends Error {}
 
+export type MailboxOwner = Pick<AuthenticatedMailbox, "userId" | "credentialId">;
+
+export const MESSAGE_BATCH_SIZE = 500;
+
+function ownedMailbox(
+	sql: postgres.Sql | postgres.TransactionSql,
+	mailboxId: string,
+	owner: MailboxOwner,
+) {
+	return sql`EXISTS (
+		SELECT 1 FROM imap_mailboxes owner
+		WHERE owner.id = ${mailboxId}
+		  AND owner.user_id = ${owner.userId}
+		  AND owner.credential_id = ${owner.credentialId})`;
+}
+
+type MessageRow = {
+	uid: number;
+	structured_email_id: string;
+	raw_source: string;
+	flags: string;
+	internal_date: Date;
+	size: number | null;
+};
+
+function toMessageMeta(row: MessageRow): MessageMeta {
+	return {
+		uid: row.uid,
+		structuredEmailId: row.structured_email_id,
+		rawSource: row.raw_source,
+		flags: parseFlags(row.flags),
+		internalDate: row.internal_date,
+		size: row.size,
+	};
+}
+
 function visibleToScopes(
 	sql: postgres.Sql | postgres.TransactionSql,
 	scopes: MailboxScope[],
@@ -375,11 +411,12 @@ export class MailStore {
 
 	async appendMessage(
 		mailbox: MailboxRow,
-		userId: string,
+		owner: MailboxOwner,
 		raw: string,
 		flags: string[],
 		internalDate: Date,
 	): Promise<{ uidValidity: number; uid: number }> {
+		const userId = owner.userId;
 		return this.sql.begin(async (sql) => {
 			await sql`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
 			const usage = await sql<{ message_count: string; total_bytes: string }[]>`
@@ -405,9 +442,14 @@ export class MailStore {
 				INSERT INTO imap_appended_messages (id, user_id, raw_content, size)
 				VALUES (${appendedId}, ${userId}, ${raw}, ${incomingBytes})`;
 			const locked = await sql<{ uid_next: number; modseq: number }[]>`
-				SELECT uid_next, modseq FROM imap_mailboxes WHERE id = ${mailbox.id} FOR UPDATE`;
-			const uid = locked[0]?.uid_next ?? 1;
-			const modseq = (locked[0]?.modseq ?? 0) + 1;
+				SELECT uid_next, modseq FROM imap_mailboxes
+				WHERE id = ${mailbox.id}
+				  AND user_id = ${userId}
+				  AND credential_id = ${owner.credentialId}
+				FOR UPDATE`;
+			if (!locked[0]) throw new Error("Mailbox not found");
+			const uid = locked[0].uid_next;
+			const modseq = locked[0].modseq + 1;
 			await sql`
 				INSERT INTO imap_mailbox_messages
 					(id, mailbox_id, structured_email_id, raw_source, uid, flags, internal_date, size, modseq)
@@ -423,6 +465,7 @@ export class MailStore {
 	}
 
 	async copyMessages(
+		owner: MailboxOwner,
 		sourceMailboxId: string,
 		destination: MailboxRow,
 		uids: number[],
@@ -445,9 +488,15 @@ export class MailStore {
 				SELECT structured_email_id, raw_source, uid, flags, internal_date, size
 				FROM imap_mailbox_messages
 				WHERE mailbox_id = ${sourceMailboxId} AND uid = ANY(${uids})
+				  AND ${ownedMailbox(sql, sourceMailboxId, owner)}
 				ORDER BY uid ASC`;
 			const locked = await sql<{ uid_next: number; modseq: number }[]>`
-				SELECT uid_next, modseq FROM imap_mailboxes WHERE id = ${destination.id} FOR UPDATE`;
+				SELECT uid_next, modseq FROM imap_mailboxes
+				WHERE id = ${destination.id}
+				  AND user_id = ${owner.userId}
+				  AND credential_id = ${owner.credentialId}
+				FOR UPDATE`;
+			if (!locked[0]) throw new Error("Destination mailbox not found");
 			const restored = source
 				.filter((row) => row.raw_source === "structured")
 				.map((row) => row.structured_email_id);
@@ -492,13 +541,18 @@ export class MailStore {
 		});
 	}
 
-	async deleteMessages(mailboxId: string, uids: number[]): Promise<number[]> {
+	async deleteMessages(
+		owner: MailboxOwner,
+		mailboxId: string,
+		uids: number[],
+	): Promise<number[]> {
 		return this.sql.begin(async (sql) => {
 			const deleted = await sql<
 				{ uid: number; structured_email_id: string; raw_source: string }[]
 			>`
 				DELETE FROM imap_mailbox_messages
 				WHERE mailbox_id = ${mailboxId} AND uid = ANY(${uids})
+				  AND ${ownedMailbox(sql, mailboxId, owner)}
 				RETURNING uid, structured_email_id, raw_source`;
 			await removeFromMirroredMailboxes(sql, mailboxId, deleted);
 			const appendedIds = deleted
@@ -531,9 +585,14 @@ export class MailStore {
 
 		return this.sql.begin(async (sql) => {
 			const locked = await sql<{ uid_next: number; modseq: number }[]>`
-				SELECT uid_next, modseq FROM imap_mailboxes WHERE id = ${mailbox.id} FOR UPDATE`;
-			const uidNext = locked[0]?.uid_next ?? 1;
-			const modseq = locked[0]?.modseq ?? 0;
+				SELECT uid_next, modseq FROM imap_mailboxes
+				WHERE id = ${mailbox.id}
+				  AND user_id = ${principal.userId}
+				  AND credential_id = ${principal.credentialId}
+				FOR UPDATE`;
+			if (!locked[0]) return 0;
+			const uidNext = locked[0].uid_next;
+			const modseq = locked[0].modseq;
 			const inserted = await sql<{ uid: number }[]>`
 				WITH new_msgs AS (
 					SELECT se.id AS seid, se.created_at,
@@ -585,6 +644,7 @@ export class MailStore {
 	}
 
 	async searchMessages(
+		owner: MailboxOwner,
 		mailboxId: string,
 		query: SearchNode[],
 	): Promise<number[]> {
@@ -596,18 +656,22 @@ export class MailStore {
 				ON mm.raw_source = 'structured' AND se.id = mm.structured_email_id
 			LEFT JOIN imap_appended_messages am
 				ON mm.raw_source = 'appended' AND am.id = mm.structured_email_id
-			WHERE mm.mailbox_id = ${mailboxId} AND (${where})
+			WHERE mm.mailbox_id = ${mailboxId}
+			  AND ${ownedMailbox(this.sql, mailboxId, owner)}
+			  AND (${where})
 			ORDER BY mm.uid ASC`;
 		return rows.map((row) => row.uid);
 	}
 
 	async getUpdatesSince(
+		owner: MailboxOwner,
 		mailboxId: string,
 		sinceModseq: number,
 	): Promise<JournalEntry[]> {
 		const rows = await this.sql<{ uid: number; modseq: number }[]>`
 			SELECT uid, modseq FROM imap_mailbox_messages
 			WHERE mailbox_id = ${mailboxId} AND modseq > ${sinceModseq}
+			  AND ${ownedMailbox(this.sql, mailboxId, owner)}
 			ORDER BY modseq ASC
 			LIMIT 500`;
 		return rows.map((row) => ({
@@ -619,67 +683,65 @@ export class MailStore {
 	}
 
 	async listMessages(
+		owner: MailboxOwner,
 		mailboxId: string,
 		uids?: number[],
 	): Promise<MessageMeta[]> {
 		const rows = uids
-			? await this.sql<
-					{
-						uid: number;
-						structured_email_id: string;
-						raw_source: string;
-						flags: string;
-						internal_date: Date;
-						size: number | null;
-					}[]
-				>`
+			? await this.sql<MessageRow[]>`
 				SELECT uid, structured_email_id, raw_source, flags, internal_date, size
 				FROM imap_mailbox_messages
 				WHERE mailbox_id = ${mailboxId} AND uid = ANY(${uids})
+				  AND ${ownedMailbox(this.sql, mailboxId, owner)}
 				ORDER BY uid ASC`
-			: await this.sql<
-					{
-						uid: number;
-						structured_email_id: string;
-						raw_source: string;
-						flags: string;
-						internal_date: Date;
-						size: number | null;
-					}[]
-				>`
+			: await this.sql<MessageRow[]>`
 				SELECT uid, structured_email_id, raw_source, flags, internal_date, size
 				FROM imap_mailbox_messages
 				WHERE mailbox_id = ${mailboxId}
+				  AND ${ownedMailbox(this.sql, mailboxId, owner)}
 				ORDER BY uid ASC`;
-		return rows.map((row) => ({
-			uid: row.uid,
-			structuredEmailId: row.structured_email_id,
-			rawSource: row.raw_source,
-			flags: parseFlags(row.flags),
-			internalDate: row.internal_date,
-			size: row.size,
-		}));
+		return rows.map(toMessageMeta);
 	}
 
-	async listUids(mailboxId: string): Promise<number[]> {
+	async *listMessagesInBatches(
+		owner: MailboxOwner,
+		mailboxId: string,
+		uids: number[],
+		batchSize = MESSAGE_BATCH_SIZE,
+	): AsyncGenerator<MessageMeta[]> {
+		const sorted = [...uids].sort((a, b) => a - b);
+		for (let index = 0; index < sorted.length; index += batchSize) {
+			const rows = await this.listMessages(
+				owner,
+				mailboxId,
+				sorted.slice(index, index + batchSize),
+			);
+			if (rows.length > 0) yield rows;
+		}
+	}
+
+	async listUids(owner: MailboxOwner, mailboxId: string): Promise<number[]> {
 		const rows = await this.sql<{ uid: number }[]>`
 			SELECT uid FROM imap_mailbox_messages
 			WHERE mailbox_id = ${mailboxId}
+			  AND ${ownedMailbox(this.sql, mailboxId, owner)}
 			ORDER BY uid ASC`;
 		return rows.map((row) => row.uid);
 	}
 
-	async countMessages(mailboxId: string): Promise<number> {
-		const rows = await this.sql<{ count: string }[]>`
-			SELECT count(*) AS count FROM imap_mailbox_messages
-			WHERE mailbox_id = ${mailboxId}`;
-		return Number(rows[0]?.count ?? 0);
-	}
-
-	async unseenCount(mailboxId: string): Promise<number> {
+	async countMessages(owner: MailboxOwner, mailboxId: string): Promise<number> {
 		const rows = await this.sql<{ count: string }[]>`
 			SELECT count(*) AS count FROM imap_mailbox_messages
 			WHERE mailbox_id = ${mailboxId}
+			  AND ${ownedMailbox(this.sql, mailboxId, owner)}`;
+		return Number(rows[0]?.count ?? 0);
+	}
+
+	async unseenCount(owner: MailboxOwner, mailboxId: string): Promise<number> {
+		const rows = await this.sql<{ count: string }[]>`
+			SELECT count(*) AS count FROM imap_mailbox_messages
+			WHERE mailbox_id = ${mailboxId}
+			  AND ${ownedMailbox(this.sql, mailboxId, owner)}
 			  AND NOT (flags::jsonb ? '\\Seen')`;
 		return Number(rows[0]?.count ?? 0);
 	}
@@ -688,71 +750,89 @@ export class MailStore {
 		messageId: string,
 		rawSource: string,
 		principal: AuthenticatedMailbox,
-	): Promise<string | null> {
-		if (rawSource === "appended") {
-			const rows = await this.sql<{ raw_content: string | null }[]>`
-				SELECT raw_content FROM imap_appended_messages
-				WHERE id = ${messageId} AND user_id = ${principal.userId} LIMIT 1`;
-			return rows[0]?.raw_content ?? null;
-		}
-
-		const rows = await this.sql<{ raw_content: string | null }[]>`
-			SELECT se.raw_content FROM structured_emails se
-			WHERE se.id = ${messageId}
-			  AND se.user_id = ${principal.userId}
-			  AND ${visibleToScopes(this.sql, principal.scopes)}
-			LIMIT 1`;
-		return rows[0]?.raw_content ?? null;
+	): Promise<Buffer | null> {
+		const rows =
+			rawSource === "appended"
+				? await this.sql<{ raw_content: string | null }[]>`
+					SELECT raw_content FROM imap_appended_messages
+					WHERE id = ${messageId} AND user_id = ${principal.userId} LIMIT 1`
+				: await this.sql<{ raw_content: string | null }[]>`
+					SELECT se.raw_content FROM structured_emails se
+					WHERE se.id = ${messageId}
+					  AND se.user_id = ${principal.userId}
+					  AND ${visibleToScopes(this.sql, principal.scopes)}
+					LIMIT 1`;
+		const raw = rows[0]?.raw_content;
+		return typeof raw === "string" ? Buffer.from(raw, "utf8") : null;
 	}
 
 	async updateFlags(
+		owner: MailboxOwner,
 		mailboxId: string,
 		uids: number[],
 		action: FlagAction,
 		flags: string[],
 	): Promise<Array<{ uid: number; flags: string[] }>> {
-		const rows = await this.listMessages(mailboxId, uids);
 		const mailbox = await this.sql<
 			{ credential_id: string | null; mirrored: boolean }[]
 		>`SELECT credential_id, (path = 'INBOX' OR scope_id IS NOT NULL) AS mirrored
-			FROM imap_mailboxes WHERE id = ${mailboxId}`;
+			FROM imap_mailboxes
+			WHERE id = ${mailboxId}
+			  AND user_id = ${owner.userId}
+			  AND credential_id = ${owner.credentialId}`;
+		if (!mailbox[0]) return [];
 		const result: Array<{ uid: number; flags: string[] }> = [];
-		for (const row of rows) {
-			let next: string[];
-			if (action === "set") next = [...flags];
-			else if (action === "add") next = [...new Set([...row.flags, ...flags])];
-			else next = row.flags.filter((flag) => !flags.includes(flag));
-			result.push({ uid: row.uid, flags: next });
-			if (JSON.stringify(next) === JSON.stringify(row.flags)) continue;
-			if (
-				mailbox[0]?.credential_id &&
-				mailbox[0].mirrored &&
-				row.rawSource === "structured"
-			) {
-				await this.sql`
-					UPDATE imap_mailbox_messages mm
-					SET flags = ${JSON.stringify(next)}
-					FROM imap_mailboxes mb
-					WHERE mm.mailbox_id = mb.id
-					  AND mb.credential_id = ${mailbox[0].credential_id}
-					  AND (mb.path = 'INBOX' OR mb.scope_id IS NOT NULL)
-					  AND mm.raw_source = ${row.rawSource}
-					  AND mm.structured_email_id = ${row.structuredEmailId}`;
-			} else {
-				await this.sql`
-					UPDATE imap_mailbox_messages
-					SET flags = ${JSON.stringify(next)}
-					WHERE mailbox_id = ${mailboxId} AND uid = ${row.uid}`;
+		for await (const rows of this.listMessagesInBatches(
+			owner,
+			mailboxId,
+			uids,
+		)) {
+			for (const row of rows) {
+				let next: string[];
+				if (action === "set") next = [...flags];
+				else if (action === "add")
+					next = [...new Set([...row.flags, ...flags])];
+				else next = row.flags.filter((flag) => !flags.includes(flag));
+				result.push({ uid: row.uid, flags: next });
+				if (JSON.stringify(next) === JSON.stringify(row.flags)) continue;
+				if (
+					mailbox[0].credential_id &&
+					mailbox[0].mirrored &&
+					row.rawSource === "structured"
+				) {
+					await this.sql`
+						UPDATE imap_mailbox_messages mm
+						SET flags = ${JSON.stringify(next)}
+						FROM imap_mailboxes mb
+						WHERE mm.mailbox_id = mb.id
+						  AND mb.user_id = ${owner.userId}
+						  AND mb.credential_id = ${mailbox[0].credential_id}
+						  AND (mb.path = 'INBOX' OR mb.scope_id IS NOT NULL)
+						  AND mm.raw_source = ${row.rawSource}
+						  AND mm.structured_email_id = ${row.structuredEmailId}`;
+				} else {
+					await this.sql`
+						UPDATE imap_mailbox_messages
+						SET flags = ${JSON.stringify(next)}
+						WHERE mailbox_id = ${mailboxId} AND uid = ${row.uid}
+						  AND ${ownedMailbox(this.sql, mailboxId, owner)}`;
+				}
 			}
 		}
 		return result;
 	}
 
-	async addFlag(mailboxId: string, uid: number, flag: string): Promise<void> {
-		await this.updateFlags(mailboxId, [uid], "add", [flag]);
+	async addFlag(
+		owner: MailboxOwner,
+		mailboxId: string,
+		uid: number,
+		flag: string,
+	): Promise<void> {
+		await this.updateFlags(owner, mailboxId, [uid], "add", [flag]);
 	}
 
 	async expunge(
+		owner: MailboxOwner,
 		mailboxId: string,
 		requestedUids?: number[],
 	): Promise<number[]> {
@@ -763,6 +843,7 @@ export class MailStore {
 					>`
 					DELETE FROM imap_mailbox_messages
 					WHERE mailbox_id = ${mailboxId}
+					  AND ${ownedMailbox(sql, mailboxId, owner)}
 					  AND flags::jsonb ? '\\Deleted'
 					  AND uid = ANY(${requestedUids})
 					RETURNING uid, structured_email_id, raw_source`
@@ -771,6 +852,7 @@ export class MailStore {
 					>`
 					DELETE FROM imap_mailbox_messages
 					WHERE mailbox_id = ${mailboxId}
+					  AND ${ownedMailbox(sql, mailboxId, owner)}
 					  AND flags::jsonb ? '\\Deleted'
 					RETURNING uid, structured_email_id, raw_source`;
 			await removeFromMirroredMailboxes(sql, mailboxId, deleted);

@@ -34,6 +34,7 @@ function upgrade(connection) {
     connection._socket.unpipe(connection._parser);
     connection.writeStream.unpipe(connection._socket);
     connection._upgrading = true;
+    connection._parser.reset();
 
     let secureContext = connection._server.secureContext.get('*');
     let socketOptions = {
@@ -95,6 +96,7 @@ function upgrade(connection) {
 
         connection.secure = true;
         connection._socket = secureSocket;
+        connection._parser.reset();
         connection._upgrading = false;
 
         let cipher = connection._socket.getCipher();

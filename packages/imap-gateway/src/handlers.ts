@@ -1,12 +1,23 @@
 import { createRequire } from "node:module";
-import { format } from "node:util";
 import type { ApiAuth, AuthenticatedMailbox } from "./auth.ts";
 import type { FlagAction, MailStore } from "./db.ts";
 import { AppendQuotaError, SPECIAL_USE } from "./db.ts";
-import type { ConnectionLimits } from "./limits.ts";
+import { ContentBudget, type ConnectionLimits } from "./limits.ts";
+import { formatLogLine, sanitizeLogValue } from "./log.ts";
+import type { SessionRevalidator } from "./sessions.ts";
 
 const require = createRequire(import.meta.url);
 const { imapHandler } = require("../vendor/imap-core/index.js");
+const { isRawContentQuery } = require("../vendor/imap-core/lib/imap-tools.js") as {
+	isRawContentQuery: (query: unknown) => boolean;
+};
+
+// Approximate peak memory per stored byte: raw bytes plus the compiled literal,
+// or a full MIME parse (tree, binary string copies, rebuilt output).
+const RAW_FETCH_MEMORY_FACTOR = 3;
+const PARSED_FETCH_MEMORY_FACTOR = 8;
+const UNKNOWN_MESSAGE_SIZE = 16 * 1024 * 1024;
+const DRAIN_TIMEOUT_MS = 60_000;
 
 const METADATA_ITEMS = new Set([
 	"uid",
@@ -36,6 +47,14 @@ interface ImapSession {
 		address: string;
 	};
 	remoteAddress?: string;
+	socket?: {
+		writableNeedDrain?: boolean;
+		destroyed?: boolean;
+		on(event: "drain", listener: () => void): unknown;
+		once(event: "drain" | "close", listener: () => void): unknown;
+		removeListener(event: "drain" | "close", listener: () => void): unknown;
+		destroy(): void;
+	};
 	selected?:
 		| {
 				mailbox?: string;
@@ -77,23 +96,134 @@ interface StoreUpdate {
 	unchangedSince: number;
 }
 
-function formatLog(args: unknown[]): string {
-	return typeof args[0] === "object" && args[0] !== null
-		? format(...args.slice(1))
-		: format(...args);
-}
-
 const logger = {
 	debug: () => undefined,
-	info: (...args: unknown[]) => console.log("[imap]", formatLog(args)),
-	error: (...args: unknown[]) => console.error("[imap]", formatLog(args)),
+	info: (...args: unknown[]) => console.log("[imap]", formatLogLine(args)),
+	error: (...args: unknown[]) => console.error("[imap]", formatLogLine(args)),
 };
+
+const TRANSIENT_ERROR_CODES = new Set([
+	"40001",
+	"40P01",
+	"55P03",
+	"57014",
+	"57P01",
+	"57P02",
+	"57P03",
+	"ECONNRESET",
+	"ECONNREFUSED",
+	"ETIMEDOUT",
+	"CONNECTION_CLOSED",
+	"CONNECTION_ENDED",
+	"CONNECTION_DESTROYED",
+	"CONNECT_TIMEOUT",
+]);
+
+/**
+ * Turns backend failures into a generic error so raw Postgres codes and
+ * messages never reach clients. imap-core reads `code` for some commands.
+ */
+export function toImapError(err: unknown): Error {
+	if (err instanceof Error && "imapCode" in err) return err;
+	const original = err as { code?: unknown; message?: unknown } | null;
+	const code = typeof original?.code === "string" ? original.code : "";
+	const transient =
+		TRANSIENT_ERROR_CODES.has(code) ||
+		code.startsWith("08") ||
+		code.startsWith("53");
+	console.error(
+		"[imap] backend error",
+		sanitizeLogValue(code || "-"),
+		sanitizeLogValue(original?.message ?? "unknown"),
+	);
+	const safe = new Error(
+		transient ? "Temporary server failure" : "Internal server error",
+	);
+	(safe as Error & { code: string }).code = transient ? "TEMPFAIL" : "SERVERBUG";
+	return safe;
+}
+
+function waitForDrain(
+	socket: ImapSession["socket"],
+	timeoutMs: number,
+): Promise<void> {
+	if (!socket?.writableNeedDrain || socket.destroyed) return Promise.resolve();
+	return new Promise((resolve, reject) => {
+		const done = (err?: Error) => {
+			clearTimeout(timer);
+			socket.removeListener("drain", onDrain);
+			socket.removeListener("close", onClose);
+			if (err) reject(err);
+			else resolve();
+		};
+		const onDrain = () => done();
+		const onClose = () => done(new Error("Connection closed during FETCH"));
+		const timer = setTimeout(() => {
+			socket.destroy();
+			done(new Error("Client stopped reading FETCH response"));
+		}, timeoutMs);
+		socket.once("drain", onDrain);
+		socket.once("close", onClose);
+	});
+}
+
+// The response is fully handed over once the compiled stream has been piped into the socket. A
+// client that stops reading stalls that pipe (no "drain" for stallTimeoutMs) while the message
+// holds its share of the content budget, so it is disconnected.
+function writeResponse(
+	session: ImapSession,
+	stream: NodeJS.EventEmitter,
+	stallTimeoutMs: number,
+): Promise<void> {
+	const socket = session.socket;
+	if (socket?.destroyed) {
+		return Promise.reject(new Error("Connection closed during FETCH"));
+	}
+	return new Promise((resolve, reject) => {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const done = (err?: Error) => {
+			clearTimeout(timer);
+			socket?.removeListener("close", onClose);
+			socket?.removeListener("drain", arm);
+			if (err) reject(err);
+			else resolve();
+		};
+		const onClose = () => done(new Error("Connection closed during FETCH"));
+		const arm = () => {
+			clearTimeout(timer);
+			timer = setTimeout(() => {
+				socket?.destroy();
+				done(new Error("Client stopped reading FETCH response"));
+			}, stallTimeoutMs);
+		};
+		if (socket) {
+			arm();
+			socket.on("drain", arm);
+			socket.once("close", onClose);
+		}
+		stream.once("error", (err: Error) => done(err));
+		session.writeStream.write(stream, () => done());
+	});
+}
+
+export interface HandlerOptions {
+	contentBudget?: ContentBudget;
+	sessions?: SessionRevalidator;
+	/** How long a FETCH response may make no progress before the client is disconnected. */
+	stallTimeoutMs?: number;
+}
 
 export function buildHandlers(
 	auth: ApiAuth,
 	store: MailStore,
 	limits: ConnectionLimits,
+	options: HandlerOptions = {},
 ) {
+	const contentBudget =
+		options.contentBudget ?? new ContentBudget(256 * 1024 * 1024, 10_000);
+	const sessions = options.sessions;
+	const stallTimeoutMs = options.stallTimeoutMs ?? DRAIN_TIMEOUT_MS;
+
 	async function openMailbox(session: ImapSession, path: string) {
 		const user = session.user;
 		if (!user?.address) throw new Error("Not authenticated");
@@ -143,7 +273,7 @@ export function buildHandlers(
 				!authData.password ||
 				authData.password.length > 1024
 			) {
-				limits.recordAuthFailure(ip, address);
+				limits.recordMalformedAuth(ip);
 				return callback(null);
 			}
 			auth
@@ -154,6 +284,7 @@ export function buildHandlers(
 						return callback(null);
 					}
 					limits.recordAuthSuccess(ip, address);
+					sessions?.remember(_session, authData.password);
 					callback(null, {
 						user: {
 							...result,
@@ -191,7 +322,7 @@ export function buildHandlers(
 				return folders;
 			})()
 				.then((folders) => callback(null, folders))
-				.catch((err: Error) => callback(err));
+				.catch((err: Error) => callback(toImapError(err)));
 		},
 
 		onLsub(_query: string, session: ImapSession, callback: Callback) {
@@ -210,7 +341,7 @@ export function buildHandlers(
 				return folders;
 			})()
 				.then((folders) => callback(null, folders))
-				.catch((err: Error) => callback(err));
+				.catch((err: Error) => callback(toImapError(err)));
 		},
 
 		onSubscribe(_path: string, _session: ImapSession, callback: Callback) {
@@ -228,7 +359,9 @@ export function buildHandlers(
 					const fresh =
 						(await store.getMailboxByPath(requireUser(session), path)) ??
 						mailbox;
-					const uidList = (await store.listUids(mailbox.id)).filter(
+					const uidList = (
+						await store.listUids(requireUser(session), mailbox.id)
+					).filter(
 						(uid) => uid < fresh.uidNext,
 					);
 					callback(null, {
@@ -242,7 +375,7 @@ export function buildHandlers(
 						readOnly: requireUser(session).accessMode !== "read_write",
 					});
 				})
-				.catch((err: Error) => callback(err));
+				.catch((err: Error) => callback(toImapError(err)));
 		},
 
 		onStatus(path: string, session: ImapSession, callback: Callback) {
@@ -250,8 +383,8 @@ export function buildHandlers(
 				.then(async (mailbox) => {
 					if (!mailbox) return callback(null, "NONEXISTENT");
 					const [messages, unseen, fresh] = await Promise.all([
-						store.countMessages(mailbox.id),
-						store.unseenCount(mailbox.id),
+						store.countMessages(requireUser(session), mailbox.id),
+						store.unseenCount(requireUser(session), mailbox.id),
 						store.getMailboxByPath(requireUser(session), path),
 					]);
 					callback(null, {
@@ -261,7 +394,7 @@ export function buildHandlers(
 						unseen,
 					});
 				})
-				.catch((err: Error) => callback(err));
+				.catch((err: Error) => callback(toImapError(err)));
 		},
 
 		onCreate(path: string, session: ImapSession, callback: Callback) {
@@ -279,7 +412,7 @@ export function buildHandlers(
 					: "ALREADYEXISTS";
 			})()
 				.then((ok) => callback(null, ok))
-				.catch((err: Error) => callback(err));
+				.catch((err: Error) => callback(toImapError(err)));
 		},
 
 		onRename(
@@ -305,7 +438,7 @@ export function buildHandlers(
 				return ok ? true : "NONEXISTENT";
 			})()
 				.then((result) => callback(null, result))
-				.catch((err: Error) => callback(err));
+				.catch((err: Error) => callback(toImapError(err)));
 		},
 
 		onDelete(path: string, session: ImapSession, callback: Callback) {
@@ -322,7 +455,7 @@ export function buildHandlers(
 				return ok ? true : "NONEXISTENT";
 			})()
 				.then((result) => callback(null, result))
-				.catch((err: Error) => callback(err));
+				.catch((err: Error) => callback(toImapError(err)));
 		},
 
 		onAppend(
@@ -347,7 +480,7 @@ export function buildHandlers(
 				const date = internaldate ? new Date(internaldate) : new Date();
 				const info = await store.appendMessage(
 					mailbox,
-					user.id,
+					user,
 					raw.toString(),
 					flags ?? [],
 					Number.isNaN(date.getTime()) ? new Date() : date,
@@ -359,7 +492,7 @@ export function buildHandlers(
 					if (err instanceof AppendQuotaError) {
 						return callback(null, "OVERQUOTA", null);
 					}
-					callback(err);
+					callback(toImapError(err));
 				});
 		},
 
@@ -386,6 +519,7 @@ export function buildHandlers(
 					return { success: "READ-ONLY" as const, info: null };
 				}
 				const info = await store.copyMessages(
+					user,
 					mailboxId,
 					destination,
 					update.messages,
@@ -393,7 +527,7 @@ export function buildHandlers(
 				return { success: true as const, info };
 			})()
 				.then(({ success, info }) => callback(null, success, info))
-				.catch((err: Error) => callback(err));
+				.catch((err: Error) => callback(toImapError(err)));
 		},
 
 		onMove(
@@ -429,11 +563,16 @@ export function buildHandlers(
 					return { success: "CANNOT" as const, info: null };
 				}
 				const info = await store.copyMessages(
+					user,
 					mailboxId,
 					destination,
 					update.messages,
 				);
-				const moved = await store.deleteMessages(mailboxId, update.messages);
+				const moved = await store.deleteMessages(
+					user,
+					mailboxId,
+					update.messages,
+				);
 				notifySelected(
 					session,
 					mailboxId,
@@ -442,7 +581,7 @@ export function buildHandlers(
 				return { success: true as const, info };
 			})()
 				.then(({ success, info }) => callback(null, success, info))
-				.catch((err: Error) => callback(err));
+				.catch((err: Error) => callback(toImapError(err)));
 		},
 
 		onFetch(
@@ -452,62 +591,79 @@ export function buildHandlers(
 			callback: Callback,
 		) {
 			(async () => {
-				const rows = await store.listMessages(mailboxId, options.messages);
+				const user = requireUser(session);
 				const wantsContent = needsContent(options.query);
+				const memoryFactor = isRawContentQuery(options.query)
+					? RAW_FETCH_MEMORY_FACTOR
+					: PARSED_FETCH_MEMORY_FACTOR;
 				let rowCount = 0;
 
-				for (const row of rows) {
-					let raw: string | null = null;
-					if (wantsContent) {
-						raw = await store.getRawContent(
-							row.structuredEmailId,
-							row.rawSource,
-							requireUser(session),
-						);
-						if (!raw) continue;
-					}
+				for await (const rows of store.listMessagesInBatches(
+					user,
+					mailboxId,
+					options.messages,
+				)) {
+					for (const row of rows) {
+						let raw: Buffer | null = null;
+						let release: (() => void) | null = null;
+						try {
+							if (wantsContent) {
+								release = await contentBudget.acquire(
+									(row.size ?? UNKNOWN_MESSAGE_SIZE) * memoryFactor,
+									user.credentialId,
+								);
+								raw = await store.getRawContent(
+									row.structuredEmailId,
+									row.rawSource,
+									user,
+								);
+								if (!raw) continue;
+							}
 
-					const flags = [...row.flags];
-					const markAsSeen =
-						options.markAsSeen &&
-						requireUser(session).accessMode === "read_write" &&
-						!sourceIsReadOnly(session, mailboxId) &&
-						!flags.includes("\\Seen");
-					if (markAsSeen) flags.unshift("\\Seen");
+							const flags = [...row.flags];
+							const markAsSeen =
+								options.markAsSeen &&
+								user.accessMode === "read_write" &&
+								!sourceIsReadOnly(session, mailboxId) &&
+								!flags.includes("\\Seen");
+							if (markAsSeen) flags.unshift("\\Seen");
 
-					const messageData = {
-						_id: row.structuredEmailId,
-						uid: row.uid,
-						flags,
-						modseq: 0,
-						idate: row.internalDate,
-						...(row.size ? { size: row.size } : {}),
-						...(raw ? { raw } : {}),
-					};
+							const messageData = {
+								_id: row.structuredEmailId,
+								uid: row.uid,
+								flags,
+								modseq: 0,
+								idate: row.internalDate,
+								...(row.size ? { size: row.size } : {}),
+								...(raw ? { raw } : {}),
+							};
 
-					const response = session.formatResponse("FETCH", row.uid, {
-						query: options.query,
-						values: session.getQueryResponse(options.query, messageData, {
-							logger,
-							fetchOptions: {},
-							acceptUTF8Enabled: session.isUTF8Enabled(),
-						}),
-					});
+							const response = session.formatResponse("FETCH", row.uid, {
+								query: options.query,
+								values: session.getQueryResponse(options.query, messageData, {
+									logger,
+									fetchOptions: {},
+									acceptUTF8Enabled: session.isUTF8Enabled(),
+								}),
+							});
+							raw = null;
 
-					const stream = imapHandler.compileStream(response);
-					await new Promise<void>((resolve, reject) => {
-						stream.once("error", reject);
-						session.writeStream.write(stream, () => resolve());
-					});
-					rowCount++;
+							const stream = imapHandler.compileStream(response);
+							await writeResponse(session, stream, stallTimeoutMs);
+							if (release) await waitForDrain(session.socket, stallTimeoutMs);
+							rowCount++;
 
-					if (markAsSeen) {
-						await store.addFlag(mailboxId, row.uid, "\\Seen");
+							if (markAsSeen) {
+								await store.addFlag(user, mailboxId, row.uid, "\\Seen");
+							}
+						} finally {
+							release?.();
+						}
 					}
 				}
 
 				callback(null, true, { rowCount });
-			})().catch((err: Error) => callback(err));
+			})().catch((err: Error) => callback(toImapError(err)));
 		},
 
 		onSearch(
@@ -516,15 +672,18 @@ export function buildHandlers(
 			_session: ImapSession,
 			callback: Callback,
 		) {
-			store
-				.searchMessages(
-					mailboxId,
-					(options.query ?? []) as import("./search.ts").SearchNode[],
+			Promise.resolve()
+				.then(() =>
+					store.searchMessages(
+						requireUser(_session),
+						mailboxId,
+						(options.query ?? []) as import("./search.ts").SearchNode[],
+					),
 				)
 				.then((uidList) => {
 					callback(null, { uidList });
 				})
-				.catch((err: Error) => callback(err));
+				.catch((err: Error) => callback(toImapError(err)));
 		},
 
 		onStore(
@@ -540,7 +699,13 @@ export function buildHandlers(
 				return callback(null, "READ-ONLY", []);
 			}
 			store
-				.updateFlags(mailboxId, update.messages, update.action, update.value)
+				.updateFlags(
+					requireUser(_session),
+					mailboxId,
+					update.messages,
+					update.action,
+					update.value,
+				)
 				.then((updated) => {
 					if (!update.silent) {
 						for (const { uid, flags } of updated) {
@@ -553,7 +718,7 @@ export function buildHandlers(
 					}
 					callback(null, true, []);
 				})
-				.catch((err: Error) => callback(err));
+				.catch((err: Error) => callback(toImapError(err)));
 		},
 
 		onExpunge(
@@ -580,6 +745,7 @@ export function buildHandlers(
 					}
 				}
 				const expunged = await store.expunge(
+					user,
 					mailboxId,
 					update.isUid ? (update.messages ?? []) : undefined,
 				);
@@ -593,7 +759,7 @@ export function buildHandlers(
 				return true;
 			})()
 				.then((result) => callback(null, result))
-				.catch((err: Error) => callback(err));
+				.catch((err: Error) => callback(toImapError(err)));
 		},
 	};
 }

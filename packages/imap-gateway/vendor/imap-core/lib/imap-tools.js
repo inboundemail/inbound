@@ -333,26 +333,77 @@ module.exports.generateFolderListing = function (folders, skipHierarchy) {
     return result;
 };
 
-module.exports.filterFolders = function (folders, query) {
-    query = query
-        // remove excess * and %
-        .replace(/\*\*+/g, '*')
-        .replace(/%%+/g, '%')
-        // escape special characters
-        .replace(/[\\^$+?!.():=[\]{}|,-]/g, '\\$&')
-        // setup *
-        .replace(/[*]/g, '.*')
-        // setup %
-        .replace(/[%]/g, '[^/]*');
+const MAX_MAILBOX_PATTERN_LENGTH = 255;
+module.exports.MAX_MAILBOX_PATTERN_LENGTH = MAX_MAILBOX_PATTERN_LENGTH;
 
-    let regex;
-    try {
-        regex = new RegExp('^' + query + '$', '');
-    } catch (err) {
+// Matches a LIST/LSUB pattern without backtracking: `*` matches anything,
+// `%` matches anything except the hierarchy delimiter. Runs in
+// O(name.length * pattern.length) by tracking every reachable pattern position.
+const matchMailboxPattern = (pattern, name, delimiter) => {
+    let tokens = [];
+    for (let i = 0; i < pattern.length; i++) {
+        let chr = pattern[i];
+        let last = tokens[tokens.length - 1];
+        if ((chr === '*' || chr === '%') && (last === '*' || last === '%')) {
+            // `%*`, `*%` and `**` all reduce to `*`; `%%` reduces to `%`
+            tokens[tokens.length - 1] = last === '%' && chr === '%' ? '%' : '*';
+            continue;
+        }
+        tokens.push(chr);
+    }
+
+    let size = tokens.length;
+    let current = new Uint8Array(size + 1);
+    let next = new Uint8Array(size + 1);
+
+    let close = states => {
+        for (let j = 0; j < size; j++) {
+            if (states[j] && (tokens[j] === '*' || tokens[j] === '%')) {
+                states[j + 1] = 1;
+            }
+        }
+    };
+
+    current[0] = 1;
+    close(current);
+
+    for (let i = 0; i < name.length; i++) {
+        let chr = name[i];
+        next.fill(0);
+        let alive = false;
+        for (let j = 0; j < size; j++) {
+            if (!current[j]) {
+                continue;
+            }
+            let token = tokens[j];
+            if (token === '*' || (token === '%' && chr !== delimiter)) {
+                next[j] = 1;
+                alive = true;
+            } else if (token === chr) {
+                next[j + 1] = 1;
+                alive = true;
+            }
+        }
+        if (!alive) {
+            return false;
+        }
+        close(next);
+        let swap = current;
+        current = next;
+        next = swap;
+    }
+
+    return current[size] === 1;
+};
+module.exports.matchMailboxPattern = matchMailboxPattern;
+
+module.exports.filterFolders = function (folders, query) {
+    query = (query || '').toString();
+    if (query.length > MAX_MAILBOX_PATTERN_LENGTH) {
         return [];
     }
 
-    return folders.filter(folder => !!regex.test(folder.path));
+    return folders.filter(folder => matchMailboxPattern(query, (folder.path || '').toString(), '/'));
 };
 
 module.exports.getMessageRange = function (uidList, range, isUid) {
@@ -540,6 +591,33 @@ module.exports.formatInternalDate = function (date) {
  * @param {Object} options Options for the indexer
  * @returns {Array} Resolved responses
  */
+// Message body after the first empty line, as stored (RFC822.TEXT without a MIME parse)
+const rawBodyText = raw => {
+    let crlf = raw.indexOf('\r\n\r\n');
+    let lf = raw.indexOf('\n\n');
+    if (crlf < 0 && lf < 0) {
+        return Buffer.alloc(0);
+    }
+    if (crlf >= 0 && (lf < 0 || crlf <= lf)) {
+        return raw.subarray(crlf + 4);
+    }
+    return raw.subarray(lf + 2);
+};
+
+const RAW_CONTENT_ITEMS = new Set(['rfc822', 'rfc822.text']);
+
+// True when every content item can be served from the raw message bytes.
+module.exports.isRawContentQuery = query =>
+    (query || []).every(item => {
+        if (RAW_CONTENT_ITEMS.has(item.item)) {
+            return true;
+        }
+        if (item.item === 'body') {
+            return item.hasOwnProperty('type') ? item.path === '' && item.type === 'content' : false;
+        }
+        return ['uid', 'flags', 'modseq', 'internaldate', 'rfc822.size'].includes(item.item);
+    });
+
 module.exports.getQueryResponse = function (query, message, options) {
     options = options || {};
 
@@ -668,6 +746,10 @@ module.exports.getQueryResponse = function (query, message, options) {
                 break;
 
             case 'rfc822':
+                if (Buffer.isBuffer(message.raw)) {
+                    value = message.raw;
+                    break;
+                }
                 if (!mimeTree) {
                     mimeTree = indexer.parseMimeTree(message.raw);
                 }
@@ -695,6 +777,10 @@ module.exports.getQueryResponse = function (query, message, options) {
 
             case 'rfc822.text':
                 // Equivalent to BODY[TEXT]
+                if (Buffer.isBuffer(message.raw)) {
+                    value = rawBodyText(message.raw);
+                    break;
+                }
                 if (!mimeTree) {
                     mimeTree = indexer.parseMimeTree(message.raw);
                 }
@@ -711,6 +797,9 @@ module.exports.getQueryResponse = function (query, message, options) {
                         mimeTree = indexer.parseMimeTree(message.raw);
                     }
                     value = indexer.getBody(mimeTree);
+                } else if (item.path === '' && item.type === 'content' && Buffer.isBuffer(message.raw)) {
+                    // BODY[] served from the stored bytes without a MIME parse
+                    value = message.raw;
                 } else if (item.path === '' && item.type === 'content') {
                     // BODY[]
                     if (!mimeTree) {
@@ -738,6 +827,9 @@ module.exports.getQueryResponse = function (query, message, options) {
                         value.startFrom = item.partial.startFrom;
                         value.maxLength = item.partial.maxLength;
                         len = value.expectedLength;
+                    } else if (Buffer.isBuffer(value)) {
+                        value = value.subarray(item.partial.startFrom, item.partial.startFrom + item.partial.maxLength);
+                        len = value.length;
                     } else {
                         value = value.toString('binary').substr(item.partial.startFrom, item.partial.maxLength);
                         len = value.length;

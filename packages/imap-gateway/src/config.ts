@@ -10,8 +10,15 @@ export interface ImapConfig {
 	gatewayAuthSecret: string | null;
 	maxConnections: number;
 	maxConnectionsPerIp: number;
+	tlsHandshakeTimeoutMs: number;
+	authTimeoutMs: number;
 	authFailureLimit: number;
 	authFailureWindowMs: number;
+	authFailureRecords: number;
+	fetchMemoryBudgetBytes: number;
+	fetchBudgetWaitMs: number;
+	sessionRevalidateMs: number;
+	sessionMaxAgeMs: number;
 	apiTimeoutMs: number;
 	maxMessageBytes: number;
 	appendMaxBytesPerUser: number;
@@ -60,8 +67,38 @@ export function loadConfig(): ImapConfig {
 		gatewayAuthSecret: process.env.MAILBOX_GATEWAY_AUTH_SECRET || null,
 		maxConnections: envNumber("IMAP_MAX_CONNECTIONS", 200),
 		maxConnectionsPerIp: envNumber("IMAP_MAX_CONNECTIONS_PER_IP", 20),
+		tlsHandshakeTimeoutMs: envNumber(
+			"IMAP_TLS_HANDSHAKE_TIMEOUT_MS",
+			5_000,
+			2_147_483_647,
+		),
+		authTimeoutMs: envNumber("IMAP_AUTH_TIMEOUT_MS", 30_000, 2_147_483_647),
 		authFailureLimit: envNumber("IMAP_AUTH_FAILURE_LIMIT", 10),
 		authFailureWindowMs: envNumber("IMAP_AUTH_FAILURE_WINDOW_MS", 15 * 60_000),
+		authFailureRecords: envNumber(
+			"IMAP_AUTH_FAILURE_RECORDS",
+			100_000,
+			1_000_000,
+		),
+		fetchMemoryBudgetBytes: envNumber(
+			"IMAP_FETCH_MEMORY_BUDGET_BYTES",
+			256 * 1024 * 1024,
+		),
+		fetchBudgetWaitMs: envNumber(
+			"IMAP_FETCH_BUDGET_WAIT_MS",
+			10_000,
+			2_147_483_647,
+		),
+		sessionRevalidateMs: envNumber(
+			"IMAP_SESSION_REVALIDATE_MS",
+			5 * 60_000,
+			2_147_483_647,
+		),
+		sessionMaxAgeMs: envNumber(
+			"IMAP_SESSION_MAX_AGE_MS",
+			24 * 60 * 60_000,
+			2_147_483_647,
+		),
 		apiTimeoutMs: envNumber("IMAP_API_TIMEOUT_MS", 10_000, 2_147_483_647),
 		maxMessageBytes: envNumber("IMAP_MAX_MESSAGE_BYTES", 1024 * 1024),
 		appendMaxBytesPerUser: envNumber(

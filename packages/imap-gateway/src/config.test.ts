@@ -25,6 +25,15 @@ describe("loadConfig", () => {
 		expect(config.maxMessageBytes).toBe(524288);
 		expect(config.tlsKeyPath).toBe("/certs/key.pem");
 		expect(config.tlsCertPath).toBe("/certs/cert.pem");
+		expect(config).toMatchObject({
+			tlsHandshakeTimeoutMs: 5_000,
+			authTimeoutMs: 30_000,
+			authFailureRecords: 100_000,
+			fetchMemoryBudgetBytes: 256 * 1024 * 1024,
+			fetchBudgetWaitMs: 10_000,
+			sessionRevalidateMs: 300_000,
+			sessionMaxAgeMs: 86_400_000,
+		});
 	});
 
 	it.each([

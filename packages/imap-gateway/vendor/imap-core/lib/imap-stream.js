@@ -45,6 +45,21 @@ class IMAPStream extends Writable {
         throw new Error('Command handler is not set');
     }
 
+    /**
+     * Drops any buffered partial input. Used when the transport changes (STARTTLS)
+     * so plaintext bytes are never prepended to the first encrypted command.
+     */
+    reset() {
+        this._remainder = '';
+        this._discarding = false;
+        this._expecting = 0;
+        if (this._literal) {
+            this._literal.end();
+        }
+        this._literal = false;
+        this._literalReady = false;
+    }
+
     // PRIVATE METHODS
 
     _checkLineLength(lineLength) {

@@ -4,8 +4,10 @@ import { ApiAuth } from "./auth.ts";
 import { loadConfig } from "./config.ts";
 import { MailStore } from "./db.ts";
 import { buildHandlers } from "./handlers.ts";
-import { ConnectionLimits } from "./limits.ts";
+import { type AcceptedSocket, ConnectionLimits, ContentBudget } from "./limits.ts";
+import { sanitizeLogValue } from "./log.ts";
 import { PgNotifier } from "./notifier.ts";
+import { SessionRevalidator } from "./sessions.ts";
 
 const require = createRequire(import.meta.url);
 const { IMAPServer } = require("../vendor/imap-core/index.js");
@@ -20,13 +22,42 @@ const limits = new ConnectionLimits(
 	config.maxConnectionsPerIp,
 	config.authFailureLimit,
 	config.authFailureWindowMs,
+	config.authFailureRecords,
 );
-const handlers = buildHandlers(auth, store, limits);
+const contentBudget = new ContentBudget(
+	config.fetchMemoryBudgetBytes,
+	config.fetchBudgetWaitMs,
+);
 const notifier = new PgNotifier(
 	config.databaseUrl.replace("-pooler", ""),
 	store,
 );
+const sessions = new SessionRevalidator({
+	authenticate: (address, password, ip) =>
+		auth.authenticate(address, password, ip),
+	sessions: () => notifier.sessions(),
+	intervalMs: config.sessionRevalidateMs,
+	maxAgeMs: config.sessionMaxAgeMs,
+});
+const handlers = buildHandlers(auth, store, limits, {
+	contentBudget,
+	sessions,
+});
+function revalidateSessions(force: boolean): void {
+	sessions.run(force).catch((err: Error) => {
+		console.error(
+			"[imap-gateway] session revalidation failed",
+			sanitizeLogValue(err.message),
+		);
+	});
+}
+notifier.onReconnect = () => revalidateSessions(true);
 await notifier.start();
+const sessionCheck = setInterval(
+	() => revalidateSessions(false),
+	Math.min(config.sessionRevalidateMs, 60_000),
+);
+sessionCheck.unref();
 const orphanCleanup = setInterval(() => {
 	store.cleanupOrphanedAppendedMessages().catch((err: Error) => {
 		console.error("[imap-gateway] orphan cleanup failed", err.message);
@@ -62,6 +93,9 @@ function startServer(secure: boolean, port: number) {
 		ignoreSTARTTLS: !tls,
 		useProxy: false,
 		maxConnections: config.maxConnections,
+		tlsHandshakeTimeout: config.tlsHandshakeTimeoutMs,
+		authTimeout: config.authTimeoutMs,
+		onSocket: (socket: AcceptedSocket) => limits.acceptSocket(socket),
 		maxMessage: config.maxMessageBytes,
 		...(tls ?? {}),
 		SNICallback: (_servername: unknown, cb: (err: Error | null) => void) =>
@@ -70,15 +104,9 @@ function startServer(secure: boolean, port: number) {
 
 	server.logger = handlers.logger;
 	server.notifier = notifier;
-	server.onConnect = (
-		session: { remoteAddress?: string },
-		callback: (err?: Error | null) => void,
-	) => callback(limits.onConnect(session));
-	server.onClose = (
-		session: { remoteAddress?: string },
-		callback: () => void,
-	) => {
-		limits.onClose(session);
+	server.onClose = (session: object, callback: () => void) => {
+		limits.releaseSocket((session as { socket?: object }).socket);
+		sessions.forget(session);
 		callback();
 	};
 	server.onAuth = handlers.onAuth;
@@ -99,8 +127,12 @@ function startServer(secure: boolean, port: number) {
 	server.onStore = handlers.onStore;
 	server.onExpunge = handlers.onExpunge;
 
-	server.on("error", (err: Error) => {
-		console.error("[imap-gateway] server error", err);
+	server.on("error", (err: Error & { code?: string }) => {
+		console.error(
+			"[imap-gateway] server error",
+			sanitizeLogValue(err.code ?? "-"),
+			sanitizeLogValue(err.message),
+		);
 	});
 
 	server.server.maxConnections = config.maxConnections;
@@ -138,6 +170,7 @@ function shutdown(): void {
 	shuttingDown = true;
 	clearInterval(orphanCleanup);
 	clearInterval(tlsReload);
+	clearInterval(sessionCheck);
 	const shutdownTimeout = setTimeout(() => {
 		console.error("[imap-gateway] graceful shutdown timed out");
 		process.exit(1);

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { createRequire } from "node:module";
+import net from "node:net";
+import tls from "node:tls";
 
 const require = createRequire(import.meta.url);
 
@@ -25,12 +27,21 @@ interface CommandModule {
 
 const tlsOptions = require("../vendor/imap-core/lib/tls-options.js") as (
 	options?: object,
-) => { minVersion: string };
+) => { minVersion: string; ciphers: string; honorCipherOrder: boolean };
 const imapTools = require("../vendor/imap-core/lib/imap-tools.js") as {
 	sendCapabilityResponse: (connection: object) => void;
 	generateFolderListing: (
 		folders: Array<{ path: string; flags: string[] }>,
 	) => Array<{ path: string; flags: string[] }>;
+	filterFolders: (
+		folders: Array<{ path: string }>,
+		query: string,
+	) => Array<{ path: string }>;
+	getQueryResponse: (
+		query: unknown[],
+		message: object,
+		options?: object,
+	) => unknown[];
 };
 
 function runCommand(name: string, commandName = name): ProtocolResponse {
@@ -60,6 +71,19 @@ function runCommand(name: string, commandName = name): ProtocolResponse {
 describe("IMAP protocol hardening", () => {
 	it("requires TLS 1.2 by default", () => {
 		expect(tlsOptions().minVersion).toBe("TLSv1.2");
+	});
+
+	it("uses AEAD forward-secret TLS 1.2 ciphers in server order", () => {
+		const options = tlsOptions({ minVersion: "TLSv1.2" });
+		expect(options.honorCipherOrder).toBe(true);
+		const ciphers = options.ciphers.split(":");
+		expect(ciphers[0]).toBe("ECDHE-ECDSA-AES128-GCM-SHA256");
+		expect(ciphers.every((cipher) => /GCM|CHACHA20/.test(cipher))).toBe(true);
+		expect(options.ciphers).not.toMatch(/CBC|SHA1|RC4|3DES|-SHA:/);
+		const context = tls.createSecureContext(
+			options as tls.SecureContextOptions,
+		);
+		expect(context).toBeDefined();
 	});
 
 	it.each([
@@ -524,5 +548,280 @@ describe("IMAP protocol hardening", () => {
 			folders.find((folder) => folder.path === "Scopes/user@example.com")
 				?.flags,
 		).toContain("\\NoInferiors");
+	});
+});
+
+const folders = [
+	"INBOX",
+	"Archive",
+	"Archive/2024",
+	"Archive/2024/Q1",
+	"Scopes",
+	"Scopes/*@example.com",
+	"Sent",
+].map((path) => ({ path }));
+
+function listPaths(query: string): string[] {
+	return imapTools.filterFolders(folders, query).map((folder) => folder.path);
+}
+
+describe("LIST pattern matching", () => {
+	it("matches * across and % within hierarchy levels", () => {
+		expect(listPaths("*")).toEqual(folders.map((folder) => folder.path));
+		expect(listPaths("%")).toEqual(["INBOX", "Archive", "Scopes", "Sent"]);
+		expect(listPaths("Archive/%")).toEqual(["Archive/2024"]);
+		expect(listPaths("Archive/*")).toEqual(["Archive/2024", "Archive/2024/Q1"]);
+		expect(listPaths("%/%")).toEqual(["Archive/2024", "Scopes/*@example.com"]);
+		expect(listPaths("*/Q1")).toEqual(["Archive/2024/Q1"]);
+		expect(listPaths("A%")).toEqual(["Archive"]);
+		expect(listPaths("%*%")).toEqual(folders.map((folder) => folder.path));
+		expect(listPaths("INBOX")).toEqual(["INBOX"]);
+		expect(listPaths("inbox")).toEqual([]);
+		expect(listPaths("Scopes/*@example.com")).toEqual(["Scopes/*@example.com"]);
+		expect(listPaths("Arch(ive|x)")).toEqual([]);
+		expect(listPaths("S.nt")).toEqual([]);
+		expect(listPaths("")).toEqual([]);
+	});
+
+	it("completes adversarial patterns in linear time", () => {
+		const long = Array.from({ length: 50 }, (_, index) => ({
+			path: `${"a/".repeat(60)}${"x".repeat(120)}${index}`,
+		}));
+		const patterns = [
+			"*%*%*%*%*%*%*%*%Q",
+			`${"*%".repeat(120)}Q`,
+			`${"%a".repeat(120)}Q`,
+			`${"*a".repeat(120)}Q`,
+		];
+		const started = performance.now();
+		for (const pattern of patterns) {
+			expect(imapTools.filterFolders(long, pattern)).toEqual([]);
+		}
+		expect(performance.now() - started).toBeLessThan(500);
+	});
+
+	it("returns BAD for LIST and LSUB patterns longer than 255 characters", () => {
+		for (const name of ["list", "lsub"]) {
+			const command = require(
+				`../vendor/imap-core/lib/commands/${name}.js`,
+			) as CommandModule;
+			let response: ProtocolResponse | undefined;
+			let backendCalled = false;
+			command.handler.call(
+				{
+					_server: {
+						onList: () => {
+							backendCalled = true;
+						},
+						onLsub: () => {
+							backendCalled = true;
+						},
+					},
+					session: { user: { id: "user" } },
+					send: () => undefined,
+				},
+				{
+					command: name.toUpperCase(),
+					attributes: [{ value: "" }, { value: "*".repeat(256) }],
+				},
+				(_error, result) => {
+					response = result;
+				},
+			);
+			expect(response).toMatchObject({ response: "BAD" });
+			expect(backendCalled).toBe(false);
+		}
+	});
+});
+
+describe("FETCH raw content", () => {
+	const raw = Buffer.from(
+		"Subject: =?UTF-8?Q?h=C3=A9?=\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nbody é\r\n",
+	);
+
+	it("serves BODY[], partial BODY[] and RFC822 straight from the stored bytes", () => {
+		const values = imapTools.getQueryResponse(
+			[
+				{ item: "body", path: "", type: "content", original: {} },
+				{
+					item: "body",
+					path: "",
+					type: "content",
+					partial: { startFrom: 2, maxLength: 5 },
+					original: { partial: [2, 5] },
+				},
+				{ item: "rfc822", original: {} },
+				{ item: "rfc822.text", original: {} },
+			],
+			{ raw, size: raw.length },
+		);
+		expect(values[0]).toBe(raw);
+		expect((values[1] as Buffer).toString()).toBe(raw.subarray(2, 7).toString());
+		expect(values[2]).toBe(raw);
+		expect((values[3] as Buffer).toString()).toBe("body é\r\n");
+	});
+
+	it("announces literal lengths in bytes for multi-byte content", async () => {
+		const { imapHandler } = require("../vendor/imap-core/index.js") as {
+			imapHandler: {
+				compileStream: (response: object) => NodeJS.ReadableStream;
+			};
+		};
+		const stream = imapHandler.compileStream({
+			tag: "*",
+			command: "1",
+			attributes: [
+				{ type: "ATOM", value: "FETCH" },
+				[
+					{ type: "ATOM", value: "BODY", section: [] },
+					{ type: "LITERAL", value: raw },
+				],
+			],
+		});
+		const chunks: Buffer[] = [];
+		for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+		const output = Buffer.concat(chunks);
+		expect(output.toString("latin1")).toContain(`{${raw.length}}\r\n`);
+		expect(output.includes(raw)).toBe(true);
+	});
+
+	it("still parses MIME for section fetches", () => {
+		const [header] = imapTools.getQueryResponse(
+			[{ item: "body", path: "", type: "header", original: {} }],
+			{ raw },
+		);
+		expect(String(header)).toContain("Subject:");
+		expect(String(header)).not.toContain("body");
+	});
+});
+
+describe("STARTTLS parser reset", () => {
+	it("drops buffered plaintext so it is never prepended to encrypted commands", async () => {
+		const { IMAPStream } = require("../vendor/imap-core/lib/imap-stream.js") as {
+			IMAPStream: new () => {
+				oncommand: (command: { value: string }, done: () => void) => void;
+				write: (chunk: Buffer, done: () => void) => void;
+				reset: () => void;
+			};
+		};
+		const parser = new IMAPStream();
+		const lines: string[] = [];
+		parser.oncommand = (command, done) => {
+			lines.push(command.value);
+			done();
+		};
+		await new Promise<void>((resolve) =>
+			parser.write(Buffer.from("A1 STARTTLS\r\nA2 LOG"), resolve),
+		);
+		await Bun.sleep(5);
+		parser.reset();
+		await new Promise<void>((resolve) =>
+			parser.write(Buffer.from("A3 NOOP\r\n"), resolve),
+		);
+		await Bun.sleep(5);
+		expect(lines).toEqual(["A1 STARTTLS", "A3 NOOP"]);
+	});
+});
+
+describe("connection admission", () => {
+	const { IMAPServer } = require("../vendor/imap-core/index.js") as {
+		IMAPServer: new (
+			options: object,
+		) => {
+			listen: (port: number, host: string, callback: () => void) => void;
+			close: (callback: () => void) => void;
+			server: net.Server;
+			logger: object;
+		};
+	};
+
+	async function startServer(options: object) {
+		const server = new IMAPServer({
+			secure: false,
+			disableSTARTTLS: true,
+			ignoreSTARTTLS: true,
+			...options,
+		});
+		server.logger = {
+			info: () => undefined,
+			debug: () => undefined,
+			error: () => undefined,
+		};
+		await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+		const address = server.server.address() as net.AddressInfo;
+		return { server, port: address.port };
+	}
+
+	function connect(port: number) {
+		const socket = net.connect(port, "127.0.0.1");
+		let data = "";
+		socket.on("data", (chunk) => {
+			data += chunk.toString();
+		});
+		socket.on("error", () => undefined);
+		const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+		return { socket, closed, output: () => data };
+	}
+
+	it("drops connections over the per-IP cap at TCP accept, before any processing", async () => {
+		const { ConnectionLimits } = await import("./limits.ts");
+		const limits = new ConnectionLimits(2, 10, 60_000);
+		const { server, port } = await startServer({
+			onSocket: (socket: net.Socket) => limits.acceptSocket(socket),
+		});
+		const first = connect(port);
+		const second = connect(port);
+		await Bun.sleep(50);
+		const third = connect(port);
+		await third.closed;
+		expect(third.output()).toBe("");
+		expect(limits.openConnections("127.0.0.1")).toBe(2);
+		first.socket.destroy();
+		await first.closed;
+		await Bun.sleep(20);
+		expect(limits.openConnections("127.0.0.1")).toBe(1);
+		second.socket.destroy();
+		await new Promise<void>((resolve) => server.close(resolve));
+	});
+
+	it("releases the per-IP slot of connections closed after STARTTLS", async () => {
+		const { ConnectionLimits } = await import("./limits.ts");
+		const limits = new ConnectionLimits(2, 10, 60_000);
+		const { server, port } = await startServer({
+			disableSTARTTLS: false,
+			ignoreSTARTTLS: false,
+			onSocket: (socket: net.Socket) => limits.acceptSocket(socket),
+			onClose: (session: { socket?: object }, callback: () => void) => {
+				limits.releaseSocket(session.socket);
+				callback();
+			},
+		});
+		const client = connect(port);
+		await Bun.sleep(50);
+		client.socket.write("A1 STARTTLS\r\n");
+		const deadline = Date.now() + 1_000;
+		while (!client.output().includes("A1 OK") && Date.now() < deadline) {
+			await Bun.sleep(5);
+		}
+		expect(client.output()).toContain("A1 OK");
+		await Bun.sleep(20);
+		expect(limits.openConnections("127.0.0.1")).toBe(1);
+		client.socket.destroy();
+		await client.closed;
+		await Bun.sleep(50);
+		expect(limits.openConnections("127.0.0.1")).toBe(0);
+		await new Promise<void>((resolve) => server.close(resolve));
+	});
+
+	it("closes unauthenticated connections at an absolute deadline despite traffic", async () => {
+		const { server, port } = await startServer({ authTimeout: 300 });
+		const client = connect(port);
+		const keepAlive = setInterval(() => client.socket.write("a NOOP\r\n"), 50);
+		const started = Date.now();
+		await client.closed;
+		clearInterval(keepAlive);
+		expect(Date.now() - started).toBeLessThan(2_000);
+		expect(client.output()).toContain("* BYE Authentication timeout");
+		await new Promise<void>((resolve) => server.close(resolve));
 	});
 });

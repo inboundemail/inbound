@@ -1,7 +1,7 @@
 'use strict';
 
 const imapHandler = require('../handler/imap-handler');
-const { normalizeMailbox, utf7encode, filterFolders, generateFolderListing } = require('../imap-tools');
+const { normalizeMailbox, utf7encode, filterFolders, generateFolderListing, MAX_MAILBOX_PATTERN_LENGTH } = require('../imap-tools');
 
 // tag LIST (SPECIAL-USE) "" "%" RETURN (SPECIAL-USE)
 
@@ -96,6 +96,13 @@ module.exports = {
             } else {
                 return callback(new Error('Invalid argument provided for ' + commandName));
             }
+        }
+
+        if (reference.length + path.length > MAX_MAILBOX_PATTERN_LENGTH) {
+            return callback(null, {
+                response: 'BAD',
+                message: 'Mailbox pattern too long'
+            });
         }
 
         // Check if LIST method is set

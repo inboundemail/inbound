@@ -41,6 +41,7 @@ export class ApiAuth {
 				method: "POST",
 				headers,
 				body: JSON.stringify({ loginAddress: address, password }),
+				redirect: "error",
 				signal: AbortSignal.timeout(this.config.apiTimeoutMs),
 			},
 		);

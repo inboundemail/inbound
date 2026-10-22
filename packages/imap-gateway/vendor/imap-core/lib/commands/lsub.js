@@ -1,7 +1,7 @@
 'use strict';
 
 const imapHandler = require('../handler/imap-handler');
-const { normalizeMailbox, utf7encode, filterFolders, generateFolderListing } = require('../imap-tools');
+const { normalizeMailbox, utf7encode, filterFolders, generateFolderListing, MAX_MAILBOX_PATTERN_LENGTH } = require('../imap-tools');
 
 // tag LSUB "" "%"
 
@@ -22,6 +22,13 @@ module.exports = {
     handler(command, callback) {
         let reference = Buffer.from((command.attributes[0] && command.attributes[0].value) || '', 'binary').toString();
         let path = Buffer.from((command.attributes[1] && command.attributes[1].value) || '', 'binary').toString();
+
+        if (reference.length + path.length > MAX_MAILBOX_PATTERN_LENGTH) {
+            return callback(null, {
+                response: 'BAD',
+                message: 'Mailbox pattern too long'
+            });
+        }
 
         // Check if LIST method is set
         if (typeof this._server.onLsub !== 'function') {

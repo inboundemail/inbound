@@ -2,9 +2,11 @@ import postgres from "postgres";
 import type { AuthenticatedMailbox } from "./auth.ts";
 import type { MailStore } from "./db.ts";
 import { scopeMailboxPath } from "./db.ts";
+import { sanitizeLogValue } from "./log.ts";
 
 interface SessionLike {
 	user?: AuthenticatedMailbox & { address?: string };
+	remoteAddress?: string;
 }
 
 type ListenerCallback = (message?: unknown) => void;
@@ -17,6 +19,9 @@ export class PgNotifier {
 	private store: MailStore;
 	private listeners = new Map<SessionLike, ListenerCallback>();
 	private pollTimer: ReturnType<typeof setInterval> | null = null;
+	private polling = false;
+	private listenCount = 0;
+	onReconnect: (() => void) | null = null;
 
 	constructor(directUrl: string, store: MailStore) {
 		this.sql = postgres(directUrl, { max: 1 });
@@ -26,22 +31,40 @@ export class PgNotifier {
 	async start(): Promise<void> {
 		await this.sql.listen("imap_changed", (payload) => {
 			this.handleChange(payload).catch((err: Error) => {
-				console.error("[notifier] change handling failed", err.message);
+				console.error(
+					"[notifier] change handling failed",
+					sanitizeLogValue(err.message),
+				);
 			});
 		});
-		await this.sql.listen("imap_credential_changed", (credentialId) => {
-			for (const [session, callback] of this.listeners) {
-				if (session.user?.credentialId === credentialId) {
-					callback({
-						command: "LOGOUT",
-						reason: "Mailbox credentials or scopes changed",
-					});
+		await this.sql.listen(
+			"imap_credential_changed",
+			(credentialId) => {
+				for (const [session, callback] of this.listeners) {
+					if (session.user?.credentialId === credentialId) {
+						callback({
+							command: "LOGOUT",
+							reason: "Mailbox credentials or scopes changed",
+						});
+					}
 				}
-			}
-		});
+			},
+			() => {
+				this.listenCount++;
+				if (this.listenCount === 1) return;
+				console.log("[notifier] LISTEN reconnected, catching up sessions");
+				this.onReconnect?.();
+				this.pollAll().catch((err: Error) => {
+					console.error(
+						"[notifier] catch-up poll failed",
+						sanitizeLogValue(err.message),
+					);
+				});
+			},
+		);
 		this.pollTimer = setInterval(() => {
 			this.pollAll().catch((err: Error) => {
-				console.error("[notifier] poll failed", err.message);
+				console.error("[notifier] poll failed", sanitizeLogValue(err.message));
 			});
 		}, POLL_INTERVAL_MS);
 		console.log(
@@ -52,6 +75,10 @@ export class PgNotifier {
 	async stop(): Promise<void> {
 		if (this.pollTimer) clearInterval(this.pollTimer);
 		await this.sql.end({ timeout: 2 }).catch(() => undefined);
+	}
+
+	sessions(): Iterable<[SessionLike, ListenerCallback]> {
+		return this.listeners.entries();
 	}
 
 	private sessionsFor(address: string): Array<[SessionLike, ListenerCallback]> {
@@ -73,10 +100,8 @@ export class PgNotifier {
 
 	private async handleChange(address: string): Promise<void> {
 		const callbacks = this.sessionsFor(address);
-		console.log(
-			`[notifier] change for ${address}: ${callbacks.length} session(s)`,
-		);
 		if (callbacks.length === 0) return;
+		console.log(`[notifier] change delivered to ${callbacks.length} session(s)`);
 		for (const [session] of callbacks) {
 			if (!session.user) continue;
 			const inbox = await this.store.getMailboxByPath(session.user, "INBOX");
@@ -106,25 +131,41 @@ export class PgNotifier {
 	}
 
 	private async pollAll(): Promise<void> {
-		for (const [session, callback] of this.listeners) {
-			if (!session.user) continue;
-			const inbox = await this.store.getMailboxByPath(session.user, "INBOX");
-			if (inbox) await this.store.syncMailbox(inbox, session.user);
-			for (const scope of session.user.scopes) {
-				const mailbox = await this.store.getMailboxByPath(
-					session.user,
-					scopeMailboxPath(scope),
-				);
-				if (mailbox) await this.store.syncMailbox(mailbox, session.user);
+		if (this.polling) return;
+		this.polling = true;
+		try {
+			for (const [session, callback] of [...this.listeners]) {
+				if (!session.user) continue;
+				try {
+					const inbox = await this.store.getMailboxByPath(
+						session.user,
+						"INBOX",
+					);
+					if (inbox) await this.store.syncMailbox(inbox, session.user);
+					for (const scope of session.user.scopes) {
+						const mailbox = await this.store.getMailboxByPath(
+							session.user,
+							scopeMailboxPath(scope),
+						);
+						if (mailbox) await this.store.syncMailbox(mailbox, session.user);
+					}
+					callback();
+				} catch (err) {
+					console.error(
+						"[notifier] session poll failed",
+						sanitizeLogValue((err as Error).message),
+					);
+				}
 			}
-			callback();
+		} finally {
+			this.polling = false;
 		}
 	}
 
 	addListener(session: SessionLike, callback: ListenerCallback): void {
 		this.listeners.set(session, callback);
 		console.log(
-			`[notifier] listener added (user=${session.user?.address ?? "pre-auth"}, total=${this.listeners.size})`,
+			`[notifier] listener added (credential=${sanitizeLogValue(session.user?.credentialId ?? "pre-auth")}, total=${this.listeners.size})`,
 		);
 	}
 
@@ -136,13 +177,23 @@ export class PgNotifier {
 		done?.(null, true);
 	}
 
-	getUpdates(mailbox: unknown, modifyIndex: number, callback: Callback): void {
+	getUpdates(
+		mailbox: unknown,
+		modifyIndex: number,
+		callback: Callback,
+		session?: SessionLike,
+	): void {
 		const mailboxId =
 			typeof mailbox === "string"
 				? mailbox
 				: ((mailbox as { _id?: string })?._id ?? "");
+		const user = session?.user;
+		if (!user) {
+			callback(null, []);
+			return;
+		}
 		this.store
-			.getUpdatesSince(mailboxId, modifyIndex || 0)
+			.getUpdatesSince(user, mailboxId, modifyIndex || 0)
 			.then((updates) => callback(null, updates))
 			.catch((err: Error) => callback(err));
 	}

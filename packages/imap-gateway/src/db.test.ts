@@ -112,9 +112,9 @@ describe("MailStore Guard and scope enforcement", () => {
 
 	it("restricts structured raw content to unblocked, currently authorized scopes", async () => {
 		const { store, requests } = createStore();
-		expect(await store.getRawContent("message", "structured", principal)).toBe(
-			"message",
-		);
+		expect(
+			(await store.getRawContent("message", "structured", principal))?.toString(),
+		).toBe("message");
 		const request = requests[0];
 		expect(request?.statement).toContain("guard_blocked IS NOT TRUE");
 		expect(request?.statement).toContain("lower(se.recipient) = ANY");
@@ -125,9 +125,9 @@ describe("MailStore Guard and scope enforcement", () => {
 
 	it("preserves appended-message ownership checks without applying structured scopes", async () => {
 		const { store, requests } = createStore();
-		expect(await store.getRawContent("message", "appended", principal)).toBe(
-			"message",
-		);
+		expect(
+			(await store.getRawContent("message", "appended", principal))?.toString(),
+		).toBe("message");
 		expect(requests[0]?.statement).toContain("FROM imap_appended_messages");
 		expect(requests[0]?.statement).not.toContain("guard_blocked");
 		expect(requests[0]?.values).toContain("user");
@@ -157,5 +157,51 @@ describe("MailStore Guard and scope enforcement", () => {
 				request.statement.includes("DELETE FROM structured_emails"),
 			),
 		).toBe(false);
+	});
+});
+
+describe("MailStore tenant isolation", () => {
+	it("scopes mailbox-id queries to the session's user and credential", async () => {
+		const { store, requests } = createStore();
+		const owner = { userId: "user", credentialId: "credential" };
+		await store.searchMessages(owner, "inbox", []);
+		await store.listMessages(owner, "inbox", [1]);
+		await store.listUids(owner, "inbox");
+		await store.countMessages(owner, "inbox");
+		await store.unseenCount(owner, "inbox");
+		await store.getUpdatesSince(owner, "inbox", 0);
+		await store.deleteMessages(owner, "inbox", [1]);
+		await store.expunge(owner, "inbox");
+		await store.expunge(owner, "inbox", [1]);
+		await store.copyMessages(owner, "inbox", mailbox, [1]);
+		await store.updateFlags(owner, "inbox", [1], "add", ["\\Seen"]);
+
+		const messageQueries = requests.filter((request) =>
+			/FROM imap_mailbox_messages|DELETE FROM imap_mailbox_messages/.test(
+				request.statement,
+			) && request.statement.includes("mailbox_id = ?"),
+		);
+		expect(messageQueries.length).toBeGreaterThanOrEqual(10);
+		for (const request of messageQueries) {
+			expect(request.statement).toContain("owner.user_id = ?");
+			expect(request.statement).toContain("owner.credential_id = ?");
+			expect(request.values).toContain("user");
+			expect(request.values).toContain("credential");
+		}
+		const flagsMailbox = requests.find((request) =>
+			request.statement.includes("AS mirrored"),
+		);
+		expect(flagsMailbox?.statement).toContain("credential_id = ?");
+		expect(flagsMailbox?.values).toContain("user");
+	});
+
+	it("refuses to sync a mailbox the principal does not own", async () => {
+		const { store, requests } = createStore();
+		await store.syncMailbox(mailbox, principal);
+		const lock = requests.find((request) =>
+			request.statement.includes("SELECT uid_next, modseq"),
+		);
+		expect(lock?.statement).toContain("user_id = ?");
+		expect(lock?.statement).toContain("credential_id = ?");
 	});
 });

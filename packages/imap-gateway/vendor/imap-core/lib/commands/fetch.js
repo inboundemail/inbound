@@ -319,7 +319,7 @@ module.exports = {
 
                     return callback(null, {
                         response: 'NO',
-                        code: 'TEMPFAIL',
+                        code: err.imapCode || 'TEMPFAIL',
                         message: err.responseMessage
                     });
                 }

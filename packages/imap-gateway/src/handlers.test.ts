@@ -1,8 +1,9 @@
 import { describe, expect, it, mock } from "bun:test";
+import { EventEmitter } from "node:events";
 import type { ApiAuth, AuthenticatedMailbox } from "./auth.ts";
 import type { MailboxRow, MailStore } from "./db.ts";
-import { buildHandlers } from "./handlers.ts";
-import type { ConnectionLimits } from "./limits.ts";
+import { buildHandlers, toImapError } from "./handlers.ts";
+import { ConnectionLimits, ContentBudget } from "./limits.ts";
 
 type Handlers = ReturnType<typeof buildHandlers>;
 type Session = Parameters<Handlers["onOpen"]>[1];
@@ -10,6 +11,8 @@ type Session = Parameters<Handlers["onOpen"]>[1];
 function createHarness(
 	accessMode: AuthenticatedMailbox["accessMode"],
 	scopeId: string | null = null,
+	contentBudget?: ContentBudget,
+	stallTimeoutMs?: number,
 ) {
 	const mailbox: MailboxRow = {
 		id: scopeId ? "scope-mailbox" : "inbox",
@@ -36,16 +39,19 @@ function createHarness(
 		),
 		syncMailbox: mock(async () => 0),
 		listUids: mock(async () => [1]),
-		listMessages: mock(async () => [
-			{
-				uid: 1,
-				structuredEmailId: "message",
-				rawSource: "structured",
-				flags: [],
-				internalDate: new Date(),
-				size: 10,
-			},
-		]),
+		listMessagesInBatches: mock(async function* () {
+			yield [
+				{
+					uid: 1,
+					structuredEmailId: "message",
+					rawSource: "structured",
+					flags: [] as string[],
+					internalDate: new Date(),
+					size: 10,
+				},
+			];
+		}),
+		getRawContent: mock(async () => Buffer.from("Subject: hi\r\n\r\nbody")),
 		addFlag: mock(async () => undefined),
 		updateFlags: mock(
 			async () => [] as Array<{ uid: number; flags: string[] }>,
@@ -63,6 +69,7 @@ function createHarness(
 		{} as ApiAuth,
 		store as unknown as MailStore,
 		{} as ConnectionLimits,
+		{ contentBudget, stallTimeoutMs },
 	);
 	const session: Session = {
 		user: {
@@ -159,7 +166,11 @@ describe("IMAP backend authorization", () => {
 		expect([stored, expunged, moved]).toEqual([true, true, true]);
 		expect(store.updateFlags).toHaveBeenCalledTimes(1);
 		expect(store.expunge).toHaveBeenCalledTimes(1);
-		expect(store.deleteMessages).toHaveBeenCalledWith(mailbox.id, [1]);
+		expect(store.deleteMessages).toHaveBeenCalledWith(
+			session.user,
+			mailbox.id,
+			[1],
+		);
 	});
 
 	it("refuses MOVE from a scope folder into INBOX, which already holds the message", async () => {
@@ -346,6 +357,9 @@ describe("IMAP backend authorization", () => {
 
 		expect(success).toBe(true);
 		expect(store.appendMessage).toHaveBeenCalledTimes(1);
+		expect(
+			(store.appendMessage.mock.calls[0] as unknown[] | undefined)?.[1],
+		).toMatchObject({ userId: "user", credentialId: "credential" });
 	});
 
 	it("reports EXPUNGE for every message removed by EXPUNGE and MOVE", async () => {
@@ -377,7 +391,11 @@ describe("IMAP backend authorization", () => {
 		});
 
 		expect(moved).toBe(true);
-		expect(store.deleteMessages).toHaveBeenCalledWith(mailbox.id, [1]);
+		expect(store.deleteMessages).toHaveBeenCalledWith(
+			session.user,
+			mailbox.id,
+			[1],
+		);
 		expect(notifications).toEqual([
 			{ command: "EXPUNGE", uid: 2 },
 			{ command: "EXPUNGE", uid: 5 },
@@ -447,5 +465,228 @@ describe("IMAP backend authorization", () => {
 
 		expect(success).toBe(true);
 		expect(store.addFlag).not.toHaveBeenCalled();
+	});
+});
+
+describe("FETCH content handling", () => {
+	const bodyQuery = [
+		{ item: "uid", original: { value: "UID" } },
+		{
+			item: "body",
+			path: "",
+			type: "content",
+			isLiteral: true,
+			original: { value: "BODY", section: [] },
+		},
+	];
+
+	it("passes stored bytes to the response builder and releases the budget", async () => {
+		const budget = new ContentBudget(1024, 50);
+		const { handlers, mailbox, session, store } = createHarness(
+			"read",
+			null,
+			budget,
+		);
+		let message: { raw?: unknown } | undefined;
+		session.getQueryResponse = (_query, data) => {
+			message = data as { raw?: unknown };
+			return [];
+		};
+		const [success] = await callbackResult((callback) => {
+			handlers.onFetch(
+				mailbox.id,
+				{
+					messages: [1],
+					query: bodyQuery,
+					metadataOnly: false,
+					markAsSeen: false,
+					isUid: true,
+				},
+				session,
+				callback,
+			);
+		});
+
+		expect(success).toBe(true);
+		expect(Buffer.isBuffer(message?.raw)).toBe(true);
+		expect(store.getRawContent).toHaveBeenCalledTimes(1);
+		expect(budget.used).toBe(0);
+	});
+
+	it("releases the budget when the client disconnects mid-response", async () => {
+		const budget = new ContentBudget(1024, 50);
+		const { handlers, mailbox, session } = createHarness("read", null, budget);
+		const socket = Object.assign(new EventEmitter(), {
+			destroyed: false,
+			writableNeedDrain: false,
+			destroy: () => undefined,
+		});
+		session.socket = socket;
+		session.writeStream = { write: () => undefined };
+		const pending = callbackResult((callback) => {
+			handlers.onFetch(
+				mailbox.id,
+				{
+					messages: [1],
+					query: bodyQuery,
+					metadataOnly: false,
+					markAsSeen: false,
+					isUid: true,
+				},
+				session,
+				callback,
+			);
+		}).catch((err: unknown) => err);
+		await Bun.sleep(5);
+		expect(budget.used).toBeGreaterThan(0);
+		socket.emit("close");
+		expect(await pending).toBeInstanceOf(Error);
+		expect(budget.used).toBe(0);
+	});
+
+	it("disconnects a client that stops reading a FETCH response and releases the budget", async () => {
+		const budget = new ContentBudget(1024, 50);
+		const { handlers, mailbox, session } = createHarness(
+			"read",
+			null,
+			budget,
+			40,
+		);
+		let destroyed = false;
+		const socket = Object.assign(new EventEmitter(), {
+			destroyed: false,
+			writableNeedDrain: true,
+			destroy: () => {
+				destroyed = true;
+				socket.destroyed = true;
+			},
+		});
+		session.socket = socket;
+		// The response never finishes piping into a socket whose peer stopped reading.
+		session.writeStream = { write: () => undefined };
+		const pending = callbackResult((callback) => {
+			handlers.onFetch(
+				mailbox.id,
+				{
+					messages: [1],
+					query: bodyQuery,
+					metadataOnly: false,
+					markAsSeen: false,
+					isUid: true,
+				},
+				session,
+				callback,
+			);
+		}).catch((err: unknown) => err);
+		await Bun.sleep(25);
+		socket.emit("drain");
+		await Bun.sleep(25);
+		expect(destroyed).toBe(false);
+		expect(budget.used).toBeGreaterThan(0);
+
+		expect(await pending).toBeInstanceOf(Error);
+		expect(destroyed).toBe(true);
+		expect(budget.used).toBe(0);
+		expect(socket.listenerCount("drain")).toBe(0);
+		expect(socket.listenerCount("close")).toBe(0);
+	});
+
+	it("answers NO [LIMIT] instead of loading content beyond the in-flight budget", async () => {
+		const budget = new ContentBudget(20, 10);
+		const held = await budget.acquire(20);
+		const { handlers, mailbox, session, store } = createHarness(
+			"read",
+			null,
+			budget,
+		);
+		const error = await callbackResult((callback) => {
+			handlers.onFetch(
+				mailbox.id,
+				{
+					messages: [1],
+					query: bodyQuery,
+					metadataOnly: false,
+					markAsSeen: false,
+					isUid: true,
+				},
+				session,
+				callback,
+			);
+		}).catch((err: unknown) => err);
+
+		expect((error as { imapCode?: string }).imapCode).toBe("LIMIT");
+		expect(store.getRawContent).not.toHaveBeenCalled();
+		held();
+		expect(budget.used).toBe(0);
+	});
+});
+
+describe("backend error mapping", () => {
+	it("never exposes raw Postgres codes or messages", () => {
+		const unique = Object.assign(new Error('duplicate key value violates "x"'), {
+			code: "23505",
+		});
+		const timeout = Object.assign(new Error("canceling statement"), {
+			code: "57014",
+		});
+		const mapped = toImapError(unique) as Error & { code: string };
+		expect(mapped.code).toBe("SERVERBUG");
+		expect(mapped.message).not.toContain("duplicate");
+		expect((toImapError(timeout) as Error & { code: string }).code).toBe(
+			"TEMPFAIL",
+		);
+		expect(
+			(
+				toImapError(Object.assign(new Error("x"), { code: "08006" })) as Error & {
+					code: string;
+				}
+			).code,
+		).toBe("TEMPFAIL");
+	});
+});
+
+describe("LOGIN accounting", () => {
+	it("counts malformed usernames against the IP only and remembers valid sessions", async () => {
+		const limits = new ConnectionLimits(5, 10, 60_000, 10);
+		const remembered: unknown[] = [];
+		const handlers = buildHandlers(
+			{
+				authenticate: async () => ({
+					userId: "user",
+					credentialId: "credential",
+					loginAddress: "user@example.com",
+					accessMode: "read" as const,
+					scopes: [],
+				}),
+			} as unknown as ApiAuth,
+			{} as MailStore,
+			limits,
+			{
+				sessions: {
+					remember: (session: unknown) => remembered.push(session),
+				} as never,
+			},
+		);
+		const session = { remoteAddress: "192.0.2.9" } as Session;
+		const [malformed] = await callbackResult((callback) =>
+			handlers.onAuth(
+				{ username: "junk\r\nforged", password: "x" },
+				session,
+				callback,
+			),
+		);
+		expect(malformed).toBeUndefined();
+		const records = limits as unknown as { failures: Map<string, unknown> };
+		expect(records.failures.size).toBe(0);
+
+		const [result] = await callbackResult((callback) =>
+			handlers.onAuth(
+				{ username: "User@Example.com", password: "secret" },
+				session,
+				callback,
+			),
+		);
+		expect(result).toMatchObject({ user: { userId: "user" } });
+		expect(remembered).toEqual([session]);
 	});
 });

@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import { sanitizeLogValue } from "./log.ts";
 
 export interface SearchNode {
 	key: string;
@@ -50,14 +51,14 @@ function nextDay(date: Date): Date {
 	return new Date(date.getTime() + 24 * 60 * 60 * 1000);
 }
 
-const HEADER_COLUMNS: Record<string, string> = {
-	from: "from_data",
-	to: "to_data",
-	cc: "cc_data",
-	bcc: "bcc_data",
-	subject: "subject",
-	"message-id": "message_id",
-};
+const HEADER_COLUMNS = new Map<string, string>([
+	["from", "from_data"],
+	["to", "to_data"],
+	["cc", "cc_data"],
+	["bcc", "bcc_data"],
+	["subject", "subject"],
+	["message-id", "message_id"],
+]);
 
 export function buildCondition(sql: Sql, node: SearchNode): Fragment {
 	switch (node.key) {
@@ -114,7 +115,7 @@ export function buildCondition(sql: Sql, node: SearchNode): Fragment {
 			const header = node.header ?? "";
 			const value = String(node.value ?? "");
 			const pattern = headerPattern(header, value);
-			const column = HEADER_COLUMNS[header];
+			const column = HEADER_COLUMNS.get(header.toLowerCase());
 			if (!column || !value) {
 				return sql`coalesce(coalesce(se.raw_content, am.raw_content) ~* ${pattern}, FALSE)`;
 			}
@@ -145,7 +146,9 @@ export function buildCondition(sql: Sql, node: SearchNode): Fragment {
 			return sql`NOT (${buildCondition(sql, node.value as SearchNode)})`;
 
 		default:
-			console.log(`[imap-search] unsupported term ${node.key}, ignoring`);
+			console.log(
+				`[imap-search] unsupported term ${sanitizeLogValue(node.key)}, ignoring`,
+			);
 			return sql`TRUE`;
 	}
 }

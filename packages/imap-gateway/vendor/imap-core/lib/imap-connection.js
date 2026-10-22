@@ -103,6 +103,10 @@ class IMAPConnection extends EventEmitter {
 
         this._closingTimeout = null;
 
+        // absolute deadline from TCP accept to successful authentication; client traffic does not extend it
+        this._acceptedAt = options.acceptedAt || Date.now();
+        this._authDeadline = null;
+
         if (server.logger) {
             this.logger = server.logger;
         } else {
@@ -133,6 +137,7 @@ class IMAPConnection extends EventEmitter {
     init() {
         // Setup event handlers for the socket
         this._setListeners();
+        this._startAuthDeadline();
 
         let now = Date.now();
         let greetingSent = false;
@@ -360,6 +365,7 @@ class IMAPConnection extends EventEmitter {
      */
     _onClose(/* hadError */) {
         clearTimeout(this._closingTimeout);
+        clearTimeout(this._authDeadline);
 
         if (this._closed) {
             return;
@@ -715,7 +721,7 @@ class IMAPConnection extends EventEmitter {
                             conn.emitNotifications();
                         }
                     }
-                });
+                }, conn.session);
             }
         };
 
@@ -1030,7 +1036,34 @@ class IMAPConnection extends EventEmitter {
 
     setUser(user) {
         this.user = this.session.user = user;
+        clearTimeout(this._authDeadline);
+        this._authDeadline = null;
         this._socket.setTimeout(this.getSocketTimeout());
+    }
+
+    _startAuthDeadline() {
+        let limit = this._server.options.authTimeout;
+        if (!limit || this.user) {
+            return;
+        }
+        let remaining = Math.max(limit - (Date.now() - this._acceptedAt), 0);
+        this._authDeadline = setTimeout(() => {
+            this._authDeadline = null;
+            if (this.user || this._closing || this._closed) {
+                return;
+            }
+            this.logger.info(
+                {
+                    tnx: 'connection',
+                    cid: this.id
+                },
+                '[%s] Authentication deadline reached, closing connection',
+                this.id
+            );
+            this.send('* BYE Authentication timeout, closing connection');
+            setImmediate(() => this.close(true));
+        }, remaining);
+        this._authDeadline.unref();
     }
 
     getSocketTimeout() {

@@ -55,32 +55,42 @@ class IMAPServer extends EventEmitter {
         // setup server listener and connection handler
         if (this.options.secure && !this.options.needsUpgrade) {
             this.server = net.createServer(this.options, socket => {
+                if (!this._accept(socket)) {
+                    return;
+                }
+                let acceptedAt = Date.now();
                 socket.setKeepAlive(true, 5 * 1000);
                 this._handleProxy(socket, (err, socketOptions) => {
                     if (err) {
                         // ignore, should not happen
                     }
+                    socketOptions.acceptedAt = acceptedAt;
                     if (this.options.secured) {
                         return this.connect(socket, socketOptions);
                     }
                     this._upgrade(socket, (err, tlsSocket) => {
                         if (err) {
-                            return this._onError(err);
+                            return this._onUpgradeError(err, socket);
                         }
                         this.connect(tlsSocket, socketOptions);
                     });
                 });
             });
         } else {
-            this.server = net.createServer(this.options, socket =>
+            this.server = net.createServer(this.options, socket => {
+                if (!this._accept(socket)) {
+                    return;
+                }
+                let acceptedAt = Date.now();
                 this._handleProxy(socket, (err, socketOptions) => {
                     if (err) {
                         // ignore, should not happen
                     }
+                    socketOptions.acceptedAt = acceptedAt;
                     socket.setKeepAlive(true, 5 * 1000);
                     this.connect(socket, socketOptions);
-                })
-            );
+                });
+            });
         }
 
         this.skipFetchLog = options.skipFetchLog;
@@ -234,6 +244,50 @@ class IMAPServer extends EventEmitter {
     _onError(err) {
         errors.notifyConnection(false, err);
         this.emit('error', err);
+    }
+
+    /**
+     * Runs the onSocket hook at TCP accept, before TLS or any IMAP processing.
+     * Returning false drops the socket immediately.
+     */
+    _accept(socket) {
+        if (typeof this.options.onSocket !== 'function') {
+            return true;
+        }
+        let accepted = false;
+        try {
+            accepted = this.options.onSocket(socket) !== false;
+        } catch (err) {
+            accepted = false;
+        }
+        if (!accepted) {
+            socket.on('error', () => false);
+            socket.destroy();
+        }
+        return accepted;
+    }
+
+    /**
+     * TLS handshake failures are client-caused (timeouts, bad hellos, resets):
+     * log one short line and drop the socket.
+     */
+    _onUpgradeError(err, socket) {
+        let meta = (err && err.meta) || {};
+        this.logger.info(
+            {
+                tnx: 'tls',
+                ip: meta.ip
+            },
+            'TLS handshake failed from %s: %s',
+            meta.ip || socket.remoteAddress || 'unknown',
+            (err && (err.code || err.message)) || 'unknown error'
+        );
+        socket.on('error', () => false);
+        try {
+            socket.destroy();
+        } catch (E) {
+            // ignore
+        }
     }
 
     _handleProxy(socket, callback) {
@@ -404,7 +458,7 @@ class IMAPServer extends EventEmitter {
             let err = new Error('TLS handshake timed out');
             err.code = 'TLSHandshakeTimeout';
             tlsSocket.destroy(err);
-        }, this.options.tlsHandshakeTimeout || 10 * 1000);
+        }, this.options.tlsHandshakeTimeout || 5 * 1000);
         errorTimer.unref();
 
         let onCloseError = hadError => {
