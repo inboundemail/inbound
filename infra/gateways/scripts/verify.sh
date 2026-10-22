@@ -6,6 +6,9 @@
 set -uo pipefail
 
 ip="${1:-}"
+if [ -n "$ip" ] && ! [[ "$ip" =~ ^[0-9.]+$ ]]; then
+	ip="$(dig +short A "$ip" | grep -E '^[0-9.]+$' | head -1)"
+fi
 gateway="${2:-both}"
 [ -n "$ip" ] && [[ "$gateway" =~ ^(smtp|imap|both)$ ]] || { echo "usage: $0 <host-ip> [smtp|imap|both]" >&2; exit 2; }
 smtp_host="${SMTP_HOSTNAME:-smtp.inboundemail.com}"

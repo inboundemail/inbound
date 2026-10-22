@@ -1,8 +1,12 @@
 name: Deploy gateway host
 
-# Consolidated gateway host (infra/gateways). Manual only until DNS cutover; the old boxes
-# keep deploying through deploy-gateways.yml.
+# Consolidated gateway host (infra/gateways). Deploys both gateways when either package changes on main.
 on:
+  push:
+    branches: [main]
+    paths:
+      - packages/smtp-gateway/**
+      - packages/imap-gateway/**
   workflow_dispatch:
     inputs:
       gateway:
@@ -25,7 +29,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        gateway: ${{ fromJSON(inputs.gateway == 'both' && '["smtp","imap"]' || format('["{0}"]', inputs.gateway)) }}
+        gateway: ${{ fromJSON((inputs.gateway || 'both') == 'both' && '["smtp","imap"]' || format('["{0}"]', inputs.gateway)) }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -48,7 +52,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      GATEWAY: ${{ inputs.gateway }}
+      GATEWAY: ${{ inputs.gateway || 'both' }}
       GATEWAY_HOST_INSTANCE_ID: ${{ vars.GATEWAY_HOST_INSTANCE_ID }}
       GATEWAY_ARTIFACT_BUCKET: ${{ vars.GATEWAY_ARTIFACT_BUCKET }}
       GATEWAY_HOST_IP: ${{ vars.GATEWAY_HOST_IP }}
