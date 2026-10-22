@@ -1,0 +1,53 @@
+#!/bin/bash
+# Publishes a short alert to the stack's SNS topic (inbound-gateway-alerts) with the instance role.
+# usage: inbound-alert <unit>   OnFailure= hook (inbound-alert@<unit>.service): the unit failed
+#        inbound-alert --disk   hourly (inbound-disk-check.timer): alert when / is DISK_ALERT_PERCENT% full
+# At most one message per subject every ALERT_MIN_INTERVAL_SECONDS. Never includes log lines.
+set -euo pipefail
+. /etc/inbound/host.env
+. /etc/inbound/host-runtime.env
+export AWS_REGION AWS_DEFAULT_REGION="$AWS_REGION" PATH="$PATH:/snap/bin"
+
+target="${1:-}"
+instance="$(cat /var/lib/cloud/data/instance-id 2>/dev/null || hostname)"
+
+if [ "$target" = --disk ]; then
+	used="$(df --output=pcent / | tail -1 | tr -dc 0-9)"
+	[ "$used" -ge "$DISK_ALERT_PERCENT" ] || exit 0
+	key=disk
+	subject="inbound-gateway-host: root disk ${used}% full"
+	message="The root filesystem on $instance is ${used}% full (alert threshold ${DISK_ALERT_PERCENT}%).
+Check: sudo du -xh --max-depth=2 / | sort -h | tail; journalctl --disk-usage"
+else
+	[[ "$target" =~ ^[A-Za-z0-9@._-]+\.(service|timer)$ ]] || {
+		echo "usage: inbound-alert <unit>|--disk" >&2
+		exit 2
+	}
+	key="$target"
+	show() { systemctl show -P "$1" "$target" 2>/dev/null || echo "?"; }
+	subject="inbound-gateway-host: $target failed"
+	message="$target failed on $instance at $(date -u +%Y-%m-%dT%H:%M:%SZ).
+State: $(show ActiveState)/$(show SubState), result $(show Result), exit status $(show ExecMainStatus), restarts $(show NRestarts).
+Gateway units restart automatically; this alert repeats at most every $((ALERT_MIN_INTERVAL_SECONDS / 60)) minutes per unit.
+Logs: aws ssm start-session --target $instance, then journalctl -u $target -n 100"
+fi
+
+install -d -m 0700 /run/inbound-alert
+stamp="/run/inbound-alert/$key"
+now="$(date +%s)"
+if [ -e "$stamp" ] && [ $((now - $(stat -c %Y "$stamp"))) -lt "$ALERT_MIN_INTERVAL_SECONDS" ]; then
+	echo "alert for $key suppressed (sent one less than ${ALERT_MIN_INTERVAL_SECONDS}s ago)"
+	exit 0
+fi
+touch "$stamp"
+
+for attempt in 1 2 3; do
+	if aws sns publish --topic-arn "$ALERT_TOPIC_ARN" --subject "$subject" --message "$message" \
+		--query MessageId --output text; then
+		exit 0
+	fi
+	sleep $((attempt * 10))
+done
+rm -f "$stamp"
+echo "could not publish the alert for $key" >&2
+exit 1

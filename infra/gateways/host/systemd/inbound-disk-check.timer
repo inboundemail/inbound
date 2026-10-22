@@ -1,0 +1,9 @@
+[Unit]
+Description=Hourly root disk check
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=1h
+
+[Install]
+WantedBy=timers.target

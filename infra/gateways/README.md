@@ -2,19 +2,22 @@
 
 One EC2 instance runs both protocol gateways: `packages/smtp-gateway` (465, 587) and
 `packages/imap-gateway` (993). This CDK app (`InboundGatewayHost`, us-east-2,
-account 375612485665) replaces the two hand-built boxes. Those boxes keep running, and
-keep deploying through `deploy-gateways.yml`, until DNS cutover.
+account 375612485665) replaced the two hand-built boxes on 2026-10-21. `smtp` and `imap`
+point at its Elastic IP, the old boxes are terminated, and `deploy-gateway-host.yml` is the
+only deploy path.
 
 ## Architecture
 
 ```
-GitHub Actions (production env, OIDC)
+GitHub Actions (deploy-gateway-host.yml on main, production env, OIDC)
   └─ role github-gateway-host-deploy: s3:PutObject releases/*, ssm:SendCommand (this instance + InboundGatewayDeploy only)
        ├─ upload releases/<gateway>-<sha>.tar.gz  ──►  S3 artifact bucket (private, versioned, 90-day expiry)
        └─ ssm send-command InboundGatewayDeploy(gateway, s3Key, sha256)
                                   │
-EC2 t4g.small, Ubuntu 24.04 arm64, Elastic IP, IMDSv2, no SSH (SSM only)
-  inbound-host-sync    re-applies the host bundle (infra/gateways/host, a CDK asset) when it changed
+EC2 t4g.small, Ubuntu 24.04 arm64, Elastic IP, IMDSv2, sshd masked (Session Manager only, logged)
+  inbound-host-sync    verifies the host bundle (infra/gateways/host, a CDK asset) against its SHA-256 manifest, then re-applies it
+  inbound-firewall     nftables: per-source connection and new-connection limits on 465/587/993
+  inbound-alert        SNS inbound-gateway-alerts when a gateway or certificate run fails, or the disk fills
   inbound-deploy       download → verify sha256 → bun install → switch symlink → restart → health check → roll back on failure
   inbound-render-env   SSM /inbound/gateways/{shared,<gateway>}/* (allowlisted names) → /etc/inbound/<gateway>-gateway.env
   inbound-certs        lego DNS-01 via Route 53, daily timer, installs certs into /etc/inbound/tls/<gateway>/versions/, switches the live symlink
@@ -23,14 +26,26 @@ EC2 t4g.small, Ubuntu 24.04 arm64, Elastic IP, IMDSv2, no SSH (SSM only)
 
 - **Runtime:** Node 24 runs the gateways, as on the old boxes (`node src/index.ts`).
   Bun 1.4.2 installs dependencies only (`--frozen-lockfile --production --ignore-scripts`,
-  as the unprivileged `inboundbuild` user, in a `systemd-run` scope capped at 512 MB so an
-  install can't push the running gateways out of memory). Bun, Node and lego are pinned in
+  as the unprivileged `inboundbuild` user, in a transient `systemd-run` service capped at
+  512 MB so an install can't push the running gateways out of memory). That service can't reach
+  the metadata service, sees the filesystem read-only except the package and its own cache, and
+  systemd kills anything it leaves running before the release is handed to root. Bun, Node and lego are pinned in
   `host/host.env` and installed only after their SHA-256 checksums match. A 2 GB swapfile
   (`vm.swappiness=10`) absorbs spikes; the gateway units themselves never swap
   (`MemorySwapMax=0`).
 - **Isolation:** the gateway units run with `IPAddressDeny=169.254.169.254/32 fd00:ec2::254/128`,
   so the gateway processes can't reach the instance metadata service or the instance role's
   credentials. The gateways make no AWS calls.
+- **SMTP parsing:** the SMTP gateway parses each message in its own `worker_threads` worker
+  with a heap limit (`SMTP_PARSE_HEAP_MB`, default 64), terminated at `SMTP_PARSE_TIMEOUT_MS`.
+  At most `SMTP_MAX_CONCURRENT_PARSES` (default 2) run at once, so their worst case (about
+  100 MB each) plus the buffered bodies stays under `MemoryMax=384M`. Raising either knob
+  needs a higher `MemoryMax`.
+- **IMAP FETCH memory:** message content in flight is bounded by
+  `IMAP_FETCH_MEMORY_BUDGET_BYTES`, and one credential may hold at most half of it. A client
+  whose FETCH response makes no progress for 60 seconds is disconnected and its share freed.
+- **Core dumps:** both units set `LimitCORE=0`, so a crash never writes message content or secrets
+  to a core file.
 - **Code:** `/opt/inbound/releases/<gateway>-<sha>` (owned by root, read-only to the
   services). `/opt/inbound/current-<gateway>` is switched atomically. The last 3 releases
   are kept. Artifacts unpack in `/opt/inbound/staging` (root, 0755); only the unpacked
@@ -66,14 +81,66 @@ EC2 t4g.small, Ubuntu 24.04 arm64, Elastic IP, IMDSv2, no SSH (SSM only)
   pick it up at the next deploy or reboot). Snaps (`amazon-ssm-agent`, `aws-cli`) refresh
   only between 08:00 and 08:30 UTC (`SNAP_REFRESH_TIMER`), and `inbound-deploy` holds their
   refreshes while it runs. The first bootstrap reboots once if the base upgrade needs it.
+- **Host bundle integrity:** at synth time the stack computes a `sha256sum` manifest of every
+  file in `host/` and stores it in the SSM parameter `/inbound/gateways/host/bundle-sha256`,
+  next to `bundle-url`. Before anything from a bundle runs, `inbound-host-sync` checks that the
+  URL matches `^s3://cdk-hnb659fds-assets-375612485665-us-east-2/[0-9a-f]{64}\.zip$`, that the
+  zip holds exactly the files in the manifest (no extra, missing, duplicate or unsafe names),
+  and that `sha256sum -c` passes. A zip with directory entries (for example an empty
+  directory) is refused too; cdk-assets zips files only. Otherwise it logs `REFUSING host bundle …` (journal tag
+  `inbound-host-sync`, and the deploy's output) and exits non-zero, so the deploy stops before
+  `inbound-deploy`. `sudo inbound-host-sync --check` verifies the published bundle without
+  applying it. User data (first boot only) doesn't verify yet, because changing it stops and
+  starts the instance: set `verifyHostBundleInUserData: true` in `lib/config.ts` with the next
+  AMI change, which replaces the instance anyway.
+- **Firewall:** `inbound-firewall.service` loads `/etc/inbound/firewall.nft` (rendered by
+  `bootstrap.sh` from `host/host.env`) early at boot, before the network. Per source IPv4 and
+  gateway port it allows at most 30 concurrent connections and 30 new connections a minute
+  (burst 60), and drops the rest. The limits sit above the gateways' own per-IP limits (SMTP 10,
+  IMAP 20), so a normal client gets the gateway's error first. Only connections to the gateway
+  ports are tracked by conntrack; everything else (SSM agent, apt, S3, the gateways' outbound
+  connections) is `notrack`, so a SYN flood that fills the conntrack table can't cut off
+  management access. `notrack` also means NAT doesn't work on this host; revisit before adding
+  Docker or anything else that needs it. The ruleset only touches its own table
+  (`inet inbound_limits`). Counters: `sudo nft list chain inet inbound_limits gateway_new`.
+- **Logs:** journald is the only log store (`ForwardToSyslog=no`, so `/var/log/syslog` no longer
+  gets service logs), persistent, capped at 500 MB and kept at least 2 GB clear of a full disk,
+  and rate-limited to 5,000 lines per 30 seconds per service.
+- **Access:** `ssh.socket` and `ssh.service` are disabled and masked. Shells go through Session
+  Manager. The `SSM-SessionManagerRunShell` document (Session Manager preferences for the whole
+  account in us-east-2, where this host is the only managed instance) streams every session
+  transcript to the CloudWatch Logs group `/inbound/gateways/ssm-sessions` (90-day retention,
+  encrypted with `alias/inbound-gateways-session-logs`), and ends idle sessions after 20 minutes.
+  If the host can't write to that group, sessions fail to start; the instance role has exactly
+  the permissions it needs. Port forwarding sessions use other documents and aren't logged.
+- **Alerts:** the SNS topic `inbound-gateway-alerts` emails `ryan@mandarin3d.com` (override with
+  `bunx cdk deploy -c alertEmail=…`; the address must confirm the subscription once). It gets
+  the recovery alarm, an alarm when the instance status check fails for 3 minutes, and an
+  alarm when the CPU credit balance stays under 20 (the instance runs in unlimited mode, so
+  that means sustained load billed as surplus credits), plus their OK transitions. On the host,
+  an `OnFailure=` drop-in on `smtp-gateway`, `imap-gateway` and `inbound-certs` runs
+  `inbound-alert`, which publishes the unit state (never log lines) with the instance role
+  (`sns:Publish` on this topic only). Gateway units go through "failed" on every crash before
+  they restart, so alerts are limited to one per unit per 30 minutes. `inbound-disk-check.timer`
+  alerts hourly while `/` is at least 85% full.
 - **Replacement guard:** a CloudFormation stack policy (`scripts/set-stack-policy.sh`)
   denies `Update:Replace` and `Update:Delete` on the instance, the Elastic IP and the EIP
   association, so a stack change that would replace the host or move the IP fails instead.
 - **Deploy logs:** when a health check fails, CI gets the unit state and the last 20 journal
   lines, with addresses, URLs with credentials, long tokens and `password=`-style values
   masked. The full journal stays on the host.
-- **Recovery:** a CloudWatch alarm on `StatusCheckFailed_System` triggers EC2 auto-recovery.
-  Recovery keeps the instance ID, the EIP and the disk.
+- **Recovery:** a CloudWatch alarm on `StatusCheckFailed_System` triggers EC2 auto-recovery
+  and alerts. Recovery keeps the instance ID, the EIP and the disk.
+- **Deploy trust:** the deploy role trusts a GitHub OIDC token only when `sub` is
+  `repo:inboundemail/inbound:environment:production`, `repository_id` is `989702246`,
+  `repository_owner_id` is `230610683`, `ref` is `refs/heads/main` and `job_workflow_ref` is
+  `inboundemail/inbound/.github/workflows/deploy-gateway-host.yml@refs/heads/main`. AWS STS
+  evaluates these GitHub claims directly (condition keys added in 2026-02), so the repository's
+  OIDC subject template stays at the default. Another workflow, a branch, a fork or a renamed
+  repository can't assume the role. It can read Run Command results only in us-east-2.
+  This doesn't stop someone who can push to `main`: protect `main` (pull requests required,
+  no force pushes, no bypass for apps) and add a required reviewer to the `production`
+  environment.
 
 ## Cost (us-east-2, on-demand)
 
@@ -83,9 +150,10 @@ EC2 t4g.small, Ubuntu 24.04 arm64, Elastic IP, IMDSv2, no SSH (SSM only)
 | 16 GB gp3 root volume | ~$1.28 |
 | Elastic IP (public IPv4) | ~$3.65 |
 | Route 53 hosted zone | $0.50 |
-| KMS customer-managed key (`alias/inbound-gateways`) | ~$1.00 |
-| S3, SSM standard parameters, KMS requests, alarm, Run Command | ~$0 |
-| **Total** | **~$18.70** |
+| KMS customer-managed keys (`alias/inbound-gateways`, `alias/inbound-gateways-session-logs`) | ~$2.00 |
+| CloudWatch alarms (3) | ~$0.30 |
+| S3, SSM standard parameters, KMS requests, SNS, session logs, Run Command | ~$0 |
+| **Total** | **~$20.00** |
 
 The two old boxes cost about $27/month (t4g.micro, t4g.small, 2 EIPs, 2 volumes).
 
@@ -143,7 +211,15 @@ example, `export AWS_PROFILE=inbound AWS_REGION=us-east-2`).
    Any other variable the gateway reads in its `src/config.ts` (for example
    `SMTP_MAX_CONNECTIONS`) can be stored the same way under `smtp/` or `imap/`. A new
    variable must also be added to that gateway's `allowed` list in
-   `host/sbin/inbound-render-env`.
+   `host/sbin/inbound-render-env`. Every tunable limit is allowlisted, including the SMTP
+   DATA, parse and session limits (`SMTP_MAX_DATA_PER_CREDENTIAL`, `SMTP_MAX_DATA_PER_IP`,
+   `SMTP_MAX_BUFFERED_BYTES`, `SMTP_DATA_TIMEOUT_MS`, `SMTP_PARSE_TIMEOUT_MS`,
+   `SMTP_MAX_CONCURRENT_PARSES`, `SMTP_PARSE_HEAP_MB`, `SMTP_MAX_MIME_PARTS`,
+   `SMTP_PREAUTH_TIMEOUT_MS`, `SMTP_MAX_SESSION_MS`) and the IMAP handshake, auth, FETCH
+   budget and session limits (`IMAP_TLS_HANDSHAKE_TIMEOUT_MS`, `IMAP_AUTH_TIMEOUT_MS`,
+   `IMAP_AUTH_FAILURE_RECORDS`, `IMAP_FETCH_MEMORY_BUDGET_BYTES`, `IMAP_FETCH_BUDGET_WAIT_MS`,
+   `IMAP_SESSION_REVALIDATE_MS`, `IMAP_SESSION_MAX_AGE_MS`). Defaults and meanings are in
+   `packages/smtp-gateway/README.md` and `packages/imap-gateway/src/config.ts`.
 
 6. Set the workflow variables on the `production` environment from the stack outputs:
 
@@ -153,7 +229,9 @@ example, `export AWS_PROFILE=inbound AWS_REGION=us-east-2`).
    gh variable set GATEWAY_HOST_IP --env production --body <ElasticIp>
    ```
 
-7. Check that bootstrap finished. The log should contain `done`, possibly followed by the
+7. Confirm the SNS subscription from the email AWS sends to the alert address.
+
+8. Check that bootstrap finished. The log should contain `done`, possibly followed by the
    one-time `first bootstrap: reboot required …` line (the host is back a minute later).
 
    ```sh
@@ -161,7 +239,7 @@ example, `export AWS_PROFILE=inbound AWS_REGION=us-east-2`).
    sudo tail -n 30 /var/log/inbound-bootstrap.log
    ```
 
-8. Deploy the code for the first time. The first deploy also issues the certificates,
+9. Deploy the code for the first time. The first deploy also issues the certificates,
    because `inbound-deploy` runs `inbound-certs` when a gateway has no certificate yet.
 
    ```sh
@@ -173,7 +251,7 @@ example, `export AWS_PROFILE=inbound AWS_REGION=us-east-2`).
    To issue or renew certificates by hand on the host:
    `sudo inbound-certs all --no-random-sleep`.
 
-9. Verify against the new IP, using the real hostnames for SNI:
+10. Verify against the new IP, using the real hostnames for SNI:
 
    ```sh
    ./scripts/verify.sh <ElasticIp>
@@ -183,60 +261,42 @@ example, `export AWS_PROFILE=inbound AWS_REGION=us-east-2`).
 
 - **Logs:** `journalctl -u smtp-gateway -u imap-gateway -f`; certs: `journalctl -u inbound-certs`;
   bootstrap: `/var/log/inbound-bootstrap.log`.
-- **Host changes** (`host/`): `bunx cdk deploy` publishes a new bundle. The next code deploy
-  applies it, or run `sudo inbound-host-sync` on the host. Gateway unit changes take
-  effect on the next deploy or restart.
+- **Host changes** (`host/`): `bunx cdk deploy` publishes a new bundle and its manifest. The
+  next code deploy verifies and applies it, or run `sudo inbound-host-sync` on the host. Gateway
+  unit changes take effect on the next deploy or restart. A deploy that fails with
+  `REFUSING host bundle` means the bundle in S3 doesn't match what the stack synthesized:
+  don't work around it, find out who wrote the object. (While `cdk deploy` is updating the
+  stack, `bundle-url` and `bundle-sha256` can briefly disagree; re-run the deploy after it
+  finishes.)
+- **Session transcripts:** `aws logs tail /inbound/gateways/ssm-sessions --since 1d`.
+- **Alerts:** `journalctl -u 'inbound-alert@*'` shows what the host sent or suppressed.
 - **Secret rotation:** run `put-secrets.sh`, then redeploy. Every deploy re-renders the
   env files.
 - **Rollback:** re-run the workflow from the previous commit. Releases already on the host
   are reused without reinstalling.
-- **AMI changes** replace the instance. Run `./scripts/set-stack-policy.sh --unlock`, turn
-  off termination protection, deploy, re-run steps 7–9, turn protection back on, and run
+- **AMI changes** replace the instance. Set `verifyHostBundleInUserData: true` in
+  `lib/config.ts` in the same change. Run `./scripts/set-stack-policy.sh --unlock`, turn
+  off termination protection, deploy, re-run steps 8–10, turn protection back on, and run
   `./scripts/set-stack-policy.sh` again. The EIP is a separate resource and follows the new
   instance.
 
-## Cutover
+## Cutover and decommission (done)
 
-1. `verify.sh <ElasticIp>` passes for both gateways, and both hosts run the same commit.
-2. The `smtp` and `imap` A records already have a 60-second TTL. Point them at the new IP.
-   Add the new record before removing the old one, so a client resolves to one of two
-   working hosts during the switch:
+DNS moved to the new host on 2026-10-21. Since then:
 
-   ```sh
-   vercel dns ls inboundemail.com | grep -E '\s(smtp|imap)\s'
-   vercel dns add inboundemail.com smtp A <ElasticIp>
-   vercel dns add inboundemail.com imap A <ElasticIp>
-   vercel dns rm <old smtp record id>     # 18.221.244.100
-   vercel dns rm <old imap record id>     # 18.223.141.122
-   ```
+- The old boxes (`i-0c10ded783a5ec476`, `i-04fe4bfb9009b39e5`) are terminated, their Elastic
+  IPs (18.221.244.100, 18.223.141.122) released, and their security groups, the
+  `inbound-smtp-gateway` key pair, the `github-gateway-deploy` role and the old workflow
+  `deploy-gateways.yml` deleted. The `production` environment secrets `GATEWAY_DEPLOY_SSH_KEY`
+  and `GATEWAY_KNOWN_HOSTS` are gone; the workflow uses only the environment variables from
+  setup step 6. No images of the old boxes were kept. Their root volumes were unencrypted and
+  held secrets, so never make an AMI of such a volume: if an image is ever needed, snapshot,
+  `aws ec2 copy-snapshot --encrypted --kms-key-id <key>`, and delete the unencrypted snapshot.
+- There is no rollback to the old boxes.
 
-3. Verify: `dig +short smtp.inboundemail.com @ns1.vercel-dns.com`, then
-   `./scripts/verify.sh "$(dig +short smtp.inboundemail.com)"`, and send a test message and
-   check IMAP with a real client.
-4. Watch the new host: `journalctl -u smtp-gateway -u imap-gateway -f`. IMAP IDLE clients
-   stay connected to the old box until they reconnect. After about 10 minutes, restart
-   `imap-gateway` on the old box to move them over.
-5. **Rollback:** add the old A records back (18.221.244.100 for smtp, 18.223.141.122 for
-   imap) and remove the new ones. Clients follow within the 60-second TTL.
-6. Once the new host has been stable for a day, add a `push` trigger to
-   `deploy-gateway-host.yml` (with the same `paths` as the old workflow), and delete
-   `deploy-gateways.yml`.
+Still to do (unless already done):
 
-## Decommission the old boxes
-
-Do this after at least 48 hours on the new host.
-
-1. Snapshot both root volumes:
-   `aws ec2 create-image --no-reboot --instance-id i-0c10ded783a5ec476 --name inbound-smtp-gateway-final`
-   (and the same for `i-04fe4bfb9009b39e5`, named `inbound-imap-gateway-final`).
-2. Terminate: `aws ec2 terminate-instances --instance-ids i-0c10ded783a5ec476 i-04fe4bfb9009b39e5`.
-3. Release the EIPs:
-   `aws ec2 describe-addresses --public-ips 18.221.244.100 18.223.141.122 --query 'Addresses[].AllocationId'`,
-   then `aws ec2 release-address --allocation-id <id>` for each.
-4. Delete the security groups `sg-08f184ab834042662` and `sg-050924ef2d471c8cd`.
-5. Delete the old deploy path:
-   - `.github/workflows/deploy-gateways.yml`
-   - `packages/*/deploy/deploy.sh` and `packages/*/deploy/*.service` (keep `provision-db-role.sql`)
-   - the GitHub secrets `GATEWAY_DEPLOY_SSH_KEY` and `GATEWAY_KNOWN_HOSTS`
-   - the `github-gateway-deploy` role and its policies
-   - the `inbound-smtp-gateway` EC2 key pair and every local copy of the `.pem`
+1. ~~Delete `packages/*/deploy/deploy.sh` and `packages/*/deploy/*.service`~~ Done
+   (`packages/imap-gateway/deploy/provision-db-role.sql` is kept).
+2. Rotate `MAILBOX_GATEWAY_AUTH_SECRET` and the `imap_gateway` database password, because
+   the old boxes held them: `./scripts/put-secrets.sh`, then redeploy.

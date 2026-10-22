@@ -1,0 +1,8 @@
+[Unit]
+Description=Alert (SNS) that %i failed
+ConditionPathExists=/etc/inbound/host-runtime.env
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/inbound-alert %i
+TimeoutStartSec=2min

@@ -53,9 +53,20 @@ prepare_release() {
 		fail "$release is live with different contents; refusing to overwrite"
 
 	log "$gw: installing production dependencies"
-	(cd "$pkg" && systemd-run --scope --quiet --collect -p MemoryMax=512M -p MemorySwapMax=1G \
-		runuser -u inboundbuild -- env HOME=/var/lib/inbound-build \
-		bun install --frozen-lockfile --production --ignore-scripts --no-progress) ||
+	# A transient service, not a scope: systemd kills anything the install leaves behind when it
+	# exits, before the chown below, and the install can't reach the instance metadata service.
+	# copyfile: the cache and the package are separate mounts here, and the release must not share
+	# inodes with the build user's cache.
+	systemd-run --wait --pipe --collect --quiet --unit="inbound-bun-install-$gw-$$" \
+		-p User=inboundbuild -p Group=inboundbuild \
+		-p WorkingDirectory="$pkg" -p Environment=HOME=/var/lib/inbound-build \
+		-p MemoryMax=512M -p MemorySwapMax=1G -p Nice=10 -p RuntimeMaxSec=600 \
+		-p "IPAddressDeny=169.254.169.254/32 fd00:ec2::254/128" \
+		-p ProtectSystem=strict -p ProtectHome=true -p PrivateTmp=true -p PrivateDevices=true \
+		-p "ReadWritePaths=$pkg /var/lib/inbound-build" \
+		-p NoNewPrivileges=true -p ProtectKernelTunables=true -p ProtectKernelModules=true \
+		-p ProtectControlGroups=true -p RestrictSUIDSGID=true -p UMask=0022 \
+		/usr/local/bin/bun install --frozen-lockfile --production --ignore-scripts --no-progress --backend=copyfile </dev/null ||
 		fail "$gw: bun install failed"
 	chown -R root:root "$pkg"
 	chmod -R u=rwX,go=rX "$pkg"

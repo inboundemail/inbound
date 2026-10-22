@@ -1,0 +1,8 @@
+[Unit]
+Description=Alert (SNS) when the root disk is nearly full
+ConditionPathExists=/etc/inbound/host-runtime.env
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/inbound-alert --disk
+TimeoutStartSec=2min

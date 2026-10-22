@@ -1,17 +1,83 @@
 #!/bin/bash
-# Re-applies bootstrap.sh when the stack has published a new host bundle. --force re-applies regardless.
+# Re-applies bootstrap.sh when the stack has published a new host bundle. The bundle is verified first:
+# its URL must be a content-addressed object in the CDK assets bucket, and its files must match, exactly
+# and by SHA-256, the manifest the stack computed at synth time (SSM <prefix>/host/bundle-sha256).
+# Nothing from the bundle runs unless both checks pass.
+# usage: inbound-host-sync [--force|--check]
+#   --force  re-apply even when the bundle URL hasn't changed
+#   --check  download and verify the published bundle, but don't apply it
 set -euo pipefail
+umask 077
 . /etc/inbound/host.env
 export AWS_REGION AWS_DEFAULT_REGION="$AWS_REGION" PATH="$PATH:/snap/bin"
 
-url="$(aws ssm get-parameter --name "$PARAMETER_PREFIX/host/bundle-url" --query Parameter.Value --output text)"
-if [ "${1:-}" != --force ] && [ "$url" = "$(cat /etc/inbound/host-bundle 2>/dev/null || true)" ]; then
+mode="${1:-}"
+case "$mode" in
+"" | --force | --check) ;;
+*)
+	echo "usage: inbound-host-sync [--force|--check]" >&2
+	exit 2
+	;;
+esac
+
+URL_RE='^s3://cdk-hnb659fds-assets-375612485665-us-east-2/[0-9a-f]{64}\.zip$'
+LINE_RE='^[0-9a-f]{64}  [A-Za-z0-9._@-]+(/[A-Za-z0-9._@-]+)*$'
+
+log() {
+	echo "[host-sync $(date -Is)] $*" >&2
+	logger -t inbound-host-sync -- "$*" 2>/dev/null || true
+}
+refuse() {
+	log "REFUSING host bundle ${url:-?}: $*"
+	exit 1
+}
+param() { aws ssm get-parameter --name "$PARAMETER_PREFIX/host/$1" --query Parameter.Value --output json | jq -er .; }
+
+url="$(param bundle-url)" || refuse "cannot read $PARAMETER_PREFIX/host/bundle-url"
+[[ "$url" =~ $URL_RE ]] || refuse "URL does not match $URL_RE"
+if [ -z "$mode" ] && [ "$url" = "$(cat /etc/inbound/host-bundle 2>/dev/null || true)" ]; then
 	echo "host bundle up to date"
 	exit 0
 fi
 
+manifest="$(param bundle-sha256)" || refuse "cannot read $PARAMETER_PREFIX/host/bundle-sha256"
+paths=()
+while IFS= read -r line; do
+	[[ "$line" =~ $LINE_RE ]] || refuse "malformed manifest line: ${line:0:120}"
+	path="${line:66}"
+	[[ "/$path/" != */./* && "/$path/" != */../* ]] || refuse "manifest path with . or ..: $path"
+	paths+=("$path")
+done <<<"$manifest"
+expected="$(printf '%s\n' "${paths[@]}" | LC_ALL=C sort)"
+[ -z "$(uniq -d <<<"$expected")" ] || refuse "duplicate paths in the manifest"
+grep -qx bootstrap.sh <<<"$expected" || refuse "manifest has no bootstrap.sh"
+
 dir="$(mktemp -d)"
 trap 'rm -rf "$dir"' EXIT
-aws s3 cp "$url" "$dir/host.zip" --only-show-errors
+aws s3 cp "$url" "$dir/host.zip" --only-show-errors || refuse "download failed"
+zip_sha256="$(sha256sum "$dir/host.zip" | cut -d' ' -f1)"
+
+entries="$(python3 -c '
+import re, sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as z:
+    for info in z.infolist():
+        # cdk-assets zips files only, so a directory entry (e.g. an empty directory) is not ours.
+        if info.is_dir():
+            sys.exit("directory entry %r" % info.filename)
+        if not re.fullmatch(r"[A-Za-z0-9._@/-]+", info.filename):
+            sys.exit("unsafe entry name %r" % info.filename)
+        print(info.filename)
+' "$dir/host.zip")" || refuse "not a valid zip archive, or unsafe or directory entries (zip sha256 $zip_sha256)"
+[ "$(LC_ALL=C sort <<<"$entries")" = "$expected" ] ||
+	refuse "zip entries differ from the manifest (zip sha256 $zip_sha256): $(diff <(LC_ALL=C sort <<<"$entries") <(echo "$expected") | grep '^[<>]' | head -5 | tr '\n' ' ')"
+
 python3 -m zipfile -e "$dir/host.zip" "$dir/host"
+[ -z "$(find "$dir/host" ! -type f ! -type d -print -quit)" ] || refuse "archive contains special files"
+[ "$(cd "$dir/host" && find . -type f -printf '%P\n' | LC_ALL=C sort)" = "$expected" ] ||
+	refuse "extracted files differ from the manifest"
+(cd "$dir/host" && sha256sum --strict --quiet -c - <<<"$manifest") >&2 ||
+	refuse "sha256 mismatch (zip sha256 $zip_sha256)"
+
+log "host bundle verified: $url ($(wc -l <<<"$expected" | tr -d ' ') files, zip sha256 $zip_sha256)"
+[ "$mode" = --check ] && exit 0
 bash "$dir/host/bootstrap.sh" "$url"

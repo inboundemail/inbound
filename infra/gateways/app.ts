@@ -10,6 +10,7 @@ const stack = new GatewayHostStack(app, "InboundGatewayHost", {
 		"Consolidated EC2 host for the Inbound SMTP and IMAP gateways (packages/smtp-gateway, packages/imap-gateway)",
 	terminationProtection: true,
 	config: gatewayHostConfig,
+	alertEmail: app.node.tryGetContext("alertEmail"),
 });
 
 Tags.of(stack).add("Project", "inbound");

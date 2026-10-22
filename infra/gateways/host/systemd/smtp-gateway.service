@@ -42,6 +42,7 @@ LockPersonality=true
 SystemCallArchitectures=native
 UMask=0077
 LimitNOFILE=65536
+LimitCORE=0
 
 MemoryHigh=320M
 MemoryMax=384M

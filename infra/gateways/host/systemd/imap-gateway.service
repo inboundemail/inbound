@@ -12,7 +12,7 @@ User=imapgw
 Group=imapgw
 WorkingDirectory=/opt/inbound/current-imap
 EnvironmentFile=/etc/inbound/imap-gateway.env
-ExecStart=/usr/local/bin/node src/index.ts
+ExecStart=/usr/local/bin/node --enable-experimental-regexp-engine-on-excessive-backtracks src/index.ts
 Restart=always
 RestartSec=2
 RestartSteps=6
@@ -42,6 +42,7 @@ LockPersonality=true
 SystemCallArchitectures=native
 UMask=0077
 LimitNOFILE=65536
+LimitCORE=0
 
 MemoryHigh=1000M
 MemoryMax=1200M
