@@ -1,6 +1,7 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { SESClient, SendBounceCommand, SendBounceCommandInput } from '@aws-sdk/client-ses';
-import { simpleParser, ParsedMail, Attachment } from 'mailparser';
+import { ParsedMail, Attachment } from 'mailparser';
+import { parseMailSafely } from '@/lib/email-management/safe-mail-parser';
 import { extractEmailAddress, extractEmailAddresses } from '@/lib/email-management/email-parser';
 
 // Types for SES email receiving
@@ -486,7 +487,7 @@ export class AWSSESEmailProcessor {
    */
   private async parseEmail(emailBuffer: Buffer): Promise<ParsedMail> {
     try {
-      return await simpleParser(emailBuffer);
+      return await parseMailSafely(emailBuffer);
     } catch (error) {
       console.error('Error parsing email:', error);
       throw error;

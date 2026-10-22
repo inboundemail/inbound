@@ -31,6 +31,7 @@ import {
 	MCP_RESOURCE_URL,
 } from "@/lib/auth/inbound-oauth-session";
 import { db } from "../db/index";
+import { disableMailCredentialsForUser } from "../db/mail-credentials";
 import * as schema from "../db/schema";
 
 // Blocked email domains - users cannot sign up with these domains
@@ -392,6 +393,16 @@ export const auth = betterAuth({
 					} catch (error) {
 						console.error("❌ Error sending welcome email:", error);
 					}
+				},
+			},
+			update: {
+				after: async (user) => {
+					const { banned, banExpires } = user as {
+						banned?: boolean | null;
+						banExpires?: Date | string | null;
+					};
+					if (banned !== true || banExpires) return;
+					await disableMailCredentialsForUser(user.id);
 				},
 			},
 		},

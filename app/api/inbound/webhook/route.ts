@@ -662,6 +662,7 @@ export async function POST(request: NextRequest) {
 				let contentLoaded = false;
 				let emailContent: string | null | undefined = record.emailContent;
 				let parsedEmailData: ParsedEmailData | null = null;
+				let parseFailure: string | null = null;
 				const loadContent = async () => {
 					if (contentLoaded) return;
 					contentLoaded = true;
@@ -710,9 +711,11 @@ export async function POST(request: NextRequest) {
 							parsedEmailData = await parseEmail(emailContent);
 							console.log(`✅ Webhook - Parse successful`);
 						} catch (parseError) {
-							console.error(
-								`❌ Webhook - Parse failed: ${parseError instanceof Error ? parseError.message : "Unknown error"}`,
-							);
+							parseFailure =
+								parseError instanceof Error
+									? parseError.message
+									: "Unknown error";
+							console.error(`❌ Webhook - Parse failed: ${parseFailure}`);
 						}
 					} else {
 						console.warn(`⚠️ Webhook - No content available for parsing`);
@@ -872,8 +875,11 @@ export async function POST(request: NextRequest) {
 								envelopeRecipients: userRecipients,
 								messageId: normalizedEmailMessageId,
 								subject: mail.commonHeaders.subject || "No Subject",
+								rawContent: emailContent || null,
 								parseSuccess: false,
-								parseError: "Failed to parse email content",
+								parseError: parseFailure
+									? `Failed to parse email content: ${parseFailure}`
+									: "Failed to parse email content",
 								userId: userId,
 								createdAt: new Date(),
 								updatedAt: new Date(),

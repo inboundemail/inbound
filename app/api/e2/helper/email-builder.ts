@@ -91,8 +91,7 @@ function encodeQuotedPrintable(text: string): string {
   // For production, consider using a proper library
   return text
     .replace(/=/g, '=3D')
-    .replace(/\r\n/g, '\n')
-    .replace(/\n/g, '\r\n')
+    .replace(/\r\n?|\n/g, '\r\n')
 }
 
 /**

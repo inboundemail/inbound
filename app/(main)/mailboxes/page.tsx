@@ -477,10 +477,10 @@ export default function MailboxesPage() {
 												</span>
 												{mailbox.type === "mailbox" && (
 													<span>
-														IMAP:{" "}
+														Access:{" "}
 														{mailbox.accessMode === "read"
-															? "read only"
-															: "read / write"}
+															? "read only, no sending"
+															: "read & write"}
 													</span>
 												)}
 											</div>

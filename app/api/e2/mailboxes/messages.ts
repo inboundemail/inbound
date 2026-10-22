@@ -587,6 +587,7 @@ export const getMailboxAttachment = new Elysia().get(
 			403: ErrorSchema,
 			404: ErrorSchema,
 			409: ErrorSchema,
+			422: ErrorSchema,
 		},
 		detail: {
 			tags: ["Mailboxes"],

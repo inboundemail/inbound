@@ -1,12 +1,14 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "bun:test";
 
-type MailboxEndpoint = "mailbox" | "smtp";
+type MailboxEndpoint = "mailbox" | "smtp" | "send";
 
 interface ScenarioRequest {
 	endpoint: MailboxEndpoint;
 	loginAddress: string;
 	headers: Record<string, string>;
+	token?: string;
 }
 
 interface Scenario {
@@ -15,10 +17,13 @@ interface Scenario {
 	unavailable?: boolean;
 	missingRedis?: boolean;
 	gatewaySecret?: string;
+	limitSucceeds?: boolean;
+	exhausted?: boolean;
 }
 
 interface ScenarioResult {
-	calls: Array<{ prefix: string; identifier: string }>;
+	calls: Array<{ prefix: string; identifier: string; check?: boolean }>;
+	verifyCalls: number;
 	responses: Array<{
 		status: number;
 		retryAfter: string | null;
@@ -28,7 +33,7 @@ interface ScenarioResult {
 }
 
 const scenarioScript = `
-import { mock } from "bun:test";
+import { mock, spyOn } from "bun:test";
 
 const scenario = JSON.parse(process.env.MAILBOX_RATE_LIMIT_SCENARIO);
 const calls = [];
@@ -47,7 +52,9 @@ class MockRatelimit {
     if (scenario.unavailable) throw new Error("Redis unavailable");
 
     const sourceLimiter = this.prefix.endsWith(":ip");
-    const blocked = scenario.blockSource ? sourceLimiter : !sourceLimiter;
+    const blocked = scenario.limitSucceeds
+      ? false
+      : scenario.blockSource ? sourceLimiter : !sourceLimiter;
     return {
       success: !blocked,
       limit: sourceLimiter ? 3000 : 60,
@@ -55,6 +62,12 @@ class MockRatelimit {
       reset: Date.now() + 60000,
       pending: Promise.resolve(),
     };
+  }
+
+  async getRemaining(identifier) {
+    calls.push({ prefix: this.prefix, identifier, check: true });
+    if (scenario.unavailable) throw new Error("Redis unavailable");
+    return { remaining: scenario.exhausted ? 0 : 10, reset: Date.now() + 60000 };
   }
 }
 
@@ -64,21 +77,37 @@ const { Elysia } = await import("elysia");
 const { AuthError } = await import("./app/api/e2/lib/auth");
 const { authenticateMailbox } = await import("./app/api/e2/mailboxes/authenticate");
 const { authenticateSmtp } = await import("./app/api/e2/mailboxes/authenticate-smtp");
+const { authenticateEmailSend } = await import("./app/api/e2/lib/send-auth");
+const { auth } = await import("./lib/auth/auth");
+let verifyCalls = 0;
+spyOn(auth.api, "verifyApiKey").mockImplementation(async () => {
+  verifyCalls++;
+  return { valid: false, error: { message: "Invalid API key" }, key: null };
+});
 const app = new Elysia()
   .onError(({ error }) => {
     if (error instanceof AuthError) return error.response;
   })
   .use(authenticateMailbox)
-  .use(authenticateSmtp);
+  .use(authenticateSmtp)
+  .post("/send", async ({ request, set }) => {
+    const { userId } = await authenticateEmailSend(request, set);
+    return { userId };
+  });
 const responses = [];
 
 for (const entry of scenario.requests) {
-  const smtp = entry.endpoint === "smtp";
-  const path = smtp ? "/mailboxes/authenticate-smtp" : "/mailboxes/authenticate";
+  const path = entry.endpoint === "send"
+    ? "/send"
+    : entry.endpoint === "smtp" ? "/mailboxes/authenticate-smtp" : "/mailboxes/authenticate";
   const response = await app.handle(
     new Request("http://localhost" + path, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...entry.headers },
+      headers: {
+        "Content-Type": "application/json",
+        ...(entry.token ? { Authorization: "Bearer " + entry.token } : {}),
+        ...entry.headers,
+      },
       body: JSON.stringify({ loginAddress: entry.loginAddress, password: "password" }),
     }),
   );
@@ -90,7 +119,7 @@ for (const entry of scenario.requests) {
   });
 }
 
-console.log("MAILBOX_RATE_LIMIT_RESULT:" + JSON.stringify({ calls, responses }));
+console.log("MAILBOX_RATE_LIMIT_RESULT:" + JSON.stringify({ calls, verifyCalls, responses }));
 process.exit(0);
 `;
 
@@ -391,5 +420,67 @@ describe("mailbox authentication rate limiting", () => {
 		expect(result.calls).toEqual([]);
 		expect(result.responses[0].status).toBe(503);
 		expect(result.responses[0].retryAfter).toBe("60");
+	});
+
+	it("counts failed mailbox passwords on the send endpoints per IP and token hash", () => {
+		const token = "mail_0123456789abcdefWRONG";
+		const result = runScenario({
+			limitSucceeds: true,
+			requests: [
+				{
+					endpoint: "send",
+					loginAddress: "",
+					token,
+					headers: { "x-real-ip": "203.0.113.90" },
+				},
+			],
+		});
+
+		const tokenHash = createHash("sha256").update(token).digest("hex");
+		const loginKey = `203.0.113.90:token:${tokenHash.slice(0, 32)}`;
+		expect(loginKey).not.toContain("mail_");
+		expect(result.calls).toEqual([
+			{ prefix: "e2:mailbox-auth:login", identifier: loginKey, check: true },
+			{ prefix: "e2:mailbox-auth:ip", identifier: "203.0.113.90", check: true },
+			{ prefix: "e2:mailbox-auth:login", identifier: loginKey },
+			{ prefix: "e2:mailbox-auth:ip", identifier: "203.0.113.90" },
+		]);
+		expect(result.verifyCalls).toBeGreaterThan(0);
+		expect(result.responses[0].status).toBe(401);
+		expect(result.responses[0].body.message).toBe("Invalid mailbox credentials.");
+	});
+
+	it("returns 429 for a failed mailbox password once the limit is used up", () => {
+		const result = runScenario({
+			requests: [
+				{
+					endpoint: "send",
+					loginAddress: "",
+					token: "imap_0123456789abcdefWRONG",
+					headers: { "x-real-ip": "203.0.113.91" },
+				},
+			],
+		});
+
+		expect(result.responses[0].status).toBe(429);
+		expect(result.responses[0].retryAfter).toBe("60");
+	});
+
+	it("refuses mailbox passwords on the send endpoints without verifying them when the limit is exhausted", () => {
+		const result = runScenario({
+			exhausted: true,
+			requests: [
+				{
+					endpoint: "send",
+					loginAddress: "",
+					token: "mail_0123456789abcdefMAYBE",
+					headers: { "x-real-ip": "203.0.113.92" },
+				},
+			],
+		});
+
+		expect(result.verifyCalls).toBe(0);
+		expect(result.calls.every(({ check }) => check)).toBe(true);
+		expect(result.responses[0].status).toBe(429);
 	});
 });

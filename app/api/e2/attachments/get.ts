@@ -68,6 +68,7 @@ export const listAttachments = new Elysia().get(
       200: t.Object({ emailId: t.String(), attachments: t.Array(AttachmentPartSchema) }),
       401: ErrorResponse,
       404: ErrorResponse,
+      422: ErrorResponse,
     },
     detail: {
       tags: ["Attachments"],
@@ -108,6 +109,7 @@ export const getAttachmentPart = new Elysia().get(
       400: ErrorResponse,
       401: ErrorResponse,
       404: ErrorResponse,
+      422: ErrorResponse,
     },
     detail: {
       tags: ["Attachments"],
@@ -147,6 +149,7 @@ export const getAttachment = new Elysia().get(
       400: ErrorResponse,
       401: ErrorResponse,
       404: ErrorResponse,
+      422: ErrorResponse,
       500: ErrorResponse,
     },
     detail: {

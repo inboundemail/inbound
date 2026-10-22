@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { db } from "@/lib/db";
+import { disableMailCredentialsForUser } from "@/lib/db/mail-credentials";
 import { user } from "@/lib/db/schema";
 import { validateAdminAndRateLimit } from "../lib/auth";
 
@@ -75,6 +76,10 @@ export const banUser = new Elysia().post(
 				updatedAt: new Date(),
 			})
 			.where(eq(user.id, params.userId));
+		const permanentBan = parsedBanExpires === null;
+		const disabledCredentials = permanentBan
+			? await disableMailCredentialsForUser(params.userId)
+			: 0;
 
 		const updatedResult = await db
 			.select()
@@ -92,7 +97,9 @@ export const banUser = new Elysia().post(
 
 		return {
 			success: true,
-			message: `User ${updatedUser.id} banned successfully`,
+			message: permanentBan
+				? `User ${updatedUser.id} banned successfully; ${disabledCredentials} mail credential(s) disabled`
+				: `User ${updatedUser.id} banned until ${parsedBanExpires?.toISOString()}; mail credentials stay enabled but are refused until the ban expires`,
 			user: {
 				id: updatedUser.id,
 				email: updatedUser.email,
@@ -126,7 +133,7 @@ export const banUser = new Elysia().post(
 			tags: ["Admin"],
 			summary: "Ban user",
 			description:
-				"Ban a user account and prevent authentication/sending until unbanned.",
+				"Ban a user account and prevent authentication/sending until unbanned. Permanent bans (no banExpires) also disable the user's mail credentials; temporary bans leave them enabled but refused until the ban expires.",
 		},
 	},
 );

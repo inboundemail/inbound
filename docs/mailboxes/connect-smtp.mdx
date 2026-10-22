@@ -5,7 +5,7 @@ description: "Send email through Inbound from any SMTP client using a managed cr
 
 Any SMTP client or library can send mail through Inbound with a managed **Mailbox + SMTP** or **SMTP only** credential. Messages submitted over SMTP go through the same sending pipeline as the [send email API](/api-reference/emails/send-an-email), so the same account sending limits and domain checks apply.
 
-If you don't have a credential yet, follow [Create a mailbox credential](/mailboxes/connect-imap#create-a-mailbox-credential). Choose **SMTP only** if the application never needs to read mail.
+If you don't have a credential yet, follow [Create a mailbox credential](/mailboxes/connect-imap#create-a-mailbox-credential). Choose **SMTP only** if the application never needs to read mail. A **Mailbox + SMTP** credential must have **Read & write** access to send; **Read only** credentials cannot authenticate to SMTP.
 
 ## Connection settings
 
@@ -95,7 +95,7 @@ Reply text includes an enhanced status code, such as `5.7.8`, even though `ENHAN
 | `452` | More than 50 recipients | Send the remaining recipients in another message |
 | `454` | The authentication service is unavailable | Retry later with backoff |
 | `530` | `MAIL FROM` was sent before authenticating | Authenticate first |
-| `535` | Invalid login email or password, disabled credential, or the domain or scope is no longer verified | Check the credential. Repeated failures lead to `421`. |
+| `535` | Invalid login email or password, disabled credential, a **Read only** credential, or the domain or scope is no longer verified | Check the credential, and give it **Read & write** access to send. Repeated failures lead to `421`. |
 | `538` | `AUTH` was attempted before TLS | Use port `465`, or run `STARTTLS` on port `587` first |
 | `550` | The email API rejected the message (for example, not authorized or invalid content), or the message has no sender or recipients | Read the reply text and fix the message or account. Don't retry unchanged. |
 | `552` | The message is larger than 3 MiB | Reduce the size or remove attachments |

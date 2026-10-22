@@ -290,7 +290,8 @@ export function MailboxDialog({
 								<span>
 									<span className="block font-medium">Mailbox + SMTP</span>
 									<span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-										Receive with IMAP and send with SMTP.
+										Receive with IMAP. Send with SMTP when access is Read &
+										write.
 									</span>
 								</span>
 							</Label>
@@ -371,7 +372,7 @@ export function MailboxDialog({
 
 					{form.type === "mailbox" && (
 						<div className="space-y-2">
-							<Label htmlFor={accessId}>IMAP access</Label>
+							<Label htmlFor={accessId}>Access</Label>
 							<Select
 								value={form.accessMode}
 								onValueChange={(value) =>
@@ -386,13 +387,13 @@ export function MailboxDialog({
 								</SelectTrigger>
 								<SelectContent>
 									<SelectItem value="read">Read only</SelectItem>
-									<SelectItem value="read_write">Read and write</SelectItem>
+									<SelectItem value="read_write">Read & write</SelectItem>
 								</SelectContent>
 							</Select>
 							<p className="text-xs leading-relaxed text-muted-foreground">
 								{form.accessMode === "read"
-									? "Read-only clients can view messages but cannot modify them."
-									: "Read-and-write clients can view and modify messages."}{" "}
+									? "Read only: view messages over IMAP. Cannot change messages or send mail."
+									: "Read & write: view and change messages over IMAP, and send with SMTP or the API."}{" "}
 								IMAP includes one combined INBOX and read-only folders per
 								scope.
 							</p>

@@ -1,4 +1,8 @@
-import { type AddressObject, type ParsedMail, simpleParser } from "mailparser";
+import type { AddressObject, ParsedMail } from "mailparser";
+import {
+	MailParseLimitError,
+	parseMailSafely,
+} from "@/lib/email-management/safe-mail-parser";
 
 const CRLF = "\r\n";
 const HEADER_BODY_SEPARATOR = Buffer.from("\r\n\r\n", "latin1");
@@ -45,6 +49,8 @@ const SMIME_SIGNATURE_PROTOCOLS = new Set([
 	"application/pkcs7-signature",
 	"application/x-pkcs7-signature",
 ]);
+const SIGNED_DATA_OID = Buffer.from("06092a864886f70d010702", "hex");
+const BASE64_BODY = /^[A-Za-z0-9+/]*={0,2}$/;
 
 export class RawMessageError extends Error {}
 
@@ -87,6 +93,9 @@ export async function prepareRawRelayMessage(
 	raw: Buffer,
 	envelopeRecipients: string[],
 ): Promise<PreparedRawMessage> {
+	if (hasBareLineBreak(raw)) {
+		throw new RawMessageError("Message must use CRLF line endings throughout");
+	}
 	const separatorIndex = raw.indexOf(HEADER_BODY_SEPARATOR);
 	if (separatorIndex <= 0) {
 		throw new RawMessageError("Message must contain headers and a body");
@@ -108,21 +117,39 @@ export async function prepareRawRelayMessage(
 		throw new RawMessageError("Message must contain exactly one From header");
 	}
 
-	const parsed = await simpleParser(raw);
+	let parsed: ParsedMail;
+	try {
+		parsed = await parseMailSafely(raw);
+	} catch (error) {
+		if (error instanceof MailParseLimitError) {
+			throw new RawMessageError(error.message);
+		}
+		throw error;
+	}
 	const contentType = parsed.headers.get("content-type");
-	const isSignedSmime =
+	const contentTypeParams =
 		typeof contentType === "object" &&
 		contentType !== null &&
 		"params" in contentType &&
-		contentType.value.toLowerCase() === "multipart/signed" &&
-		SMIME_SIGNATURE_PROTOCOLS.has(
-			(contentType.params.protocol ?? "").toLowerCase(),
-		);
-	if (!isSignedSmime) {
+		contentType.value.toLowerCase() === "multipart/signed"
+			? contentType.params
+			: null;
+	if (
+		!contentTypeParams ||
+		!SMIME_SIGNATURE_PROTOCOLS.has(
+			(contentTypeParams.protocol ?? "").toLowerCase(),
+		)
+	) {
 		throw new RawMessageError(
 			"Raw relay only supports S/MIME multipart/signed messages",
 		);
 	}
+
+	assertSmimeSignedStructure(
+		raw.subarray(separatorIndex + HEADER_BODY_SEPARATOR.length),
+		contentTypeParams.boundary ?? "",
+	);
+	assertAttachmentNamesAgree(parsed);
 
 	const sender = singleMailbox(parsed.from);
 	const fromAddress = sender.address.toLowerCase();
@@ -199,6 +226,168 @@ export async function prepareRawRelayMessage(
 		headers,
 		attachments: relayAttachments(parsed),
 	};
+}
+
+function hasBareLineBreak(raw: Buffer): boolean {
+	for (
+		let index = raw.indexOf(0x0d);
+		index !== -1;
+		index = raw.indexOf(0x0d, index + 1)
+	) {
+		if (raw[index + 1] !== 0x0a) return true;
+	}
+	for (
+		let index = raw.indexOf(0x0a);
+		index !== -1;
+		index = raw.indexOf(0x0a, index + 1)
+	) {
+		if (index === 0 || raw[index - 1] !== 0x0d) return true;
+	}
+	return false;
+}
+
+/**
+ * A detached S/MIME signature is exactly two top-level parts: the signed
+ * content and an application/(x-)pkcs7-signature part holding a CMS
+ * SignedData structure.
+ */
+function assertSmimeSignedStructure(body: Buffer, boundary: string): void {
+	if (!boundary || boundary.length > 70) {
+		throw new RawMessageError("multipart/signed message has no valid boundary");
+	}
+	const lines = body.toString("latin1").split(CRLF);
+	const parts: string[][] = [];
+	let current: string[] | null = null;
+	let closed = false;
+	for (const line of lines) {
+		const trimmed = line.trimEnd();
+		if (trimmed === `--${boundary}--`) {
+			if (current) parts.push(current);
+			closed = true;
+			break;
+		}
+		if (trimmed === `--${boundary}`) {
+			if (current) parts.push(current);
+			current = [];
+			continue;
+		}
+		current?.push(line);
+	}
+	if (!closed) {
+		throw new RawMessageError("multipart/signed message is not terminated");
+	}
+	if (parts.length !== 2) {
+		throw new RawMessageError(
+			"multipart/signed message must have exactly two parts",
+		);
+	}
+
+	const signaturePart = parts[1];
+	const blank = signaturePart.indexOf("");
+	if (blank === -1) {
+		throw new RawMessageError("S/MIME signature part is malformed");
+	}
+	const partHeaders = new Map<string, string>();
+	let lastName = "";
+	for (const line of signaturePart.slice(0, blank)) {
+		if ((line.startsWith(" ") || line.startsWith("\t")) && lastName) {
+			partHeaders.set(lastName, `${partHeaders.get(lastName)} ${line.trim()}`);
+			continue;
+		}
+		const colon = line.indexOf(":");
+		if (colon <= 0) {
+			throw new RawMessageError("S/MIME signature part is malformed");
+		}
+		lastName = line.slice(0, colon).trim().toLowerCase();
+		partHeaders.set(lastName, line.slice(colon + 1).trim());
+	}
+	const partType = (partHeaders.get("content-type") ?? "")
+		.split(";")[0]
+		.trim()
+		.toLowerCase();
+	if (!SMIME_SIGNATURE_PROTOCOLS.has(partType)) {
+		throw new RawMessageError(
+			"Second multipart/signed part must be an S/MIME signature",
+		);
+	}
+	if (
+		(partHeaders.get("content-transfer-encoding") ?? "").toLowerCase() !==
+		"base64"
+	) {
+		throw new RawMessageError("S/MIME signature must be base64 encoded");
+	}
+	const encoded = signaturePart
+		.slice(blank + 1)
+		.join("")
+		.replace(/[ \t]/g, "");
+	if (!encoded || !BASE64_BODY.test(encoded) || encoded.length % 4 !== 0) {
+		throw new RawMessageError("S/MIME signature is not valid base64");
+	}
+	if (!isCmsSignedData(Buffer.from(encoded, "base64"))) {
+		throw new RawMessageError(
+			"S/MIME signature is not a CMS SignedData structure",
+		);
+	}
+}
+
+function readDerLength(
+	der: Buffer,
+	offset: number,
+): { length: number | null; headerEnd: number } | null {
+	const first = der[offset];
+	if (first === undefined) return null;
+	if (first < 0x80) return { length: first, headerEnd: offset + 1 };
+	if (first === 0x80) return { length: null, headerEnd: offset + 1 };
+	const octets = first & 0x7f;
+	if (octets > 4 || offset + 1 + octets > der.length) return null;
+	let length = 0;
+	for (let index = 0; index < octets; index++) {
+		length = length * 256 + der[offset + 1 + index];
+	}
+	return { length, headerEnd: offset + 1 + octets };
+}
+
+function isCmsSignedData(der: Buffer): boolean {
+	if (der.length < 2 + SIGNED_DATA_OID.length || der[0] !== 0x30) return false;
+	const outer = readDerLength(der, 1);
+	if (!outer) return false;
+	if (outer.length === null) {
+		if (der[der.length - 1] !== 0 || der[der.length - 2] !== 0) return false;
+	} else if (outer.headerEnd + outer.length !== der.length) {
+		return false;
+	}
+	return der
+		.subarray(outer.headerEnd, outer.headerEnd + SIGNED_DATA_OID.length)
+		.equals(SIGNED_DATA_OID);
+}
+
+function headerParam(
+	parsed: ParsedMail["attachments"][number],
+	header: string,
+	param: string,
+): string | undefined {
+	const value = parsed.headers.get(header);
+	if (typeof value !== "object" || value === null || !("params" in value)) {
+		return undefined;
+	}
+	const params = value.params as Record<string, string | undefined>;
+	return params[param]?.trim() || undefined;
+}
+
+function assertAttachmentNamesAgree(parsed: ParsedMail): void {
+	for (const attachment of parsed.attachments ?? []) {
+		const name = headerParam(attachment, "content-type", "name");
+		const filename = headerParam(attachment, "content-disposition", "filename");
+		if (
+			name !== undefined &&
+			filename !== undefined &&
+			name.toLowerCase() !== filename.toLowerCase()
+		) {
+			throw new RawMessageError(
+				"Attachment Content-Type name and Content-Disposition filename disagree",
+			);
+		}
+	}
 }
 
 function parseHeaderBlock(block: string): HeaderField[] {

@@ -4,7 +4,8 @@
  * Used extensively throughout the application for webhook processing, email routing, and data storage.
  * Includes HTML sanitization and type definitions for consistent email data handling.
  */
-import { simpleParser, ParsedMail, Attachment } from 'mailparser'
+import { ParsedMail, Attachment } from 'mailparser'
+import { parseMailSafely } from '@/lib/email-management/safe-mail-parser'
 
 // Types for the parsed email data structure
 interface ParsedEmailAddress {
@@ -88,7 +89,7 @@ interface ParsedEmailData {
 export async function parseEmail(emailContent: string): Promise<ParsedEmailData> {
   try {
     // Parse the email
-    const parsed = await simpleParser(emailContent);
+    const parsed = await parseMailSafely(emailContent);
     
     // Helper function to extract address info
     const extractAddressInfo = (addressObj: any): ParsedEmailAddress | null => {

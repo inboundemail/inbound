@@ -9,10 +9,10 @@ Every managed credential combines a credential type, one or more verified-domain
 
 | Type | IMAP | SMTP | Intended use |
 | --- | --- | --- | --- |
-| `mailbox` | Available, subject to `accessMode` | Available, subject to the sender policy | Email clients and applications that receive and send |
+| `mailbox` | Available, subject to `accessMode` | Only with `read_write` access, subject to the sender policy | Email clients and applications that receive and send |
 | `smtp` | Not available | Available, subject to the sender policy | Applications that only send |
 
-An SMTP-only credential still requires scopes and a sender policy. Its `accessMode` is returned as `read_write`, but this does not grant IMAP access.
+An SMTP-only credential still requires scopes and a sender policy. Its `accessMode` is always `read_write` so it can send, but this does not grant IMAP access.
 
 ## Domain and address scopes
 
@@ -45,18 +45,16 @@ Scopes/support@another-example.com
 
 Scope folders are always read-only, including for credentials with `read_write` access. Update flags or organize messages through `INBOX` or another writable folder instead. See [IMAP behavior](/mailboxes/imap-behavior) for folder, flag, and synchronization details.
 
-## IMAP access modes
+## Access modes
 
-`accessMode` applies only to `mailbox` credentials:
+`accessMode` applies to `mailbox` credentials and controls both IMAP changes and sending:
 
-- `read`: Open folders, fetch messages, search, and receive `IDLE` updates. All folders are read-only.
-- `read_write`: Read messages and modify writable folders using operations such as `STORE`, `APPEND`, `COPY`, `MOVE`, and `EXPUNGE`. `Scopes/*` folders remain read-only.
-
-IMAP access mode does not control whether SMTP sending is available. A read-only mailbox credential can still send through SMTP when its sender policy permits the sender.
+- `read` (**Read only** in the dashboard): Open folders, fetch messages, search, and receive `IDLE` updates. All folders are read-only, and the credential cannot send mail. SMTP authentication fails with `535`, and HTTP sends (`POST /emails`, replies) with its password return `403`.
+- `read_write` (**Read & write** in the dashboard): Read messages, modify writable folders using operations such as `STORE`, `APPEND`, `COPY`, `MOVE`, and `EXPUNGE`, and send through SMTP or HTTP when the sender policy permits the sender. `Scopes/*` folders remain read-only.
 
 ## SMTP sender policies
 
-The sender policy applies to SMTP and to HTTP sends authorized with the credential's password. A disallowed SMTP sender is rejected with `553`; see [Send with SMTP](/mailboxes/connect-smtp#allowed-senders).
+The sender policy applies to SMTP and to HTTP sends authorized with the credential's password. Only `read_write` mailbox credentials and SMTP-only credentials can send. A disallowed SMTP sender is rejected with `553`; see [Send with SMTP](/mailboxes/connect-smtp#allowed-senders).
 
 ### Exact identity
 
@@ -115,7 +113,7 @@ The login username does not automatically grant access to mail sent to `imap@ope
 
 | Configuration | Read incoming mail | Modify IMAP folders | Send with SMTP |
 | --- | --- | --- | --- |
-| `mailbox`, `read`, address scope, `identity` | Only the scoped address | No | Only the exact configured sender |
+| `mailbox`, `read`, address scope, `identity` | Only the scoped address | No | No |
 | `mailbox`, `read_write`, domain scope, `identity` | Addresses on the exact scoped domain | Yes, except `Scopes/*` | Only the exact configured sender |
 | `mailbox`, `read_write`, address scope, `scoped_domains` | Only the scoped address | Yes, except `Scopes/*` | Any address on that exact scoped domain |
 | `smtp`, address scope, `identity` | No IMAP access | No IMAP access | Only the exact configured sender |

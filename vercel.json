@@ -25,6 +25,10 @@
     {
       "path": "/api/cron/send-scheduled",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/gateway-health",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

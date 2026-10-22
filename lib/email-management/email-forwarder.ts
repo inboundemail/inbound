@@ -267,8 +267,8 @@ export class EmailForwarder {
     try {
       // If we have the raw email content, parse it to get attachment content
       if (originalEmail.raw) {
-        const { simpleParser } = await import('mailparser')
-        const parsed = await simpleParser(originalEmail.raw)
+        const { parseMailSafely } = await import('@/lib/email-management/safe-mail-parser')
+        const parsed = await parseMailSafely(originalEmail.raw)
         
         const attachment = parsed.attachments?.find(att => att.filename === filename)
         if (attachment && attachment.content) {

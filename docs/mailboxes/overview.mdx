@@ -23,7 +23,7 @@ A managed credential combines three things:
 2. **Access scopes** - One or more verified domains or exact email addresses the credential can access.
 3. **Permissions** - The available protocols, IMAP access level, and authorized SMTP sender addresses.
 
-For IMAP-enabled credentials, Inbound provides `INBOX`, `Sent`, `Drafts`, `Trash`, and `Junk`, plus read-only folders for individual scopes. The combined `INBOX` contains received mail covered by the credential's scopes. SMTP uses the same login email and password and enforces the credential's sender policy.
+For IMAP-enabled credentials, Inbound provides `INBOX`, `Sent`, `Drafts`, `Trash`, and `Junk`, plus read-only folders for individual scopes. The combined `INBOX` contains received mail covered by the credential's scopes. With **Read & write** access, SMTP uses the same login email and password and enforces the credential's sender policy.
 
 <Note>
   The login email must use an exact domain you own and have verified when you create or edit the credential. It is an authentication username and does not need to match the receiving or sending addresses, which are controlled separately by scopes and sender policy.
@@ -33,10 +33,10 @@ For IMAP-enabled credentials, Inbound provides `INBOX`, `Sent`, `Drafts`, `Trash
 
 | Credential type | IMAP | SMTP | Best for |
 | --- | --- | --- | --- |
-| **Mailbox + SMTP** | Read-only or read/write access | Send using the configured sender policy | Email clients and applications that receive and send mail |
+| **Mailbox + SMTP** | Read-only or read/write access | Send using the configured sender policy (**Read & write** only) | Email clients and applications that receive and send mail |
 | **SMTP only** | Not available | Send using the configured sender policy | Applications and services that only send mail |
 
-For **Mailbox + SMTP**, select **Read and write** if your client needs to save messages in `Sent` or `Drafts` or change message flags. **Read only** still allows SMTP sending. Scope-specific folders remain read-only with either setting.
+For **Mailbox + SMTP**, select **Read & write** if your client needs to send mail, save messages in `Sent` or `Drafts`, or change message flags. **Read only** allows reading over IMAP and nothing else: the credential cannot send through SMTP or the API. Scope-specific folders remain read-only with either setting.
 
 For send-only applications, create an **SMTP only** credential and use either SMTP configuration above. The same scope and sender-policy rules still apply.
 
@@ -52,7 +52,7 @@ Both credential types require at least one scope covering a whole verified domai
 
 ## Mail-scoped API keys and security
 
-The generated credential password is itself a mail-scoped API key, typically beginning with `mail_`; older credentials can begin with `imap_`. It authenticates IMAP and SMTP alongside the login email and can also authorize HTTP email sending under the same sender policy. It cannot manage account resources.
+The generated credential password is itself a mail-scoped API key, typically beginning with `mail_`; older credentials can begin with `imap_`. It authenticates IMAP and SMTP alongside the login email and, for **Read & write** and **SMTP only** credentials, can also authorize HTTP email sending under the same sender policy. A **Read only** password is refused with `403` by the sending endpoints. It cannot manage account resources.
 
 Ordinary account API keys, often stored as `INBOUND_API_KEY`, are a separate credential type. They can access permitted HTTP API resources but cannot authenticate to IMAP or SMTP.
 

@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { suspendTenantSending } from "@/lib/aws-ses/aws-ses-tenants";
 import { db } from "@/lib/db";
 import { user } from "@/lib/db/auth-schema";
+import { disableMailCredentialsForUser } from "@/lib/db/mail-credentials";
 import {
 	SCHEDULED_EMAIL_STATUS,
 	scheduledEmails,
@@ -119,6 +120,10 @@ async function main() {
 			updatedAt: user.updatedAt,
 		});
 
+	const disabledCredentialCount = options.banExpires
+		? 0
+		: await disableMailCredentialsForUser(targetUser.id);
+
 	let cancelledScheduledCount = 0;
 	if (options.cancelScheduled) {
 		const cancelledScheduled = await db
@@ -200,6 +205,13 @@ async function main() {
 		JSON.stringify(
 			{
 				user: updatedUser,
+				disabledCredentialCount,
+				...(options.banExpires
+					? {
+							mailCredentials:
+								"Temporary ban: mail credentials stay enabled but are refused until the ban expires",
+						}
+					: {}),
 				cancelledScheduledCount,
 				tenant: tenantSummary,
 				options: {

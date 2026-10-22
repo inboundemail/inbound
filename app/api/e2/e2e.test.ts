@@ -1030,7 +1030,10 @@ function signSmimeMessage(
 		],
 		dir,
 	);
-	const signed = readFileSync(join(dir, "signed.eml"), "utf8");
+	const signed = readFileSync(join(dir, "signed.eml"), "utf8").replace(
+		/\r?\n/g,
+		"\r\n",
+	);
 	return {
 		raw: `${headers.join("\r\n")}\r\n${signed}`,
 		verify: (raw) => {
@@ -1430,6 +1433,48 @@ describe("E2 API - Email E2E", () => {
 			}
 
 			expect(receivedMatches.length).toBe(1);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"stores inbound mail with too many MIME parts as a parse failure without hanging",
+		async () => {
+			const token = makeToken("part-bomb");
+			const subject = `E2E Part Bomb ${token}`;
+			const lines = [
+				"From: part-bomb@example.test",
+				`To: ${E2E_RECIPIENT_ADDRESS}`,
+				`Subject: ${subject}`,
+				`Message-ID: <${token}@example.test>`,
+				"MIME-Version: 1.0",
+				'Content-Type: multipart/mixed; boundary="b"',
+				"",
+			];
+			for (let index = 0; index < 1001; index++) {
+				lines.push("--b", "Content-Type: message/rfc822", "", "Subject: x", "", "body");
+			}
+			lines.push("--b--", "");
+
+			const startedAt = Date.now();
+			const response = await deliverInbound({
+				inboundWebhookUrl: `${LOCAL_BASE_URL}/api/inbound/webhook`,
+				serviceApiKey: LOCAL_SERVICE_API_KEY,
+				recipients: [E2E_RECIPIENT_ADDRESS],
+				sesMessageId: `ses-${token}`,
+				source: "part-bomb@example.test",
+				raw: lines.join("\r\n"),
+			});
+			expect(response.status).toBe(200);
+			expect(Date.now() - startedAt).toBeLessThan(30_000);
+
+			const [parseSuccess, parseError, rawLength] = psql(
+				`select parse_success, parse_error, length(raw_content) from structured_emails where subject = '${subject}' and user_id = '${PRIMARY_USER_ID}';`,
+				E2E_DATABASE,
+			).split("|");
+			expect(parseSuccess).toBe("f");
+			expect(parseError).toContain("more than 500 MIME parts");
+			expect(Number(rawLength)).toBeGreaterThan(50_000);
 		},
 		TEST_TIMEOUT_MS,
 	);
@@ -2448,10 +2493,108 @@ describe("E2 API - Email E2E", () => {
 					),
 				],
 				[400, await sendRaw(smime.raw, { recipients: ["bad address@x"] })],
+				[
+					400,
+					await sendRaw(
+						smime.raw.replace(
+							"From the start of a line.\r\n",
+							"From the start of a line.\nBcc: attacker@evil.example\r\n",
+						),
+					),
+				],
+				[
+					400,
+					await sendRaw(
+						smime.raw.replace("Signed body   \r\n", "Signed body\r   \r\n"),
+					),
+				],
+				[
+					400,
+					await sendRaw(
+						smime.raw.replace(
+							/(smime\.p7s"\r\n\r\n)[A-Za-z0-9+/=\r\n]+?(\r\n\r\n--|\r\n--)/,
+							"$1aGVsbG8gd29ybGQ=$2",
+						),
+					),
+				],
+				[
+					400,
+					await sendRaw(
+						smime.raw.replace(
+							/filename="?smime\.p7s"?/,
+							'filename="invoice.pdf.exe"',
+						),
+					),
+				],
 			];
 			for (const [status, rejection] of rejected) {
 				expect(rejection.status).toBe(status);
 			}
+			expect(mailServer?.messages.length).toBe(relayedCount);
+
+			const { response: readOnlyResponse, data: readOnly } = await apiJson<{
+				password: string;
+			}>("/mailboxes", {
+				method: "POST",
+				body: JSON.stringify({
+					name: `Read only ${token}`,
+					loginAddress: `ro-${token}@${E2E_DOMAIN}`,
+					type: "mailbox",
+					accessMode: "read",
+					sendingMode: "identity",
+					sendingName: null,
+					sendingAddress: E2E_SENDER_ADDRESS,
+					scopes: [{ type: "domain", domainId: E2E_DOMAIN_ID }],
+				}),
+			});
+			expect(readOnlyResponse.status).toBe(201);
+			const readOnlyRaw = await sendRaw(smime.raw, {
+				apiKey: readOnly.password,
+				idempotencyKey: `raw-relay-ro-${token}`,
+			});
+			expect(readOnlyRaw.status).toBe(403);
+			const readOnlySend = await fetch(`${API_URL}/emails`, {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${readOnly.password}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					from: E2E_SENDER_ADDRESS,
+					to: E2E_RECIPIENT_ADDRESS,
+					subject: `Read only send ${token}`,
+					text: "must not send",
+				}),
+			});
+			expect(readOnlySend.status).toBe(403);
+			const readOnlyBody = (await readOnlySend.json()) as {
+				error: string;
+				message: string;
+			};
+			expect(readOnlyBody.error).toBe("Forbidden");
+			expect(readOnlyBody.message).toContain("read only");
+			const gatewayAuth = (path: string) =>
+				fetch(`${API_URL}/mailboxes/${path}`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"x-inbound-gateway-secret": E2E_GATEWAY_SECRET,
+					},
+					body: JSON.stringify({
+						loginAddress: `ro-${token}@${E2E_DOMAIN}`,
+						password: readOnly.password,
+					}),
+				});
+			const readOnlySmtpAuth = await gatewayAuth("authenticate-smtp");
+			expect(readOnlySmtpAuth.status).toBe(200);
+			expect(
+				((await readOnlySmtpAuth.json()) as { accessMode: string }).accessMode,
+			).toBe("read");
+			const readOnlyImapAuth = await gatewayAuth("authenticate");
+			expect(readOnlyImapAuth.status).toBe(200);
+			expect(
+				((await readOnlyImapAuth.json()) as { accessMode: string }).accessMode,
+			).toBe("read");
 			expect(mailServer?.messages.length).toBe(relayedCount);
 		},
 		TEST_TIMEOUT_MS,

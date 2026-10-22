@@ -4,8 +4,8 @@ import {
 	enforceAuthenticatedUserAndRateLimit,
 	validateAndRateLimit,
 } from "@/app/api/e2/lib/auth";
+import { authenticateRateLimitedMailToken } from "@/app/api/e2/lib/send-auth";
 import {
-	authenticateManagedMailCredential,
 	getOwnedCredential,
 	type ManagedMailCredential,
 	resolveManagedMailCredential,
@@ -63,8 +63,10 @@ export async function authorizeMailboxAccess(
 ): Promise<MailboxAccessResult> {
 	const token = bearerToken(request);
 	if (isMailboxPassword(token)) {
-		const credential = await authenticateManagedMailCredential(
+		const credential = await authenticateRateLimitedMailToken(
+			request,
 			token as string,
+			set,
 			{ requireType: "mailbox" },
 		);
 		if (!credential) unauthorized(set);

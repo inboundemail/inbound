@@ -1,9 +1,10 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3"
 import { and, eq } from "drizzle-orm"
-import { type Attachment, simpleParser } from "mailparser"
+import type { Attachment, ParsedMail } from "mailparser"
 import { db } from "@/lib/db"
 import { sesEvents, structuredEmails } from "@/lib/db/schema"
 import { resolveStructuredEmailId } from "@/lib/email-management/email-aliases"
+import { MailParseLimitError, parseMailSafely } from "@/lib/email-management/safe-mail-parser"
 
 export type StoredAttachments =
   | { ok: true; emailId: string; attachments: Attachment[] }
@@ -55,7 +56,15 @@ export async function loadStoredAttachments(rawEmailId: string, userId: string):
   }
   if (!rawEmailContent) return { ok: false, status: 404, error: "Email content not available" }
 
-  const parsed = await simpleParser(rawEmailContent)
+  let parsed: ParsedMail
+  try {
+    parsed = await parseMailSafely(rawEmailContent)
+  } catch (error) {
+    if (error instanceof MailParseLimitError) {
+      return { ok: false, status: 422, error: `Email attachments are not available: ${error.message}` }
+    }
+    throw error
+  }
   return { ok: true, emailId, attachments: parsed.attachments ?? [] }
 }
 

@@ -70,4 +70,20 @@ describe("buildRawEmailMessage recipient headers", () => {
 		);
 		expect(message).not.toContain("blind@example.com");
 	});
+
+	it("normalises bare CR and LF in bodies to CRLF", () => {
+		const message = buildRawEmailMessage({
+			from: "sender@example.com",
+			to: ["visible@example.com"],
+			subject: "Subject",
+			textBody: "line one\rBcc: injected@example.com\nline three",
+			htmlBody: "<p>one</p>\r<p>two</p>",
+		});
+
+		expect(message).not.toMatch(/\r(?!\n)|(?<!\r)\n/);
+		expect(message).toContain(
+			"line one\r\nBcc: injected@example.com\r\nline three",
+		);
+		expect(message).toContain("<p>one</p>\r\n<p>two</p>");
+	});
 });

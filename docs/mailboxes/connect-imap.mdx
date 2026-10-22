@@ -29,10 +29,10 @@ Port `143` and IMAP `STARTTLS` are not offered. Keep certificate verification en
     Add and verify a domain in [domain settings](https://inbound.new/emails), including its receiving MX records if you want incoming mail. Then open the [Mailboxes & SMTP dashboard](https://inbound.new/mailboxes) and select **Create credential**.
   </Step>
 
-  <Step title="Choose the credential and IMAP access">
+  <Step title="Choose the credential and access">
     Select **Mailbox + SMTP** under **Credential type**. Enter a descriptive **Name** and a **Login email** on an exact domain you own and have verified. The login email is your authentication username; it does not have to match the receiving or sending address.
 
-    Under **IMAP access**, choose **Read only** to prevent mailbox changes or **Read and write** to save messages in `Sent` or `Drafts`, change flags, and modify supported mailboxes. Read-only credentials can still send through SMTP. Scope-specific folders are always read-only.
+    Under **Access**, choose **Read only** to read mail over IMAP without changing the mailbox or sending, or **Read & write** to also send through SMTP, save messages in `Sent` or `Drafts`, change flags, and modify supported mailboxes. Read-only credentials cannot send mail. Scope-specific folders are always read-only.
   </Step>
 
   <Step title="Set the sender policy">
@@ -164,7 +164,7 @@ with imaplib.IMAP4_SSL(
 </CodeGroup>
 
 <Note>
-  `BODY.PEEK` reads the requested headers without marking a message as seen. Opening `INBOX` in read-only mode also works with both **Read only** and **Read and write** credentials.
+  `BODY.PEEK` reads the requested headers without marking a message as seen. Opening `INBOX` in read-only mode also works with both **Read only** and **Read & write** credentials.
 </Note>
 
 ## Troubleshooting
