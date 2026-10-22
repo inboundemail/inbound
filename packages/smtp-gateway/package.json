@@ -8,7 +8,6 @@
 	"scripts": {
 		"start": "node src/index.ts",
 		"dev": "SMTP_ALLOW_INSECURE_AUTH=true SMTP_STARTTLS_PORT=2587 SMTP_IMPLICIT_TLS_PORT=0 bun run src/index.ts",
-		"deploy": "bash deploy/deploy.sh",
 		"typecheck": "bunx tsc --noEmit"
 	},
 	"dependencies": {

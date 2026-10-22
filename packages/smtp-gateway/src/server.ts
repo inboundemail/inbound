@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import type { Socket } from "node:net";
+import type { Server, Socket } from "node:net";
 import { createServer as createTlsServer } from "node:tls";
+import { domainToASCII } from "node:url";
 import {
 	SMTPServer,
 	type SMTPServerAddress,
@@ -17,7 +18,7 @@ import {
 	SmtpRelayError,
 } from "./api-client.ts";
 import type { GatewayConfig } from "./config.ts";
-import { idempotencyKeyFor, mapRawMessage } from "./mapper.ts";
+import { idempotencyKeyFor, mapRawMessageInWorker } from "./mapper.ts";
 
 interface ConnectionInternals {
 	secure: boolean;
@@ -78,12 +79,36 @@ interface FailureRecord {
 }
 
 interface DataQueueEntry {
-	stream?: SMTPServerDataStream;
+	signal?: AbortSignal;
 	resolve: (release: () => void) => void;
 	reject: (error: SmtpRelayError) => void;
 	cancel: () => void;
 	cleanup: () => void;
 	canceled: boolean;
+}
+
+interface SessionData {
+	stream: SMTPServerDataStream;
+	controller: AbortController;
+}
+
+interface SessionState {
+	preAuth?: ReturnType<typeof setTimeout>;
+	lifetime: ReturnType<typeof setTimeout>;
+	releaseConnection?: () => void;
+	expired?: boolean;
+}
+
+interface ByteBudget {
+	reserve(bytes: number): boolean;
+	release(): void;
+}
+
+interface SmtpConnectionHandle {
+	id: string;
+	_socket: Socket;
+	send(code: number, message: string): void;
+	close(): void;
 }
 
 export class SmtpGateway {
@@ -92,11 +117,17 @@ export class SmtpGateway {
 	private authFailures = new Map<string, FailureRecord>();
 	private successfulAuth = new Map<string, number>();
 	private connectionsByIp = new Map<string, number>();
-	private countedSessions = new WeakSet<SMTPServerSession>();
-	private sessionDataStreams = new Map<string, SMTPServerDataStream>();
+	private connectionReleases = new WeakMap<Socket, () => void>();
+	private sessionData = new Map<string, SessionData>();
+	private sessionTimers = new Map<string, SessionState>();
+	private dataByCredential = new Map<string, number>();
+	private dataByIp = new Map<string, number>();
+	private bufferedBytes = 0;
 	private servers: SMTPServer[] = [];
 	private activeData = 0;
 	private dataQueue: DataQueueEntry[] = [];
+	private activeParses = 0;
+	private parseQueue: Array<() => void> = [];
 
 	constructor(config: GatewayConfig) {
 		this.config = config;
@@ -172,16 +203,7 @@ export class SmtpGateway {
 			maxClients: this.config.maxConnections,
 			...(tls ?? {}),
 			onConnect: (session, callback) => {
-				const ip = session.remoteAddress;
-				const count = this.connectionsByIp.get(ip) ?? 0;
-				if (count >= this.config.maxConnectionsPerIp) {
-					callback(
-						smtpError(421, "4.7.0 Too many connections from your address"),
-					);
-					return;
-				}
-				this.connectionsByIp.set(ip, count + 1);
-				this.countedSessions.add(session);
+				this.startSessionTimers(session.id);
 				callback();
 			},
 			onSecure: (socket, _session, callback) => {
@@ -235,30 +257,42 @@ export class SmtpGateway {
 				callback();
 			},
 			onData: (stream, session, callback) => {
-				this.sessionDataStreams.set(session.id, stream);
-				this.handleData(stream, session)
+				const startedAt = Date.now();
+				const entry: SessionData = {
+					stream,
+					controller: new AbortController(),
+				};
+				this.sessionData.set(session.id, entry);
+				this.handleData(stream, session, entry.controller.signal)
 					.then((message) => callback(null, message))
 					.catch((error: unknown) => {
-						stream.resume();
+						if (!stream.destroyed && !stream.readableEnded) {
+							this.drainRejectedData(stream, session.id, startedAt);
+						}
 						callback(toSmtpError(error));
 					})
 					.finally(() => {
-						if (this.sessionDataStreams.get(session.id) === stream) {
-							this.sessionDataStreams.delete(session.id);
+						if (this.sessionData.get(session.id) === entry) {
+							this.sessionData.delete(session.id);
+						}
+						if (this.sessionTimers.get(session.id)?.expired) {
+							this.closeExpiredSession(session.id);
 						}
 					});
 			},
 			onClose: (session, callback) => {
-				const stream = this.sessionDataStreams.get(session.id);
-				if (stream) {
-					this.sessionDataStreams.delete(session.id);
-					stream.destroy();
+				const state = this.sessionTimers.get(session.id);
+				if (state) {
+					this.sessionTimers.delete(session.id);
+					clearTimeout(state.preAuth);
+					clearTimeout(state.lifetime);
+					state.releaseConnection?.();
 				}
-				if (this.countedSessions.delete(session)) {
-					const count =
-						(this.connectionsByIp.get(session.remoteAddress) ?? 1) - 1;
-					if (count > 0) this.connectionsByIp.set(session.remoteAddress, count);
-					else this.connectionsByIp.delete(session.remoteAddress);
+				const entry = this.sessionData.get(session.id);
+				if (entry) {
+					this.sessionData.delete(session.id);
+					entry.controller.abort();
+					entry.stream.destroy();
 				}
 				callback?.();
 			},
@@ -281,12 +315,127 @@ export class SmtpGateway {
 				destroyAfterEnd(socket);
 				accept.emit("connection", socket);
 			},
-		).on("tlsClientError", (_error, socket) => socket.destroy());
+		)
+			.on("tlsClientError", (_error, socket) => socket.destroy())
+			.on("error", (error) => smtp.emit("error", error));
 		return smtp;
+	}
+
+	// Per-address limits must apply before the TLS handshake and before smtp-server allocates a
+	// connection, so they are enforced on the raw TCP socket of every listener.
+	private gateConnections(server: Server): void {
+		const listeners = server.listeners("connection") as Array<
+			(this: Server, socket: Socket) => void
+		>;
+		server.removeAllListeners("connection");
+		server.on("connection", (socket: Socket) => {
+			if (!this.admitSocket(socket)) {
+				socket.destroy();
+				return;
+			}
+			for (const listener of listeners) listener.call(server, socket);
+		});
+	}
+
+	private admitSocket(socket: Socket): boolean {
+		const ip = socket.remoteAddress?.replace(
+			/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i,
+			"",
+		);
+		if (!ip) return false;
+		const count = this.connectionsByIp.get(ip) ?? 0;
+		if (count >= this.config.maxConnectionsPerIp) return false;
+		this.connectionsByIp.set(ip, count + 1);
+		const release = once(() => decrement(this.connectionsByIp, ip));
+		// After STARTTLS the TLS socket owns the handle and Node never emits "close" on the
+		// raw socket, so the SMTP session's onClose releases the count as well.
+		socket.once("close", release);
+		this.connectionReleases.set(socket, release);
+		return true;
+	}
+
+	private drainRejectedData(
+		stream: SMTPServerDataStream,
+		sessionId: string,
+		startedAt: number,
+	): void {
+		const timer = setTimeout(
+			() => {
+				this.closeSession(
+					sessionId,
+					451,
+					"4.4.2 Message transfer deadline exceeded",
+				);
+				stream.destroy();
+			},
+			Math.max(0, startedAt + this.config.dataTimeoutMs - Date.now()),
+		);
+		timer.unref();
+		stream.once("close", () => clearTimeout(timer));
+		stream.once("end", () => clearTimeout(timer));
+		stream.resume();
+	}
+
+	private startSessionTimers(sessionId: string): void {
+		const preAuth = setTimeout(() => {
+			this.closeSession(
+				sessionId,
+				421,
+				"4.4.2 Authentication timeout, closing connection",
+			);
+		}, this.config.preAuthTimeoutMs);
+		// A message in flight (bounded by SMTP_DATA_TIMEOUT_MS) gets its reply first; onData closes
+		// the session once it completes.
+		const lifetime = setTimeout(() => {
+			const state = this.sessionTimers.get(sessionId);
+			if (state && this.sessionData.has(sessionId)) {
+				state.expired = true;
+				return;
+			}
+			this.closeExpiredSession(sessionId);
+		}, this.config.maxSessionMs);
+		preAuth.unref();
+		lifetime.unref();
+		const socket = this.findConnection(sessionId)?._socket;
+		this.sessionTimers.set(sessionId, {
+			preAuth,
+			lifetime,
+			releaseConnection: socket && this.connectionReleases.get(socket),
+		});
+	}
+
+	private closeExpiredSession(sessionId: string): void {
+		this.closeSession(
+			sessionId,
+			421,
+			"4.4.2 Maximum session duration reached, closing connection",
+		);
+	}
+
+	private findConnection(sessionId: string): SmtpConnectionHandle | undefined {
+		for (const server of this.servers) {
+			const connections = (
+				server as unknown as { connections: Set<SmtpConnectionHandle> }
+			).connections;
+			for (const connection of connections) {
+				if (connection.id === sessionId) return connection;
+			}
+		}
+		return undefined;
+	}
+
+	private closeSession(sessionId: string, code: number, message: string): void {
+		const connection = this.findConnection(sessionId);
+		if (!connection) return;
+		const socket = connection._socket;
+		connection.send(code, message);
+		connection.close();
+		setTimeout(() => socket.destroy(), 1_000).unref();
 	}
 
 	private listen(server: SMTPServer, port: number, label: string): void {
 		server.server.maxConnections = this.config.maxConnections;
+		this.gateConnections(server.server);
 		server.on("error", (error) => {
 			console.error(`[smtp-gateway] ${label} listener error`, error);
 		});
@@ -337,12 +486,23 @@ export class SmtpGateway {
 				message: "5.7.8 Authentication failed: invalid mailbox credentials",
 			});
 		}
+		if (identity.accessMode !== "read_write") {
+			throw new SmtpRelayError({
+				responseCode: 535,
+				message: "5.7.8 This credential is read-only",
+			});
+		}
 
 		const key = this.authKey(ip, username);
 		this.authFailures.delete(key);
 		this.successfulAuth.delete(key);
 		this.successfulAuth.set(key, Date.now());
 		this.limitRecords(this.successfulAuth);
+		const state = this.sessionTimers.get(session.id);
+		if (state?.preAuth) {
+			clearTimeout(state.preAuth);
+			state.preAuth = undefined;
+		}
 		const user: AuthenticatedUser = { apiKey: password, identity };
 		return { user };
 	}
@@ -350,6 +510,7 @@ export class SmtpGateway {
 	private async handleData(
 		stream: SMTPServerDataStream,
 		session: SMTPServerSession,
+		sessionSignal?: AbortSignal,
 	): Promise<string> {
 		const user = session.user as AuthenticatedUser | undefined;
 		if (!user?.apiKey) {
@@ -358,37 +519,93 @@ export class SmtpGateway {
 				message: "5.7.0 Authentication required",
 			});
 		}
+		const releaseSender = this.claimSenderData(
+			user.identity.credentialId,
+			session.remoteAddress,
+		);
 
-		const release = await this.acquireDataSlot(stream);
+		const controller = new AbortController();
+		const abort = () => controller.abort();
+		if (sessionSignal?.aborted) abort();
+		sessionSignal?.addEventListener("abort", abort, { once: true });
+		const budget = this.byteBudget();
+		const envelope = {
+			mailFrom: session.envelope.mailFrom
+				? session.envelope.mailFrom.address
+				: null,
+			rcptTo: session.envelope.rcptTo.map((recipient) => recipient.address),
+		};
+		const work = this.relayData(
+			stream,
+			user,
+			envelope,
+			controller.signal,
+			budget,
+		).finally(() => {
+			sessionSignal?.removeEventListener("abort", abort);
+			budget.release();
+			releaseSender();
+		});
+		work.catch(() => {});
+
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const deadline = new Promise<never>((_resolve, reject) => {
+			timer = setTimeout(() => {
+				const message = "4.4.2 Message transfer deadline exceeded";
+				this.closeSession(session.id, 451, message);
+				controller.abort();
+				stream.destroy();
+				reject(new SmtpRelayError({ responseCode: 451, message }));
+			}, this.config.dataTimeoutMs);
+			timer.unref();
+		});
 		try {
-			if (stream.destroyed && !stream.readableEnded) {
-				throw new SmtpRelayError({
-					responseCode: 451,
-					message: "4.3.0 SMTP connection closed before message processing",
-				});
-			}
-			const raw = await collectStream(stream, this.config.maxMessageBytes);
-			if (stream.sizeExceeded) {
-				throw new SmtpRelayError({
-					responseCode: 552,
-					message: "5.3.4 Message size exceeds fixed maximum message size",
-				});
-			}
+			return await Promise.race([work, deadline]);
+		} finally {
+			clearTimeout(timer);
+		}
+	}
 
-			const envelope = {
-				mailFrom: session.envelope.mailFrom
-					? session.envelope.mailFrom.address
-					: null,
-				rcptTo: session.envelope.rcptTo.map((recipient) => recipient.address),
-			};
+	// The body is buffered before a processing slot is taken, so slow clients never hold one;
+	// the slot covers only parsing and the upstream request.
+	private async relayData(
+		stream: SMTPServerDataStream,
+		user: AuthenticatedUser,
+		envelope: { mailFrom: string | null; rcptTo: string[] },
+		signal: AbortSignal,
+		budget: ByteBudget,
+	): Promise<string> {
+		const { raw, oversized, overBudget } = await collectStream(
+			stream,
+			this.config.maxMessageBytes,
+			signal,
+			budget,
+		);
+		if (stream.sizeExceeded || oversized) {
+			throw new SmtpRelayError({
+				responseCode: 552,
+				message: "5.3.4 Message size exceeds fixed maximum message size",
+			});
+		}
+		if (overBudget) {
+			throw new SmtpRelayError({
+				responseCode: 451,
+				message: "4.3.2 Gateway busy, try again later",
+			});
+		}
 
-			const mapped = await mapRawMessage(raw, envelope);
+		const release = await this.acquireDataSlot(signal);
+		try {
+			const releaseParse = await this.acquireParseSlot(signal);
+			const mapped = await mapRawMessageInWorker(raw, envelope, {
+				maxMimeParts: this.config.maxMimeParts,
+				timeoutMs: this.config.parseTimeoutMs,
+				heapMb: this.config.parseHeapMb,
+				signal,
+			}).finally(releaseParse);
 			this.assertSenderAllowed(user.identity, mapped.fromAddress);
 			if (envelope.mailFrom) {
-				this.assertSenderAllowed(
-					user.identity,
-					envelope.mailFrom.toLowerCase(),
-				);
+				this.assertSenderAllowed(user.identity, envelope.mailFrom);
 			}
 			const idempotencyKey = idempotencyKeyFor(
 				raw,
@@ -418,13 +635,58 @@ export class SmtpGateway {
 		}
 	}
 
+	private claimSenderData(credentialId: string, ip: string): () => void {
+		const byCredential = this.dataByCredential.get(credentialId) ?? 0;
+		const byIp = this.dataByIp.get(ip) ?? 0;
+		if (
+			byCredential >= this.config.maxDataPerCredential ||
+			byIp >= this.config.maxDataPerIp
+		) {
+			throw new SmtpRelayError({
+				responseCode: 451,
+				message:
+					"4.3.2 Another message is already being transferred, try again later",
+			});
+		}
+		this.dataByCredential.set(credentialId, byCredential + 1);
+		this.dataByIp.set(ip, byIp + 1);
+		let released = false;
+		return () => {
+			if (released) return;
+			released = true;
+			decrement(this.dataByCredential, credentialId);
+			decrement(this.dataByIp, ip);
+		};
+	}
+
+	private byteBudget(): ByteBudget {
+		let reserved = 0;
+		return {
+			reserve: (bytes) => {
+				if (this.bufferedBytes + bytes > this.config.maxBufferedBytes) {
+					return false;
+				}
+				this.bufferedBytes += bytes;
+				reserved += bytes;
+				return true;
+			},
+			release: () => {
+				this.bufferedBytes -= reserved;
+				reserved = 0;
+			},
+		};
+	}
+
 	private assertSenderAllowed(identity: SmtpIdentity, address: string): void {
-		const normalized = address.toLowerCase();
-		const domain = normalized.split("@")[1] ?? "";
+		const sender = normalizeMailbox(address);
 		const allowed =
-			identity.sendingMode === "identity"
-				? normalized === identity.sendingAddress?.toLowerCase()
-				: identity.allowedDomains.includes(domain);
+			sender !== null &&
+			(identity.sendingMode === "identity"
+				? identity.sendingAddress !== null &&
+					sender.address === normalizeMailbox(identity.sendingAddress)?.address
+				: identity.allowedDomains.some(
+						(domain) => asciiDomain(domain) === sender.domain,
+					));
 		if (!allowed) {
 			throw new SmtpRelayError({
 				responseCode: 553,
@@ -433,20 +695,25 @@ export class SmtpGateway {
 		}
 	}
 
-	private acquireDataSlot(stream?: SMTPServerDataStream): Promise<() => void> {
+	private acquireDataSlot(signal?: AbortSignal): Promise<() => void> {
+		if (signal?.aborted) {
+			return Promise.reject(connectionClosedBeforeProcessing());
+		}
 		if (this.activeData < this.config.maxConcurrentData) {
 			this.activeData++;
-			return Promise.resolve(() => this.releaseDataSlot());
+			return Promise.resolve(once(() => this.releaseDataSlot()));
 		}
 		if (this.dataQueue.length >= this.config.maxDataQueue) {
-			throw new SmtpRelayError({
-				responseCode: 451,
-				message: "4.3.2 Gateway busy, try again later",
-			});
+			return Promise.reject(
+				new SmtpRelayError({
+					responseCode: 451,
+					message: "4.3.2 Gateway busy, try again later",
+				}),
+			);
 		}
 		return new Promise((resolve, reject) => {
 			const entry: DataQueueEntry = {
-				stream,
+				signal,
 				resolve,
 				reject,
 				canceled: false,
@@ -456,24 +723,13 @@ export class SmtpGateway {
 					entry.cleanup();
 					const index = this.dataQueue.indexOf(entry);
 					if (index >= 0) this.dataQueue.splice(index, 1);
-					entry.reject(
-						new SmtpRelayError({
-							responseCode: 451,
-							message: "4.3.0 SMTP connection closed before message processing",
-						}),
-					);
+					entry.reject(connectionClosedBeforeProcessing());
 				},
 				cleanup: () => {
-					stream?.removeListener("close", entry.cancel);
-					stream?.removeListener("error", entry.cancel);
+					signal?.removeEventListener("abort", entry.cancel);
 				},
 			};
-			if (stream?.destroyed) {
-				entry.cancel();
-				return;
-			}
-			stream?.once("close", entry.cancel);
-			stream?.once("error", entry.cancel);
+			signal?.addEventListener("abort", entry.cancel, { once: true });
 			this.dataQueue.push(entry);
 		});
 	}
@@ -482,15 +738,47 @@ export class SmtpGateway {
 		while (this.dataQueue.length > 0) {
 			const next = this.dataQueue.shift();
 			if (!next) break;
-			if (next.canceled || next.stream?.destroyed) {
+			if (next.canceled || next.signal?.aborted) {
 				next.cancel();
 				continue;
 			}
 			next.cleanup();
-			next.resolve(() => this.releaseDataSlot());
+			next.resolve(once(() => this.releaseDataSlot()));
 			return;
 		}
 		this.activeData--;
+	}
+
+	// Each parse worker may use up to SMTP_PARSE_HEAP_MB of heap, so parses are limited separately
+	// from the DATA slots, which also cover the upstream request. Waiters are bounded by the DATA
+	// slots.
+	private acquireParseSlot(signal: AbortSignal): Promise<() => void> {
+		if (signal.aborted) {
+			return Promise.reject(connectionClosedBeforeProcessing());
+		}
+		if (this.activeParses < this.config.maxConcurrentParses) {
+			this.activeParses++;
+			return Promise.resolve(once(() => this.releaseParseSlot()));
+		}
+		return new Promise((resolve, reject) => {
+			const start = () => {
+				signal.removeEventListener("abort", cancel);
+				resolve(once(() => this.releaseParseSlot()));
+			};
+			const cancel = () => {
+				const index = this.parseQueue.indexOf(start);
+				if (index >= 0) this.parseQueue.splice(index, 1);
+				reject(connectionClosedBeforeProcessing());
+			};
+			signal.addEventListener("abort", cancel, { once: true });
+			this.parseQueue.push(start);
+		});
+	}
+
+	private releaseParseSlot(): void {
+		const next = this.parseQueue.shift();
+		if (next) next();
+		else this.activeParses--;
 	}
 
 	private assertNotThrottled(ip: string, username: string): void {
@@ -515,21 +803,6 @@ export class SmtpGateway {
 				message: "4.7.0 Too many failed authentication attempts, slow down",
 			});
 		}
-		if (
-			!record &&
-			!aggregate &&
-			this.authFailures.size >= this.config.maxAuthFailureRecords &&
-			[...this.authFailures].every(
-				([failureKey, failure]) =>
-					now - failure.windowStart <= this.config.authFailureWindowMs &&
-					this.failureBlocked(failureKey, failure),
-			)
-		) {
-			throw new SmtpRelayError({
-				responseCode: 421,
-				message: "4.7.0 Too many failed authentication attempts, slow down",
-			});
-		}
 	}
 
 	private recordFailure(ip: string, username: string): void {
@@ -540,29 +813,36 @@ export class SmtpGateway {
 				record.count += 1;
 				continue;
 			}
-			if (this.reserveFailureRecord(now)) {
-				this.authFailures.set(key, { count: 1, windowStart: now });
-			}
+			this.reserveFailureRecord(now);
+			this.authFailures.set(key, { count: 1, windowStart: now });
 		}
 	}
 
-	private reserveFailureRecord(now: number): boolean {
-		if (this.authFailures.size < this.config.maxAuthFailureRecords) return true;
-		let candidate: string | undefined;
+	// Records are kept in insertion order, so the first expired or unblocked entry is the oldest.
+	// A full table evicts rather than refusing logins that have no record.
+	private reserveFailureRecord(now: number): void {
+		if (this.authFailures.size < this.config.maxAuthFailureRecords) return;
+		let oldest: string | undefined;
+		let oldestUnblocked: string | undefined;
 		for (const [key, record] of this.authFailures) {
 			if (now - record.windowStart > this.config.authFailureWindowMs) {
 				this.authFailures.delete(key);
-				return true;
+				continue;
 			}
-			if (this.failureBlocked(key, record)) continue;
-			if (candidate === undefined || key.startsWith("user:")) {
-				candidate = key;
-				if (key.startsWith("user:")) break;
+			oldest ??= key;
+			if (!this.failureBlocked(key, record)) {
+				oldestUnblocked = key;
+				break;
 			}
 		}
-		if (candidate === undefined) return false;
-		this.authFailures.delete(candidate);
-		return true;
+		while (this.authFailures.size >= this.config.maxAuthFailureRecords) {
+			const victim =
+				oldestUnblocked ?? oldest ?? this.authFailures.keys().next().value;
+			if (victim === undefined) return;
+			this.authFailures.delete(victim);
+			oldestUnblocked = undefined;
+			oldest = undefined;
+		}
 	}
 
 	private failureBlocked(key: string, record: FailureRecord): boolean {
@@ -601,27 +881,102 @@ export class SmtpGateway {
 function collectStream(
 	stream: SMTPServerDataStream,
 	maxBytes: number,
-): Promise<Buffer> {
+	signal: AbortSignal,
+	budget: ByteBudget,
+): Promise<{ raw: Buffer; oversized: boolean; overBudget: boolean }> {
 	return new Promise((resolve, reject) => {
-		const chunks: Buffer[] = [];
+		const closed = () =>
+			new SmtpRelayError({
+				responseCode: 451,
+				message: "4.3.0 SMTP connection closed during message processing",
+			});
+		if (signal.aborted || (stream.destroyed && !stream.readableEnded)) {
+			reject(closed());
+			return;
+		}
+		let chunks: Buffer[] = [];
 		let total = 0;
+		let overBudget = false;
+		const onAbort = () => {
+			chunks = [];
+			reject(closed());
+		};
+		signal.addEventListener("abort", onAbort, { once: true });
 		stream.on("data", (chunk: Buffer) => {
 			total += chunk.length;
-			if (total <= maxBytes) chunks.push(chunk);
-		});
-		stream.once("end", () => resolve(Buffer.concat(chunks)));
-		stream.once("error", reject);
-		stream.once("close", () => {
-			if (!stream.readableEnded) {
-				reject(
-					new SmtpRelayError({
-						responseCode: 451,
-						message: "4.3.0 SMTP connection closed during message processing",
-					}),
-				);
+			if (total > maxBytes || overBudget) {
+				chunks = [];
+				budget.release();
+				return;
 			}
+			if (budget.reserve(chunk.length)) {
+				chunks.push(chunk);
+				return;
+			}
+			overBudget = true;
+			chunks = [];
+			budget.release();
+		});
+		stream.once("end", () => {
+			signal.removeEventListener("abort", onAbort);
+			resolve({
+				raw: Buffer.concat(chunks),
+				oversized: total > maxBytes,
+				overBudget,
+			});
+		});
+		stream.once("error", (error) => {
+			signal.removeEventListener("abort", onAbort);
+			reject(error);
+		});
+		stream.once("close", () => {
+			signal.removeEventListener("abort", onAbort);
+			if (!stream.readableEnded) reject(closed());
 		});
 	});
+}
+
+function once(callback: () => void): () => void {
+	let called = false;
+	return () => {
+		if (called) return;
+		called = true;
+		callback();
+	};
+}
+
+function decrement(counts: Map<string, number>, key: string): void {
+	const remaining = (counts.get(key) ?? 1) - 1;
+	if (remaining > 0) counts.set(key, remaining);
+	else counts.delete(key);
+}
+
+function connectionClosedBeforeProcessing(): SmtpRelayError {
+	return new SmtpRelayError({
+		responseCode: 451,
+		message: "4.3.0 SMTP connection closed before message processing",
+	});
+}
+
+function asciiDomain(domain: string): string {
+	const trimmed = domain.trim().replace(/\.$/, "");
+	return trimmed ? domainToASCII(trimmed).toLowerCase() : "";
+}
+
+// Matches the API's parseMailbox: the domain follows the last "@" and is compared in its
+// ASCII (punycode) form, since smtp-server and mailparser hand over Unicode IDN domains.
+function normalizeMailbox(
+	address: string,
+): { address: string; domain: string } | null {
+	const value = address.trim();
+	const at = value.lastIndexOf("@");
+	if (at <= 0) return null;
+	const domain = asciiDomain(value.slice(at + 1));
+	if (!domain) return null;
+	return {
+		address: `${value.slice(0, at).toLowerCase()}@${domain}`,
+		domain,
+	};
 }
 
 // smtp-server only half-closes (end()) on QUIT, timeouts and errors; a peer that never closes its

@@ -23,6 +23,16 @@ export interface GatewayConfig {
 	maxConnectionsPerIp: number;
 	maxConcurrentData: number;
 	maxDataQueue: number;
+	maxDataPerCredential: number;
+	maxDataPerIp: number;
+	maxBufferedBytes: number;
+	dataTimeoutMs: number;
+	parseTimeoutMs: number;
+	maxConcurrentParses: number;
+	parseHeapMb: number;
+	maxMimeParts: number;
+	preAuthTimeoutMs: number;
+	maxSessionMs: number;
 }
 
 function envString(name: string, fallback: string): string {
@@ -48,6 +58,16 @@ function envNumber(
 }
 
 export function loadConfig(): GatewayConfig {
+	const maxMessageBytes = envNumber("SMTP_MAX_MESSAGE_BYTES", 3 * 1024 * 1024);
+	const maxBufferedBytes = envNumber(
+		"SMTP_MAX_BUFFERED_BYTES",
+		Math.max(64 * 1024 * 1024, maxMessageBytes),
+	);
+	if (maxBufferedBytes < maxMessageBytes) {
+		throw new Error(
+			"SMTP_MAX_BUFFERED_BYTES must be at least SMTP_MAX_MESSAGE_BYTES",
+		);
+	}
 	return {
 		apiBaseUrl: envString(
 			"INBOUND_API_BASE_URL",
@@ -59,11 +79,11 @@ export function loadConfig(): GatewayConfig {
 		hostname: envString("SMTP_HOSTNAME", "smtp.inboundemail.com"),
 		starttlsPort: envNumber("SMTP_STARTTLS_PORT", 587, 0, 65_535),
 		implicitTlsPort: envNumber("SMTP_IMPLICIT_TLS_PORT", 465, 0, 65_535),
-		maxMessageBytes: envNumber("SMTP_MAX_MESSAGE_BYTES", 3 * 1024 * 1024),
+		maxMessageBytes,
 		maxRecipients: envNumber("SMTP_MAX_RECIPIENTS", 50, 1, 50),
 		tlsKeyPath: process.env.SMTP_TLS_KEY_PATH || null,
 		tlsCertPath: process.env.SMTP_TLS_CERT_PATH || null,
-		tlsHandshakeTimeoutMs: envNumber("SMTP_TLS_HANDSHAKE_TIMEOUT_MS", 10_000),
+		tlsHandshakeTimeoutMs: envNumber("SMTP_TLS_HANDSHAKE_TIMEOUT_MS", 5_000),
 		allowInsecureAuth: process.env.SMTP_ALLOW_INSECURE_AUTH === "true",
 		authFailureWindowMs: envNumber("SMTP_AUTH_FAILURE_WINDOW_MS", 15 * 60_000),
 		authFailureLimit: envNumber("SMTP_AUTH_FAILURE_LIMIT", 10),
@@ -72,9 +92,19 @@ export function loadConfig(): GatewayConfig {
 		authRequestTimeoutMs: envNumber("SMTP_AUTH_REQUEST_TIMEOUT_MS", 10_000),
 		sendRequestTimeoutMs: envNumber("SMTP_SEND_REQUEST_TIMEOUT_MS", 30_000),
 		socketTimeoutMs: envNumber("SMTP_SOCKET_TIMEOUT_MS", 60_000),
-		maxConnections: envNumber("SMTP_MAX_CONNECTIONS", 50),
+		maxConnections: envNumber("SMTP_MAX_CONNECTIONS", 500),
 		maxConnectionsPerIp: envNumber("SMTP_MAX_CONNECTIONS_PER_IP", 10),
-		maxConcurrentData: envNumber("SMTP_MAX_CONCURRENT_DATA", 2),
+		maxConcurrentData: envNumber("SMTP_MAX_CONCURRENT_DATA", 8),
 		maxDataQueue: envNumber("SMTP_MAX_DATA_QUEUE", 20, 0),
+		maxDataPerCredential: envNumber("SMTP_MAX_DATA_PER_CREDENTIAL", 3),
+		maxDataPerIp: envNumber("SMTP_MAX_DATA_PER_IP", 4),
+		maxBufferedBytes,
+		dataTimeoutMs: envNumber("SMTP_DATA_TIMEOUT_MS", 120_000),
+		parseTimeoutMs: envNumber("SMTP_PARSE_TIMEOUT_MS", 15_000),
+		maxConcurrentParses: envNumber("SMTP_MAX_CONCURRENT_PARSES", 2),
+		parseHeapMb: envNumber("SMTP_PARSE_HEAP_MB", 64, 32, 1024),
+		maxMimeParts: envNumber("SMTP_MAX_MIME_PARTS", 500, 1, 900),
+		preAuthTimeoutMs: envNumber("SMTP_PREAUTH_TIMEOUT_MS", 30_000),
+		maxSessionMs: envNumber("SMTP_MAX_SESSION_MS", 10 * 60_000),
 	};
 }
