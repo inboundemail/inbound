@@ -1147,3 +1147,43 @@ describe("junk verdict", () => {
 		).toEqual({ isJunk: true, reason: "classifier" });
 	});
 });
+
+describe("Guard rule action normalisation", () => {
+	it("accepts current and legacy action shapes", async () => {
+		const { normalizeGuardAction } = await import(
+			"@/app/api/e2/guard/action-schema"
+		);
+		expect(normalizeGuardAction({ action: "junk" })).toEqual({ action: "junk" });
+		expect(normalizeGuardAction({ action: "allow", note: "extra" })).toEqual({
+			action: "allow",
+		});
+		expect(normalizeGuardAction({ action: "flag" })).toEqual({ action: "flag" });
+		expect(normalizeGuardAction({ action: "label", label: "x" })).toEqual({
+			action: "label",
+		});
+		expect(normalizeGuardAction('{"action":"block"}')).toEqual({
+			action: "block",
+		});
+		expect(normalizeGuardAction("block")).toEqual({ action: "block" });
+		expect(
+			normalizeGuardAction({ action: "route", endpointId: " ep_1 ", extra: 1 }),
+		).toEqual({ action: "route", endpointId: "ep_1" });
+	});
+
+	it("rejects invalid actions", async () => {
+		const { normalizeGuardAction } = await import(
+			"@/app/api/e2/guard/action-schema"
+		);
+		for (const value of [
+			{ action: "explode" },
+			{ action: "route" },
+			{ action: "route", endpointId: "" },
+			{},
+			42,
+			"{not json",
+			'"nope"',
+		]) {
+			expect(normalizeGuardAction(value)).toBeNull();
+		}
+	});
+});

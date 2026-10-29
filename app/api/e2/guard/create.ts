@@ -2,7 +2,11 @@ import { Elysia, t } from "elysia";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { guardRules } from "@/lib/db/schema";
-import { GuardRuleActionSchema } from "@/app/api/e2/guard/action-schema";
+import {
+	GuardRuleActionSchema,
+	INVALID_GUARD_ACTION,
+	normalizeGuardAction,
+} from "@/app/api/e2/guard/action-schema";
 import { validateAndRateLimit } from "../lib/auth";
 
 const GuardTextCriterionOpenApiSchema = {
@@ -229,7 +233,15 @@ export const createGuardRule = new Elysia().post(
 		// Serialize config to JSON string
 		const configJson =
 			typeof config === "string" ? config : JSON.stringify(config);
-		const actionsJson = action ? JSON.stringify(action) : null;
+		let actionsJson: string | null = null;
+		if (action !== undefined && action !== null) {
+			const normalized = normalizeGuardAction(action);
+			if (!normalized) {
+				set.status = 400;
+				return { error: INVALID_GUARD_ACTION };
+			}
+			actionsJson = JSON.stringify(normalized);
+		}
 
 		try {
 			const ruleId = nanoid();

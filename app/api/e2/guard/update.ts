@@ -2,7 +2,11 @@ import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import { db } from "@/lib/db";
 import { guardRules } from "@/lib/db/schema";
-import { GuardRuleActionSchema } from "@/app/api/e2/guard/action-schema";
+import {
+	GuardRuleActionSchema,
+	INVALID_GUARD_ACTION,
+	normalizeGuardAction,
+} from "@/app/api/e2/guard/action-schema";
 import { validateAndRateLimit } from "../lib/auth";
 
 // Request schema
@@ -89,7 +93,16 @@ export const updateGuardRule = new Elysia().put(
 		}
 
 		if (body.action !== undefined) {
-			updateData.actions = JSON.stringify(body.action);
+			if (body.action === null) {
+				updateData.actions = null;
+			} else {
+				const normalized = normalizeGuardAction(body.action);
+				if (!normalized) {
+					set.status = 400;
+					return { error: INVALID_GUARD_ACTION };
+				}
+				updateData.actions = JSON.stringify(normalized);
+			}
 		}
 
 		try {
