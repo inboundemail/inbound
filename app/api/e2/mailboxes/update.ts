@@ -10,6 +10,7 @@ import {
 	MailboxUpdateInputSchema,
 	serializeMailbox,
 	type ValidatedMailboxInput,
+	validateMailboxControls,
 	validateMailboxInput,
 } from "@/app/api/e2/mailboxes/shared";
 import { db } from "@/lib/db";
@@ -88,6 +89,12 @@ export const updateMailbox = new Elysia().put(
 			validatedData = validated.data;
 		}
 
+		const controls = validateMailboxControls(body, existing);
+		if ("error" in controls) {
+			set.status = 400;
+			return { error: controls.error };
+		}
+
 		const now = new Date();
 		try {
 			const updateCredential = db
@@ -100,6 +107,7 @@ export const updateMailbox = new Elysia().put(
 					sendingMode: validatedData.sendingMode,
 					sendingName: validatedData.sendingName,
 					sendingAddress: validatedData.sendingAddress,
+					...controls.data,
 					enabled: body.enabled ?? existing.enabled,
 					updatedAt: now,
 				})
@@ -162,6 +170,7 @@ export const updateMailbox = new Elysia().put(
 					sendingMode: validatedData.sendingMode,
 					sendingName: validatedData.sendingName,
 					sendingAddress: validatedData.sendingAddress,
+					...controls.data,
 					enabled: body.enabled ?? existing.enabled,
 					updatedAt: now,
 				},

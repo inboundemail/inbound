@@ -298,15 +298,44 @@ function hasValidGatewaySecret(request: Request): boolean {
  * request proves it came from a gateway; otherwise use the connecting IP.
  */
 function getMailboxAuthClientIp(request: Request): string {
+	return getGatewayClientIp(request) ?? getClientIp(request);
+}
+
+/** Whether the request carries the IMAP/SMTP gateways' shared secret. */
+export function isMailboxGatewayRequest(request: Request): boolean {
+	return hasValidGatewaySecret(request);
+}
+
+/**
+ * The end client's IP as forwarded by an IMAP/SMTP gateway, or null when the
+ * request does not carry a valid gateway secret or a valid forwarded IP.
+ */
+export function getGatewayClientIp(request: Request): string | null {
 	const forwarded = request.headers
 		.get(MAILBOX_GATEWAY_CLIENT_IP_HEADER)
 		?.trim()
 		.toLowerCase()
-		.replace(/^::ffff:/, "");
+		.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/, "");
 	if (forwarded && isIP(forwarded) && hasValidGatewaySecret(request)) {
 		return forwarded;
 	}
-	return getClientIp(request);
+	return null;
+}
+
+/**
+ * The client IP of a direct HTTP request, taken only from a header the
+ * platform sets and clients cannot spoof: on Vercel, `x-vercel-forwarded-for`
+ * (Vercel overwrites client-supplied forwarding headers). Elsewhere there is
+ * no trusted source, so this returns null.
+ */
+export function getTrustedHttpClientIp(request: Request): string | null {
+	if (process.env.VERCEL !== "1") return null;
+	const ip = request.headers
+		.get("x-vercel-forwarded-for")
+		?.split(",")[0]
+		?.trim()
+		.toLowerCase();
+	return ip && isIP(ip) ? ip : null;
 }
 
 let loggedMissingGatewaySecret = false;

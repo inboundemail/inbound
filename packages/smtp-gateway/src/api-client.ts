@@ -145,20 +145,22 @@ export class InboundApiClient {
 		throw new SmtpRelayError({ responseCode: 454, message: failure });
 	}
 
+	/**
+	 * With the gateway secret configured, the send carries it and the SMTP client's IP, so the
+	 * API treats it as SMTP use of the credential (its SMTP toggle and IP allowlist apply)
+	 * rather than HTTP API use.
+	 */
 	async sendEmail(
 		apiKey: string,
 		payload: SendEmailPayload,
 		idempotencyKey: string,
+		clientIp?: string,
 	): Promise<SendEmailResult> {
 		const response = await this.request(
 			`${this.config.apiBaseUrl}${this.config.sendPath}`,
 			{
 				method: "POST",
-				headers: {
-					Authorization: `Bearer ${apiKey}`,
-					"Content-Type": "application/json",
-					"Idempotency-Key": idempotencyKey,
-				},
+				headers: this.sendHeaders(apiKey, idempotencyKey, clientIp),
 				body: JSON.stringify(payload),
 			},
 			this.config.sendRequestTimeoutMs,
@@ -185,15 +187,9 @@ export class InboundApiClient {
 		apiKey: string,
 		payload: SendRawEmailPayload,
 		idempotencyKey: string,
+		clientIp?: string,
 	): Promise<SendEmailResult | null> {
-		const headers: Record<string, string> = {
-			Authorization: `Bearer ${apiKey}`,
-			"Content-Type": "application/json",
-			"Idempotency-Key": idempotencyKey,
-		};
-		if (this.config.gatewayAuthSecret) {
-			headers["x-inbound-gateway-secret"] = this.config.gatewayAuthSecret;
-		}
+		const headers = this.sendHeaders(apiKey, idempotencyKey, clientIp);
 		const response = await this.request(
 			`${this.config.apiBaseUrl}${this.config.rawSendPath}`,
 			{ method: "POST", headers, body: JSON.stringify(payload) },
@@ -211,6 +207,23 @@ export class InboundApiClient {
 			);
 		}
 		return (await response.json()) as SendEmailResult;
+	}
+
+	private sendHeaders(
+		apiKey: string,
+		idempotencyKey: string,
+		clientIp: string | undefined,
+	): Record<string, string> {
+		const headers: Record<string, string> = {
+			Authorization: `Bearer ${apiKey}`,
+			"Content-Type": "application/json",
+			"Idempotency-Key": idempotencyKey,
+		};
+		if (this.config.gatewayAuthSecret) {
+			headers["x-inbound-gateway-secret"] = this.config.gatewayAuthSecret;
+			if (clientIp) headers["x-inbound-client-ip"] = clientIp;
+		}
+		return headers;
 	}
 
 	private async request(

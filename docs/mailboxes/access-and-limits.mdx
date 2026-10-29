@@ -1,0 +1,97 @@
+---
+title: "Access and Limits"
+description: "Restrict a credential's protocols and IP addresses, cap its storage and sending, and choose what mailbox users manage themselves"
+---
+
+Each managed credential has optional controls on top of its [scopes and permissions](/mailboxes/scopes-and-permissions). Set them when you create the credential or later with `PUT /mailboxes/{id}`; list and get responses include them. Every control is optional and nullable, and `null` resets it to its default: no extra restriction, and no self-service.
+
+```json
+{
+  "protocols": { "imap": true, "smtp": true, "api": false },
+  "allowedIps": ["203.0.113.0/24", "2001:db8::/32"],
+  "storageQuotaBytes": 52428800,
+  "dailySendLimit": 500,
+  "selfService": { "filters": true, "spam": true, "password": false }
+}
+```
+
+Only the account (an account API key or the dashboard) can change these controls. A mailbox password can never raise its own limits.
+
+## Protocols
+
+`protocols` turns each way of using the credential's password on or off:
+
+| Key | Controls |
+| --- | --- |
+| `imap` | IMAP login |
+| `smtp` | SMTP authentication and sending |
+| `api` | HTTP requests authenticated with the mailbox password, such as `/mailboxes/me/...` and `POST /emails` |
+
+`null` enables all three, and so does a key left out. On update, the keys you send are merged with the current values. SMTP keeps working when `api` is `false`: SMTP sends are relayed through Inbound's own trusted gateway, not through the credential's API access. `protocols` limits the mailbox password only; the account API key can still manage the mailbox through `/mailboxes/{id}/...`.
+
+## Allowed IP addresses
+
+`allowedIps` is a list of up to 100 IPv4 and IPv6 addresses or CIDR ranges, such as `198.51.100.7`, `203.0.113.0/24` or `2001:db8::/32`. A bare address means that address only. When the list is set, the password only authenticates from a client address inside one of the ranges; IPv4-mapped IPv6 addresses match IPv4 ranges. `null` or `[]` allows any address, and responses show it as `[]`.
+
+Ranges are stored normalized, so `203.0.113.7/24` is saved as `203.0.113.0/24`.
+
+Inbound only checks a client address it can trust:
+
+- **IMAP and SMTP**: the address of the client connecting to Inbound's gateway. The gateway forwards it to the API together with a shared gateway secret; a forwarded address without a valid secret is ignored.
+- **HTTP**: on Inbound's hosted API, the client address from the platform's `x-vercel-forwarded-for` header, which clients can't set themselves. Other forwarding headers are ignored. A self-hosted deployment outside Vercel has no trusted client address, so a password with a non-empty `allowedIps` is refused for every HTTP request.
+
+When no trusted address is available and `allowedIps` is set, authentication fails closed.
+
+<Note>
+  A disabled protocol or a disallowed IP address fails like a wrong password: IMAP returns `NO [AUTHENTICATIONFAILED]`, SMTP returns `535`, and HTTP returns `401`. The response doesn't say which check failed, so check these settings when a correct password is refused.
+</Note>
+
+Protocol and IP changes apply to each new login or request. Open IMAP sessions are rechecked periodically, currently about every five minutes, and closed when they no longer pass. Don't rely on a change ending an open session right away; [rotate the password](/mailboxes/manage-credentials#rotate-a-password) when access must end at once.
+
+## Storage quota
+
+`storageQuotaBytes` caps, in bytes, the content this credential stores itself: messages appended over IMAP or HTTP, drafts and saved Sent copies. Received mail doesn't count. Each stored message counts once, even when it is in several folders of the credential. `null` means no per-credential cap; the minimum is `1`.
+
+The [account-wide appended storage limits](/mailboxes/imap-behavior#message-and-storage-limits) still apply. An append over either limit is rejected; IMAP returns `NO [OVERQUOTA]`.
+
+## Daily send limit
+
+`dailySendLimit` caps how many sends and replies this credential's password can make per UTC day, across SMTP and HTTP, from `0` (no sending) to `1,000,000`. `null` means no per-credential limit; account sending limits still apply either way.
+
+Sends made while the limit is `null` aren't counted if you set a limit later that day.
+
+- Each message counts once when it is accepted for delivery, whatever its number of recipients. A send the email provider rejects is not counted, but a message that later bounces still counts.
+- Retrying a send with the same `Idempotency-Key` after it was accepted doesn't count again.
+- Concurrent sends can't exceed the limit. The counter resets at 00:00 UTC.
+- Sends authorized with an account API key don't count toward any mailbox's limit, even when they save a copy to its `Sent`.
+- A password with a daily limit can't schedule sends: `scheduled_at` returns `400`.
+
+Over the limit, HTTP sends return `429` and SMTP returns a temporary `451`. Retry after 00:00 UTC.
+
+## Self-service
+
+`selfService` chooses what a mailbox user can manage with their own password through `/mailboxes/me/...`:
+
+| Key | Allows |
+| --- | --- |
+| `filters` | [Filters](/mailboxes/filters) at `/mailboxes/me/filters` |
+| `spam` | [Spam settings](/mailboxes/junk-filter#per-mailbox-spam-settings) at `/mailboxes/me/spam` |
+| `password` | `POST /mailboxes/me/rotate-password` |
+
+`null` turns all three off, and so does a key left out. On update, the keys you send are merged with the current values. Requests for a setting that isn't enabled return `403`. The account API key can always manage these settings through `/mailboxes/{id}/...`.
+
+```bash
+curl -X POST "https://inbound.new/api/e2/mailboxes/me/rotate-password" \
+  -H "Authorization: Bearer $MAILBOX_PASSWORD"
+```
+
+The response contains the new password. The old one stops working immediately, including for the IMAP and SMTP clients that use it.
+
+<CardGroup cols={2}>
+  <Card title="Manage Credentials" icon="key" href="/mailboxes/manage-credentials">
+    Create, update, disable and rotate credentials.
+  </Card>
+  <Card title="Mailbox Filters" icon="filter" href="/mailboxes/filters">
+    Sort, flag and junk received mail with ordered rules.
+  </Card>
+</CardGroup>

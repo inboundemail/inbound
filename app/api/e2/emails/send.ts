@@ -173,6 +173,13 @@ export const sendEmail = new Elysia().post(
 		let parsedDate: ParsedScheduleDate | null = null;
 		if (body.scheduled_at) {
 			console.log("⏰ Scheduled email detected");
+			if (credential && credential.dailySendLimit !== null) {
+				set.status = 400;
+				return {
+					error:
+						"scheduled_at is not available for mailbox passwords with a daily sending limit",
+				};
+			}
 
 			parsedDate = parseScheduledAt(body.scheduled_at, body.timezone || "UTC");
 			if (!parsedDate.isValid) {

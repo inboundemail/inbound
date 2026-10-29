@@ -121,6 +121,29 @@ resources:
               copy: post /api/e2/mailboxes/{id}/folders/{folder}/messages/{uid}/copy
               list_attachments: get /api/e2/mailboxes/{id}/folders/{folder}/messages/{uid}/attachments
               download_attachment: get /api/e2/mailboxes/{id}/folders/{folder}/messages/{uid}/attachments/{index}
+      filters:
+        methods:
+          list: get /api/e2/mailboxes/{id}/filters
+          create: post /api/e2/mailboxes/{id}/filters
+          retrieve: get /api/e2/mailboxes/{id}/filters/{filterId}
+          update: patch /api/e2/mailboxes/{id}/filters/{filterId}
+          delete: delete /api/e2/mailboxes/{id}/filters/{filterId}
+          reorder: post /api/e2/mailboxes/{id}/filters/reorder
+          apply_all: post /api/e2/mailboxes/{id}/filters/apply
+          apply: post /api/e2/mailboxes/{id}/filters/{filterId}/apply
+      spam:
+        methods:
+          retrieve: get /api/e2/mailboxes/{id}/spam
+          update: put /api/e2/mailboxes/{id}/spam
+        subresources:
+          allow:
+            methods:
+              add: post /api/e2/mailboxes/{id}/spam/allow
+              remove: delete /api/e2/mailboxes/{id}/spam/allow
+          block:
+            methods:
+              add: post /api/e2/mailboxes/{id}/spam/block
+              remove: delete /api/e2/mailboxes/{id}/spam/block
 
 settings:
   # All generated integration tests that hit the prism mock http server are marked

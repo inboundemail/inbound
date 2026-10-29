@@ -121,6 +121,10 @@ The login username does not automatically grant access to mail sent to `imap@ope
 
 Disabled credentials cannot authenticate, regardless of their other permissions.
 
+## Protocols, IP ranges and limits
+
+Optional per-credential controls narrow these permissions further. `protocols` can turn off IMAP, SMTP or HTTP use of the password, and `allowedIps` limits the client addresses it authenticates from. A blocked protocol or address fails like a wrong password. `storageQuotaBytes` and `dailySendLimit` cap appended storage and daily sends, and `selfService` decides whether the mailbox user can manage their own filters, spam settings and password. None of them grants access the credential's type, access mode or sender policy doesn't already allow. See [Access and Limits](/mailboxes/access-and-limits).
+
 <CardGroup cols={2}>
   <Card title="Manage Credentials" icon="key" href="/mailboxes/manage-credentials">
     Create credentials, update scopes, disable access, and rotate passwords.

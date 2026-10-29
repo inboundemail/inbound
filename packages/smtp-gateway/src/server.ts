@@ -72,6 +72,7 @@ type TlsOptions = { key: Buffer; cert: Buffer; minVersion: "TLSv1.2" };
 interface AuthenticatedUser {
 	apiKey: string;
 	identity: SmtpIdentity;
+	clientIp: string;
 }
 
 interface FailureRecord {
@@ -545,7 +546,11 @@ export class SmtpGateway {
 			clearTimeout(state.preAuth);
 			state.preAuth = undefined;
 		}
-		const user: AuthenticatedUser = { apiKey: password, identity };
+		const user: AuthenticatedUser = {
+			apiKey: password,
+			identity,
+			clientIp: ip,
+		};
 		return { user };
 	}
 
@@ -659,6 +664,7 @@ export class SmtpGateway {
 						user.apiKey,
 						{ raw: raw.toString("base64"), recipients: envelope.rcptTo },
 						idempotencyKey,
+						user.clientIp,
 					)
 				: null;
 			const result =
@@ -667,6 +673,7 @@ export class SmtpGateway {
 					user.apiKey,
 					mapped.payload,
 					idempotencyKey,
+					user.clientIp,
 				));
 			console.log(
 				`[smtp-gateway] relayed ${rawResult ? "raw " : ""}message ${result.id} recipients=${envelope.rcptTo.length}`,

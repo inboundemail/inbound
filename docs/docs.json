@@ -47,8 +47,10 @@
               "mailboxes/connect-smtp",
               "mailboxes/scopes-and-permissions",
               "mailboxes/manage-credentials",
+              "mailboxes/access-and-limits",
               "mailboxes/http-api",
               "mailboxes/imap-behavior",
+              "mailboxes/filters",
               "mailboxes/junk-filter"
             ]
           },

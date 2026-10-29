@@ -55,6 +55,15 @@ const MailboxProfileSchema = t.Object({
 			address: t.Nullable(t.String()),
 		}),
 	),
+	protocols: t.Object({ imap: t.Boolean(), smtp: t.Boolean(), api: t.Boolean() }),
+	allowedIps: t.Array(t.String()),
+	storageQuotaBytes: t.Nullable(t.Number()),
+	dailySendLimit: t.Nullable(t.Integer()),
+	selfService: t.Object({
+		filters: t.Boolean(),
+		spam: t.Boolean(),
+		password: t.Boolean(),
+	}),
 	unreadCount: t.Number(),
 	authenticatedAs: t.Union([t.Literal("account"), t.Literal("mailbox")]),
 });
@@ -537,6 +546,11 @@ export const getMailbox = new Elysia().get(
 				domain: scope.domain,
 				address: scope.address,
 			})),
+			protocols: credential.protocols,
+			allowedIps: credential.allowedIps,
+			storageQuotaBytes: credential.storageQuotaBytes,
+			dailySendLimit: credential.dailySendLimit,
+			selfService: credential.selfService,
 			unreadCount: await unreadCount(result.access),
 			authenticatedAs: via,
 		};
@@ -875,7 +889,7 @@ export const updateMailboxMessage = new Elysia().patch(
 			isJunk: t.Optional(
 				t.Boolean({
 					description:
-						"Move to Junk (true) or back to the inbox (false). Applies to the email account-wide, including IMAP Junk folders.",
+						"Move to Junk (true) or back to the inbox (false). Sets this mailbox's own junk verdict, shared with IMAP; other mailboxes and the account-level spam verdict are unchanged.",
 				}),
 			),
 		}),
@@ -891,7 +905,7 @@ export const updateMailboxMessage = new Elysia().patch(
 			tags: ["Mailboxes"],
 			summary: "Mark a mailbox message read, archived or junk",
 			description:
-				"Requires a read_write mailbox. Updates the mailbox's own state, shared with IMAP: isRead sets \\Seen, isArchived moves between INBOX and Archive, and isJunk moves between INBOX and Junk (the junk verdict also applies to the email account-wide). The dashboard's read and archived state are separate.",
+				"Requires a read_write mailbox. Updates the mailbox's own state, shared with IMAP: isRead sets \\Seen, isArchived moves between INBOX and Archive, and isJunk moves between INBOX and Junk for this mailbox only. The dashboard's state and the account-level spam verdict are separate.",
 		},
 	},
 );

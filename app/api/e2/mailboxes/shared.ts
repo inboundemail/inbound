@@ -1,6 +1,10 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { t } from "elysia";
 import { nanoid } from "nanoid";
+import {
+	ipAllowed,
+	normalizeAllowedIps,
+} from "@/app/api/e2/mailboxes/ip-allowlist";
 import { auth } from "@/lib/auth/auth";
 import { db } from "@/lib/db";
 import { apikey, user } from "@/lib/db/auth-schema";
@@ -16,7 +20,44 @@ export const MailboxScopeInputSchema = t.Object({
 	address: t.Optional(t.String({ minLength: 3, maxLength: 255 })),
 });
 
+export const MAX_DAILY_SEND_LIMIT = 1_000_000;
+
+const MailboxProtocolsInputSchema = t.Object(
+	{
+		imap: t.Optional(t.Boolean()),
+		smtp: t.Optional(t.Boolean()),
+		api: t.Optional(t.Boolean()),
+	},
+	{ additionalProperties: false },
+);
+
+const MailboxSelfServiceInputSchema = t.Object(
+	{
+		filters: t.Optional(t.Boolean()),
+		spam: t.Optional(t.Boolean()),
+		password: t.Optional(t.Boolean()),
+	},
+	{ additionalProperties: false },
+);
+
+const MailboxControlsInputFields = {
+	protocols: t.Optional(t.Nullable(MailboxProtocolsInputSchema)),
+	allowedIps: t.Optional(
+		t.Nullable(
+			t.Array(t.String({ minLength: 1, maxLength: 64 }), { maxItems: 100 }),
+		),
+	),
+	storageQuotaBytes: t.Optional(
+		t.Nullable(t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })),
+	),
+	dailySendLimit: t.Optional(
+		t.Nullable(t.Integer({ minimum: 0, maximum: MAX_DAILY_SEND_LIMIT })),
+	),
+	selfService: t.Optional(t.Nullable(MailboxSelfServiceInputSchema)),
+};
+
 export const MailboxInputSchema = t.Object({
+	...MailboxControlsInputFields,
 	name: t.String({ minLength: 1, maxLength: 255 }),
 	loginAddress: t.String({ minLength: 3, maxLength: 255 }),
 	type: t.Union([t.Literal("mailbox"), t.Literal("smtp")]),
@@ -29,6 +70,7 @@ export const MailboxInputSchema = t.Object({
 
 export const MailboxUpdateInputSchema = t.Object(
 	{
+		...MailboxControlsInputFields,
 		name: t.Optional(t.String({ minLength: 1, maxLength: 255 })),
 		loginAddress: t.Optional(t.String({ minLength: 3, maxLength: 255 })),
 		type: t.Optional(t.Union([t.Literal("mailbox"), t.Literal("smtp")])),
@@ -67,6 +109,19 @@ export const MailboxSchema = t.Object({
 	sendingAddress: t.Nullable(t.String()),
 	enabled: t.Boolean(),
 	scopes: t.Array(MailboxScopeSchema),
+	protocols: t.Object({
+		imap: t.Boolean(),
+		smtp: t.Boolean(),
+		api: t.Boolean(),
+	}),
+	allowedIps: t.Array(t.String()),
+	storageQuotaBytes: t.Nullable(t.Number()),
+	dailySendLimit: t.Nullable(t.Integer()),
+	selfService: t.Object({
+		filters: t.Boolean(),
+		spam: t.Boolean(),
+		password: t.Boolean(),
+	}),
 	createdAt: t.String({ format: "date-time" }),
 	updatedAt: t.String({ format: "date-time" }),
 	lastUsedAt: t.Nullable(t.String({ format: "date-time" })),
@@ -111,7 +166,104 @@ export interface ValidatedMailboxInput {
 	}>;
 }
 
-interface CredentialRecord {
+export interface MailboxProtocols {
+	imap: boolean;
+	smtp: boolean;
+	api: boolean;
+}
+
+export interface MailboxSelfService {
+	filters: boolean;
+	spam: boolean;
+	password: boolean;
+}
+
+export type MailboxProtocol = keyof MailboxProtocols;
+
+export interface MailboxControlsInput {
+	protocols?: Partial<MailboxProtocols> | null;
+	allowedIps?: string[] | null;
+	storageQuotaBytes?: number | null;
+	dailySendLimit?: number | null;
+	selfService?: Partial<MailboxSelfService> | null;
+}
+
+export interface StoredMailboxControls {
+	protocols: MailboxProtocols | null;
+	allowedIps: string[] | null;
+	storageQuotaBytes: number | null;
+	dailySendLimit: number | null;
+	selfService: MailboxSelfService | null;
+}
+
+/** Stored protocols: null (or a missing key) means the protocol is enabled. */
+export function resolveProtocols(
+	stored: Partial<MailboxProtocols> | null | undefined,
+): MailboxProtocols {
+	return {
+		imap: stored?.imap !== false,
+		smtp: stored?.smtp !== false,
+		api: stored?.api !== false,
+	};
+}
+
+/** Stored self-service flags: null (or a missing key) means not allowed. */
+export function resolveSelfService(
+	stored: Partial<MailboxSelfService> | null | undefined,
+): MailboxSelfService {
+	return {
+		filters: stored?.filters === true,
+		spam: stored?.spam === true,
+		password: stored?.password === true,
+	};
+}
+
+/**
+ * Validates the access and sending controls in a create or update body. Keys
+ * left out keep their current value (or the default on create); protocols and
+ * selfService merge key by key, and null resets a control to its default.
+ */
+export function validateMailboxControls(
+	input: MailboxControlsInput,
+	existing: StoredMailboxControls | null,
+): { data: StoredMailboxControls } | { error: string } {
+	let protocols = existing?.protocols ?? null;
+	if (input.protocols === null) protocols = null;
+	else if (input.protocols !== undefined) {
+		protocols = { ...resolveProtocols(protocols), ...input.protocols };
+	}
+
+	let selfService = existing?.selfService ?? null;
+	if (input.selfService === null) selfService = null;
+	else if (input.selfService !== undefined) {
+		selfService = { ...resolveSelfService(selfService), ...input.selfService };
+	}
+
+	let allowedIps = existing?.allowedIps ?? null;
+	if (input.allowedIps !== undefined) {
+		const normalized = normalizeAllowedIps(input.allowedIps);
+		if ("error" in normalized) return { error: normalized.error };
+		allowedIps = normalized.value;
+	}
+
+	return {
+		data: {
+			protocols,
+			allowedIps,
+			storageQuotaBytes:
+				input.storageQuotaBytes === undefined
+					? (existing?.storageQuotaBytes ?? null)
+					: input.storageQuotaBytes,
+			dailySendLimit:
+				input.dailySendLimit === undefined
+					? (existing?.dailySendLimit ?? null)
+					: input.dailySendLimit,
+			selfService,
+		},
+	};
+}
+
+interface CredentialRecord extends StoredMailboxControls {
 	id: string;
 	name: string;
 	loginAddress: string;
@@ -351,6 +503,36 @@ export interface ManagedMailCredential {
 		domain: string;
 		address: string | null;
 	}>;
+	protocols: MailboxProtocols;
+	allowedIps: string[];
+	storageQuotaBytes: number | null;
+	dailySendLimit: number | null;
+	selfService: MailboxSelfService;
+	spamLevel: string | null;
+	spamAllow: string[] | null;
+	spamBlock: string[] | null;
+}
+
+/**
+ * How a mailbox password is being used: the protocol (IMAP or SMTP through a
+ * gateway, or the HTTP API) and the end client's IP from a trusted source
+ * (null when unknown). A disabled protocol or an IP outside the allowlist
+ * fails like a wrong password.
+ */
+export interface MailboxPasswordUse {
+	protocol: MailboxProtocol;
+	clientIp: string | null;
+}
+
+export function credentialAllowsUse(
+	credential: {
+		protocols: Partial<MailboxProtocols> | null;
+		allowedIps: string[] | null;
+	},
+	use: MailboxPasswordUse,
+): boolean {
+	if (!resolveProtocols(credential.protocols)[use.protocol]) return false;
+	return ipAllowed(credential.allowedIps, use.clientIp);
 }
 
 export async function authenticateManagedMailCredential(
@@ -358,6 +540,7 @@ export async function authenticateManagedMailCredential(
 	options: {
 		loginAddress?: string;
 		requireType?: "mailbox";
+		use?: MailboxPasswordUse;
 	} = {},
 ): Promise<ManagedMailCredential | null> {
 	let verification: Awaited<ReturnType<typeof auth.api.verifyApiKey>> | null =
@@ -398,7 +581,7 @@ export async function authenticateManagedMailCredential(
 			apiKeyId,
 			loginAddress: options.loginAddress,
 		},
-		{ requireType: options.requireType },
+		{ requireType: options.requireType, use: options.use },
 	);
 }
 
@@ -406,8 +589,9 @@ export async function authenticateManagedMailCredential(
  * Loads a mailbox or SMTP credential and the policy it grants, applying the
  * same checks as password authentication: enabled, owner not banned, login
  * domain verified, at least one verified scope and a valid sending identity.
- * Used after verifying a mailbox password, and when the account owner acts on
- * one of their own mailboxes by ID.
+ * Used after verifying a mailbox password (pass `use` to apply its protocol
+ * and IP controls), and when the account owner acts on one of their own
+ * mailboxes by ID (account access is not limited by those controls).
  */
 export async function resolveManagedMailCredential(
 	where: {
@@ -416,7 +600,7 @@ export async function resolveManagedMailCredential(
 		credentialId?: string;
 		loginAddress?: string;
 	},
-	options: { requireType?: "mailbox" } = {},
+	options: { requireType?: "mailbox"; use?: MailboxPasswordUse } = {},
 ): Promise<ManagedMailCredential | null> {
 	if (!where.apiKeyId && !where.credentialId) return null;
 	const conditions = [eq(imapCredentials.userId, where.userId)];
@@ -441,6 +625,14 @@ export async function resolveManagedMailCredential(
 			sendingName: imapCredentials.sendingName,
 			sendingAddress: imapCredentials.sendingAddress,
 			enabled: imapCredentials.enabled,
+			protocols: imapCredentials.protocols,
+			allowedIps: imapCredentials.allowedIps,
+			storageQuotaBytes: imapCredentials.storageQuotaBytes,
+			dailySendLimit: imapCredentials.dailySendLimit,
+			selfService: imapCredentials.selfService,
+			spamLevel: imapCredentials.spamLevel,
+			spamAllow: imapCredentials.spamAllow,
+			spamBlock: imapCredentials.spamBlock,
 			banned: user.banned,
 			banExpires: user.banExpires,
 		})
@@ -452,6 +644,7 @@ export async function resolveManagedMailCredential(
 	if (credential.type !== "mailbox" && credential.type !== "smtp") return null;
 	if (options.requireType && credential.type !== options.requireType)
 		return null;
+	if (options.use && !credentialAllowsUse(credential, options.use)) return null;
 	if (
 		credential.type === "mailbox" &&
 		credential.accessMode !== "read" &&
@@ -554,6 +747,14 @@ export async function resolveManagedMailCredential(
 			domain: scope.domain,
 			address: scope.address,
 		})),
+		protocols: resolveProtocols(credential.protocols),
+		allowedIps: credential.allowedIps ?? [],
+		storageQuotaBytes: credential.storageQuotaBytes,
+		dailySendLimit: credential.dailySendLimit,
+		selfService: resolveSelfService(credential.selfService),
+		spamLevel: credential.spamLevel,
+		spamAllow: credential.spamAllow,
+		spamBlock: credential.spamBlock,
 	};
 }
 
@@ -583,6 +784,11 @@ export function serializeMailbox(
 				domain: scope.domain,
 				address: scope.address,
 			})),
+		protocols: resolveProtocols(credential.protocols),
+		allowedIps: credential.allowedIps ?? [],
+		storageQuotaBytes: credential.storageQuotaBytes,
+		dailySendLimit: credential.dailySendLimit,
+		selfService: resolveSelfService(credential.selfService),
 		createdAt: credential.createdAt.toISOString(),
 		updatedAt: credential.updatedAt.toISOString(),
 		lastUsedAt: credential.lastUsedAt?.toISOString() ?? null,

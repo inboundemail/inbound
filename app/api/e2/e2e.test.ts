@@ -13,8 +13,18 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type {
+	ClassificationSummary,
+	DimensionSummary,
+} from "@/lib/guard/classification";
+import {
+	classifierJunkVerdict,
+	SPAM_FILTER_LEVELS,
+} from "@/lib/guard/junk-verdict";
 import {
 	buildLocalEnv,
 	LOCAL_CRON_SECRET,
@@ -1076,6 +1086,10 @@ describe("E2 API - Email E2E", () => {
 		startServices();
 		console.log(`🗄️  Recreating ${E2E_DATABASE}`);
 		recreateDatabase(E2E_DATABASE);
+		psql(
+			`\\set gateway_password local-e2e-gateway\n${readFileSync("packages/imap-gateway/deploy/provision-db-role.sql", "utf8").replace("ON DATABASE neondb", `ON DATABASE ${E2E_DATABASE}`)}`,
+			E2E_DATABASE,
+		);
 		await flushRedis();
 
 		const seed = runSeed<E2ESeed>(["e2e"], e2eServerEnv());
@@ -3616,7 +3630,7 @@ describe("E2 API - Email E2E", () => {
 						`select is_junk, junk_reason from structured_emails where id = '${emailId}';`,
 						E2E_DATABASE,
 					),
-				).toBe("f|user");
+				).toBe("t|guard_rule");
 
 				const marked = await apiJson<{ is_junk: boolean }>(`/emails/${emailId}`, {
 					method: "PATCH",
@@ -3624,10 +3638,774 @@ describe("E2 API - Email E2E", () => {
 				});
 				expect(marked.response.status).toBe(200);
 				expect(marked.data.is_junk).toBe(true);
-				expect(await folderIds("junk")).toEqual([emailId]);
+				expect(await folderIds("junk")).toEqual([]);
+				expect(await folderIds("inbox")).toEqual([emailId]);
 			} finally {
 				await apiRequest(`/guard/${rule.data.data.id}`, { method: "DELETE" });
 			}
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"applies ordered mailbox filters once and isolates spam policy and user marks",
+		async () => {
+			const token = makeToken("controls");
+			const recipient = `${token}@${E2E_DOMAIN}`;
+			const create = async (suffix: string) => {
+				const result = await apiJson<{
+					data: { id: string };
+					password: string;
+				}>("/mailboxes", {
+					method: "POST",
+					body: JSON.stringify({
+						name: `${token}-${suffix}`,
+						loginAddress: `${token}-${suffix}@${E2E_DOMAIN}`,
+						type: "mailbox",
+						accessMode: "read_write",
+						sendingMode: "identity",
+						sendingName: null,
+						sendingAddress: recipient,
+						scopes: [
+							{ type: "address", domainId: E2E_DOMAIN_ID, address: recipient },
+						],
+					}),
+				});
+				expect(result.response.status).toBe(201);
+				return result.data;
+			};
+			const first = await create("a");
+			const second = await create("b");
+			const base = `/mailboxes/${first.data.id}`;
+			const mutate = (path: string, method: string, body?: object) =>
+				apiRequest(path, {
+					method,
+					...(body ? { body: JSON.stringify(body) } : {}),
+				});
+			type Row = {
+				uid: number;
+				flags: string[];
+				structuredEmailId: string;
+				modseq: number;
+			};
+			const list = async (id: string, folder: string) => {
+				const result = await apiJson<{ data: Row[] }>(
+					`/mailboxes/${id}/folders/${folder}/messages?limit=100`,
+				);
+				expect(result.response.status).toBe(200);
+				return result.data.data;
+			};
+			const self = (path: string, method = "GET", body?: object) =>
+				apiRequestWithKey(`/mailboxes/me/${path}`, first.password, {
+					method,
+					...(body ? { body: JSON.stringify(body) } : {}),
+				});
+			expect((await self("filters")).status).toBe(403);
+			expect((await self("spam")).status).toBe(403);
+			expect(
+				(
+					await mutate(base, "PUT", {
+						selfService: { filters: true, spam: true, password: false },
+					})
+				).status,
+			).toBe(200);
+			expect((await self("filters")).status).toBe(200);
+			expect(
+				(await self("spam", "PUT", { level: "off", allow: [], block: [] }))
+					.status,
+			).toBe(200);
+			expect(
+				(await apiRequestWithKey(`${base}/filters`, ALT_API_KEY)).status,
+			).toBe(404);
+			expect(
+				(await mutate(`${base}/folders`, "POST", { path: "Processed" })).status,
+			).toBe(201);
+			const rule = async (
+				name: string,
+				conditions: object[],
+				actions: object[],
+				stopProcessing = false,
+			) => {
+				const result = await apiJson<{ id: string }>(
+					`${base}/filters`,
+					{
+						method: "POST",
+						body: JSON.stringify({
+							name,
+							match: "all",
+							enabled: true,
+							conditions,
+							actions,
+							stopProcessing,
+						}),
+					},
+				);
+				expect(result.response.status).toBe(201);
+				return result.data.id;
+			};
+			const subject = (value: string) => ({
+				field: "subject",
+				operator: "contains",
+				value,
+			});
+			const invoice = await rule(
+				"invoice",
+				[
+					subject("invoice"),
+					{ field: "from", operator: "domain_is", value: "EXAMPLE.TEST" },
+					{ field: "to", operator: "contains", value: token.toUpperCase() },
+					{ field: "cc", operator: "equals", value: "copy@example.test" },
+					{ field: "recipient", operator: "domain_is", value: E2E_DOMAIN },
+					{
+						field: "header",
+						header: "X-Category",
+						operator: "equals",
+						value: "BILLING",
+					},
+					{ field: "body", operator: "contains", value: "PAYMENT" },
+					{ field: "has_attachment", operator: "equals", value: true },
+					{ field: "size", operator: "greater_than", value: 10 },
+					{ field: "junk", operator: "equals", value: false },
+					{ field: "jev", label: "spam", operator: "gte", value: 2 },
+				],
+				[
+					{ type: "move_to", value: "Processed" },
+					{ type: "mark_read" },
+					{ type: "flag" },
+					{ type: "add_keyword", value: "Billing" },
+				],
+				true,
+			);
+			const fallback = await rule(
+				"fallback",
+				[subject("invoice")],
+				[{ type: "move_to_trash" }],
+			);
+			expect(
+				(
+					await mutate(`${base}/filters/reorder`, "POST", {
+						ids: [fallback, invoice],
+					})
+				).status,
+			).toBe(200);
+			expect(
+				(
+					await mutate(`${base}/filters/reorder`, "POST", {
+						ids: [invoice, fallback],
+					})
+				).status,
+			).toBe(200);
+			const ordered = await apiJson<{ data: { id: string }[] }>(
+				`${base}/filters`,
+			);
+			expect(ordered.data.data.map((item) => item.id)).toEqual([
+				invoice,
+				fallback,
+			]);
+			await rule("junk", [subject("junk-me")], [{ type: "mark_junk" }]);
+			await rule("clean", [subject("clean-me")], [{ type: "mark_not_junk" }]);
+			await rule("trash", [subject("trash-me")], [{ type: "move_to_trash" }]);
+			await rule(
+				"stop",
+				[subject("stop-me")],
+				[{ type: "flag" }, { type: "stop" }],
+			);
+			await rule(
+				"after stop",
+				[subject("stop-me")],
+				[{ type: "move_to_trash" }],
+			);
+			const literal = (value: unknown) =>
+				`'${String(value).replaceAll("'", "''")}'`;
+			const seed = (name: string, junk = false, level = 2) => {
+				const id = `${token}-${name}`;
+				const raw = `From: sender@example.test\r\nTo: ${recipient}\r\nSubject: ${name}\r\n\r\nPayment enclosed`;
+				psql(
+					`insert into structured_emails
+					(id,email_id,ses_event_id,user_id,recipient,envelope_recipients,subject,from_data,to_data,cc_data,headers,text_body,raw_content,attachments,is_junk,jev_classification)
+					values (${literal(id)},${literal(id)},'local',${literal(PRIMARY_USER_ID)},${literal(recipient)},ARRAY[${literal(recipient)}],${literal(name)},
+					${literal(JSON.stringify({ addresses: [{ address: "sender@example.test" }] }))},
+					${literal(JSON.stringify({ addresses: [{ address: recipient }] }))},
+					${literal(JSON.stringify({ addresses: [{ address: "copy@example.test" }] }))},
+					'{"x-category":"billing"}','Payment enclosed',${literal(raw)},'[{"filename":"invoice.pdf"}]',${junk},
+					${literal(JSON.stringify({ summary: { spam: { level, confidence: 0.9, base_level: level } } }))});`,
+					E2E_DATABASE,
+				);
+				return id;
+			};
+			const invoiceId = seed("invoice");
+			const junkId = seed("junk-me");
+			const cleanId = seed("clean-me", true);
+			const trashId = seed("trash-me");
+			const stopId = seed("stop-me");
+			const applyId = seed("apply-me");
+			await list(first.data.id, "INBOX");
+			const processed = await list(first.data.id, "Processed");
+			expect(processed.map((row) => row.structuredEmailId)).toEqual([
+				invoiceId,
+			]);
+			expect(processed[0].flags).toEqual(
+				expect.arrayContaining(["\\Seen", "\\Flagged", "Billing"]),
+			);
+			expect(
+				(await list(first.data.id, "Junk")).map((row) => row.structuredEmailId),
+			).toContain(junkId);
+			expect(
+				(await list(first.data.id, "INBOX")).map(
+					(row) => row.structuredEmailId,
+				),
+			).toContain(cleanId);
+			expect(
+				(await list(first.data.id, "Trash")).map(
+					(row) => row.structuredEmailId,
+				),
+			).toEqual([trashId]);
+			expect(
+				(await list(first.data.id, "INBOX")).find(
+					(row) => row.structuredEmailId === stopId,
+				)?.flags,
+			).toContain("\\Flagged");
+			const peer = await list(second.data.id, "INBOX");
+			expect(peer.map((row) => row.structuredEmailId)).toContain(invoiceId);
+			expect(
+				peer.find((row) => row.structuredEmailId === invoiceId)?.flags,
+			).toEqual([]);
+			expect(
+				(await list(second.data.id, "Junk")).map(
+					(row) => row.structuredEmailId,
+				),
+			).toContain(cleanId);
+			expect(
+				(
+					await mutate(`${base}/messages/${invoiceId}`, "PATCH", {
+						isJunk: true,
+					})
+				).status,
+			).toBe(200);
+			expect(
+				(await list(second.data.id, "INBOX")).map(
+					(row) => row.structuredEmailId,
+				),
+			).toContain(invoiceId);
+			expect(
+				psql(
+					`select is_junk from structured_emails where id=${literal(invoiceId)}`,
+					E2E_DATABASE,
+				),
+			).toBe("f");
+			await rule(
+				"existing",
+				[subject("apply-me")],
+				[{ type: "mark_read" }, { type: "add_keyword", value: "Applied" }],
+			);
+			expect(
+				(
+					await mutate(`${base}/filters/apply`, "POST", {
+						folder: "INBOX",
+						limit: 100,
+					})
+				).status,
+			).toBe(200);
+			const applied = (await list(first.data.id, "INBOX")).find(
+				(row) => row.structuredEmailId === applyId,
+			)!;
+			expect(applied.flags).toEqual(
+				expect.arrayContaining(["\\Seen", "Applied"]),
+			);
+			expect(
+				(
+					await mutate(`${base}/filters/apply`, "POST", {
+						folder: "INBOX",
+						limit: 100,
+					})
+				).status,
+			).toBe(200);
+			expect(
+				(await list(first.data.id, "INBOX")).find(
+					(row) => row.structuredEmailId === applyId,
+				)?.modseq,
+			).toBe(applied.modseq);
+			const policyId = seed("policy", false, 4);
+			expect(
+				(
+					await mutate(`${base}/spam`, "PUT", {
+						level: "standard",
+						allow: [],
+						block: [],
+					})
+				).status,
+			).toBe(200);
+			expect(
+				(await list(first.data.id, "Junk")).map((row) => row.structuredEmailId),
+			).toContain(policyId);
+			expect(
+				(await list(second.data.id, "INBOX")).map(
+					(row) => row.structuredEmailId,
+				),
+			).toContain(policyId);
+			expect(
+				(await self("spam/allow", "POST", { pattern: "@EXAMPLE.TEST" })).status,
+			).toBe(200);
+			expect(
+				(await list(first.data.id, "INBOX")).map(
+					(row) => row.structuredEmailId,
+				),
+			).toContain(policyId);
+			expect(
+				(await self("spam/allow", "DELETE", { pattern: "@example.test" }))
+					.status,
+			).toBe(200);
+			expect(
+				(
+					await self("spam", "PUT", {
+						level: "off",
+						allow: [],
+						block: ["sender@example.test"],
+					})
+				).status,
+			).toBe(200);
+			expect(
+				(await list(first.data.id, "Junk")).map((row) => row.structuredEmailId),
+			).toContain(policyId);
+			expect(
+				(await self("spam/block", "DELETE", { pattern: "sender@example.test" }))
+					.status,
+			).toBe(200);
+			expect(
+				(await list(first.data.id, "INBOX")).map(
+					(row) => row.structuredEmailId,
+				),
+			).toContain(policyId);
+			expect(
+				(await mutate(`${base}/filters/${invoice}`, "DELETE")).status,
+			).toBe(200);
+			expect(
+				(
+					await mutate(`${base}/filters`, "POST", {
+						name: "invalid",
+						match: "all",
+						conditions: [subject("x")],
+						actions: [{ type: "move_to", value: "Scopes/secret" }],
+					})
+				).status,
+			).toBe(400);
+			await rule(
+				"live IMAP",
+				[subject("live-imap")],
+				[
+					{ type: "move_to", value: "Processed" },
+					{ type: "mark_read" },
+					{ type: "flag" },
+					{ type: "add_keyword", value: "Live" },
+				],
+			);
+			const liveId = seed("live-imap");
+			const gatewaySource = `${import.meta.dir}/../../../packages/imap-gateway/src`;
+			const { ApiAuth } = await import(`${gatewaySource}/auth.ts`);
+			const { loadConfig } = await import(`${gatewaySource}/config.ts`);
+			const { MailStore } = await import(`${gatewaySource}/db.ts`);
+			const { buildHandlers } = await import(`${gatewaySource}/handlers.ts`);
+			const { ConnectionLimits } = await import(`${gatewaySource}/limits.ts`);
+			const { PgNotifier } = await import(`${gatewaySource}/notifier.ts`);
+			const gatewayUrl = `postgres://imap_gateway:local-e2e-gateway@127.0.0.1:54329/${E2E_DATABASE}`;
+			const store = new MailStore(gatewayUrl, {
+				appendMaxBytesPerUser: 250 * 1024 * 1024,
+				appendMaxMessagesPerUser: 5000,
+			});
+			const notifier = new PgNotifier(gatewayUrl, store);
+			const auth = new ApiAuth({
+				...loadConfig(),
+				apiBaseUrl: API_URL,
+				gatewayAuthSecret: E2E_GATEWAY_SECRET,
+			});
+			const handlers = buildHandlers(
+				auth,
+				store,
+				new ConnectionLimits(10, 10, 60000),
+			);
+			const require = createRequire(import.meta.url);
+			const {
+				IMAPServer,
+			} = require("../../../packages/imap-gateway/vendor/imap-core/index.js");
+			const server = new IMAPServer({
+				name: "localhost",
+				secure: false,
+				disableSTARTTLS: true,
+				ignoreSTARTTLS: true,
+			});
+			Object.assign(server, handlers, { notifier });
+			await notifier.start();
+			await new Promise<void>((resolve) =>
+				server.listen(0, "127.0.0.1", resolve),
+			);
+			const port = (server.server.address() as net.AddressInfo).port;
+			const socket = net.connect(port, "127.0.0.1");
+			let sequence = 0;
+			const command = (value: string) =>
+				new Promise<string>((resolve, reject) => {
+					const tag = `T${++sequence}`;
+					let output = "";
+					const timer = setTimeout(() => {
+						socket.off("data", receive);
+						reject(new Error(`IMAP timeout: ${value}: ${output}`));
+					}, 15000);
+					const receive = (chunk: Buffer) => {
+						output += chunk.toString();
+						if (!new RegExp(`(?:^|\\r\\n)${tag} (?:OK|NO|BAD) `).test(output))
+							return;
+						clearTimeout(timer);
+						socket.off("data", receive);
+						if (!output.includes(`${tag} OK `)) reject(new Error(output));
+						else resolve(output);
+					};
+					socket.on("data", receive);
+					socket.write(`${tag} ${value}\r\n`);
+				});
+			try {
+				await new Promise<void>((resolve, reject) => {
+					socket.once("data", () => resolve());
+					socket.once("error", reject);
+				});
+				await command(`LOGIN "${token}-a@${E2E_DOMAIN}" "${first.password}"`);
+				await command('SELECT "INBOX"');
+				await command('SELECT "Processed"');
+				const rows = await list(first.data.id, "Processed");
+				const live = rows.find((row) => row.structuredEmailId === liveId)!;
+				expect(live).toBeDefined();
+				const fetched = await command(`UID FETCH ${live.uid} (FLAGS)`);
+				expect(fetched).toContain("\\Seen");
+				expect(fetched).toContain("\\Flagged");
+				expect(fetched).toContain("Live");
+				await command(`UID MOVE ${live.uid} "Junk"`);
+				expect(
+					(await list(second.data.id, "INBOX")).map(
+						(row) => row.structuredEmailId,
+					),
+				).toContain(liveId);
+				expect(
+					psql(
+						`select is_junk from structured_emails where id=${literal(liveId)}`,
+						E2E_DATABASE,
+					),
+				).toBe("f");
+				const principal = await auth.authenticate(
+					`${token}-a@${E2E_DOMAIN}`,
+					first.password,
+					"127.0.0.1",
+				);
+				expect(principal).not.toBeNull();
+				await store.createMailbox(principal!, "RoleTest");
+				await store.renameMailbox(principal!, "RoleTest", "RoleRenamed");
+				await store.subscribeMailbox(principal!, "RoleRenamed", true);
+				const folder = (await store.getMailboxByPath(
+					principal!,
+					"RoleRenamed",
+				))!;
+				const appended = await store.appendMessage(
+					folder,
+					principal!,
+					"Subject: role\r\n\r\nbody",
+					["\\Seen"],
+					new Date(),
+				);
+				await store.updateFlags(principal!, folder.id, [appended.uid], "add", [
+					"\\Deleted",
+				]);
+				expect(
+					await store.expunge(principal!, folder.id, [appended.uid]),
+				).toEqual([appended.uid]);
+				await store.deleteMailbox(principal!, "RoleRenamed");
+				await command("LOGOUT");
+			} finally {
+				socket.destroy();
+				await new Promise<void>((resolve) => server.close(resolve));
+				await notifier.stop();
+				await store.end();
+			}
+			expect((await mutate(base, "DELETE")).status).toBe(200);
+			expect(
+				(await mutate(`/mailboxes/${second.data.id}`, "DELETE")).status,
+			).toBe(200);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"matches SQL per-mailbox classifier thresholds to the TypeScript verdict",
+		() => {
+			const cases: Array<{
+				level: string;
+				classification: object;
+				expected: boolean;
+			}> = [];
+			const dimensions: DimensionSummary[] = [];
+			for (let level = 0; level <= 4; level++) {
+				for (const confidence of [0.59, 0.6, 0.9]) {
+					for (const base_level of [0, 2, 4])
+						dimensions.push({ level, confidence, base_level });
+				}
+				for (const mass of [0.49, 0.5, 0.69, 0.7, 1]) {
+					dimensions.push({
+						level,
+						confidence: 0.2,
+						base_level: 0,
+						p_ge2: mass,
+						p_ge3: mass,
+						p_eq4: mass,
+					});
+				}
+			}
+			for (const dimension of dimensions) {
+				for (const label of [
+					"spam",
+					"phishing",
+					"fraud",
+					"impersonation",
+					"malware",
+					"prompt_injection",
+				] as const) {
+					const clear = { level: 0, confidence: 1, base_level: 0 };
+					const summary: ClassificationSummary = {
+						spam: clear,
+						phishing: clear,
+						fraud: clear,
+						impersonation: clear,
+						malware: clear,
+						prompt_injection: clear,
+						risk: 0,
+						[label]: dimension,
+					};
+					for (const level of SPAM_FILTER_LEVELS) {
+						cases.push({
+							level,
+							classification: {
+								summary,
+								facts: { ses_spam: "PASS", ses_virus: "PASS" },
+							},
+							expected: classifierJunkVerdict(level, summary, "PASS", "PASS")!
+								.isJunk,
+						});
+					}
+				}
+			}
+			for (const level of SPAM_FILTER_LEVELS) {
+				cases.push({
+					level,
+					classification: { facts: { ses_spam: "FAIL", ses_virus: "PASS" } },
+					expected: classifierJunkVerdict(level, null, "FAIL", "PASS")!.isJunk,
+				});
+				cases.push({
+					level,
+					classification: { facts: { ses_spam: "PASS", ses_virus: "FAIL" } },
+					expected: classifierJunkVerdict(level, null, "PASS", "FAIL")!.isJunk,
+				});
+			}
+			const encoded = JSON.stringify(cases).replaceAll("'", "''");
+			expect(
+				psql(
+					`select count(*) from jsonb_to_recordset('${encoded}'::jsonb) as cases(level text, classification jsonb, expected boolean)
+				where imap_mailbox_junk(false, 'classifier', null::text, classification::text, level, null::text[], null::text[], null::boolean) is distinct from expected`,
+					E2E_DATABASE,
+				),
+			).toBe("0");
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"enforces mailbox protocols, trusted IPs, append/send quotas and password self-service",
+		async () => {
+			const token = makeToken("limits");
+			const loginAddress = `${token}@${E2E_DOMAIN}`;
+			const created = await apiJson<{
+				data: { id: string; protocols: object; storageQuotaBytes: number };
+				password: string;
+			}>("/mailboxes", {
+				method: "POST",
+				body: JSON.stringify({
+					name: token,
+					loginAddress,
+					type: "mailbox",
+					accessMode: "read_write",
+					sendingMode: "identity",
+					sendingName: null,
+					sendingAddress: E2E_SENDER_ADDRESS,
+					scopes: [{ type: "domain", domainId: E2E_DOMAIN_ID }],
+					protocols: { imap: false, smtp: false, api: true },
+					storageQuotaBytes: 1,
+					dailySendLimit: 1,
+				}),
+			});
+			expect(created.response.status).toBe(201);
+			expect(created.data.data.storageQuotaBytes).toBe(1);
+			const { password } = created.data;
+			const base = `/mailboxes/${created.data.data.id}`;
+			const patch = (body: object) =>
+				apiRequest(base, { method: "PUT", body: JSON.stringify(body) });
+			const self = (
+				path: string,
+				method = "GET",
+				body?: object,
+				key = password,
+			) =>
+				apiRequestWithKey(`/mailboxes/me/${path}`, key, {
+					method,
+					...(body ? { body: JSON.stringify(body) } : {}),
+				});
+			const gateway = (protocol: "imap" | "smtp", ip = "203.0.113.42") =>
+				fetch(
+					`${API_URL}/mailboxes/${protocol === "imap" ? "authenticate" : "authenticate-smtp"}`,
+					{
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							"x-inbound-gateway-secret": E2E_GATEWAY_SECRET,
+							"x-inbound-client-ip": ip,
+						},
+						body: JSON.stringify({ loginAddress, password }),
+					},
+				);
+			expect((await gateway("imap")).status).toBe(401);
+			expect((await gateway("smtp")).status).toBe(401);
+			expect((await self("folders")).status).toBe(200);
+			expect(
+				(await patch({ protocols: { imap: true, smtp: true, api: false } }))
+					.status,
+			).toBe(200);
+			expect((await gateway("imap")).status).toBe(200);
+			expect((await gateway("smtp")).status).toBe(200);
+			expect((await self("folders")).status).toBe(401);
+			expect(
+				(
+					await patch({
+						protocols: null,
+						allowedIps: ["203.0.113.0/24", "2001:db8::/32"],
+					})
+				).status,
+			).toBe(200);
+			expect((await gateway("imap")).status).toBe(200);
+			expect((await gateway("smtp", "2001:db8::1234")).status).toBe(200);
+			expect((await gateway("imap", "198.51.100.1")).status).toBe(401);
+			expect(
+				(
+					await apiRequestWithKey("/mailboxes/me/folders", password, {
+						headers: {
+							"x-forwarded-for": "203.0.113.42",
+							"x-inbound-client-ip": "203.0.113.42",
+						},
+					})
+				).status,
+			).toBe(401);
+			expect((await patch({ allowedIps: ["not-an-ip/24"] })).status).toBe(400);
+			expect((await patch({ allowedIps: null })).status).toBe(200);
+			const raw = `From: ${loginAddress}\r\nTo: ${E2E_RECIPIENT_ADDRESS}\r\nSubject: quota\r\n\r\nquota body`;
+			const append = { raw: Buffer.from(raw).toString("base64") };
+			expect(
+				(await self("folders/Drafts/messages", "POST", append)).status,
+			).toBe(413);
+			expect(
+				(await patch({ storageQuotaBytes: Buffer.byteLength(raw) })).status,
+			).toBe(200);
+			expect(
+				(await self("folders/Drafts/messages", "POST", append)).status,
+			).toBe(201);
+			expect(
+				(await self("folders/Drafts/messages", "POST", append)).status,
+			).toBe(413);
+			expect((await patch({ storageQuotaBytes: null })).status).toBe(200);
+			expect((await self("rotate-password", "POST", {})).status).toBe(403);
+			expect(
+				(
+					await self("", "PATCH", {
+						selfService: { password: true, filters: true, spam: true },
+					})
+				).status,
+			).not.toBe(200);
+			const sendBody = {
+				from: E2E_SENDER_ADDRESS,
+				to: E2E_RECIPIENT_ADDRESS,
+				subject: `Quota ${token}`,
+				text: "quota",
+			};
+			const send = (idempotencyKey: string, extra: HeadersInit = {}) =>
+				apiRequestWithKey("/emails", password, {
+					method: "POST",
+					headers: { "Idempotency-Key": idempotencyKey, ...extra },
+					body: JSON.stringify(sendBody),
+				});
+			expect((await apiRequestWithKey("/emails", password, {
+				method: "POST",
+				body: JSON.stringify({ ...sendBody, scheduled_at: new Date(Date.now() + 60_000).toISOString() }),
+			})).status).toBe(400);
+			const replySubject = `Quota reply ${token}`;
+			await postSyntheticInboundRecord({
+				subject: replySubject,
+				messageId: `${token}-reply@example.test`,
+				recipient: E2E_RECIPIENT_ADDRESS,
+				text: "Reply reservation release",
+			});
+			const replySource = await waitForExactSubjectEmailCount("received", replySubject, 1);
+			expect(replySource).not.toBeNull();
+			const tenantId = psql(`select tenant_id from email_domains where id = '${E2E_DOMAIN_ID}';`, E2E_DATABASE);
+			try {
+				psql(`update email_domains set tenant_id = null where id = '${E2E_DOMAIN_ID}';`, E2E_DATABASE);
+				const failedReply = await apiRequestWithKey(`/emails/${replySource![0].id}/reply`, password, {
+					method: "POST",
+					body: JSON.stringify({ from: E2E_SENDER_ADDRESS, text: "No identity ARN" }),
+				});
+				expect(failedReply.status).toBe(500);
+				expect(await failedReply.text()).toContain("Failed to get identity ARN");
+				expect(psql(`select count from mailbox_send_usage where credential_id = '${created.data.data.id}';`, E2E_DATABASE)).toBe("0");
+			} finally {
+				psql(`update email_domains set tenant_id = '${tenantId}' where id = '${E2E_DOMAIN_ID}';`, E2E_DATABASE);
+			}
+			const sendKeys = [`${token}-first`, `${token}-second`];
+			const sent = await Promise.all(sendKeys.map((key) => send(key)));
+			expect(sent.map((response) => response.status).sort()).toEqual([200, 429]);
+			const acceptedKey = sendKeys[sent.findIndex((response) => response.status === 200)];
+			expect((await send(acceptedKey)).status).toBe(200);
+			expect(psql(`select count from mailbox_send_usage where credential_id = '${created.data.data.id}';`, E2E_DATABASE)).toBe("1");
+			expect(
+				(
+					await patch({
+						dailySendLimit: 2,
+						protocols: { imap: true, smtp: true, api: false },
+					})
+				).status,
+			).toBe(200);
+			expect((await send(`${token}-api-disabled`)).status).toBe(401);
+			expect(
+				(
+					await send(`${token}-smtp`, {
+						"x-inbound-gateway-secret": E2E_GATEWAY_SECRET,
+						"x-inbound-client-ip": "203.0.113.42",
+					})
+				).status,
+			).toBe(200);
+			expect(
+				(
+					await send(`${token}-smtp-full`, {
+						"x-inbound-gateway-secret": E2E_GATEWAY_SECRET,
+						"x-inbound-client-ip": "203.0.113.42",
+					})
+				).status,
+			).toBe(429);
+			expect(
+				(
+					await patch({
+						protocols: null,
+						selfService: { filters: false, spam: false, password: true },
+					})
+				).status,
+			).toBe(200);
+			const rotated = await self("rotate-password", "POST", {});
+			expect(rotated.status).toBe(200);
+			const replacement = (await rotated.json()) as { password: string };
+			expect((await self("folders")).status).toBe(401);
+			expect(
+				(await self("folders", "GET", undefined, replacement.password)).status,
+			).toBe(200);
+			expect((await apiRequest(base, { method: "DELETE" })).status).toBe(200);
 		},
 		TEST_TIMEOUT_MS,
 	);

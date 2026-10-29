@@ -3,10 +3,14 @@ import {
 	AuthError,
 	enforceAuthenticatedUserAndRateLimit,
 	enforceMailboxAuthenticationRateLimit,
+	getGatewayClientIp,
+	getTrustedHttpClientIp,
+	isMailboxGatewayRequest,
 	validateAndRateLimit,
 } from "@/app/api/e2/lib/auth";
 import {
 	authenticateManagedMailCredential,
+	type MailboxPasswordUse,
 	type ManagedMailCredential,
 	normalizeEmailAddress,
 } from "@/app/api/e2/mailboxes/shared";
@@ -46,16 +50,33 @@ function rejectInvalidMailToken(set: {
 }
 
 /**
+ * How a mailbox password presented over HTTP is being used. Requests that
+ * prove they come from the SMTP gateway (valid gateway secret) are SMTP use
+ * from the client IP the gateway forwards; everything else is HTTP API use
+ * from the platform-verified client IP.
+ */
+export function httpMailboxPasswordUse(
+	request: Request,
+	options: { allowGateway: boolean },
+): MailboxPasswordUse {
+	if (options.allowGateway && isMailboxGatewayRequest(request)) {
+		return { protocol: "smtp", clientIp: getGatewayClientIp(request) };
+	}
+	return { protocol: "api", clientIp: getTrustedHttpClientIp(request) };
+}
+
+/**
  * Verifies a mailbox or SMTP password (`mail_…`/`imap_…`) presented as a
- * bearer token. Failures count against the mailbox authentication rate limit
- * (per client IP and per token hash), and once that limit is hit even a
- * correct password is refused with 429 until it resets.
+ * bearer token and applies its protocol and IP controls for `use`. Failures
+ * count against the mailbox authentication rate limit (per client IP and per
+ * token hash), and once that limit is hit even a correct password is refused
+ * with 429 until it resets.
  */
 export async function authenticateRateLimitedMailToken(
 	request: Request,
 	token: string,
 	set: { status?: number | string; headers?: unknown },
-	options: { requireType?: "mailbox" } = {},
+	options: { requireType?: "mailbox"; use: MailboxPasswordUse },
 ): Promise<ManagedMailCredential | null> {
 	const rateLimitKey = mailTokenRateLimitKey(token);
 	await enforceMailboxAuthenticationRateLimit(request, rateLimitKey, set, {
@@ -70,8 +91,9 @@ export async function authenticateRateLimitedMailToken(
 
 /**
  * Authenticates a send. A mailbox or SMTP password (`mail_…`/`imap_…`) may
- * send only when it is read & write; anything else needs an account API key or
- * session.
+ * send only when it is read & write and its controls allow this use: SMTP when
+ * the SMTP gateway relays the send, the HTTP API otherwise. Anything else
+ * needs an account API key or session.
  */
 export async function authenticateEmailSend(
 	request: Request,
@@ -88,6 +110,7 @@ export async function authenticateEmailSend(
 			request,
 			apiKey,
 			set,
+			{ use: httpMailboxPasswordUse(request, { allowGateway: true }) },
 		);
 		if (!credential) rejectInvalidMailToken(set);
 		if (credential.accessMode !== "read_write") {

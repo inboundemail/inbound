@@ -4,7 +4,10 @@ import {
 	enforceAuthenticatedUserAndRateLimit,
 	validateAndRateLimit,
 } from "@/app/api/e2/lib/auth";
-import { authenticateRateLimitedMailToken } from "@/app/api/e2/lib/send-auth";
+import {
+	authenticateRateLimitedMailToken,
+	httpMailboxPasswordUse,
+} from "@/app/api/e2/lib/send-auth";
 import {
 	getOwnedCredential,
 	type ManagedMailCredential,
@@ -67,7 +70,10 @@ export async function authorizeMailboxAccess(
 			request,
 			token as string,
 			set,
-			{ requireType: "mailbox" },
+			{
+				requireType: "mailbox",
+				use: httpMailboxPasswordUse(request, { allowGateway: false }),
+			},
 		);
 		if (!credential) unauthorized(set);
 		await enforceAuthenticatedUserAndRateLimit(credential.userId, set);

@@ -91,11 +91,11 @@ Reply text includes an enhanced status code, such as `5.7.8`, even though `ENHAN
 | --- | --- | --- |
 | `250` | Accepted. The reply text includes `Queued as` and the Inbound email ID. | Nothing |
 | `421` | Too many connections from your IP address, too many failed logins, or the connection is closing | Reduce concurrent connections, or wait out the 15-minute login window. Reconnect with backoff. |
-| `451` | Temporary failure: rate limited, the same message is already being processed, the gateway is busy, or the email API is unavailable | Retry later with backoff |
+| `451` | Temporary failure: rate limited, the credential's [daily send limit](/mailboxes/access-and-limits#daily-send-limit) reached, the same message is already being processed, the gateway is busy, or the email API is unavailable | Retry later with backoff |
 | `452` | More than 50 recipients | Send the remaining recipients in another message |
 | `454` | The authentication service is unavailable | Retry later with backoff |
 | `530` | `MAIL FROM` was sent before authenticating | Authenticate first |
-| `535` | Invalid login email or password, disabled credential, a **Read only** credential, or the domain or scope is no longer verified | Check the credential, and give it **Read & write** access to send. Repeated failures lead to `421`. |
+| `535` | Invalid login email or password, disabled credential, a **Read only** credential, SMTP turned off in the credential's `protocols`, a client address outside its `allowedIps`, or the domain or scope is no longer verified | Check the credential, its [access settings](/mailboxes/access-and-limits), and give it **Read & write** access to send. Repeated failures lead to `421`. |
 | `538` | `AUTH` was attempted before TLS | Use port `465`, or run `STARTTLS` on port `587` first |
 | `550` | The email API rejected the message (for example, not authorized or invalid content), or the message has no sender or recipients | Read the reply text and fix the message or account. Don't retry unchanged. |
 | `552` | The message is larger than 3 MiB | Reduce the size or remove attachments |

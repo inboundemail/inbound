@@ -193,6 +193,37 @@ describe("InboundApiClient.sendEmail", () => {
 		expect(options?.signal).toBeInstanceOf(AbortSignal);
 	});
 
+	it("marks gateway sends with the gateway secret and SMTP client IP", async () => {
+		const fetchMock = spyOn(globalThis, "fetch").mockResolvedValue(
+			Response.json({ id: "message-id" }),
+		);
+
+		await client({ gatewayAuthSecret: "gateway-secret" }).sendEmail(
+			"secret",
+			payload,
+			"smtp-key",
+			"203.0.113.9",
+		);
+		const [, options] = fetchMock.mock.calls[0] ?? [];
+		expect(options?.headers).toEqual({
+			Authorization: "Bearer secret",
+			"Content-Type": "application/json",
+			"Idempotency-Key": "smtp-key",
+			"x-inbound-gateway-secret": "gateway-secret",
+			"x-inbound-client-ip": "203.0.113.9",
+		});
+	});
+
+	it("maps a daily sending limit 429 to a transient SMTP failure", async () => {
+		spyOn(globalThis, "fetch").mockResolvedValue(
+			Response.json({ error: "daily limit" }, { status: 429 }),
+		);
+
+		await expect(
+			client().sendEmail("secret", payload, "key"),
+		).rejects.toMatchObject({ responseCode: 451 });
+	});
+
 	it("includes upstream rejection details in SMTP failures", async () => {
 		spyOn(globalThis, "fetch").mockResolvedValue(
 			Response.json({ error: "Recipient blocked" }, { status: 422 }),
