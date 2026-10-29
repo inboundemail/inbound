@@ -9,6 +9,12 @@ import { validateAndRateLimit } from "../lib/auth";
 const UpdateEmailBody = t.Object({
 	is_read: t.Optional(t.Boolean()),
 	is_archived: t.Optional(t.Boolean()),
+	is_junk: t.Optional(
+		t.Boolean({
+			description:
+				"Mark a received email as junk or not junk. Overrides the junk filter and Guard for this email.",
+		}),
+	),
 });
 
 // Response schemas
@@ -17,6 +23,7 @@ const UpdateEmailSuccessResponse = t.Object({
 	id: t.String(),
 	is_read: t.Boolean(),
 	is_archived: t.Boolean(),
+	is_junk: t.Boolean(),
 	updated_at: t.String(),
 });
 
@@ -33,10 +40,15 @@ export const updateEmail = new Elysia().patch(
 		const emailId = await resolveStructuredEmailId(params.id, userId);
 
 		// Validate that at least one field is being updated
-		if (body.is_read === undefined && body.is_archived === undefined) {
+		if (
+			body.is_read === undefined &&
+			body.is_archived === undefined &&
+			body.is_junk === undefined
+		) {
 			set.status = 400;
 			return {
-				error: "At least one field must be provided: is_read, is_archived",
+				error:
+					"At least one field must be provided: is_read, is_archived, is_junk",
 			};
 		}
 
@@ -55,6 +67,12 @@ export const updateEmail = new Elysia().patch(
 			updateData.archivedAt = body.is_archived ? new Date() : null;
 		}
 
+		if (body.is_junk !== undefined) {
+			updateData.isJunk = body.is_junk;
+			updateData.junkReason = "user";
+			updateData.junkUpdatedAt = new Date();
+		}
+
 		// Update the email
 		const updated = await db
 			.update(structuredEmails)
@@ -69,6 +87,7 @@ export const updateEmail = new Elysia().patch(
 				id: structuredEmails.id,
 				isRead: structuredEmails.isRead,
 				isArchived: structuredEmails.isArchived,
+				isJunk: structuredEmails.isJunk,
 				updatedAt: structuredEmails.updatedAt,
 			});
 
@@ -84,6 +103,7 @@ export const updateEmail = new Elysia().patch(
 			id: email.id,
 			is_read: email.isRead ?? false,
 			is_archived: email.isArchived ?? false,
+			is_junk: email.isJunk === true,
 			updated_at: email.updatedAt?.toISOString() || new Date().toISOString(),
 		};
 	},
@@ -103,7 +123,7 @@ export const updateEmail = new Elysia().patch(
 			tags: ["Emails"],
 			summary: "Update email",
 			description:
-				"Update metadata for a received email. Supports marking emails as read/unread and archived/unarchived.",
+				"Update metadata for a received email. Supports marking emails as read/unread, archived/unarchived and junk/not junk.",
 		},
 	},
 );
