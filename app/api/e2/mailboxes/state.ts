@@ -146,7 +146,7 @@ export async function ensureFolders(
 	owner: MailboxOwnerRef,
 ): Promise<ImapMailbox[]> {
 	await db.execute(
-		sql`SELECT id FROM imap_ensure(${owner.userId}, ${owner.credentialId})`,
+		sql`SELECT id FROM imap_ensure(${owner.userId}::text, ${owner.credentialId}::text)`,
 	);
 	return loadFolders(owner);
 }
@@ -190,7 +190,7 @@ export async function syncFolder(
 	folder: ImapMailbox,
 ): Promise<ImapMailbox> {
 	await db.execute(
-		sql`SELECT id FROM imap_sync(${owner.userId}, ${owner.credentialId}, ${folder.id})`,
+		sql`SELECT id FROM imap_sync(${owner.userId}::text, ${owner.credentialId}::text, ${folder.id}::text)`,
 	);
 	return (await loadFolder(owner, folder.path)) ?? folder;
 }
@@ -206,7 +206,7 @@ export async function syncReceivedFolders(
 	if (targets.length === 0) return folders;
 	for (const folder of targets) {
 		await db.execute(
-			sql`SELECT id FROM imap_sync(${owner.userId}, ${owner.credentialId}, ${folder.id})`,
+			sql`SELECT id FROM imap_sync(${owner.userId}::text, ${owner.credentialId}::text, ${folder.id}::text)`,
 		);
 	}
 	return loadFolders(owner);
@@ -214,7 +214,7 @@ export async function syncReceivedFolders(
 
 export function appendedHeadersMatch(pattern: string): SQL {
 	const head = sql`left(${imapAppendedMessages.rawContent}, ${APPENDED_HEADER_SEARCH_CHARS}::integer)`;
-	return sql`coalesce(substring(${head} from ${"^(.*?)\\r?\\n\\r?\\n"}), ${head}) ILIKE ${pattern}`;
+	return sql`coalesce(substring(${head} from ${"^(.*?)\\r?\\n\\r?\\n"}::text), ${head}) ILIKE ${pattern}`;
 }
 
 export async function folderCounts(folderIds: string[]) {
@@ -224,7 +224,7 @@ export async function folderCounts(folderIds: string[]) {
 		.select({
 			mailboxId: imapMailboxMessages.mailboxId,
 			total: sql<number>`count(*)::int`,
-			unread: sql<number>`(count(*) FILTER (WHERE NOT jsonb_exists(${imapMailboxMessages.flags}::jsonb, ${"\\Seen"})))::int`,
+			unread: sql<number>`(count(*) FILTER (WHERE NOT jsonb_exists(${imapMailboxMessages.flags}::jsonb, ${"\\Seen"}::text)))::int`,
 		})
 		.from(imapMailboxMessages)
 		.where(inArray(imapMailboxMessages.mailboxId, folderIds))
@@ -264,8 +264,8 @@ export async function folderOperation(
 	options: { newPath?: string | null; subscribed?: boolean | null } = {},
 ): Promise<string[]> {
 	const result = await db.execute(sql`
-		SELECT path FROM imap_folder(${owner.userId}, ${owner.credentialId},
-			${operation}, ${path}, ${options.newPath ?? null}::text,
+		SELECT path FROM imap_folder(${owner.userId}::text, ${owner.credentialId}::text,
+			${operation}::text, ${path}::text, ${options.newPath ?? null}::text,
 			${options.subscribed ?? null}::boolean)`);
 	return result.rows.map((row) => String(row.path));
 }
@@ -278,8 +278,8 @@ export async function updateFlags(
 	flags: string[],
 ): Promise<Array<{ uid: number; flags: string[] }>> {
 	const result = await db.execute(sql`
-		SELECT uid, flags FROM imap_flags(${owner.userId}, ${owner.credentialId},
-			${folderId}, ${intArray(uids)}, ${action}, ${textArray(flags)})`);
+		SELECT uid, flags FROM imap_flags(${owner.userId}::text, ${owner.credentialId}::text,
+			${folderId}::text, ${intArray(uids)}, ${action}::text, ${textArray(flags)})`);
 	return result.rows.map((row) => ({
 		uid: Number(row.uid),
 		flags: parseFlags(String(row.flags)),
@@ -294,9 +294,9 @@ export async function transferMessages(
 	move: boolean,
 ): Promise<Array<{ sourceUid: number; destinationUid: number }>> {
 	const result = await db.execute(sql`
-		SELECT source_uid, destination_uid FROM imap_transfer(${owner.userId},
-			${owner.credentialId}, ${sourceId}, ${destinationId}, ${intArray(uids)},
-			${move})`);
+		SELECT source_uid, destination_uid FROM imap_transfer(${owner.userId}::text,
+			${owner.credentialId}::text, ${sourceId}::text, ${destinationId}::text, ${intArray(uids)},
+			${move}::boolean)`);
 	return result.rows.map((row) => ({
 		sourceUid: Number(row.source_uid),
 		destinationUid: Number(row.destination_uid),
@@ -310,8 +310,8 @@ export async function expungeMessages(
 	force = false,
 ): Promise<number[]> {
 	const result = await db.execute(sql`
-		SELECT uid FROM imap_expunge(${owner.userId}, ${owner.credentialId},
-			${folderId}, ${uids ? intArray(uids) : sql`NULL::integer[]`}, ${force})`);
+		SELECT uid FROM imap_expunge(${owner.userId}::text, ${owner.credentialId}::text,
+			${folderId}::text, ${uids ? intArray(uids) : sql`NULL::integer[]`}, ${force}::boolean)`);
 	return result.rows.map((row) => Number(row.uid));
 }
 
@@ -323,8 +323,8 @@ export async function appendMessage(
 	date: Date,
 ): Promise<{ uid: number; uidValidity: number }> {
 	const result = await db.execute(sql`
-		SELECT uid, uid_validity FROM imap_append(${owner.userId},
-			${owner.credentialId}, ${folderId}, ${raw}, ${textArray(flags)},
+		SELECT uid, uid_validity FROM imap_append(${owner.userId}::text,
+			${owner.credentialId}::text, ${folderId}::text, ${raw}::text, ${textArray(flags)},
 			${date.toISOString()}::timestamp, ${APPEND_MAX_BYTES_PER_USER}::bigint,
 			${APPEND_MAX_MESSAGES_PER_USER}::integer)`);
 	const row = result.rows[0];

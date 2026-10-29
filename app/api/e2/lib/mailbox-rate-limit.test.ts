@@ -19,6 +19,8 @@ interface Scenario {
 	gatewaySecret?: string;
 	limitSucceeds?: boolean;
 	exhausted?: boolean;
+	/** Replaces password verification, e.g. a correct password refused by policy. */
+	authOutcome?: "refused";
 }
 
 interface ScenarioResult {
@@ -72,6 +74,15 @@ class MockRatelimit {
 }
 
 mock.module("@upstash/ratelimit", () => ({ Ratelimit: MockRatelimit }));
+
+if (scenario.authOutcome) {
+  const shared = { ...(await import("./app/api/e2/mailboxes/shared")) };
+  mock.module("./app/api/e2/mailboxes/shared", () => ({
+    ...shared,
+    verifyManagedMailCredential: async () => ({ status: scenario.authOutcome }),
+    authenticateManagedMailCredential: async () => null,
+  }));
+}
 
 const { Elysia } = await import("elysia");
 const { AuthError } = await import("./app/api/e2/lib/auth");
@@ -482,5 +493,84 @@ describe("mailbox authentication rate limiting", () => {
 		expect(result.verifyCalls).toBe(0);
 		expect(result.calls.every(({ check }) => check)).toBe(true);
 		expect(result.responses[0].status).toBe(429);
+	});
+	it("counts a policy-refused correct password on the send endpoints only per IP, answering like a wrong password", () => {
+		const token = "mail_0123456789abcdefRIGHT";
+		const request = {
+			endpoint: "send" as const,
+			loginAddress: "",
+			token,
+			headers: { "x-real-ip": "203.0.113.93" },
+		};
+		const refused = runScenario({
+			limitSucceeds: true,
+			authOutcome: "refused",
+			requests: [request],
+		});
+		const wrong = runScenario({ limitSucceeds: true, requests: [request] });
+
+		const tokenHash = createHash("sha256").update(token).digest("hex");
+		const loginKey = `203.0.113.93:token:${tokenHash.slice(0, 32)}`;
+		expect(refused.calls).toEqual([
+			{ prefix: "e2:mailbox-auth:login", identifier: loginKey, check: true },
+			{ prefix: "e2:mailbox-auth:ip", identifier: "203.0.113.93", check: true },
+			{ prefix: "e2:mailbox-auth:ip", identifier: "203.0.113.93" },
+		]);
+		expect(refused.responses).toEqual(wrong.responses);
+		expect(refused.responses[0].status).toBe(401);
+	});
+
+	it("still refuses a policy-refused password once its source IP is limited", () => {
+		const result = runScenario({
+			blockSource: true,
+			authOutcome: "refused",
+			requests: [
+				{
+					endpoint: "send",
+					loginAddress: "",
+					token: "mail_0123456789abcdefRIGHT",
+					headers: { "x-real-ip": "203.0.113.94" },
+				},
+			],
+		});
+
+		expect(result.responses[0].status).toBe(429);
+		expect(result.responses[0].limit).toBe("3000");
+	});
+
+	it("keeps IMAP and SMTP policy refusals in the refusing client IP's own budget, answering like a wrong password", () => {
+		for (const endpoint of ["mailbox", "smtp"] as const) {
+			const refused = runScenario({
+				limitSucceeds: true,
+				authOutcome: "refused",
+				requests: [
+					{
+						endpoint,
+						loginAddress: "user@example.com",
+						headers: { "x-real-ip": "203.0.113.95" },
+					},
+				],
+			});
+			const wrong = runScenario({
+				limitSucceeds: true,
+				requests: [
+					{
+						endpoint,
+						loginAddress: "user@example.com",
+						headers: { "x-real-ip": "203.0.113.95" },
+					},
+				],
+			});
+
+			expect(refused.calls).toEqual([
+				{
+					prefix: "e2:mailbox-auth:login",
+					identifier: "203.0.113.95:user@example.com",
+				},
+				{ prefix: "e2:mailbox-auth:ip", identifier: "203.0.113.95" },
+			]);
+			expect(refused.responses).toEqual(wrong.responses);
+			expect(refused.responses[0].status).toBe(401);
+		}
 	});
 });

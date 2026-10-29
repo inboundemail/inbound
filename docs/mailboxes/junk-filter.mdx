@@ -9,21 +9,33 @@ Inbound checks every received email for spam, phishing, fraud, malware and imper
 - **IMAP** shows it in the `Junk` folder instead of `INBOX` and the scope folders. See [IMAP Behavior](/mailboxes/imap-behavior#junk).
 - **The mailbox API** lists it under `folder=junk`, and the email API returns `spam.is_junk`.
 
+The account level below is the default. Each mailbox credential can also have [its own spam settings](#per-mailbox-spam-settings), which decide what lands in that credential's `Junk` without changing the account's verdict.
+
 ## Filter levels
 
 Set the level in the [Mailboxes & SMTP dashboard](https://inbound.new/mailboxes) or with `PUT /api/e2/spam-filter`. It applies to the whole account and to emails received after the change.
 
-Each email gets a level from 0 (none) to 4 (clear) for spam, phishing, fraud, malware and impersonation. Failed authentication (for example a DMARC failure) can raise a level, but `standard` and `lenient` only act when the classifier itself backs the level:
+Each email gets a level from 0 (none) to 4 (clear) for spam, phishing, fraud, malware and impersonation. An email is junk when any one of these categories meets the account's level.
 
-- For spam, phishing and fraud, the classifier gives a probability for each level. "Likely" means at least a 70% chance of that level or higher.
-- For malware and impersonation, the classifier says how likely the label is. "Likely" means at least an 80% chance.
+For spam, phishing and fraud, the classifier usually gives the probability that the level is at least 2, at least 3, or exactly 4. Those probabilities decide:
 
-| Level | Marks as junk when any of them is |
+| Level | Marks as junk when, for any of spam, phishing or fraud |
 | --- | --- |
-| `strict` | Level 3 or higher, likely level 2 or higher, or (for spam, phishing and fraud) at least a 50% chance of level 3 or higher |
-| `standard` (default) | Likely level 3 or higher |
-| `lenient` | Likely level 4 |
+| `strict` | The level is 3 or higher, the chance of level 3 or higher is at least 50%, or the chance of level 2 or higher is at least 70% |
+| `standard` (default) | The chance of level 3 or higher is at least 70% |
+| `lenient` | The chance of level 4 is at least 70% |
 | `off` | Nothing automatically |
+
+Malware and impersonation, and spam, phishing or fraud when probabilities are missing, use the level and the classifier's confidence instead. The classifier counts as **confident** when its confidence is at least 0.6 and its own level, before any authentication rules raised it, is 2 or higher:
+
+| Level | Marks as junk when, for any such category |
+| --- | --- |
+| `strict` | The level is 3 or higher, or the level is 2 and the classifier is confident |
+| `standard` (default) | The level is 3 or higher and the classifier is confident |
+| `lenient` | The level is 4 and the classifier is confident |
+| `off` | Nothing automatically |
+
+Failed authentication (for example a DMARC failure) can raise a level. Without the classifier backing it, a raised level counts at `strict` but not at `standard` or `lenient`.
 
 Prompt injection (text aimed at an AI reading the email) is checked too, but never marks an email as junk by itself.
 
@@ -44,8 +56,54 @@ Guard rules take precedence over the filter level:
 - The `allow` action marks matching emails as not junk, even if the filter would flag them.
 - The `block` action still blocks delivery entirely.
 
+## Per-mailbox spam settings
+
+A mailbox credential can override the account level and keep its own sender lists. These settings only decide whether a message is in that credential's `INBOX` or `Junk`.
+
+| Method | Path after `/mailboxes/{id}` | Purpose |
+| --- | --- | --- |
+| `GET` | `/spam` | Get the level and lists |
+| `PUT` | `/spam` | Replace the level and both lists |
+| `POST` | `/spam/allow` | Add `{"pattern":"..."}` to the allow list, removing it from the block list |
+| `DELETE` | `/spam/allow` | Remove `{"pattern":"..."}` from the allow list |
+| `POST` | `/spam/block` | Add `{"pattern":"..."}` to the block list, removing it from the allow list |
+| `DELETE` | `/spam/block` | Remove `{"pattern":"..."}` from the block list |
+
+Use an account API key with `/mailboxes/{mailboxId}/spam`, or a mailbox password with `/mailboxes/me/spam` when the credential's `selfService.spam` is enabled. See [Access and Limits](/mailboxes/access-and-limits#self-service).
+
+```bash
+curl -X PUT "https://inbound.new/api/e2/mailboxes/YOUR_MAILBOX_ID/spam" \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "level": "strict",
+    "allow": ["boss@example.net", "@partner.example"],
+    "block": ["@promotions.example"]
+  }'
+```
+
+- `PUT` requires `level`, `allow` and `block`. Responses also include `effectiveLevel`, the level in use after falling back to the account's.
+- `level` is `off`, `lenient`, `standard`, `strict` or `null`. `null` uses the account level.
+- `allow` and `block` hold up to 1,000 patterns each. A pattern is an exact email address, such as `boss@example.net`, or a whole domain written as `@partner.example`. Patterns are stored in lowercase and compared with the message's first `From` address; a domain pattern doesn't include subdomains. A pattern can't be on both lists, and removing one that isn't on the list returns `404`.
+- Allowed senders stay in `INBOX`; blocked senders go to `Junk`. Blocking doesn't reject or drop mail.
+- Settings apply to new mail as it arrives. Changing the level or lists also re-sorts mail already in this mailbox's `INBOX` and `Junk` under the new settings, in batches of at most 500 messages per sync, newest first. Later mailbox reads and syncs continue the catch-up; a settings update does not reclassify the whole mailbox before returning. Until a message is processed, its previous verdict remains in use. Messages with a decision of their own (step 1 below) and messages a filter moved to another folder stay where they are.
+
+For each received message, the mailbox decides in this order:
+
+1. A message you moved into or out of `Junk` in this mailbox, or that a [filter](/mailboxes/filters) marked, keeps that decision.
+2. A sender on the allow list is not junk, even when a domain on the block list, an account decision or the level would mark it.
+3. A sender on the block list is junk.
+4. A decision you made for the whole account, or a matching [Guard rule](#guard-rules), applies.
+5. Otherwise the mailbox's `level` applies, with the same thresholds as the [account levels](#filter-levels). `off` marks nothing, and `null` uses the account verdict.
+
 ## Correcting a verdict
 
-Moving a message between `INBOX` and `Junk` in an email client, or setting `isJunk` with `PATCH /api/e2/mailboxes/{id}/messages/{messageId}` or `is_junk` with `PATCH /api/e2/emails/{id}`, records your decision for the email across the account. Automatic verdicts never override a decision you made.
+Moving a message between `INBOX` and `Junk` in an email client, or setting `isJunk` with `PATCH /api/e2/mailboxes/{id}/messages/{messageId}`, records your decision for that mailbox credential only. It doesn't change the account verdict, other credentials, the `spam` fields in the email API or webhooks.
+
+Setting `is_junk` with `PATCH /api/e2/emails/{id}` records your decision for the email across the account. Mailboxes follow it unless they have their own decision for the message or the sender is on their allow or block list. Automatic verdicts never override a decision you made.
+
+<Note>
+  Account-wide decisions made by moving messages in a mailbox before per-mailbox settings existed are kept as account decisions with reason `user`. They are not converted into per-mailbox decisions.
+</Note>
 
 The webhook and API report why an email was marked: `classifier`, `ses_spam`, `guard_rule` or `user`.

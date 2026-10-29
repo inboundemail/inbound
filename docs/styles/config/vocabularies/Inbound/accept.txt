@@ -38,3 +38,6 @@ Postgres
 (?i)enums?
 (?i)rollouts?
 (?i)unprocessable
+(?i)booleans?
+IPs
+Vercel

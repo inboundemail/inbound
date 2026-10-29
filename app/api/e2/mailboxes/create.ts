@@ -9,6 +9,7 @@ import {
 	MailboxInputSchema,
 	MailboxSchema,
 	serializeMailbox,
+	validateMailboxControls,
 	validateMailboxInput,
 } from "@/app/api/e2/mailboxes/shared";
 import { auth } from "@/lib/auth/auth";
@@ -33,6 +34,11 @@ export const createMailbox = new Elysia().post(
 		if ("error" in validated) {
 			set.status = 400;
 			return { error: validated.error };
+		}
+		const controls = validateMailboxControls(body, null);
+		if ("error" in controls) {
+			set.status = 400;
+			return { error: controls.error };
 		}
 
 		const mailboxLimit = maxMailboxesPerUser();
@@ -67,6 +73,7 @@ export const createMailbox = new Elysia().post(
 			sendingMode: validated.data.sendingMode,
 			sendingName: validated.data.sendingName,
 			sendingAddress: validated.data.sendingAddress,
+			...controls.data,
 			enabled: true,
 			lastUsedAt: null,
 			createdAt: now,

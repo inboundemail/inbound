@@ -16,6 +16,8 @@ curl 'https://inbound.new/api/e2/mailboxes/me/folders' \
 
 All writes require a **Read & write** mailbox, even when authenticated with the account key. Read-only credentials can list and fetch. Scope folders remain read-only with either access mode.
 
+A mailbox password only works over HTTP when the credential's `protocols.api` is enabled and the request comes from an address in its `allowedIps`; otherwise the request fails like a wrong password. With the password, `/mailboxes/me/filters`, `/mailboxes/me/spam` and `/mailboxes/me/rotate-password` are available only when the matching `selfService` setting is on. See [Access and Limits](/mailboxes/access-and-limits).
+
 ## Folders
 
 | Method | Path after `/mailboxes/{id}` | Purpose |
@@ -66,7 +68,7 @@ Use `action: "remove"` to clear selected flags or `action: "set"` to replace the
 | `DELETE` | `/messages/{uid}?permanent=true` | Expunge this folder entry |
 | `POST` | `/expunge` | Remove entries carrying `\Deleted` |
 
-Moving a received message into `Junk` marks it as junk; moving it back to `INBOX` marks it as not junk. That verdict is account-wide. Other folder state and flags belong to the credential.
+Moving a received message into `Junk` marks it as junk; moving it back to `INBOX` marks it as not junk. That decision belongs to this credential, like its other folder state and flags; it doesn't change the account verdict or other credentials. See [Correcting a verdict](/mailboxes/junk-filter#correcting-a-verdict).
 
 <Warning>
   Permanent mailbox deletion removes the folder entry, not the underlying received email from the account. The email remains available in the dashboard and account email API, and may be visible to other credentials. Appended content is reclaimed when no folder references it.
@@ -82,7 +84,7 @@ Moving a received message into `Junk` marks it as junk; moving it back to `INBOX
 
 Raw append uses `{"raw":"BASE64_RFC822","flags":["\\Draft"]}`. Both forms accept an optional ISO `date`. JSON drafts in `Drafts` default to `\Seen` and `\Draft`; raw append defaults to no flags. Use raw MIME for attachments. List them at `/messages/{uid}/attachments`, then download `/messages/{uid}/attachments/{index}` using the returned zero-based index.
 
-HTTP append has the same 1 MiB message limit as IMAP `APPEND`. Appended storage is limited to 250 MiB and 5,000 messages per account, shared by all credentials and folders. Quota checks are atomic across HTTP and IMAP.
+HTTP append has the same 1 MiB message limit as IMAP `APPEND`. Appended storage is limited to 250 MiB and 5,000 messages per account, shared by all credentials and folders. A credential can also have its own [`storageQuotaBytes`](/mailboxes/access-and-limits#storage-quota). Quota checks are atomic across HTTP and IMAP.
 
 Raw messages must be valid UTF-8 without NUL bytes (ASCII MIME is also valid). Encode non-UTF-8 text and binary attachments with MIME base64 or quoted-printable before submitting. HTTP and IMAP append reject invalid UTF-8 rather than silently changing message bytes.
 
@@ -94,9 +96,13 @@ Copies with the same `Message-ID` in `Sent` are deduplicated whether the client 
 
 Scheduled sends currently do not retain the originating mailbox credential and do not save a mailbox Sent copy. `message_id` cannot be combined with `scheduled_at`.
 
-Sent persistence runs in the background after delivery is accepted, so a successful response can precede the copy appearing. A failed, timed-out or interrupted copy is logged but is not retried, and never causes an accepted message to be resent. Each matching mailbox receives its own copy, counted against the account's shared storage quota. Check available mailbox storage if a successful send has no copy. Raw Sent copies also require valid UTF-8 MIME without NUL bytes. Existing historical account-level sent emails are not backfilled into `Sent`.
+Sent persistence runs in the background after delivery is accepted, so a successful response can precede the copy appearing. A failed, timed-out or interrupted copy is logged but is not retried, and never causes an accepted message to be resent. Each matching mailbox receives its own copy, counted against the account's shared storage quota and that credential's own storage quota, if set. Check available mailbox storage if a successful send has no copy. Raw Sent copies also require valid UTF-8 MIME without NUL bytes. Existing historical account-level sent emails are not backfilled into `Sent`.
 
 Automatic sent copies can exceed the client APPEND limit of 1 MiB, up to the send endpoint's message-size limit. They still count toward the same 250 MiB / 5,000-message account quota and are visible over both HTTP and IMAP.
+
+## Filters and spam settings
+
+Each credential can sort new mail with [filters](/mailboxes/filters) at `/mailboxes/{id}/filters` and set its own [spam level and sender lists](/mailboxes/junk-filter#per-mailbox-spam-settings) at `/mailboxes/{id}/spam`. Both act on this credential's folders only.
 
 ## Existing mailbox endpoints
 

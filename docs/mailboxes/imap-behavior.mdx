@@ -112,11 +112,15 @@ Immediate sending through SMTP or the HTTP API with a `read_write` mailbox passw
 
 ### Junk
 
-The [junk filter](/mailboxes/junk-filter) decides whether a received message belongs in `INBOX` or in `Junk`; it is never in both. Moving a received message from `INBOX` or a scope folder into `Junk` marks it as junk, and moving it from `Junk` back to `INBOX` marks it as not junk. The decision applies to the email account-wide, so the message also moves in every other credential and in the mailbox API. Copying a received message into `INBOX` or `Junk` has the same effect.
+The [junk filter](/mailboxes/junk-filter) decides whether a received message belongs in `INBOX` or in `Junk`; it is never in both. Each credential can have [its own spam level and sender lists](/mailboxes/junk-filter#per-mailbox-spam-settings). Moving a received message from `INBOX` or a scope folder into `Junk` marks it as junk, and moving it from `Junk` back to `INBOX` marks it as not junk. The decision applies to this credential only, in IMAP and the mailbox API; it doesn't change other credentials, the account verdict or webhooks. Copying a received message into `INBOX` or `Junk` has the same effect.
 
-New mail appears in `INBOX` or `Junk` once the junk filter has made its verdict, normally within a few seconds of arrival (at most about two minutes if filtering is unavailable). If a message's verdict changes elsewhere (in the API, the dashboard or another credential), it moves between `INBOX` and `Junk` with its flags, and open sessions receive `EXPUNGE` for the folder it left and `EXISTS` for the folder it entered.
+New mail appears in `INBOX` or `Junk` once the junk filter has made its verdict, normally within a few seconds of arrival (at most about two minutes if filtering is unavailable). If the verdict that applies to this credential changes later, for example when the account verdict changes in the email API or dashboard and the credential has no decision of its own, the message moves between `INBOX` and `Junk` with its flags, and open sessions receive `EXPUNGE` for the folder it left and `EXISTS` for the folder it entered.
 
 Expunging a received message from `Junk` removes it from the credential's folders; it doesn't return to `INBOX` if it is later marked as not junk. Messages appended to `Junk` are stored like other appended messages.
+
+### Filters
+
+[Mailbox filters](/mailboxes/filters) run once, when a received message first enters the credential's mailbox, and can move it to another folder, flag it or mark it as junk. A message a filter moved out of `INBOX` is no longer in `INBOX` or the scope folders, like any other move. Changing filters later doesn't re-sort existing mail.
 
 ### Guard-filtered messages
 
@@ -126,7 +130,7 @@ Messages blocked by Guard are not synchronized, and their content cannot be fetc
 
 When a credential's scopes, permissions, sender settings, enabled state, or password change, its active IMAP sessions receive `* BYE Mailbox credentials or scopes changed` and must reconnect. On the next folder listing or selection, folders for removed scopes disappear, and received messages that no longer match any remaining scope are removed from all of the credential's folders. Appended messages are not affected.
 
-Each login rechecks that the login email's domain is verified, that at least one scope domain is verified, and that an exact sender identity is still covered by a verified scope. If not, authentication fails.
+Each login rechecks that the login email's domain is verified, that at least one scope domain is verified, and that an exact sender identity is still covered by a verified scope. It also checks that the credential's `protocols.imap` is enabled and that the client address is in its `allowedIps` (see [Access and Limits](/mailboxes/access-and-limits)). If not, authentication fails with the same `NO [AUTHENTICATIONFAILED]` as a wrong password. Changing the credential's `protocols`, `allowedIps` or `selfService` settings immediately logs out its active IMAP sessions. Clients must reconnect using the current settings. Open sessions are also periodically rechecked for changes such as domain verification.
 
 <Note>
   A domain losing its verified status does not disconnect an established IMAP session. To end current access, disable the credential, change its scopes or permissions, rotate its password, or delete it.
@@ -139,8 +143,9 @@ Each login rechecks that the login email's domain is verified, that at least one
 | Maximum `APPEND` size | 1 MiB (`1,048,576` bytes), advertised as `APPENDLIMIT` |
 | Appended storage per account | 250 MiB |
 | Appended messages per account | 5,000 |
+| Appended storage per credential | The credential's `storageQuotaBytes`, if set |
 
-An `APPEND` over 1 MiB is rejected with `NO [TOOBIG]`. The storage and message-count limits are shared by all of the account's credentials and folders; exceeding them returns `NO [OVERQUOTA]`. For SMTP limits, see [Send with SMTP](/mailboxes/connect-smtp#limits).
+An `APPEND` over 1 MiB is rejected with `NO [TOOBIG]`. The account storage and message-count limits are shared by all of the account's credentials and folders. A credential's own [storage quota](/mailboxes/access-and-limits#storage-quota) counts each message it stored once, however many folders hold it. Exceeding either limit returns `NO [OVERQUOTA]`. For SMTP limits, see [Send with SMTP](/mailboxes/connect-smtp#limits).
 
 ## Connection limits and timeouts
 
@@ -159,8 +164,8 @@ Connections over the per-IP limit receive `* BYE Too many connections from this 
 
 | Symptom | Likely cause | What to check |
 | --- | --- | --- |
-| Authentication fails | Wrong login, rotated password, disabled credential, SMTP-only credential, unverified domain, or login throttling | Confirm the login email, current password, credential type, enabled state, and verified domains. Wait 15 minutes after repeated failures. |
-| An expected message is missing | Recipient is outside the scopes, the message is Guard-blocked, or the folder hasn't been refreshed | Check the recipient, scope domains, and Guard status, then reselect the folder |
+| Authentication fails | Wrong login, rotated password, disabled credential, SMTP-only credential, IMAP turned off in `protocols`, client address outside `allowedIps`, unverified domain, or login throttling | Confirm the login email, current password, credential type, enabled state, protocols, allowed IPs, and verified domains. Wait 15 minutes after repeated failures. |
+| An expected message is missing | Recipient is outside the scopes, the message is Guard-blocked, a filter moved it, or the folder hasn't been refreshed | Check the recipient, scope domains, Guard status, and the credential's filters, then reselect the folder |
 | A scope folder rejects changes | `Scopes/*` folders are always read-only | Change the message in `INBOX` or copy it to a writable folder |
 | A deleted received message is still in the dashboard or account API | Mailbox deletion only removes it from the credential's folders | Manage its account-level state through the dashboard or account email API |
 | No sent copy appears | The copy is still pending, the send had no matching mailbox identity, or persistence failed | Use a `read_write` mailbox credential or exact sending identity and check available storage |

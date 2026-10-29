@@ -53,7 +53,7 @@ export function smtpFailureForApiStatus(
 ): SmtpFailure {
 	// API messages end up in an SMTP reply line: strip line breaks and bound their length.
 	const safeMessage = apiMessage
-		?.replace(/[\x00-\x1f\x7f]+/g, " ")
+		?.replace(/[\x00-\x1f\x7f-\x9f]+/g, " ")
 		.trim()
 		.slice(0, 200);
 	const detail = safeMessage ? `: ${safeMessage}` : "";
@@ -69,7 +69,16 @@ export function smtpFailureForApiStatus(
 			message: "5.3.4 Message size exceeds fixed maximum message size",
 		};
 	}
-	if (status === 409 || status === 429) {
+	if (status === 429) {
+		// Tell the client which limit it hit (e.g. the mailbox's daily limit and when it resets).
+		return {
+			responseCode: 451,
+			message: safeMessage
+				? `4.7.0 ${safeMessage}`
+				: "4.7.0 Rate limited, try again later",
+		};
+	}
+	if (status === 409) {
 		return {
 			responseCode: 451,
 			message: "4.7.0 Rate limited or already in progress, try again later",
@@ -99,10 +108,15 @@ export class SmtpRelayError extends Error {
 async function readErrorMessage(response: Response): Promise<string | null> {
 	try {
 		const body = (await response.json()) as {
-			error?: string;
-			message?: string;
+			error?: unknown;
+			message?: unknown;
 		};
-		return body.error ?? body.message ?? null;
+		const error = typeof body.error === "string" ? body.error : null;
+		const message = typeof body.message === "string" ? body.message : null;
+		// Rate-limit responses shaped { error: "Too Many Requests", message } carry the
+		// useful detail in `message`; send-limit responses carry it in `error`.
+		if (response.status === 429 && message) return message;
+		return error ?? message;
 	} catch {
 		return null;
 	}
@@ -145,20 +159,22 @@ export class InboundApiClient {
 		throw new SmtpRelayError({ responseCode: 454, message: failure });
 	}
 
+	/**
+	 * With the gateway secret configured, the send carries it and the SMTP client's IP, so the
+	 * API treats it as SMTP use of the credential (its SMTP toggle and IP allowlist apply)
+	 * rather than HTTP API use.
+	 */
 	async sendEmail(
 		apiKey: string,
 		payload: SendEmailPayload,
 		idempotencyKey: string,
+		clientIp?: string,
 	): Promise<SendEmailResult> {
 		const response = await this.request(
 			`${this.config.apiBaseUrl}${this.config.sendPath}`,
 			{
 				method: "POST",
-				headers: {
-					Authorization: `Bearer ${apiKey}`,
-					"Content-Type": "application/json",
-					"Idempotency-Key": idempotencyKey,
-				},
+				headers: this.sendHeaders(apiKey, idempotencyKey, clientIp),
 				body: JSON.stringify(payload),
 			},
 			this.config.sendRequestTimeoutMs,
@@ -185,15 +201,9 @@ export class InboundApiClient {
 		apiKey: string,
 		payload: SendRawEmailPayload,
 		idempotencyKey: string,
+		clientIp?: string,
 	): Promise<SendEmailResult | null> {
-		const headers: Record<string, string> = {
-			Authorization: `Bearer ${apiKey}`,
-			"Content-Type": "application/json",
-			"Idempotency-Key": idempotencyKey,
-		};
-		if (this.config.gatewayAuthSecret) {
-			headers["x-inbound-gateway-secret"] = this.config.gatewayAuthSecret;
-		}
+		const headers = this.sendHeaders(apiKey, idempotencyKey, clientIp);
 		const response = await this.request(
 			`${this.config.apiBaseUrl}${this.config.rawSendPath}`,
 			{ method: "POST", headers, body: JSON.stringify(payload) },
@@ -211,6 +221,23 @@ export class InboundApiClient {
 			);
 		}
 		return (await response.json()) as SendEmailResult;
+	}
+
+	private sendHeaders(
+		apiKey: string,
+		idempotencyKey: string,
+		clientIp: string | undefined,
+	): Record<string, string> {
+		const headers: Record<string, string> = {
+			Authorization: `Bearer ${apiKey}`,
+			"Content-Type": "application/json",
+			"Idempotency-Key": idempotencyKey,
+		};
+		if (this.config.gatewayAuthSecret) {
+			headers["x-inbound-gateway-secret"] = this.config.gatewayAuthSecret;
+			if (clientIp) headers["x-inbound-client-ip"] = clientIp;
+		}
+		return headers;
 	}
 
 	private async request(

@@ -38,6 +38,11 @@ import { saveSentCopies } from "@/lib/email-management/mailbox-sent-copy";
 import { enforceOutboundSendGuard } from "@/lib/email-management/outbound-send-guard";
 import { checkSendingSpike } from "@/lib/email-management/sending-spike-detector";
 import {
+	MAILBOX_DAILY_LIMIT_ERROR,
+	releaseMailboxSend,
+	reserveMailboxSend,
+} from "@/app/api/e2/helper/mailbox-send-limit";
+import {
 	attachmentsToStorageFormat,
 	processAttachments,
 } from "../helper/attachment-processor";
@@ -607,6 +612,21 @@ export const replyToEmail = new Elysia().post(
 				: { error: "A request with this Idempotency-Key is still being processed. Retry shortly." };
 		}
 
+		let reservation: Awaited<ReturnType<typeof reserveMailboxSend>>;
+		try {
+			reservation = await reserveMailboxSend(credential);
+		} catch (error) {
+			console.error("❌ Failed to check the mailbox daily send limit:", error);
+			await db.delete(sentEmails).where(eq(sentEmails.id, replyEmailId));
+			set.status = 500;
+			return { error: "Failed to check the mailbox sending limit" };
+		}
+		if (reservation === "exceeded") {
+			await db.delete(sentEmails).where(eq(sentEmails.id, replyEmailId));
+			set.status = 429;
+			return { error: MAILBOX_DAILY_LIMIT_ERROR };
+		}
+
 		// Process threading for sent email
 		try {
 			const threadingResult = await EmailThreader.processSentEmailForThreading(
@@ -627,6 +647,7 @@ export const replyToEmail = new Elysia().post(
 		// Check if SES is configured
 		if (!sesClient) {
 			console.log("❌ AWS SES not configured");
+			await releaseMailboxSend(reservation);
 
 			await db
 				.update(sentEmails)
@@ -641,6 +662,7 @@ export const replyToEmail = new Elysia().post(
 			return { error: "Email service not configured. Please contact support." };
 		}
 
+		let providerAccepted = false;
 		try {
 			console.log("📤 Sending reply email via AWS SES");
 
@@ -762,6 +784,8 @@ export const replyToEmail = new Elysia().post(
 				console.error(
 					`❌ Failed to get identity ARN for ${fromAddress}. Cannot send reply email.`,
 				);
+				await releaseMailboxSend(reservation);
+				reservation = null;
 				await db
 					.update(sentEmails)
 					.set({
@@ -787,6 +811,8 @@ export const replyToEmail = new Elysia().post(
 				console.error(
 					`🚫 FromEmailAddress does not match the authorized sender for reply ${replyEmailId}`,
 				);
+				await releaseMailboxSend(reservation);
+				reservation = null;
 				await db
 					.update(sentEmails)
 					.set({
@@ -823,6 +849,7 @@ export const replyToEmail = new Elysia().post(
 			});
 
 			const sesResponse = await sesClient.send(sesCommand);
+			providerAccepted = true;
 			const sesMessageId = sesResponse.MessageId;
 
 			console.log("✅ Reply sent successfully via SES:", sesMessageId);
@@ -888,6 +915,7 @@ export const replyToEmail = new Elysia().post(
 			};
 		} catch (sesError) {
 			console.error("❌ SES send error:", sesError);
+			if (!providerAccepted) await releaseMailboxSend(reservation);
 
 			await db
 				.update(sentEmails)

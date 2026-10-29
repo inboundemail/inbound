@@ -1,0 +1,146 @@
+---
+title: "Mailbox Filters"
+description: "Sort, flag and junk received mail per mailbox with ordered rules"
+---
+
+Filters are ordered rules that run on received mail for one mailbox credential. Each filter has conditions and actions: when a new message matches, its actions move, flag or mark it in that credential's folders. Filters belong to the credential; other credentials on the same account are not affected.
+
+## When filters run
+
+Filters run **once**, when a received message first enters the credential's mailbox. Editing, reordering or deleting filters does not re-sort mail that has already arrived. To run the current filters against existing mail, use [apply](#apply-filters-to-existing-mail).
+
+- Filters only see received mail. Appended messages, drafts and Sent copies are not filtered.
+- Enabled filters run in their saved order, and every matching filter's actions run. A `stop` action or `stopProcessing: true` skips the filters after it.
+- If a filter fails for a message (for example, a `move_to` folder was deleted), that filter's actions are discarded. Other filters still run. If no filter moves the message, it lands in `INBOX`, or `Junk` when the [junk filter](/mailboxes/junk-filter) says so.
+
+For a mailbox catching up on existing mail, each sync processes at most 500 previously unseen messages, newest first so new arrivals don't wait behind older mail. Later mailbox reads and syncs continue the catch-up, so the first folder listing may be partial. Mail already present in the credential's folders isn't automatically filtered again.
+
+## Manage filters
+
+Use an account API key with `/api/e2/mailboxes/{mailboxId}/filters`, or a mailbox password with `/api/e2/mailboxes/me/filters` when the credential's `selfService.filters` is enabled. See [Access and Limits](/mailboxes/access-and-limits#self-service).
+
+| Method | Path after `/mailboxes/{id}` | Purpose |
+| --- | --- | --- |
+| `GET` | `/filters` | List filters in the order they run |
+| `POST` | `/filters` | Create a filter; it runs after the existing ones |
+| `GET` | `/filters/{filterId}` | Get one filter |
+| `PATCH` | `/filters/{filterId}` | Change some of a filter's fields |
+| `DELETE` | `/filters/{filterId}` | Delete a filter |
+| `POST` | `/filters/reorder` | Set the order with `{"ids":["FILTER_ID", ...]}` |
+| `POST` | `/filters/apply` | Run the enabled filters against mail already in a folder |
+| `POST` | `/filters/{filterId}/apply` | Run one filter against mail already in a folder |
+
+The list returns `data` and `pagination: { limit, offset, total, hasMore }`; `limit` defaults to 50 and cannot exceed 100. `PATCH` replaces `conditions` or `actions` as whole lists. `reorder` must list every filter of the mailbox exactly once; otherwise nothing changes and it returns `409`.
+
+```bash
+curl -X POST "https://inbound.new/api/e2/mailboxes/YOUR_MAILBOX_ID/filters" \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Invoices",
+    "match": "all",
+    "conditions": [
+      { "field": "from", "operator": "domain_is", "value": "billing.example.net" },
+      { "field": "subject", "operator": "contains", "value": "invoice" }
+    ],
+    "actions": [
+      { "type": "move_to", "value": "Projects/Invoices" },
+      { "type": "add_keyword", "value": "invoice" }
+    ],
+    "stopProcessing": true
+  }'
+```
+
+| Field | Description |
+| --- | --- |
+| `name` | Required, up to 255 characters |
+| `enabled` | Defaults to `true`. Disabled filters are skipped. |
+| `match` | `all` (default) needs every condition to match; `any` needs at least one |
+| `conditions` | 1 to 20 conditions |
+| `actions` | 1 to 20 actions |
+| `stopProcessing` | When `true`, a match skips later filters. Defaults to `false`. |
+
+Responses also include `id`, `position`, `createdAt` and `updatedAt`.
+
+## Conditions
+
+Each condition has a `field`, an `operator` and, for most operators, a `value`. Text comparisons ignore case. Regular expressions are not supported.
+
+| Field | Matches | Operators | `value` |
+| --- | --- | --- | --- |
+| `from`, `to` | Addresses in that header | Text operators, `domain_is` | String |
+| `cc` | Addresses in that header | Text operators, `domain_is`, `exists` | String; optional boolean for `exists` |
+| `recipient` | Any recipient Inbound received the message for | Text operators, `domain_is` | String |
+| `subject` | The subject line | Text operators | String |
+| `header` | The header named in `header`, such as `List-Id` | Text operators, `exists` | String; optional boolean for `exists` |
+| `body` | The plain-text body, or the HTML body when there is no plain text | `contains`, `not_contains` | String |
+| `has_attachment` | Whether the message has attachments | `equals` | `true` or `false` |
+| `size` | Raw message size in bytes | `greater_than`, `less_than` | Number |
+| `junk` | Whether the message is junk for this mailbox at this point | `equals` | `true` or `false` |
+| `jev` | The classifier level for the category in `label`: `spam`, `phishing`, `fraud`, `malware` or `impersonation` | `gte` | Level from 0 to 4 |
+
+The text operators are `contains`, `not_contains`, `equals`, `not_equals`, `starts_with` and `ends_with`. `domain_is` matches the exact domain of an address, without subdomains, and accepts `example.com` or `@example.com`. For an address field with several addresses, a positive operator matches when any address matches, and `not_contains` or `not_equals` match only when none does.
+
+For `exists`, omit `value` or use `true` to match when the header or `Cc` is present; use `false` to match when it is missing.
+
+```json
+{ "field": "jev", "label": "phishing", "operator": "gte", "value": 3 }
+```
+
+The subject and body are checked up to their first 64 KiB. If a message's headers are larger than 64 KiB in total, `header` conditions treat them as missing.
+
+## Actions
+
+| Action | Effect |
+| --- | --- |
+| `move_to` | Move into the folder in `value`. The folder must exist and can't be under `Scopes`. Moving to `Junk` or `INBOX` works like `mark_junk` or `mark_not_junk`. |
+| `move_to_trash` | Move into `Trash` |
+| `mark_read` | Add `\Seen` |
+| `flag` | Add `\Flagged` |
+| `add_keyword` | Add the custom keyword in `value`. System flags such as `\Seen` aren't allowed. |
+| `mark_junk` | Mark as junk for this mailbox, so it lands in `Junk` |
+| `mark_not_junk` | Mark as not junk for this mailbox, so it lands in `INBOX` |
+| `stop` | Skip this filter's remaining actions and all later filters |
+
+A filter can have at most one `move_to` or `move_to_trash`, and can't have both `mark_junk` and `mark_not_junk`. If several matching filters move a message, the last one wins. A message moved to another folder is no longer in `INBOX` or the scope folders, like any other move. Filters can't forward, reply or permanently delete mail.
+
+A filter's `mark_junk` or `mark_not_junk` is a decision for this mailbox, like moving the message in an email client. It doesn't change the account's verdict or webhooks. See [Junk Filter](/mailboxes/junk-filter#per-mailbox-spam-settings).
+
+## Limits
+
+| Limit | Value |
+| --- | --- |
+| Filters per mailbox | 100 |
+| Conditions per filter | 20 |
+| Actions per filter | 20 |
+| Length of a `value` | 1,024 characters |
+| Subject and body text checked | First 64 KiB |
+
+Sieve scripts and ManageSieve are not supported.
+
+## Apply filters to existing mail
+
+`POST /mailboxes/{id}/filters/apply` runs the enabled filters against received messages already in a folder, in UID order. `POST /mailboxes/{id}/filters/{filterId}/apply` runs only one filter. Both need a **Read & write** mailbox and can't run on `Scopes/*` folders.
+
+```json
+{"folder":"INBOX","afterUid":0,"limit":500}
+```
+
+`folder` is required. Each request examines at most 500 messages; `limit` defaults to 500.
+
+```json
+{"folder":"INBOX","processed":500,"lastUid":1734,"hasMore":true}
+```
+
+While `hasMore` is `true`, repeat the request with `afterUid` set to `lastUid`. Repeating apply with unchanged filters makes no further changes. Changing the enabled filters or their order creates a new version of the rule set. Applying all filters then runs their actions again on the batch, including unchanged rules; this can restore flags or moves you had undone manually.
+
+When applying all filters, an earlier matching `stop` still prevents later filters from running, even if only a later filter changed. Applying one filter runs just that filter. When the matching actions only add flags or keywords, the message stays in the folders it is already in; move and junk actions can move it.
+
+<CardGroup cols={2}>
+  <Card title="Junk Filter" icon="shield-halved" href="/mailboxes/junk-filter">
+    Set a per-mailbox spam level and allow or block senders.
+  </Card>
+  <Card title="Access and Limits" icon="lock" href="/mailboxes/access-and-limits">
+    Restrict protocols and IP addresses, and let mailbox users manage their own filters.
+  </Card>
+</CardGroup>

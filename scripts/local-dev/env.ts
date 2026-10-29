@@ -1,4 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parse } from "dotenv";
 
 export const LOCAL_DB_HOST = "db.localtest.me";
@@ -58,6 +60,12 @@ export function buildLocalEnv(options: {
 		UPSTASH_REDIS_REST_URL: LOCAL_REDIS_REST_URL,
 		UPSTASH_REDIS_REST_TOKEN: LOCAL_REDIS_REST_TOKEN,
 		AUTUMN_SECRET_KEY: "am_sk_local_mock",
+		NODE_OPTIONS: [
+			env.NODE_OPTIONS,
+			`--import=${pathToFileURL(resolve("lib/local-dev/autumn-mock.ts")).href}`,
+		]
+			.filter(Boolean)
+			.join(" "),
 		AWS_ENDPOINT_URL: `http://127.0.0.1:${options.mailPort ?? LOCAL_MAIL_PORT}`,
 		AWS_ACCESS_KEY_ID: "local",
 		AWS_SECRET_ACCESS_KEY: "local",

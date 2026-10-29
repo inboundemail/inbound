@@ -1,4 +1,5 @@
 const AUTUMN_HOST = "api.useautumn.com";
+const INSTALLED = Symbol.for("inbound.localDev.autumnMock");
 
 function localCustomer(customerId: string) {
 	return {
@@ -56,7 +57,8 @@ function respond(path: string, body: Record<string, unknown>) {
 }
 
 export function installAutumnMock() {
-	const realFetch = globalThis.fetch;
+	const realFetch = globalThis.fetch as typeof fetch & { [INSTALLED]?: true };
+	if (realFetch[INSTALLED]) return;
 	const mockedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
 		const request = new Request(input, init);
 		const url = new URL(request.url);
@@ -71,6 +73,10 @@ export function installAutumnMock() {
 		}
 		return Response.json(respond(url.pathname, body));
 	};
-	globalThis.fetch = Object.assign(mockedFetch, realFetch);
+	globalThis.fetch = Object.assign(mockedFetch, realFetch, { [INSTALLED]: true as const });
 	console.log("🧪 [local dev] Autumn API calls are served by a local mock");
+}
+
+if (process.env.INBOUND_LOCAL_DEV === "true" && process.env.NODE_ENV === "development") {
+	installAutumnMock();
 }

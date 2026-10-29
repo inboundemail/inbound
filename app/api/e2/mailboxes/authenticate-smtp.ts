@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import {
 	enforceMailboxAuthenticationRateLimit,
 	enforceMailboxGatewayAuthorization,
+	getGatewayClientIp,
 } from "@/app/api/e2/lib/auth";
 import {
 	authenticateManagedMailCredential,
@@ -47,10 +48,22 @@ export const authenticateSmtp = new Elysia().post(
 
 		const credential = await authenticateManagedMailCredential(body.password, {
 			loginAddress,
+			use: { protocol: "smtp", clientIp: getGatewayClientIp(request) },
 		});
 		if (!credential) return unauthorized(set);
 
-		return credential;
+		return {
+			credentialId: credential.credentialId,
+			userId: credential.userId,
+			loginAddress: credential.loginAddress,
+			type: credential.type,
+			sendingMode: credential.sendingMode,
+			sendingName: credential.sendingName,
+			sendingAddress: credential.sendingAddress,
+			allowedDomains: credential.allowedDomains,
+			accessMode: credential.accessMode,
+			scopes: credential.scopes,
+		};
 	},
 	{
 		body: AuthenticateSmtpBody,

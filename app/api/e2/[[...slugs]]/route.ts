@@ -80,6 +80,7 @@ import {
 	listMailboxFolders,
 	updateMailboxFolder,
 } from "@/app/api/e2/mailboxes/folders";
+import { mailboxFilterRoutes } from "@/app/api/e2/mailboxes/filters";
 import { listMailboxes } from "../mailboxes/list";
 import {
 	getMailbox,
@@ -90,6 +91,7 @@ import {
 	updateMailboxMessage,
 } from "../mailboxes/messages";
 import { rotateMailboxPassword } from "../mailboxes/rotate-password";
+import { mailboxSpamRoutes } from "@/app/api/e2/mailboxes/spam";
 import { updateMailbox } from "../mailboxes/update";
 import { checkOnboardingReply } from "../onboarding/check-reply";
 // Onboarding routes
@@ -561,6 +563,8 @@ https://inbound.new/api/e2
 	.use(copyFolderMessage)
 	.use(listFolderMessageAttachments)
 	.use(getFolderMessageAttachment)
+	.use(mailboxFilterRoutes)
+	.use(mailboxSpamRoutes)
 	.use(getSpamFilter)
 	.use(updateSpamFilter)
 	// Onboarding routes

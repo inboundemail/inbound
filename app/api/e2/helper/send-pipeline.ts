@@ -7,6 +7,12 @@ import {
 	checkIdempotencyKey,
 	readIdempotencyKey,
 } from "@/app/api/e2/helper/idempotency";
+import {
+	MAILBOX_DAILY_LIMIT_ERROR,
+	type MailboxSendLimitCredential,
+	releaseMailboxSend,
+	reserveMailboxSend,
+} from "@/app/api/e2/helper/mailbox-send-limit";
 import { buildSentEmailTags } from "@/app/api/e2/helper/ses-email-tags";
 import {
 	isSendingPausedError,
@@ -328,7 +334,7 @@ export async function deliverSentEmail(input: {
 	record: SentEmailContent;
 	buildRawMessage: () => string | Uint8Array;
 	evaluation: EmailEvaluationData;
-	credential?: SentCopyCredential | null;
+	credential?: (SentCopyCredential & MailboxSendLimitCredential) | null;
 }): Promise<SendResponse> {
 	const { userId, idempotencyKey, sender } = input;
 	if (
@@ -394,8 +400,22 @@ export async function deliverSentEmail(input: {
 				);
 	}
 
+	let reservation: Awaited<ReturnType<typeof reserveMailboxSend>>;
+	try {
+		reservation = await reserveMailboxSend(input.credential);
+	} catch (error) {
+		console.error("❌ Failed to check the mailbox daily send limit:", error);
+		await db.delete(sentEmails).where(eq(sentEmails.id, emailId));
+		return sendError(500, "Failed to check the mailbox sending limit");
+	}
+	if (reservation === "exceeded") {
+		await db.delete(sentEmails).where(eq(sentEmails.id, emailId));
+		return sendError(429, MAILBOX_DAILY_LIMIT_ERROR);
+	}
+
 	if (!sesClient) {
 		console.log("❌ AWS SES not configured");
+		await releaseMailboxSend(reservation);
 
 		await db
 			.update(sentEmails)
@@ -409,6 +429,7 @@ export async function deliverSentEmail(input: {
 		return sendError(500, "Email service not configured. Please contact support.");
 	}
 
+	let providerAccepted = false;
 	try {
 		console.log("📤 Sending email via AWS SES");
 
@@ -470,6 +491,7 @@ export async function deliverSentEmail(input: {
 		});
 
 		const sesResponse = await sesClient.send(rawCommand);
+		providerAccepted = true;
 		const messageId = sesResponse.MessageId;
 
 		console.log("✅ Email sent successfully via SES:", messageId);
@@ -522,6 +544,7 @@ export async function deliverSentEmail(input: {
 		};
 	} catch (sesError) {
 		console.error("❌ SES send error:", sesError);
+		if (!providerAccepted) await releaseMailboxSend(reservation);
 
 		await db
 			.update(sentEmails)

@@ -70,13 +70,13 @@ async function saveSentCopy(input: {
 		const date = (input.date ?? new Date()).toISOString();
 		const [, , appended] = await db.batch([
 			db.execute(sql`SELECT set_config('statement_timeout', '5s', true), set_config('lock_timeout', '4s', true)`),
-			db.execute(sql`SELECT id FROM imap_ensure(${credential.userId}, ${credential.credentialId})`),
+			db.execute(sql`SELECT id FROM imap_ensure(${credential.userId}::text, ${credential.credentialId}::text)`),
 			db.execute(sql`
 				SELECT uid, uid_validity
-				FROM imap_append(${credential.userId}, ${credential.credentialId},
+				FROM imap_append(${credential.userId}::text, ${credential.credentialId}::text,
 					(SELECT id FROM imap_mailboxes WHERE user_id = ${credential.userId}
-						AND credential_id = ${credential.credentialId} AND path = ${SENT_MAILBOX_PATH} AND scope_id IS NULL),
-					${raw}, ARRAY[${"\\Seen"}]::text[], ${date}::timestamp,
+						AND credential_id = ${credential.credentialId} AND path = ${SENT_MAILBOX_PATH} AND scope_id IS NULL)::text,
+					${raw}::text, ARRAY[${"\\Seen"}::text]::text[], ${date}::timestamp,
 					${APPEND_MAX_BYTES_PER_USER}::bigint, ${APPEND_MAX_MESSAGES_PER_USER}::integer)`),
 		]);
 		const row = appended.rows[0];
