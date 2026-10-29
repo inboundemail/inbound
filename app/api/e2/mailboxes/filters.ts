@@ -142,8 +142,8 @@ async function applyFilters(
 		if (!folder) return fail(set, 404, "Folder not found");
 		const limit = Math.min(body.limit ?? APPLY_MAX_BATCH, APPLY_MAX_BATCH);
 		const result = await db.execute(sql`
-			SELECT processed, last_uid FROM imap_apply_filters(${owner.userId},
-				${owner.credentialId}, ${folder.id}, ${body.afterUid ?? 0}::integer,
+			SELECT processed, last_uid FROM imap_apply_filters(${owner.userId}::text,
+				${owner.credentialId}::text, ${folder.id}::text, ${body.afterUid ?? 0}::integer,
 				${limit}::integer, ${filterId}::text)`);
 		const row = result.rows[0];
 		const processed = Number(row?.processed ?? 0);

@@ -155,7 +155,7 @@ export class MailStore {
 		principal: AuthenticatedMailbox,
 	): Promise<MailboxRow[]> {
 		const rows = await this.sql<StoredMailbox[]>`
-			SELECT * FROM imap_ensure(${principal.userId}, ${principal.credentialId})`;
+			SELECT * FROM imap_ensure(${principal.userId}::text, ${principal.credentialId}::text)`;
 		return rows.map(toMailbox);
 	}
 
@@ -218,9 +218,9 @@ export class MailStore {
 		subscribed: boolean | null = null,
 	): Promise<boolean> {
 		const rows = await this.sql<StoredMailbox[]>`
-			SELECT * FROM imap_folder(${principal.userId}, ${principal.credentialId},
-				${operation}, ${normalizeMailboxPath(path)},
-				${newPath === null ? null : normalizeMailboxPath(newPath)}, ${subscribed})`;
+			SELECT * FROM imap_folder(${principal.userId}::text, ${principal.credentialId}::text,
+				${operation}::text, ${normalizeMailboxPath(path)}::text,
+				${newPath === null ? null : normalizeMailboxPath(newPath)}::text, ${subscribed}::boolean)`;
 		return rows.length > 0;
 	}
 
@@ -263,8 +263,8 @@ export class MailStore {
 	): Promise<{ uidValidity: number; uid: number }> {
 		try {
 			const rows = await this.sql<{ uid: number; uid_validity: number }[]>`
-				SELECT * FROM imap_append(${owner.userId}, ${owner.credentialId}, ${mailbox.id},
-					${raw}, ${normalizeFlags(flags)}::text[], ${internalDate.toISOString()}::timestamp,
+				SELECT * FROM imap_append(${owner.userId}::text, ${owner.credentialId}::text, ${mailbox.id}::text,
+					${raw}::text, ${normalizeFlags(flags)}::text[], ${internalDate.toISOString()}::timestamp,
 					${this.options.appendMaxBytesPerUser}::bigint, ${this.options.appendMaxMessagesPerUser}::integer)`;
 			if (!rows[0]) throw new Error("Mailbox not found");
 			return { uid: rows[0].uid, uidValidity: rows[0].uid_validity };
@@ -289,8 +289,8 @@ export class MailStore {
 		const rows = await this.sql<
 			{ source_uid: number; destination_uid: number }[]
 		>`
-			SELECT * FROM imap_transfer(${owner.userId}, ${owner.credentialId},
-				${sourceMailboxId}, ${destination.id}, ${uids}::integer[], ${move})`;
+			SELECT * FROM imap_transfer(${owner.userId}::text, ${owner.credentialId}::text,
+				${sourceMailboxId}::text, ${destination.id}::text, ${uids}::integer[], ${move}::boolean)`;
 		return {
 			uidValidity: destination.uidValidity,
 			sourceUid: rows.map((row) => row.source_uid),
@@ -328,7 +328,7 @@ export class MailStore {
 		);
 		const rows = await this.sql<{ uid: number }[]>`
 			SELECT uid FROM imap_mailbox_expunges
-			WHERE mailbox_id = ${sourceMailboxId} AND uid = ANY(${uids})
+			WHERE mailbox_id = ${sourceMailboxId} AND uid = ANY(${uids}::integer[])
 			  AND ${ownedMailbox(this.sql, sourceMailboxId, owner)} ORDER BY uid ASC`;
 		return { ...result, expunged: rows.map((row) => row.uid) };
 	}
@@ -339,7 +339,7 @@ export class MailStore {
 		uids: number[],
 	): Promise<number[]> {
 		const rows = await this.sql<{ uid: number }[]>`
-			SELECT * FROM imap_expunge(${owner.userId}, ${owner.credentialId}, ${mailboxId}, ${uids}::integer[], ${true})`;
+			SELECT * FROM imap_expunge(${owner.userId}::text, ${owner.credentialId}::text, ${mailboxId}::text, ${uids}::integer[], ${true}::boolean)`;
 		return rows.map((row) => row.uid).sort((a, b) => a - b);
 	}
 
@@ -348,7 +348,7 @@ export class MailStore {
 		principal: AuthenticatedMailbox,
 	): Promise<number> {
 		const rows = await this.sql<StoredMailbox[]>`
-			SELECT * FROM imap_sync(${principal.userId}, ${principal.credentialId}, ${mailbox.id})`;
+			SELECT * FROM imap_sync(${principal.userId}::text, ${principal.credentialId}::text, ${mailbox.id}::text)`;
 		return Math.max(
 			0,
 			(rows[0]?.uid_next ?? mailbox.uidNext) - mailbox.uidNext,
@@ -445,7 +445,7 @@ export class MailStore {
 		const rows = uids
 			? await this.sql<MessageRow[]>`
 				SELECT uid, structured_email_id, raw_source, flags, internal_date, size
-				FROM imap_mailbox_messages WHERE mailbox_id = ${mailboxId} AND uid = ANY(${uids})
+				FROM imap_mailbox_messages WHERE mailbox_id = ${mailboxId} AND uid = ANY(${uids}::integer[])
 				  AND ${ownedMailbox(this.sql, mailboxId, owner)} ORDER BY uid ASC`
 			: await this.sql<MessageRow[]>`
 				SELECT uid, structured_email_id, raw_source, flags, internal_date, size
@@ -505,7 +505,7 @@ export class MailStore {
 				: await this.sql<{ raw_content: string | null }[]>`
 				SELECT se.raw_content FROM structured_emails se
 				WHERE se.id = ${messageId} AND se.user_id = ${principal.userId}
-				  AND imap_visible(${principal.userId}, ${principal.credentialId}, se.id) LIMIT 1`;
+				  AND imap_visible(${principal.userId}::text, ${principal.credentialId}::text, se.id) LIMIT 1`;
 		const raw = rows[0]?.raw_content;
 		return typeof raw === "string" ? Buffer.from(raw, "utf8") : null;
 	}
@@ -518,8 +518,8 @@ export class MailStore {
 		flags: string[],
 	): Promise<Array<{ uid: number; flags: string[] }>> {
 		const rows = await this.sql<MessageRow[]>`
-			SELECT * FROM imap_flags(${owner.userId}, ${owner.credentialId}, ${mailboxId},
-				${uids}::integer[], ${action}, ${normalizeFlags(flags)}::text[])`;
+			SELECT * FROM imap_flags(${owner.userId}::text, ${owner.credentialId}::text, ${mailboxId}::text,
+				${uids}::integer[], ${action}::text, ${normalizeFlags(flags)}::text[])`;
 		return rows.map((row) => ({ uid: row.uid, flags: parseFlags(row.flags) }));
 	}
 
@@ -538,8 +538,8 @@ export class MailStore {
 		requestedUids?: number[],
 	): Promise<number[]> {
 		const rows = await this.sql<{ uid: number }[]>`
-			SELECT * FROM imap_expunge(${owner.userId}, ${owner.credentialId}, ${mailboxId},
-				${requestedUids ?? null}::integer[], ${false})`;
+			SELECT * FROM imap_expunge(${owner.userId}::text, ${owner.credentialId}::text, ${mailboxId}::text,
+				${requestedUids ?? null}::integer[], ${false}::boolean)`;
 		return rows.map((row) => row.uid).sort((a, b) => a - b);
 	}
 
