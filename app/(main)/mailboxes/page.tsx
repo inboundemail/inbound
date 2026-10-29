@@ -15,6 +15,7 @@ import Refresh2 from "@/components/icons/refresh-2";
 import Trash2 from "@/components/icons/trash-2";
 import { MailboxDialog } from "@/components/mailboxes/MailboxDialog";
 import { MailboxPasswordDialog } from "@/components/mailboxes/MailboxPasswordDialog";
+import { SpamFilterSettings } from "@/components/mailboxes/SpamFilterSettings";
 import SidebarToggleButton from "@/components/sidebar-toggle-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -317,6 +318,7 @@ export default function MailboxesPage() {
 				</div>
 
 				<div className="mx-auto max-w-5xl p-2 py-4">
+					<SpamFilterSettings />
 					{mailboxes.length > 0 && (
 						<section
 							aria-labelledby={connectionSettingsId}
