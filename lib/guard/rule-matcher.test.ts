@@ -1274,6 +1274,23 @@ describe("junk verdict", () => {
 		expect(withCurrentSummary(old).summary.spam).toMatchObject({ p_ge3: 1, base_level: 4 });
 	});
 
+	it("junks an SES virus failure without a classification unless the filter is off", () => {
+		for (const level of ["lenient", "standard", "strict"] as const) {
+			expect(classifierJunkVerdict(level, null, "PASS", "FAIL")).toEqual({
+				isJunk: true,
+				reason: "ses_spam",
+			});
+		}
+		expect(classifierJunkVerdict("standard", null, "PASS", "PASS")).toBeNull();
+		expect(classifierJunkVerdict("off", null, "PASS", "FAIL")).toEqual({
+			isJunk: false,
+			reason: null,
+		});
+		expect(
+			resolveJunkVerdict(null, "standard", null, null, "fail"),
+		).toEqual({ isJunk: true, reason: "ses_spam" });
+	});
+
 	it("ignores prompt injection, which is not junk by itself", () => {
 		expect(
 			classifierJunkVerdict("strict", summaryWith({ prompt_injection: 4 }), null),

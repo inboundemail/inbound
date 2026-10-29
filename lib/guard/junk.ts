@@ -19,15 +19,19 @@ export async function getSpamFilterLevel(
 	return isSpamFilterLevel(row?.level) ? row.level : DEFAULT_SPAM_FILTER_LEVEL;
 }
 
-export async function loadSesSpamVerdict(
+/** The SES spam and virus verdicts for a received email. */
+export async function loadSesVerdicts(
 	sesEventId: string,
-): Promise<string | null> {
+): Promise<{ spam: string | null; virus: string | null }> {
 	const [row] = await db
-		.select({ spamVerdict: sesEvents.spamVerdict })
+		.select({
+			spamVerdict: sesEvents.spamVerdict,
+			virusVerdict: sesEvents.virusVerdict,
+		})
 		.from(sesEvents)
 		.where(eq(sesEvents.id, sesEventId))
 		.limit(1);
-	return row?.spamVerdict ?? null;
+	return { spam: row?.spamVerdict ?? null, virus: row?.virusVerdict ?? null };
 }
 
 /** Stores an automatic verdict, never replacing one the user set. */

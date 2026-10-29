@@ -27,9 +27,7 @@ Each email gets a level from 0 (none) to 4 (clear) for spam, phishing, fraud, ma
 
 Prompt injection (text aimed at an AI reading the email) is checked too, but never marks an email as junk by itself.
 
-An attachment that fails the receiving server's virus scan counts as clear malware.
-
-Unless the level is `off`, an email that fails the receiving server's spam check is also marked as junk.
+Unless the level is `off`, an email that fails the receiving server's spam check or virus scan is also marked as junk. A failed virus scan counts as clear malware.
 
 ```bash
 curl -X PUT https://inbound.new/api/e2/spam-filter \

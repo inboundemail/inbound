@@ -99,20 +99,27 @@ export function isSpamFilterLevel(value: unknown): value is SpamFilterLevel {
 
 /**
  * The spam filter's verdict for an email, from its Jev classification summary
- * and the SES spam verdict (see dimensionIsJunk; prompt injection never makes
- * an email junk by itself). Returns null when there is nothing to decide on
- * (no classification and no SES spam failure), so an earlier verdict is kept.
+ * and the SES spam and virus verdicts (see dimensionIsJunk; prompt injection
+ * never makes an email junk by itself). An SES spam failure is junk. Without a
+ * classification, an SES virus failure is junk too (with one, it already sets
+ * malware to 4); both report `ses_spam`, the SES scan. Returns null when there
+ * is nothing to decide on, so an earlier verdict is kept.
  */
 export function classifierJunkVerdict(
 	level: SpamFilterLevel,
 	summary: ClassificationSummary | null | undefined,
 	sesSpamVerdict: string | null | undefined,
+	sesVirusVerdict?: string | null,
 ): JunkVerdict | null {
 	if (level === "off") return { isJunk: false, reason: null };
 	if (sesSpamVerdict?.toUpperCase() === "FAIL") {
 		return { isJunk: true, reason: "ses_spam" };
 	}
-	if (!summary) return null;
+	if (!summary) {
+		return sesVirusVerdict?.toUpperCase() === "FAIL"
+			? { isJunk: true, reason: "ses_spam" }
+			: null;
+	}
 	const junk = JUNK_DIMENSIONS.some((name) => {
 		const dimension = summary[name];
 		return dimension ? dimensionIsJunk(level, dimension) : false;
@@ -130,6 +137,7 @@ export function resolveJunkVerdict(
 	level: SpamFilterLevel,
 	summary: ClassificationSummary | null | undefined,
 	sesSpamVerdict: string | null | undefined,
+	sesVirusVerdict?: string | null,
 ): JunkVerdict | null {
 	if (guard?.matchedRule && guard.action === "junk") {
 		return { isJunk: true, reason: "guard_rule" };
@@ -137,7 +145,7 @@ export function resolveJunkVerdict(
 	if (guard?.matchedRule && guard.action === "allow") {
 		return { isJunk: false, reason: "guard_rule" };
 	}
-	return classifierJunkVerdict(level, summary, sesSpamVerdict);
+	return classifierJunkVerdict(level, summary, sesSpamVerdict, sesVirusVerdict);
 }
 
 /** The `spam` object exposed in webhooks and the API. */

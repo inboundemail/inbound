@@ -26,7 +26,7 @@ import {
 import { getOrCreateVerificationToken } from "@/lib/webhooks/verification";
 import {
 	getSpamFilterLevel,
-	loadSesSpamVerdict,
+	loadSesVerdicts,
 	settleJunkVerdict,
 	storeJunkVerdict,
 } from "@/lib/guard/junk";
@@ -458,16 +458,20 @@ async function routeEmailWithResult(
 		// Junk mail is still delivered; the verdict is stored and included in the webhook.
 		try {
 			const level = await getSpamFilterLevel(emailData.userId);
-			const sesSpamVerdict = inbound.classification
-				? inbound.classification.facts.ses_spam
+			const sesVerdicts = inbound.classification
+				? {
+						spam: inbound.classification.facts.ses_spam,
+						virus: inbound.classification.facts.ses_virus,
+					}
 				: level === "off"
 					? null
-					: await loadSesSpamVerdict(emailData.sesEventId);
+					: await loadSesVerdicts(emailData.sesEventId);
 			const verdict = resolveJunkVerdict(
 				guardFeatureEnabled ? inbound.guard : null,
 				level,
 				inbound.classification?.summary,
-				sesSpamVerdict,
+				sesVerdicts?.spam,
+				sesVerdicts?.virus,
 			);
 			if (verdict) {
 				await storeJunkVerdict(
