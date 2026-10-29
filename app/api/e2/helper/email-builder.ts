@@ -5,6 +5,8 @@
  */
 
 import { nanoid } from 'nanoid'
+import * as mimeFuncs from 'nodemailer/lib/mime-funcs'
+import * as qp from 'nodemailer/lib/qp'
 import { findUnsafeCustomHeader, isReservedHeaderName } from '@/app/api/e2/helper/header-safety'
 import {
   extractDomain as extractMailboxDomain,
@@ -82,16 +84,40 @@ function generateBoundary(): string {
   return `----=_Part_${nanoid()}_${Date.now()}`
 }
 
+const MAX_HEADER_LINE_LENGTH = 998
+const NON_ASCII = /[^\u0000-\u007f]/
+
 /**
- * Encode content for email transmission
- * Uses quoted-printable for text and base64 for attachments
+ * Quoted-printable body encoding (RFC 2045): UTF-8 bytes outside printable
+ * ASCII and trailing whitespace become =XX, and lines are soft-wrapped at 76
+ * characters. Line breaks are normalised to CRLF first.
  */
-function encodeQuotedPrintable(text: string): string {
-  // Simple quoted-printable encoding for basic text
-  // For production, consider using a proper library
-  return text
-    .replace(/=/g, '=3D')
-    .replace(/\r\n?|\n/g, '\r\n')
+export function encodeQuotedPrintable(text: string): string {
+  return qp.wrap(qp.encode(text.replace(/\r\n?|\n/g, '\r\n')), 76)
+}
+
+/**
+ * Header text as RFC 2047 encoded words when it contains non-ASCII characters
+ * or a literal `=?`, otherwise unchanged.
+ */
+export function encodeHeaderText(value: string): string {
+  if (NON_ASCII.test(value) || value.includes('=?')) {
+    return mimeFuncs.encodeWord(value, 'Q', 52)
+  }
+  return value
+}
+
+/**
+ * Folds a header field at whitespace to 76-character lines (RFC 5322 2.2.3).
+ * A value that would still exceed the 998-character line limit is sent as
+ * encoded words, which can always be folded.
+ */
+function foldHeader(name: string, value: string): string {
+  const folded = mimeFuncs.foldLines(`${name}: ${value}`, 76)
+  if (folded.split('\r\n').every((line) => line.length <= MAX_HEADER_LINE_LENGTH)) {
+    return folded
+  }
+  return mimeFuncs.foldLines(`${name}: ${mimeFuncs.encodeWord(value, 'Q', 52)}`, 76)
 }
 
 /**
@@ -114,8 +140,8 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
     attachments = []
   } = params
 
-  const hasText = !!textBody
   const hasHtml = !!htmlBody
+  const hasText = !!textBody || !hasHtml
   
   // Separate CID attachments from regular attachments
   const cidAttachments = attachments.filter(att => att.content_id)
@@ -181,14 +207,14 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
   
   // Build headers
   const headers = [
-    `From: ${from}`,
-    `To: ${to.length > 0 ? formatAddressList('to', to) : 'undisclosed-recipients:;'}`,
-    cc && cc.length > 0 ? `Cc: ${formatAddressList('cc', cc)}` : null,
-    replyTo && replyTo.length > 0 ? `Reply-To: ${formatAddressList('reply_to', replyTo)}` : null,
-    `Subject: ${subject}`,
+    foldHeader('From', from),
+    foldHeader('To', to.length > 0 ? formatAddressList('to', to) : 'undisclosed-recipients:;'),
+    cc && cc.length > 0 ? foldHeader('Cc', formatAddressList('cc', cc)) : null,
+    replyTo && replyTo.length > 0 ? foldHeader('Reply-To', formatAddressList('reply_to', replyTo)) : null,
+    foldHeader('Subject', encodeHeaderText(subject)),
     formattedMessageId ? `Message-ID: ${formattedMessageId}` : null,
     formattedInReplyTo ? `In-Reply-To: ${formattedInReplyTo}` : null,
-    formattedReferences.length > 0 ? `References: ${formattedReferences.join(' ')}` : null,
+    formattedReferences.length > 0 ? foldHeader('References', formattedReferences.join(' ')) : null,
     `Date: ${formatEmailDate(date)}`,
     'MIME-Version: 1.0',
   ].filter((header): header is string => header !== null)
@@ -332,7 +358,6 @@ function addContentPart(
     messageParts.push('Content-Transfer-Encoding: quoted-printable')
     messageParts.push('')
     messageParts.push(encodeQuotedPrintable(textBody || ''))
-    messageParts.push('')
     
     // HTML part
     messageParts.push(`--${alternativeBoundary}`)
@@ -340,7 +365,6 @@ function addContentPart(
     messageParts.push('Content-Transfer-Encoding: quoted-printable')
     messageParts.push('')
     messageParts.push(encodeQuotedPrintable(htmlBody || ''))
-    messageParts.push('')
     
     messageParts.push(`--${alternativeBoundary}--`)
     
@@ -357,7 +381,7 @@ function addContentPart(
     }
     messageParts.push(encodeQuotedPrintable(textBody || ''))
     
-  } else if (hasHtml) {
+  } else {
     // HTML only
     if (headers) {
       headers.push('Content-Type: text/html; charset=UTF-8')
@@ -369,17 +393,6 @@ function addContentPart(
       messageParts.push('')
     }
     messageParts.push(encodeQuotedPrintable(htmlBody || ''))
-    
-  } else {
-    // No content
-    if (headers) {
-      headers.push('Content-Type: text/plain; charset=UTF-8')
-      messageParts.push(...headers, '')
-    } else {
-      messageParts.push('Content-Type: text/plain; charset=UTF-8')
-      messageParts.push('')
-    }
-    messageParts.push('[No content]')
   }
 }
 
