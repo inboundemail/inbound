@@ -18,7 +18,7 @@ Each mailbox credential includes these folders:
 | `Junk` | `\Junk` | Incoming mail marked as junk, from every configured scope. See [Junk](#junk) |
 | `Archive` | `\Archive` | Archived messages, shared with the mailbox HTTP API |
 
-The personal namespace is `""` and the hierarchy separator is `/`. `INBOX` and the special-use folders cannot be deleted or renamed. With a `read_write` credential you can create, rename, and delete other folders. Renaming a folder also renames its subfolders. Creating or renaming onto an existing name returns `NO [ALREADYEXISTS]`.
+The personal namespace is `""` and the hierarchy separator is `/`. `INBOX` and the special-use folders cannot be deleted or renamed. With a `read_write` credential you can create, rename, and delete other folders. Renaming a folder also renames its subfolders; deleting a folder keeps its subfolders. Creating or renaming onto an existing custom folder returns `NO [ALREADYEXISTS]`, and onto a special-use or `Scopes/...` name returns `NO [CANNOT]`. Read-only credentials can't change folders or subscriptions.
 
 Folders, flags, and appended messages belong to one credential. Other credentials on the same account don't see them.
 
@@ -43,24 +43,26 @@ Scope folders are filtered views of the same messages as `INBOX` (junk mail appe
 
 ## Capabilities
 
-The server advertises exactly these capabilities:
+Before login, the server advertises exactly these capabilities:
 
 ```text
 IMAP4rev1 APPENDLIMIT=1048576 AUTH=PLAIN CHILDREN ENABLE ID IDLE MOVE NAMESPACE SASL-IR SPECIAL-USE UIDPLUS UNSELECT UTF8=ACCEPT WITHIN
 ```
 
+After login, `AUTH=PLAIN` and `SASL-IR` are no longer listed.
+
 Supported commands:
 
-- Authentication: `LOGIN` and `AUTHENTICATE PLAIN` (with `SASL-IR`). A `PLAIN` authorization identity different from the login email is rejected.
+- Authentication: `LOGIN` and `AUTHENTICATE PLAIN` (with `SASL-IR`). A `PLAIN` authorization identity different from the login email is rejected with `NO [AUTHORIZATIONFAILED]`.
 - Folders: `LIST`, `LSUB`, `NAMESPACE`, `SELECT`, `EXAMINE`, `STATUS`, `CREATE`, `RENAME`, `DELETE`, `SUBSCRIBE`, `UNSUBSCRIBE`.
 - Messages: `FETCH`, `SEARCH`, `STORE`, `COPY`, `MOVE`, and their `UID` forms, plus `EXPUNGE`, `UID EXPUNGE`, `APPEND`, `CLOSE`, `UNSELECT`, `CHECK`, `NOOP`, and `IDLE`.
-- `ENABLE UTF8=ACCEPT`. Other `ENABLE` arguments are ignored.
+- `ENABLE UTF8=ACCEPT`, before a folder is selected. Other `ENABLE` arguments are ignored.
 
-`COPY` and `APPEND` return `COPYUID` and `APPENDUID`. `MOVE` returns `COPYUID` followed by an untagged `EXPUNGE` for every moved message, and moving a message into the folder it's already in returns `NO`. `EXPUNGE` and `UID EXPUNGE` send an untagged `EXPUNGE` for each removed message.
+`COPY` and `APPEND` return `COPYUID` and `APPENDUID`. `MOVE` returns `COPYUID` followed by an untagged `EXPUNGE` for every moved message, and moving a message into the folder it's already in returns `NO [CANNOT]`. `EXPUNGE` and `UID EXPUNGE` send an untagged `EXPUNGE` for each removed message.
 
 `SUBSCRIBE` and `UNSUBSCRIBE` persist per credential; `LSUB` returns subscribed folders.
 
-Extensions that aren't advertised are not supported, including `STARTTLS` (use implicit TLS on port `993`), `CONDSTORE`, `QRESYNC`, `QUOTA`, `COMPRESS=DEFLATE`, `SORT`, `THREAD`, `ACL`, OAuth (`XOAUTH2` or `OAUTHBEARER`), and the Gmail-only `XLIST`. Requests that would enable `CONDSTORE`, such as `SELECT (CONDSTORE)` or `SEARCH MODSEQ`, are rejected.
+Extensions that aren't advertised are not supported, including `STARTTLS` (use implicit TLS on port `993`), `CONDSTORE`, `QRESYNC`, `QUOTA`, `COMPRESS=DEFLATE`, `SORT`, `THREAD`, `ACL`, OAuth (`XOAUTH2` or `OAUTHBEARER`), and the Gmail-only `XLIST`. Requests that would enable `CONDSTORE`, such as `SELECT (CONDSTORE)` or `SEARCH MODSEQ`, are rejected with `BAD`.
 
 ### Search
 
@@ -70,7 +72,7 @@ Extensions that aren't advertised are not supported, including `STARTTLS` (use i
 - `HEADER` searches on other header names match the raw message.
 - `SENTBEFORE`, `SENTON`, and `SENTSINCE` use the parsed `Date` header of received mail and don't match appended messages. `BEFORE`, `ON`, `SINCE`, `OLDER`, and `YOUNGER` use the internal date, which is when Inbound received the message.
 - `\Recent` is never set, so `RECENT` and `NEW` match nothing.
-- Search keys the server doesn't implement are ignored instead of rejected, which can return more messages than requested. Filter results in your application when exact matching matters.
+- Unknown search keys are rejected with `BAD Unknown search term`. A `CHARSET` argument is accepted and ignored. Dates are compared in UTC.
 
 ## New-message notifications
 
@@ -94,17 +96,21 @@ Flags set on a received message in `INBOX` also apply to the same message in the
 
 New messages, expunges and moves are pushed to other open sessions on the same folder as `EXISTS` and `EXPUNGE`. Flag changes arrive as `FETCH FLAGS`, including changes made through HTTP. The update journal is stored in Postgres rather than in a gateway process, so it survives restarts. Expunge history is retained for approximately seven days; a session behind the retained history is disconnected and must reconnect and resynchronize rather than silently miss removals.
 
+### First sync of a large mailbox
+
+Each sync adds at most 500 received messages that this credential hasn't seen yet, newest first, so new arrivals don't wait behind older mail. On a mailbox with a lot of existing mail, `INBOX` fills in over the next few syncs, and older messages can get higher UIDs than newer ones.
+
 ### Received-message deletion and moves
 
 <Warning>
-  `EXPUNGE` and `MOVE` do not delete the underlying received email. Expunging or moving a received message out of `INBOX` or a scope folder removes it from `INBOX` and every scope folder of that credential, and it stays removed there. It remains available through the API and dashboard, and in other credentials. Copying or moving it back into `INBOX` restores it. Don't use IMAP deletion as permanent deletion.
+  `EXPUNGE` and `MOVE` do not delete the underlying received email. Expunging or moving a received message out of `INBOX` removes it from `INBOX` and every scope folder of that credential, and it stays removed there. It remains available through the API and dashboard, and in other credentials. Copying or moving it back into `INBOX` restores it. Don't use IMAP deletion as permanent deletion.
 </Warning>
 
 Moving a received message into a custom folder or `Trash` does create a copy there that stays until you expunge it. Moving it into `Junk` marks it as junk instead (see [Junk](#junk)). Messages created with `APPEND`, such as sent copies and drafts, are stored separately and are permanently removed when their last copy is expunged.
 
 ### Sent mail
 
-Immediate sending through SMTP or the HTTP API with a `read_write` mailbox password saves a message in that credential's `Sent` in the background. Clients may still save their own copy with `APPEND`: a matching `Message-ID` already in `Sent` is deduplicated, in either order. Account-key sends also save to enabled read/write mailboxes with an exact sending-identity match; domain scopes alone do not select a mailbox. SMTP-only credentials and scheduled sends do not populate a mailbox. Historical sent email records are not backfilled.
+Immediate sending through SMTP or the HTTP API with a `read_write` mailbox password saves a message in that credential's `Sent` in the background. Clients may still save their own copy with `APPEND`: a matching `Message-ID` already in `Sent` is deduplicated, in either order. Account-key sends also save to enabled read/write mailboxes whose sending address (or login email, when no sending address is set) exactly matches the From address; domain scopes alone do not select a mailbox. SMTP-only credentials and scheduled sends do not populate a mailbox. Historical sent email records are not backfilled.
 
 <Warning>
   SMTP accepts messages up to 3 MiB, but client `APPEND` accepts at most 1 MiB. Automatic sent copies count toward the account's appended-storage quota. A sent-copy failure does not undo an accepted delivery or cause it to be retried.
@@ -112,7 +118,7 @@ Immediate sending through SMTP or the HTTP API with a `read_write` mailbox passw
 
 ### Junk
 
-The [junk filter](/mailboxes/junk-filter) decides whether a received message belongs in `INBOX` or in `Junk`; it is never in both. Each credential can have [its own spam level and sender lists](/mailboxes/junk-filter#per-mailbox-spam-settings). Moving a received message from `INBOX` or a scope folder into `Junk` marks it as junk, and moving it from `Junk` back to `INBOX` marks it as not junk. The decision applies to this credential only, in IMAP and the mailbox API; it doesn't change other credentials, the account verdict or webhooks. Copying a received message into `INBOX` or `Junk` has the same effect.
+The [junk filter](/mailboxes/junk-filter) decides whether a received message belongs in `INBOX` or in `Junk`; it is never in both. Each credential can have [its own spam level and sender lists](/mailboxes/junk-filter#per-mailbox-spam-settings). Moving a received message from `INBOX` into `Junk` marks it as junk, and moving it from `Junk` back to `INBOX` marks it as not junk. The decision applies to this credential only, in IMAP and the mailbox API; it doesn't change other credentials, the account verdict or webhooks. Copying a received message into `INBOX` or `Junk` has the same effect.
 
 New mail appears in `INBOX` or `Junk` once the junk filter has made its verdict, normally within a few seconds of arrival (at most about two minutes if filtering is unavailable). If the verdict that applies to this credential changes later, for example when the account verdict changes in the email API or dashboard and the credential has no decision of its own, the message moves between `INBOX` and `Junk` with its flags, and open sessions receive `EXPUNGE` for the folder it left and `EXISTS` for the folder it entered.
 
@@ -124,17 +130,15 @@ Expunging a received message from `Junk` removes it from the credential's folder
 
 ### Guard-filtered messages
 
-Messages blocked by Guard are not synchronized, and their content cannot be fetched. If a message is blocked after it was already synchronized, it is removed from the credential's folders the next time the client lists or opens a folder. Email clients may still show content they cached earlier.
+Messages blocked by Guard are not synchronized, and their content cannot be fetched. If a message is blocked after it was already synchronized, it is removed from the credential's folders at the next sync: right away for open sessions, otherwise when the client opens the folder or requests its `STATUS`. Email clients may still show content they cached earlier.
 
 ## Scope changes and revoked access
 
-When a credential's scopes, permissions, sender settings, enabled state, or password change, its active IMAP sessions receive `* BYE Mailbox credentials or scopes changed` and must reconnect. On the next folder listing or selection, folders for removed scopes disappear, and received messages that no longer match any remaining scope are removed from all of the credential's folders. Appended messages are not affected.
+When a credential's scopes, login email, type, access mode, sender settings, enabled state, password, `protocols`, `allowedIps` or `selfService` change, its active IMAP sessions immediately receive `* BYE Mailbox credentials or scopes changed` and must reconnect. Changing its name, `storageQuotaBytes`, `dailySendLimit`, spam settings or filters doesn't end sessions. On the next folder listing or selection, folders for removed scopes disappear, and received messages that no longer match any remaining scope are removed from all of the credential's folders. Appended messages are not affected.
 
-Each login rechecks that the login email's domain is verified, that at least one scope domain is verified, and that an exact sender identity is still covered by a verified scope. It also checks that the credential's `protocols.imap` is enabled and that the client address is in its `allowedIps` (see [Access and Limits](/mailboxes/access-and-limits)). If not, authentication fails with the same `NO [AUTHENTICATIONFAILED]` as a wrong password. Changing the credential's `protocols`, `allowedIps` or `selfService` settings immediately logs out its active IMAP sessions. Clients must reconnect using the current settings. Open sessions are also periodically rechecked for changes such as domain verification.
+Each login rechecks that the login email's domain is verified, that at least one scope domain is verified, and that an exact sender identity is still covered by a verified scope. It also checks that the credential's `protocols.imap` is enabled and that the client address is in its `allowedIps` (see [Access and Limits](/mailboxes/access-and-limits)). If not, authentication fails with the same `NO [AUTHENTICATIONFAILED]` as a wrong password.
 
-<Note>
-  A domain losing its verified status does not disconnect an established IMAP session. To end current access, disable the credential, change its scopes or permissions, rotate its password, or delete it.
-</Note>
+Open sessions repeat these checks about every 5 minutes. A session whose login email domain is no longer verified receives `* BYE Mailbox credentials are no longer valid`; one that lost a verified scope domain receives `* BYE Mailbox credentials or scopes changed`. Every session must log in again after 24 hours (`* BYE Session expired, please log in again`). To end access right away, disable the credential, rotate its password, or delete it.
 
 ## Message and storage limits
 
@@ -145,7 +149,7 @@ Each login rechecks that the login email's domain is verified, that at least one
 | Appended messages per account | 5,000 |
 | Appended storage per credential | The credential's `storageQuotaBytes`, if set |
 
-An `APPEND` over 1 MiB is rejected with `NO [TOOBIG]`. The account storage and message-count limits are shared by all of the account's credentials and folders. A credential's own [storage quota](/mailboxes/access-and-limits#storage-quota) counts each message it stored once, however many folders hold it. Exceeding either limit returns `NO [OVERQUOTA]`. For SMTP limits, see [Send with SMTP](/mailboxes/connect-smtp#limits).
+An `APPEND` over 1 MiB is rejected with `NO [TOOBIG]`. Appended messages must be valid UTF-8 without NUL bytes; encode other 8-bit content with base64 or quoted-printable. The account storage and message-count limits are shared by all of the account's credentials and folders. A credential's own [storage quota](/mailboxes/access-and-limits#storage-quota) counts each message it stored once, however many folders hold it. Exceeding either limit returns `NO [OVERQUOTA]`. For SMTP limits, see [Send with SMTP](/mailboxes/connect-smtp#limits).
 
 ## Connection limits and timeouts
 
@@ -153,19 +157,22 @@ An `APPEND` over 1 MiB is rejected with `NO [TOOBIG]`. The account storage and m
 | --- | --- |
 | TLS | Implicit TLS on port `993`, TLS 1.2 or later |
 | Simultaneous connections per client IP address | 20 |
-| Inactivity timeout before login | 60 seconds |
+| Time to log in after connecting | 30 seconds |
 | Inactivity timeout after login | About 30 minutes |
 | Maximum `IDLE` duration | 30 minutes |
+| Maximum session length | 24 hours |
 | Failed logins | 10 per login address and IP address, and 50 per IP address, in a 15-minute window |
 
-Connections over the per-IP limit receive `* BYE Too many connections from this address`. Once a login is throttled, attempts return `NO [AUTHENTICATIONFAILED]` until the window ends, even with the correct password. Authentication requests are also rate-limited by the API, so avoid reconnect loops and retry with backoff.
+Connections over the per-IP limit are closed without a reply. A connection that hasn't logged in within 30 seconds receives `* BYE Authentication timeout, closing connection`. Once a login is throttled, attempts return `NO [AUTHENTICATIONFAILED]` until the window ends, even with the correct password. Authentication requests are also rate-limited by the API, so avoid reconnect loops and retry with backoff.
 
 ## Troubleshooting
 
 | Symptom | Likely cause | What to check |
 | --- | --- | --- |
-| Authentication fails | Wrong login, rotated password, disabled credential, SMTP-only credential, IMAP turned off in `protocols`, client address outside `allowedIps`, unverified domain, or login throttling | Confirm the login email, current password, credential type, enabled state, protocols, allowed IPs, and verified domains. Wait 15 minutes after repeated failures. |
-| An expected message is missing | Recipient is outside the scopes, the message is Guard-blocked, a filter moved it, or the folder hasn't been refreshed | Check the recipient, scope domains, Guard status, and the credential's filters, then reselect the folder |
+| Authentication fails | Wrong login, rotated password, disabled credential, SMTP-only credential, IMAP turned off in `protocols`, client address outside `allowedIps`, unverified domain, or login throttling | Confirm the login email, current password, credential type, enabled state, protocols, allowed IPs, and verified domains. Wait 15 minutes after repeated failures. See [Authentication fails](/mailboxes/connect-imap#authentication-fails). |
+| `APPEND` fails with `NO [TOOBIG]` or `NO [OVERQUOTA]` | The message is over 1 MiB, or appended storage is full | Delete drafts and saved copies you don't need, or raise the credential's `storageQuotaBytes` |
+| An expected message is in `Junk` | The junk filter marked it, or a filter or spam setting did | Move it to `INBOX` to mark it as not junk for this credential, or allow the sender in the credential's [spam settings](/mailboxes/junk-filter#per-mailbox-spam-settings) |
+| An expected message is missing | Recipient is outside the scopes, the message is Guard-blocked or in `Junk`, a filter moved it, the mailbox is still catching up on older mail, or the folder hasn't been refreshed | Check the recipient, scope domains, Guard status, `Junk`, and the credential's filters, then reselect the folder |
 | A scope folder rejects changes | `Scopes/*` folders are always read-only | Change the message in `INBOX` or copy it to a writable folder |
 | A deleted received message is still in the dashboard or account API | Mailbox deletion only removes it from the credential's folders | Manage its account-level state through the dashboard or account email API |
 | No sent copy appears | The copy is still pending, the send had no matching mailbox identity, or persistence failed | Use a `read_write` mailbox credential or exact sending identity and check available storage |
