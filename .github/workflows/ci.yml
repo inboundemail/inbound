@@ -39,6 +39,8 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile
+        working-directory: packages/imap-gateway
       - run: bun run test:e2e
       - name: Stop local services
         if: always()
