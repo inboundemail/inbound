@@ -4,12 +4,29 @@ import {
 	buildRawEmailMessage,
 	encodeQuotedPrintable,
 } from "@/app/api/e2/helper/email-builder";
+import {
+	findUnsafeCustomHeader,
+	normalizeMessageId,
+} from "@/app/api/e2/helper/header-safety";
+import { ensureMessageIdHeader } from "@/lib/email-management/mailbox-sent-copy";
 
 function lines(message: string): string[] {
 	return message.split("\r\n");
 }
 
 describe("buildRawEmailMessage recipient headers", () => {
+	it("finds Message-ID only in the header block for CRLF and LF messages", () => {
+		for (const newline of ["\r\n", "\n"]) {
+			const raw = `Subject: body header${newline}${newline}Message-ID: <body@example.test>`;
+			expect(ensureMessageIdHeader(raw, "generated@example.test")).toBe(
+				`Message-ID: <generated@example.test>\r\n${raw}`,
+			);
+			const existing = `Message-ID: <original@example.test>${newline}${raw}`;
+			expect(ensureMessageIdHeader(existing, "generated@example.test")).toBe(existing);
+			expect(Buffer.from(ensureMessageIdHeader(Buffer.from(existing), "generated@example.test")).toString()).toBe(existing);
+		}
+	});
+
 	it("preserves visible To and Cc recipients without exposing Bcc", () => {
 		const message = buildRawEmailMessage({
 			from: "sender@example.com",
@@ -24,6 +41,38 @@ describe("buildRawEmailMessage recipient headers", () => {
 		expect(message).toContain("Cc: copied@example.com\r\n");
 		expect(message).not.toContain("blind@example.com");
 		expect(message).not.toMatch(/^Bcc:/m);
+	});
+
+	it("normalizes valid message IDs and rejects injected or malformed ones", () => {
+		expect(normalizeMessageId("abc.1@client.example.com")).toBe(
+			"<abc.1@client.example.com>",
+		);
+		expect(normalizeMessageId("<abc@[127.0.0.1]>")).toBe("<abc@[127.0.0.1]>");
+		for (const value of [
+			"<abc@example.com>\r\nBcc: x@example.com",
+			"<abc@example.com",
+			"<a b@example.com>",
+			"<x@y> <z@w>",
+			"no-at-sign",
+			`<${"a".repeat(500)}@example.com>`,
+		]) {
+			expect(normalizeMessageId(value)).toBeNull();
+		}
+		expect(findUnsafeCustomHeader("Message-ID", "<abc@example.com>")).toBe(
+			"Header Message-ID cannot be set through headers",
+		);
+	});
+
+	it("writes the given message ID as the Message-ID header", () => {
+		const message = buildRawEmailMessage({
+			from: "sender@example.com",
+			to: ["visible@example.com"],
+			subject: "Subject",
+			textBody: "Body",
+			messageId: "<abc.1@client.example.com>",
+		});
+
+		expect(message).toContain("Message-ID: <abc.1@client.example.com>\r\n");
 	});
 
 	it("uses undisclosed recipients for Bcc-only mail", () => {

@@ -17,6 +17,11 @@ const RESERVED_HEADERS = new Set([
 	"received",
 ]);
 const RESERVED_HEADER_PREFIXES = ["content-", "x-ses-"];
+const MESSAGE_ID_ATOM = "[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*";
+const MESSAGE_ID = new RegExp(
+	`^${MESSAGE_ID_ATOM}@(?:${MESSAGE_ID_ATOM}|\\[[!-Z^-~]*\\])$`,
+);
+export const MAX_MESSAGE_ID_LENGTH = 500;
 
 type OutgoingEmailInput = {
 	from?: string;
@@ -44,6 +49,16 @@ function list(value: string | string[] | undefined): string[] {
  */
 export function stripHeaderBreaks(value: string): string {
 	return value.replace(HEADER_BREAKS, " ").trim();
+}
+
+export function normalizeMessageId(value: string): string | null {
+	const bracketed = value.startsWith("<");
+	if (bracketed !== value.endsWith(">")) return null;
+	const id = bracketed ? value.slice(1, -1) : value;
+	if (id.length + 2 > MAX_MESSAGE_ID_LENGTH || !MESSAGE_ID.test(id)) {
+		return null;
+	}
+	return `<${id}>`;
 }
 
 export function isReservedHeaderName(name: string): boolean {

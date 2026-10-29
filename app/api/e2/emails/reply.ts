@@ -34,6 +34,7 @@ import {
 import { checkRecipientsAgainstBlocklist } from "@/lib/email-management/email-blocking";
 import { evaluateSending } from "@/lib/email-management/email-evaluation";
 import { EmailThreader } from "@/lib/email-management/email-threader";
+import { saveSentCopies } from "@/lib/email-management/mailbox-sent-copy";
 import { enforceOutboundSendGuard } from "@/lib/email-management/outbound-send-guard";
 import { checkSendingSpike } from "@/lib/email-management/sending-spike-detector";
 import {
@@ -837,6 +838,16 @@ export const replyToEmail = new Elysia().post(
 					updatedAt: new Date(),
 				})
 				.where(eq(sentEmails.id, replyEmailId));
+
+			waitUntil(
+				saveSentCopies({
+					userId,
+					credential,
+					fromAddress,
+					raw: rawMessage,
+					sentEmailId: replyEmailId,
+				}),
+			);
 
 			// Track email usage with Autumn
 			if (!emailCheck.unlimited) {

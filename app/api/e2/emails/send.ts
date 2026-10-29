@@ -6,7 +6,11 @@ import {
 	processAttachments,
 } from "@/app/api/e2/helper/attachment-processor";
 import { buildRawEmailMessage } from "@/app/api/e2/helper/email-builder";
-import { findUnsafeHeaderInput } from "@/app/api/e2/helper/header-safety";
+import {
+	findUnsafeHeaderInput,
+	MAX_MESSAGE_ID_LENGTH,
+	normalizeMessageId,
+} from "@/app/api/e2/helper/header-safety";
 import {
 	authorizeOutboundSend,
 	checkEmailSendAllowance,
@@ -58,6 +62,14 @@ const SendEmailBodySchema = t.Object({
 	),
 	attachments: t.Optional(t.Array(AttachmentSchema)),
 	tags: t.Optional(t.Array(TagSchema)),
+	message_id: t.Optional(
+		t.String({
+			minLength: 3,
+			maxLength: MAX_MESSAGE_ID_LENGTH,
+			description:
+				"Client Message-ID retained in the mailbox's Sent copy, e.g. <id@example.com>. SES assigns its own delivery Message-ID. Generated for mailbox sends when omitted.",
+		}),
+	),
 	scheduled_at: t.Optional(
 		t.String({
 			description: "ISO 8601 date or natural language for scheduling",
@@ -106,7 +118,10 @@ export const sendEmail = new Elysia().post(
 		console.log("📧 POST /api/e2/emails - Starting request");
 
 		// Auth & rate limit validation
-		const { userId, senderPolicy } = await authenticateEmailSend(request, set);
+		const { userId, senderPolicy, credential } = await authenticateEmailSend(
+			request,
+			set,
+		);
 		console.log("✅ Authentication successful for userId:", userId);
 
 		// Check new account warmup limits
@@ -138,6 +153,20 @@ export const sendEmail = new Elysia().post(
 		if (unsafeHeaderInput) {
 			set.status = 400;
 			return { error: unsafeHeaderInput };
+		}
+
+		let messageId: string | undefined;
+		if (body.message_id !== undefined) {
+			const normalized = normalizeMessageId(body.message_id);
+			if (!normalized) {
+				set.status = 400;
+				return { error: "Invalid message_id" };
+			}
+			if (body.scheduled_at) {
+				set.status = 400;
+				return { error: "message_id cannot be used with scheduled_at" };
+			}
+			messageId = normalized;
 		}
 
 		// Handle scheduled_at if provided
@@ -308,6 +337,7 @@ export const sendEmail = new Elysia().post(
 					subject: body.subject,
 					textBody: body.text,
 					htmlBody: body.html,
+					messageId,
 					customHeaders: body.headers,
 					attachments: processedAttachments,
 					date: new Date(),
@@ -320,6 +350,7 @@ export const sendEmail = new Elysia().post(
 				textBody: body.text,
 				htmlBody: body.html,
 			},
+			credential,
 		});
 		if (delivery.status) set.status = delivery.status;
 		return delivery.body;

@@ -61,6 +61,25 @@ import { authenticateMailbox } from "../mailboxes/authenticate";
 import { authenticateSmtp } from "../mailboxes/authenticate-smtp";
 import { createMailbox } from "../mailboxes/create";
 import { deleteMailbox } from "../mailboxes/delete";
+import {
+	appendFolderMessage,
+	copyFolderMessage,
+	deleteFolderMessage,
+	getFolderMessage,
+	getFolderMessageAttachment,
+	getFolderMessageRaw,
+	listFolderMessageAttachments,
+	listFolderMessages,
+	moveFolderMessage,
+	updateFolderMessageFlags,
+} from "@/app/api/e2/mailboxes/folder-messages";
+import {
+	createMailboxFolder,
+	deleteMailboxFolder,
+	expungeMailboxFolder,
+	listMailboxFolders,
+	updateMailboxFolder,
+} from "@/app/api/e2/mailboxes/folders";
 import { listMailboxes } from "../mailboxes/list";
 import {
 	getMailbox,
@@ -527,6 +546,21 @@ https://inbound.new/api/e2
 	.use(updateMailboxMessage)
 	.use(getMailboxThread)
 	.use(getMailboxAttachment)
+	.use(listMailboxFolders)
+	.use(createMailboxFolder)
+	.use(updateMailboxFolder)
+	.use(deleteMailboxFolder)
+	.use(expungeMailboxFolder)
+	.use(listFolderMessages)
+	.use(appendFolderMessage)
+	.use(getFolderMessage)
+	.use(updateFolderMessageFlags)
+	.use(deleteFolderMessage)
+	.use(getFolderMessageRaw)
+	.use(moveFolderMessage)
+	.use(copyFolderMessage)
+	.use(listFolderMessageAttachments)
+	.use(getFolderMessageAttachment)
 	.use(getSpamFilter)
 	.use(updateSpamFilter)
 	// Onboarding routes

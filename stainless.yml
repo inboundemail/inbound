@@ -100,6 +100,27 @@ resources:
       update: put /api/e2/mailboxes/{id}
       delete: delete /api/e2/mailboxes/{id}
       rotate_password: post /api/e2/mailboxes/{id}/rotate-password
+    subresources:
+      folders:
+        methods:
+          list: get /api/e2/mailboxes/{id}/folders
+          create: post /api/e2/mailboxes/{id}/folders
+          update: patch /api/e2/mailboxes/{id}/folders/{folder}
+          delete: delete /api/e2/mailboxes/{id}/folders/{folder}
+          expunge: post /api/e2/mailboxes/{id}/folders/{folder}/expunge
+        subresources:
+          messages:
+            methods:
+              list: get /api/e2/mailboxes/{id}/folders/{folder}/messages
+              append: post /api/e2/mailboxes/{id}/folders/{folder}/messages
+              retrieve: get /api/e2/mailboxes/{id}/folders/{folder}/messages/{uid}
+              update_flags: patch /api/e2/mailboxes/{id}/folders/{folder}/messages/{uid}
+              delete: delete /api/e2/mailboxes/{id}/folders/{folder}/messages/{uid}
+              raw: get /api/e2/mailboxes/{id}/folders/{folder}/messages/{uid}/raw
+              move: post /api/e2/mailboxes/{id}/folders/{folder}/messages/{uid}/move
+              copy: post /api/e2/mailboxes/{id}/folders/{folder}/messages/{uid}/copy
+              list_attachments: get /api/e2/mailboxes/{id}/folders/{folder}/messages/{uid}/attachments
+              download_attachment: get /api/e2/mailboxes/{id}/folders/{folder}/messages/{uid}/attachments/{index}
 
 settings:
   # All generated integration tests that hit the prism mock http server are marked
