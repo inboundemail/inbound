@@ -127,6 +127,9 @@ function isLockTimeout(error: unknown): boolean {
 }
 
 export async function applyMigrations(url: string, folder = MIGRATIONS_FOLDER) {
+	if (/-pooler\./i.test(hostOf(url))) {
+		throw new Error("Migrations require a direct database connection. Use DATABASE_URL_UNPOOLED, not a Neon -pooler URL.");
+	}
 	return withClient(url, async (client) => {
 		// drizzle's migrator opens its own transaction, so hold a session-level lock around it.
 		await client.query("select pg_advisory_lock(hashtext($1))", [MIGRATION_LOCK_KEY]);
@@ -147,7 +150,7 @@ export async function applyMigrations(url: string, folder = MIGRATIONS_FOLDER) {
 					}
 					throw error;
 				} finally {
-					await client.query("reset lock_timeout");
+					await client.query("reset lock_timeout").catch(() => {});
 				}
 			}
 			return status.pending.map((m) => m.tag);

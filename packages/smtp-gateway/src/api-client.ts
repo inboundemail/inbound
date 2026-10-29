@@ -21,6 +21,7 @@ export interface SendEmailPayload {
 	cc?: string[];
 	bcc?: string[];
 	reply_to?: string[];
+	message_id?: string;
 	headers?: Record<string, string>;
 	attachments?: Array<{
 		filename: string;

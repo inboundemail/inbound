@@ -25,8 +25,32 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE imap_mailboxes TO imap_gateway;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE imap_mailbox_messages TO imap_gateway;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE imap_appended_messages TO imap_gateway;
 GRANT SELECT, INSERT, DELETE ON TABLE imap_mailbox_removals TO imap_gateway;
-GRANT EXECUTE ON FUNCTION imap_notify_mailbox_message() TO imap_gateway;
-GRANT EXECUTE ON FUNCTION imap_notify_structured_email_junk() TO imap_gateway;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE imap_mailbox_expunges TO imap_gateway;
+GRANT SELECT, INSERT, UPDATE ON TABLE imap_source_versions TO imap_gateway;
+REVOKE SELECT ON TABLE imap_credentials, email_domains FROM imap_gateway;
+GRANT SELECT (id, user_id, login_address, type, access_mode, enabled) ON TABLE imap_credentials TO imap_gateway;
+GRANT SELECT (id, domain, status, user_id) ON TABLE email_domains TO imap_gateway;
+GRANT SELECT ON TABLE imap_credential_scopes TO imap_gateway;
+REVOKE ALL ON FUNCTION imap_message_state(), imap_notify_state(), imap_notify_received(), imap_stamp_verdict(),
+  imap_cleanup_appended(), imap_expunge_state(), imap_notify_message_state(),
+  imap_record_received_change(), imap_record_received_update(), imap_invalidate_removals(),
+  imap_notify_mailbox_message(), imap_notify_structured_email_junk(), imap_notify_new_structured_email(),
+  imap_notify_credential_changed(), imap_notify_scope_changed() FROM imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_scope_visibility(text, text), imap_visibility_fingerprint(text, text) TO imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_authorize(text, text, boolean) TO imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_visible(text, text, text, text) TO imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_lock(text, text, text[], boolean) TO imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_ensure(text, text) TO imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_flags(text, text, text, integer[], text, text[]) TO imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_expunge(text, text, text, integer[], boolean) TO imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_message_id(text) TO imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_append(text, text, text, text, text[], timestamp, bigint, integer) TO imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_reconcile(text, text, text[]) TO imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_sync(text, text, text) TO imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_transfer(text, text, text, text, integer[], boolean) TO imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_folder(text, text, text, text, text, boolean) TO imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_normalize_flags(text[]) TO imap_gateway;
+GRANT EXECUTE ON FUNCTION imap_normalize_path(text) TO imap_gateway;
 
 ALTER ROLE imap_gateway SET statement_timeout = '30s';
 ALTER ROLE imap_gateway SET lock_timeout = '5s';

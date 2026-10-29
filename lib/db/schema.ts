@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+	bigint,
 	boolean,
 	index,
 	integer,
@@ -1226,6 +1227,11 @@ export const imapMailboxes = pgTable(
 		uidValidity: integer("uid_validity").notNull(),
 		uidNext: integer("uid_next").notNull().default(1),
 		modseq: integer("modseq").notNull().default(0),
+		expungeFloor: integer("expunge_floor").notNull().default(0),
+		syncedAt: timestamp("synced_at"),
+		visibilityFingerprint: text("visibility_fingerprint"),
+		sourceFingerprint: text("source_fingerprint"),
+		sourcePendingAt: timestamp("source_pending_at"),
 		subscribed: boolean("subscribed").notNull().default(true),
 		createdAt: timestamp("created_at").defaultNow(),
 		updatedAt: timestamp("updated_at").defaultNow(),
@@ -1265,6 +1271,7 @@ export const imapMailboxMessages = pgTable(
 		internalDate: timestamp("internal_date").notNull(),
 		size: integer("size"),
 		modseq: integer("modseq").notNull().default(0),
+		createdModseq: integer("created_modseq"),
 		createdAt: timestamp("created_at").defaultNow(),
 	},
 	(table) => ({
@@ -1284,6 +1291,37 @@ export const imapMailboxMessages = pgTable(
 			"imap_mailbox_messages_appended_reference_idx",
 		).on(table.rawSource, table.structuredEmailId),
 		mailboxModseqIdx: index("imap_mailbox_messages_mailbox_modseq_idx").on(
+			table.mailboxId,
+			table.modseq,
+		),
+	}),
+);
+
+export const imapSourceVersions = pgTable(
+	"imap_source_versions",
+	{
+		userId: varchar("user_id", { length: 255 }).notNull(),
+		scopeKey: varchar("scope_key", { length: 34 }).notNull(),
+		revision: bigint("revision", { mode: "number" }).notNull().default(0),
+	},
+	(table) => ({
+		pk: primaryKey({ columns: [table.userId, table.scopeKey] }),
+	}),
+);
+
+export const imapMailboxExpunges = pgTable(
+	"imap_mailbox_expunges",
+	{
+		mailboxId: varchar("mailbox_id", { length: 255 })
+			.notNull()
+			.references(() => imapMailboxes.id, { onDelete: "cascade" }),
+		uid: integer("uid").notNull(),
+		modseq: integer("modseq").notNull(),
+		createdAt: timestamp("created_at").notNull().defaultNow(),
+	},
+	(table) => ({
+		pk: primaryKey({ columns: [table.mailboxId, table.uid] }),
+		mailboxModseqIdx: index("imap_mailbox_expunges_mailbox_modseq_idx").on(
 			table.mailboxId,
 			table.modseq,
 		),

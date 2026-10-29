@@ -124,6 +124,43 @@ describe("mapRawMessage", () => {
 		expect(mapped.payload.bcc).toEqual(["Hidden@example.com"]);
 	});
 
+	it("passes the original Message-ID as message_id, never as a custom header", async () => {
+		const mapped = await mapRawMessage(
+			message([
+				"From: sender@example.com",
+				"To: recipient@example.com",
+				"Message-ID: <ABC.123@client.example.com>",
+				"Subject: Sent copy",
+			]),
+			envelope,
+		);
+
+		expect(mapped.payload.message_id).toBe("<ABC.123@client.example.com>");
+		expect(JSON.stringify(mapped.payload.headers ?? {})).not.toMatch(
+			/message-id/i,
+		);
+	});
+
+	it("drops malformed or missing Message-IDs so the API generates one", async () => {
+		for (const header of [
+			"Message-ID: <x@y> <z@w>",
+			"Message-ID: <weird id@example.com>",
+			"Message-ID: =?utf-8?Q?a=0D=0AX-Evil=3A_1?=@example.com",
+			`Message-ID: <${"a".repeat(500)}@example.com>`,
+			null,
+		]) {
+			const mapped = await mapRawMessage(
+				message([
+					"From: sender@example.com",
+					"To: recipient@example.com",
+					...(header ? [header] : []),
+				]),
+				envelope,
+			);
+			expect(mapped.payload.message_id).toBeUndefined();
+		}
+	});
+
 	it("keeps BCC-only recipients hidden", async () => {
 		const mapped = await mapRawMessage(
 			message([

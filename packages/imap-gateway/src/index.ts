@@ -52,20 +52,12 @@ function revalidateSessions(force: boolean): void {
 	});
 }
 notifier.onReconnect = () => revalidateSessions(true);
-store.onExpunged = (mailboxIds) => notifier.wakeMailboxes(mailboxIds);
 await notifier.start();
 const sessionCheck = setInterval(
 	() => revalidateSessions(false),
 	Math.min(config.sessionRevalidateMs, 60_000),
 );
 sessionCheck.unref();
-const orphanCleanup = setInterval(() => {
-	store.cleanupOrphanedAppendedMessages().catch((err: Error) => {
-		console.error("[imap-gateway] orphan cleanup failed", err.message);
-	});
-}, 60 * 60_000);
-orphanCleanup.unref();
-await store.cleanupOrphanedAppendedMessages();
 
 function readTls() {
 	return config.tlsKeyPath && config.tlsCertPath
@@ -169,7 +161,6 @@ let shuttingDown = false;
 function shutdown(): void {
 	if (shuttingDown) return;
 	shuttingDown = true;
-	clearInterval(orphanCleanup);
 	clearInterval(tlsReload);
 	clearInterval(sessionCheck);
 	const shutdownTimeout = setTimeout(() => {
