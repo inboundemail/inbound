@@ -17,9 +17,12 @@ import { createRequire } from "node:module";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-	ClassificationSummary,
-	DimensionSummary,
+import type { JevAnswer } from "@/lib/ai/jev";
+import {
+	buildStoredClassification,
+	type ClassificationSummary,
+	type DimensionSummary,
+	withCurrentSummary,
 } from "@/lib/guard/classification";
 import {
 	classifierJunkVerdict,
@@ -4039,7 +4042,7 @@ describe("E2 API - Email E2E", () => {
 				server.listen(0, "127.0.0.1", resolve),
 			);
 			const port = (server.server.address() as net.AddressInfo).port;
-			const socket = net.connect(port, "127.0.0.1");
+			let socket = net.connect(port, "127.0.0.1");
 			let sequence = 0;
 			const command = (value: string) =>
 				new Promise<string>((resolve, reject) => {
@@ -4115,6 +4118,59 @@ describe("E2 API - Email E2E", () => {
 					await store.expunge(principal!, folder.id, [appended.uid]),
 				).toEqual([appended.uid]);
 				await store.deleteMailbox(principal!, "RoleRenamed");
+				for (const [change, restore] of [
+					[{ protocols: { imap: false } }, { protocols: null }],
+					[{ allowedIps: ["203.0.113.0/24"] }, { allowedIps: null }],
+					[
+						{ selfService: { filters: false } },
+						{ selfService: { filters: true } },
+					],
+				]) {
+					await new Promise<void>((resolve, reject) => {
+						let output = "";
+						const timer = setTimeout(() => {
+							socket.off("data", receive);
+							reject(new Error(`IMAP IDLE timeout: ${output}`));
+						}, 5000);
+						const receive = (chunk: Buffer) => {
+							output += chunk.toString();
+							if (!/(?:^|\r\n)\+/.test(output)) return;
+							clearTimeout(timer);
+							socket.off("data", receive);
+							resolve();
+						};
+						socket.on("data", receive);
+						socket.write(`T${++sequence} IDLE\r\n`);
+					});
+					const closed = new Promise<void>((resolve, reject) => {
+						const timer = setTimeout(
+							() =>
+								reject(
+									new Error(
+										"IMAP session stayed open after access controls changed",
+									),
+								),
+							5000,
+						);
+						socket.once("close", () => {
+							clearTimeout(timer);
+							resolve();
+						});
+					});
+					const [updated] = await Promise.all([
+						mutate(base, "PUT", change),
+						closed,
+					]);
+					expect(updated.status).toBe(200);
+					expect((await mutate(base, "PUT", restore)).status).toBe(200);
+					socket = net.connect(port, "127.0.0.1");
+					await new Promise<void>((resolve, reject) => {
+						socket.once("data", () => resolve());
+						socket.once("error", reject);
+					});
+					await command(`LOGIN "${token}-a@${E2E_DOMAIN}" "${first.password}"`);
+					await command('SELECT "Processed"');
+				}
 				await command("LOGOUT");
 			} finally {
 				socket.destroy();
@@ -4141,6 +4197,7 @@ describe("E2 API - Email E2E", () => {
 			const dimensions: DimensionSummary[] = [];
 			for (let level = 0; level <= 4; level++) {
 				for (const confidence of [0.59, 0.6, 0.9]) {
+					dimensions.push({ level, confidence });
 					for (const base_level of [0, 2, 4])
 						dimensions.push({ level, confidence, base_level });
 				}
@@ -4200,11 +4257,114 @@ describe("E2 API - Email E2E", () => {
 					expected: classifierJunkVerdict(level, null, "PASS", "FAIL")!.isJunk,
 				});
 			}
+			const answers: Array<Record<string, JevAnswer>> = [
+				{
+					spam: {
+						score: 4,
+						confidence: 0.1,
+						probabilities: { "3": 0.5, "4": 0.5 },
+					},
+				},
+				{
+					phishing: {
+						score: 3,
+						confidence: 0.4,
+						probabilities: { "0": 0.1, "3": 0.4, "4": 0.5 },
+					},
+				},
+				{ phishing: { score: 2, confidence: 0.8, probabilities: {} } },
+				{ fraud: { score: 2, confidence: 0.8, probabilities: {} } },
+				{ impersonation: { noul: 0.2 } },
+				{ malware: { noul: 0.9 } },
+				{ spam: { score: 0, confidence: 1, probabilities: {} } },
+			];
+			for (const answer of answers) {
+				for (const factChanges of [
+					{},
+					{ ses_spam: "FAIL" },
+					{ ses_virus: "FAIL" },
+					{ dmarc: "FAIL", reply_to_differs_from_sender: true },
+					{
+						spf: "FAIL",
+						dkim: "FAIL",
+						display_name_contains_other_address: true,
+					},
+					{ reply_to_differs_from_sender: true },
+				]) {
+					const stored = buildStoredClassification("local-parity", answer, {
+						spf: "PASS",
+						dkim: "PASS",
+						dmarc: "PASS",
+						ses_spam: "PASS",
+						ses_virus: "PASS",
+						sender_domain: "example.test",
+						link_domains: [],
+						reply_to_differs_from_sender: false,
+						display_name_contains_other_address: false,
+						...factChanges,
+					})!;
+					const noBase = structuredClone(stored);
+					const noMass = structuredClone(stored);
+					for (const label of [
+						"spam",
+						"phishing",
+						"fraud",
+						"impersonation",
+						"malware",
+						"prompt_injection",
+					] as const) {
+						delete noBase.summary[label].base_level;
+						delete noMass.summary[label].p_ge2;
+						delete noMass.summary[label].p_ge3;
+						delete noMass.summary[label].p_eq4;
+					}
+					for (const classification of [
+						stored,
+						noBase,
+						noMass,
+						{ ...noBase, answers: {} },
+					]) {
+						const current = withCurrentSummary(classification);
+						for (const level of SPAM_FILTER_LEVELS) {
+							cases.push({
+								level,
+								classification,
+								expected: classifierJunkVerdict(
+									level,
+									current.summary,
+									current.facts.ses_spam,
+									current.facts.ses_virus,
+								)!.isJunk,
+							});
+						}
+					}
+				}
+			}
 			const encoded = JSON.stringify(cases).replaceAll("'", "''");
 			expect(
 				psql(
 					`select count(*) from jsonb_to_recordset('${encoded}'::jsonb) as cases(level text, classification jsonb, expected boolean)
 				where imap_mailbox_junk(false, 'classifier', null::text, classification::text, level, null::text[], null::text[], null::boolean) is distinct from expected`,
+					E2E_DATABASE,
+				),
+			).toBe("0");
+			const malformed = JSON.stringify(
+				[
+					{ score: "invalid", confidence: 1, probabilities: {} },
+					{ score: 3, confidence: 1, probabilities: [] },
+					{ score: 3, confidence: 1, probabilities: { "3": "invalid" } },
+					{ noul: "invalid" },
+				].map((spam) => ({
+					answers: { spam },
+					summary: { spam: { level: 2, confidence: 0.5 } },
+				})),
+			).replaceAll("'", "''");
+			expect(
+				psql(
+					`select count(*) from jsonb_array_elements('${malformed}'::jsonb) classification
+				where imap_filter_email(null::text, null::text, null::text, '{}'::text[], null::text,
+				  null::text, null::text, null::text, 0::integer, classification::text) -> 'jev'
+				  is distinct from classification -> 'summary'`,
 					E2E_DATABASE,
 				),
 			).toBe("0");
@@ -4275,6 +4435,18 @@ describe("E2 API - Email E2E", () => {
 			expect((await gateway("imap")).status).toBe(200);
 			expect((await gateway("smtp")).status).toBe(200);
 			expect((await self("folders")).status).toBe(401);
+			const protocolRefusals = await Promise.all(
+				Array.from({ length: 65 }, async () => {
+					const response = await fetch(`${API_URL}/mailboxes/me/folders`, {
+						headers: { Authorization: `Bearer ${password}` },
+					});
+					await response.arrayBuffer();
+					return response.status;
+				}),
+			);
+			expect(protocolRefusals.every((status) => status === 401)).toBe(true);
+			expect((await patch({ protocols: { api: true } })).status).toBe(200);
+			expect((await self("folders")).status).toBe(200);
 			expect(
 				(
 					await patch({
@@ -4286,6 +4458,32 @@ describe("E2 API - Email E2E", () => {
 			expect((await gateway("imap")).status).toBe(200);
 			expect((await gateway("smtp", "2001:db8::1234")).status).toBe(200);
 			expect((await gateway("imap", "198.51.100.1")).status).toBe(401);
+			const ipRefusals = await Promise.all(
+				Array.from({ length: 65 }, async () => {
+					const response = await fetch(`${API_URL}/mailboxes/me/folders`, {
+						headers: { Authorization: `Bearer ${password}` },
+					});
+					await response.arrayBuffer();
+					return response.status;
+				}),
+			);
+			expect(ipRefusals.every((status) => status === 401)).toBe(true);
+			const allowedSource = await apiRequestWithKey("/emails", password, {
+				method: "POST",
+				headers: {
+					"x-inbound-gateway-secret": E2E_GATEWAY_SECRET,
+					"x-inbound-client-ip": "203.0.113.42",
+				},
+				body: JSON.stringify({
+					from: E2E_SENDER_ADDRESS,
+					to: E2E_RECIPIENT_ADDRESS,
+					subject: token,
+					text: "policy limiter",
+					scheduled_at: new Date(Date.now() + 60_000).toISOString(),
+				}),
+			});
+			expect(allowedSource.status).toBe(400);
+			expect(await allowedSource.text()).toContain("daily sending limit");
 			expect(
 				(
 					await apiRequestWithKey("/mailboxes/me/folders", password, {

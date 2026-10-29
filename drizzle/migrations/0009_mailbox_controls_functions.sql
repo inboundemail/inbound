@@ -1,3 +1,9 @@
+ALTER TABLE mailbox_message_state ADD COLUMN spam_revision text;
+--> statement-breakpoint
+ALTER TABLE mailbox_message_state ADD COLUMN effective_junk boolean;
+--> statement-breakpoint
+ALTER TABLE mailbox_message_state ADD COLUMN spam_source_updated_at timestamp;
+--> statement-breakpoint
 CREATE FUNCTION imap_filter_text(p_text text)
 RETURNS text LANGUAGE plpgsql IMMUTABLE SECURITY INVOKER SET search_path = public, pg_temp AS $$
 DECLARE low integer := 0; high integer; middle integer;
@@ -22,19 +28,97 @@ EXCEPTION WHEN invalid_text_representation THEN RETURN NULL;
 END;
 $$;
 --> statement-breakpoint
-CREATE FUNCTION imap_mailbox_junk(p_default boolean, p_reason text, p_from text, p_classification text,
-  p_level text, p_allow text[], p_block text[], p_override boolean)
+CREATE FUNCTION imap_classification_summary(p_classification jsonb)
+RETURNS jsonb LANGUAGE plpgsql IMMUTABLE SECURITY INVOKER SET search_path = public, pg_temp AS $$
+DECLARE summary jsonb := p_classification -> 'summary'; answers jsonb := p_classification -> 'answers';
+  facts jsonb := coalesce(p_classification -> 'facts', '{}'); name text; answer jsonb; item jsonb; current boolean := true;
+  level numeric; confidence numeric; probability numeric; total numeric; ge2 numeric; ge3 numeric; eq4 numeric; auth_failed boolean;
+BEGIN
+  IF jsonb_typeof(answers) IS DISTINCT FROM 'object' THEN RETURN summary; END IF;
+  FOREACH name IN ARRAY ARRAY['spam','phishing','fraud','impersonation','malware','prompt_injection'] LOOP
+    answer := answers -> name;
+    IF NOT coalesce((summary -> name) ? 'base_level', false) THEN current := false; EXIT; END IF;
+    IF answer ? 'score' THEN
+      SELECT sum(value::numeric) INTO total FROM jsonb_each_text(coalesce(nullif(answer -> 'probabilities', 'null'), '{}'))
+      WHERE btrim(key) ~ '^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$' OR btrim(key) = '';
+      IF total > 0 AND NOT coalesce((summary -> name) ? 'p_ge3', false) THEN current := false; EXIT; END IF;
+    END IF;
+  END LOOP;
+  IF current THEN RETURN summary; END IF;
+  summary := '{}';
+  FOREACH name IN ARRAY ARRAY['spam','phishing','fraud','impersonation','malware','prompt_injection'] LOOP
+    answer := answers -> name;
+    IF answer ? 'score' THEN
+      level := least(4, greatest(0, floor((answer ->> 'score')::numeric + 0.5)));
+      confidence := (answer ->> 'confidence')::numeric;
+      item := jsonb_build_object('level', level, 'base_level', level, 'confidence', confidence);
+      SELECT sum(value::numeric), sum(value::numeric) FILTER (WHERE coalesce(nullif(btrim(key), ''), '0')::numeric >= 2),
+        sum(value::numeric) FILTER (WHERE coalesce(nullif(btrim(key), ''), '0')::numeric >= 3),
+        sum(value::numeric) FILTER (WHERE coalesce(nullif(btrim(key), ''), '0')::numeric >= 4)
+        INTO total, ge2, ge3, eq4 FROM jsonb_each_text(coalesce(nullif(answer -> 'probabilities', 'null'), '{}'))
+        WHERE btrim(key) ~ '^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$' OR btrim(key) = '';
+      IF total > 0 THEN item := item || jsonb_build_object('p_ge2', coalesce(ge2, 0) / total,
+        'p_ge3', coalesce(ge3, 0) / total, 'p_eq4', coalesce(eq4, 0) / total); END IF;
+    ELSE
+      probability := (answer ->> 'noul')::numeric;
+      level := CASE WHEN probability >= 0.9 THEN 4 WHEN probability >= 0.6 THEN 3 WHEN probability >= 0.4 THEN 2 WHEN probability >= 0.2 THEN 1 ELSE 0 END;
+      item := jsonb_build_object('level', level, 'base_level', level, 'confidence', coalesce(abs(2 * probability - 1), 0));
+    END IF;
+    summary := summary || jsonb_build_object(name, item);
+  END LOOP;
+  auth_failed := facts ->> 'dmarc' = 'FAIL' OR (facts ->> 'spf' = 'FAIL' AND facts ->> 'dkim' = 'FAIL');
+  FOREACH name IN ARRAY ARRAY['spam','phishing','fraud','impersonation','malware','prompt_injection'] LOOP
+    item := summary -> name; level := (item ->> 'level')::numeric;
+    IF name = 'phishing' THEN
+      IF auth_failed AND (facts ->> 'reply_to_differs_from_sender')::boolean THEN level := level + 1; END IF;
+      IF auth_failed AND (facts ->> 'display_name_contains_other_address')::boolean THEN level := level + 1; END IF;
+    ELSIF name = 'impersonation' THEN
+      IF auth_failed AND (facts ->> 'display_name_contains_other_address')::boolean THEN level := level + 1; END IF;
+      IF auth_failed AND level >= 2 THEN level := level + 1; END IF;
+    ELSIF name = 'fraud' AND (facts ->> 'reply_to_differs_from_sender')::boolean AND level >= 2 THEN level := level + 1;
+    ELSIF name = 'malware' AND facts ->> 'ses_virus' = 'FAIL' THEN
+      level := 4; item := item || '{"base_level":4,"confidence":1}'::jsonb;
+    ELSIF name = 'spam' AND facts ->> 'ses_spam' = 'FAIL' THEN level := greatest(level, 3);
+    END IF;
+    summary := jsonb_set(summary, ARRAY[name], item || jsonb_build_object('level', least(4, greatest(0, level))));
+  END LOOP;
+  RETURN summary || jsonb_build_object('risk', greatest((summary #>> '{phishing,level}')::numeric,
+    (summary #>> '{fraud,level}')::numeric, (summary #>> '{impersonation,level}')::numeric,
+    (summary #>> '{malware,level}')::numeric, (summary #>> '{prompt_injection,level}')::numeric,
+    least((summary #>> '{spam,level}')::numeric, 2)));
+EXCEPTION WHEN OTHERS THEN RETURN p_classification -> 'summary';
+END;
+$$;
+--> statement-breakpoint
+CREATE FUNCTION imap_spam_policy(p_user text, p_credential text)
+RETURNS TABLE(revision text, level text, default_policy boolean, allow_addresses text[], allow_domains text[], block_addresses text[], block_domains text[])
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public, pg_temp AS $$
+  WITH credential AS MATERIALIZED (
+    SELECT spam_level, spam_allow, spam_block FROM imap_credentials WHERE id = p_credential AND user_id = p_user
+  ), patterns AS MATERIALIZED (
+    SELECT lower(value) AS pattern, true AS allowed FROM credential, unnest(spam_allow[1:1000]) AS entries(value)
+    UNION ALL SELECT lower(value), false FROM credential, unnest(spam_block[1:1000]) AS entries(value)
+  )
+  SELECT md5(jsonb_build_array(spam_level, spam_allow, spam_block)::text), spam_level,
+    spam_level IS NULL AND coalesce(cardinality(spam_allow), 0) = 0 AND coalesce(cardinality(spam_block), 0) = 0,
+    ARRAY(SELECT pattern FROM patterns WHERE allowed AND strpos(pattern, '@') > 1),
+    ARRAY(SELECT ltrim(pattern, '@') FROM patterns WHERE allowed AND strpos(pattern, '@') <= 1),
+    ARRAY(SELECT pattern FROM patterns WHERE NOT allowed AND strpos(pattern, '@') > 1),
+    ARRAY(SELECT ltrim(pattern, '@') FROM patterns WHERE NOT allowed AND strpos(pattern, '@') <= 1)
+  FROM credential;
+$$;
+--> statement-breakpoint
+CREATE FUNCTION imap_mailbox_junk_prepared(p_default boolean, p_reason text, p_from text, p_classification text,
+  p_level text, p_allow_addresses text[], p_allow_domains text[], p_block_addresses text[], p_block_domains text[], p_override boolean)
 RETURNS boolean LANGUAGE plpgsql IMMUTABLE SECURITY INVOKER SET search_path = public, pg_temp AS $$
 DECLARE sender text; classification jsonb; summary jsonb; dimension jsonb; confident boolean; junk boolean;
   ses_spam text; ses_virus text;
 BEGIN
   IF p_override IS NOT NULL THEN RETURN p_override; END IF;
-  IF cardinality(p_allow) > 0 OR cardinality(p_block) > 0 THEN
+  IF cardinality(p_allow_addresses) > 0 OR cardinality(p_allow_domains) > 0 OR cardinality(p_block_addresses) > 0 OR cardinality(p_block_domains) > 0 THEN
     sender := lower(imap_filter_json(p_from) #>> '{addresses,0,address}');
-    IF EXISTS (SELECT 1 FROM unnest(p_allow[1:1000]) AS entries(value)
-      WHERE sender = lower(value) OR split_part(sender, '@', 2) = lower(ltrim(value, '@'))) THEN RETURN false; END IF;
-    IF EXISTS (SELECT 1 FROM unnest(p_block[1:1000]) AS entries(value)
-      WHERE sender = lower(value) OR split_part(sender, '@', 2) = lower(ltrim(value, '@'))) THEN RETURN true; END IF;
+    IF sender = ANY(p_allow_addresses) OR split_part(sender, '@', 2) = ANY(p_allow_domains) THEN RETURN false; END IF;
+    IF sender = ANY(p_block_addresses) OR split_part(sender, '@', 2) = ANY(p_block_domains) THEN RETURN true; END IF;
   END IF;
   IF p_reason IN ('user', 'guard_rule') THEN RETURN p_default; END IF;
   IF p_level IS NULL THEN RETURN p_default; END IF;
@@ -45,7 +129,7 @@ BEGIN
   ses_virus := upper(classification #>> '{facts,ses_virus}');
   IF ses_spam = 'FAIL' THEN RETURN true; END IF;
   IF p_reason = 'ses_spam' AND ses_spam IS NULL THEN RETURN p_default; END IF;
-  summary := classification -> 'summary';
+  summary := imap_classification_summary(classification);
   IF summary IS NULL OR jsonb_typeof(summary) <> 'object' THEN
     IF ses_virus = 'FAIL' THEN RETURN true; END IF;
     RETURN p_default;
@@ -70,6 +154,20 @@ BEGIN
   RETURN false;
 EXCEPTION WHEN OTHERS THEN RETURN p_default;
 END;
+$$;
+--> statement-breakpoint
+CREATE FUNCTION imap_mailbox_junk(p_default boolean, p_reason text, p_from text, p_classification text,
+  p_level text, p_allow text[], p_block text[], p_override boolean)
+RETURNS boolean LANGUAGE sql IMMUTABLE SECURITY INVOKER SET search_path = public, pg_temp AS $$
+  WITH patterns AS MATERIALIZED (
+    SELECT lower(value) AS pattern, true AS allowed FROM unnest(p_allow[1:1000]) AS entries(value)
+    UNION ALL SELECT lower(value), false FROM unnest(p_block[1:1000]) AS entries(value)
+  )
+  SELECT imap_mailbox_junk_prepared(p_default, p_reason, p_from, p_classification, p_level,
+    ARRAY(SELECT pattern FROM patterns WHERE allowed AND strpos(pattern, '@') > 1),
+    ARRAY(SELECT ltrim(pattern, '@') FROM patterns WHERE allowed AND strpos(pattern, '@') <= 1),
+    ARRAY(SELECT pattern FROM patterns WHERE NOT allowed AND strpos(pattern, '@') > 1),
+    ARRAY(SELECT ltrim(pattern, '@') FROM patterns WHERE NOT allowed AND strpos(pattern, '@') <= 1), p_override);
 $$;
 --> statement-breakpoint
 CREATE FUNCTION imap_filter_condition(p_email jsonb, p_condition jsonb, p_junk boolean)
@@ -206,15 +304,13 @@ RETURNS jsonb LANGUAGE sql IMMUTABLE SECURITY INVOKER SET search_path = public, 
     'recipient', to_jsonb(coalesce(p_recipients, '{}')), 'subject', imap_filter_text(p_subject),
     'headers', coalesce(imap_filter_json(p_headers), '{}'::jsonb), 'body', imap_filter_text(p_body),
     'has_attachment', coalesce(imap_filter_json(p_attachments) <> '[]'::jsonb, false), 'size', p_size,
-    'jev', imap_filter_json(p_classification) -> 'summary');
+    'jev', imap_classification_summary(imap_filter_json(p_classification)));
 $$;
 --> statement-breakpoint
 CREATE FUNCTION imap_invalidate_spam_settings()
 RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp AS $$
 BEGIN
   IF (NEW.spam_level, NEW.spam_allow, NEW.spam_block) IS DISTINCT FROM (OLD.spam_level, OLD.spam_allow, OLD.spam_block) THEN
-    PERFORM mb.id FROM imap_mailboxes mb WHERE mb.credential_id = NEW.id ORDER BY mb.id FOR UPDATE;
-    UPDATE imap_mailboxes SET source_fingerprint = NULL WHERE credential_id = NEW.id;
     PERFORM pg_notify('imap_state_changed', 'cred:' || NEW.id);
   END IF;
   RETURN NULL;
@@ -229,35 +325,40 @@ RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp
 BEGIN
   PERFORM imap_authorize(p_user, p_credential);
   PERFORM mb.id FROM imap_mailboxes mb
-  WHERE mb.user_id = p_user AND mb.credential_id = p_credential AND (mb.id = ANY(p_mailboxes) OR p_views)
+  WHERE mb.user_id = p_user AND mb.credential_id = p_credential AND (mb.id = ANY(p_mailboxes)
+    OR (p_views AND (mb.path IN ('INBOX', 'Junk') OR mb.scope_id IS NOT NULL
+      OR EXISTS (SELECT 1 FROM mailbox_filters f CROSS JOIN LATERAL jsonb_array_elements(f.actions) a
+        WHERE f.user_id = p_user AND f.credential_id = p_credential AND f.enabled
+          AND ((a ->> 'type' = 'move_to' AND a ->> 'value' IN (mb.id, mb.path))
+            OR (a ->> 'type' = 'move_to_trash' AND mb.path = 'Trash')))
+      OR EXISTS (SELECT 1 FROM mailbox_message_state state
+        WHERE state.credential_id = p_credential AND state.filter_mailbox_id = mb.id))))
   ORDER BY mb.id FOR UPDATE;
 END;
 $$;
 --> statement-breakpoint
 CREATE FUNCTION imap_reconcile_filters(p_user text, p_credential text, p_ids text[], p_source text)
 RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp SET plan_cache_mode = force_custom_plan AS $$
-DECLARE level text; allow_list text[]; block_list text[]; default_spam boolean; addresses text[]; domains text[];
+DECLARE addresses text[]; domains text[];
 BEGIN
-  PERFORM imap_lock(p_user, p_credential, '{}', true);
-  SELECT spam_level, spam_allow, spam_block INTO level, allow_list, block_list FROM imap_credentials
-    WHERE id = p_credential AND user_id = p_user;
-  default_spam := level IS NULL AND coalesce(cardinality(allow_list), 0) = 0 AND coalesce(cardinality(block_list), 0) = 0;
+  PERFORM imap_lock(p_user, p_credential, ARRAY[p_source], true);
   SELECT v.addresses, v.domains INTO addresses, domains FROM imap_scope_visibility(p_user, p_credential) v WHERE v.scope_id IS NULL;
-  WITH proposed AS MATERIALIZED (
+  WITH misplaced AS MATERIALIZED (
     SELECT mm.*, destination.id AS destination_id
     FROM imap_mailboxes mb JOIN imap_mailbox_messages mm ON mm.mailbox_id = mb.id
-    JOIN structured_emails se ON se.id = mm.structured_email_id AND se.user_id = p_user
-    LEFT JOIN mailbox_message_state state ON state.credential_id = p_credential AND state.structured_email_id = se.id
+    JOIN mailbox_message_state state ON state.credential_id = p_credential AND state.structured_email_id = mm.structured_email_id
     JOIN imap_mailboxes destination ON destination.user_id = p_user AND destination.credential_id = p_credential
       AND destination.scope_id IS NULL AND destination.path NOT LIKE 'Scopes/%'
       AND CASE WHEN state.filter_mailbox_id IS NOT NULL THEN destination.id = state.filter_mailbox_id
-        ELSE destination.path = CASE WHEN (CASE WHEN default_spam THEN coalesce(state.junk_override, se.is_junk)
-          ELSE imap_mailbox_junk(se.is_junk, se.junk_reason, se.from_data, se.jev_classification,
-            level, allow_list, block_list, state.junk_override) END) IS TRUE THEN 'Junk' ELSE 'INBOX' END END
+        ELSE destination.path = CASE WHEN coalesce(state.effective_junk, (SELECT se.is_junk FROM structured_emails se
+          WHERE se.id = state.structured_email_id AND se.user_id = p_user)) IS TRUE THEN 'Junk' ELSE 'INBOX' END END
     WHERE mb.user_id = p_user AND mb.credential_id = p_credential AND mb.scope_id IS NULL
       AND (mb.path IN ('INBOX', 'Junk') OR mb.id = p_source) AND mm.raw_source = 'structured'
-      AND (p_ids IS NULL OR se.id = ANY(p_ids)) AND se.guard_blocked IS NOT TRUE
+      AND (p_ids IS NULL OR mm.structured_email_id = ANY(p_ids)) AND state.spam_revision IS NOT NULL
       AND destination.id <> mb.id
+  ), proposed AS MATERIALIZED (
+    SELECT misplaced.* FROM misplaced JOIN structured_emails se ON se.id = misplaced.structured_email_id AND se.user_id = p_user
+    WHERE se.guard_blocked IS NOT TRUE
       AND (lower(se.recipient) = ANY(addresses)
         OR (cardinality(domains) > 0 AND split_part(lower(se.recipient), '@', 2) = ANY(domains) AND split_part(lower(se.recipient), '@', 1) <> 'dmarc')
         OR (se.envelope_recipients IS DISTINCT FROM ARRAY[se.recipient::text]
@@ -287,10 +388,8 @@ BEGIN
     JOIN structured_emails se ON se.id = mm.structured_email_id AND se.user_id = p_user
     LEFT JOIN mailbox_message_state state ON state.credential_id = p_credential AND state.structured_email_id = se.id
     WHERE mb.user_id = p_user AND mb.credential_id = p_credential AND mb.scope_id IS NOT NULL AND mm.raw_source = 'structured'
-      AND (p_ids IS NULL OR se.id = ANY(p_ids)) AND (state.filter_mailbox_id IS NOT NULL
-        OR (CASE WHEN default_spam THEN coalesce(state.junk_override, se.is_junk)
-          ELSE imap_mailbox_junk(se.is_junk, se.junk_reason, se.from_data, se.jev_classification,
-            level, allow_list, block_list, state.junk_override) END) IS TRUE)
+      AND (p_ids IS NULL OR se.id = ANY(p_ids)) AND state.spam_revision IS NOT NULL
+      AND (state.filter_mailbox_id IS NOT NULL OR coalesce(state.effective_junk, se.is_junk) IS TRUE)
   )
   DELETE FROM imap_mailbox_messages mm USING hidden WHERE mm.id = hidden.id;
 END;
@@ -304,39 +403,59 @@ END;
 $$;
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION imap_sync(p_user text, p_credential text, p_mailbox text)
-RETURNS SETOF imap_mailboxes LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp SET plan_cache_mode = force_custom_plan AS $$
-DECLARE box imap_mailboxes; floor integer; addresses text[]; domains text[]; fingerprint text; pending_at timestamp;
-  rules jsonb; folders jsonb; level text; allow_list text[]; block_list text[]; default_spam boolean; pending_ids text[]; backlog boolean;
+RETURNS SETOF imap_mailboxes LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp SET plan_cache_mode = force_custom_plan SET jit = off AS $$
+DECLARE box imap_mailboxes; checkpoint imap_mailboxes; floor integer; addresses text[]; domains text[]; fingerprint text; scanned_fingerprint text; pending_at timestamp;
+  rules jsonb; folders jsonb; policy record; pending_ids text[]; backlog boolean; hidden_ids text[]; hidden_mailboxes text[];
 BEGIN
   PERFORM imap_authorize(p_user, p_credential);
   PERFORM imap_ensure(p_user, p_credential);
-  PERFORM imap_lock(p_user, p_credential, '{}', true);
+  SELECT * INTO box FROM imap_mailboxes WHERE id = p_mailbox AND user_id = p_user AND credential_id = p_credential;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Mailbox not found'; END IF;
+  SELECT * INTO checkpoint FROM imap_mailboxes WHERE user_id = p_user AND credential_id = p_credential AND path = 'INBOX';
+  SELECT v.addresses, v.domains INTO addresses, domains FROM imap_scope_visibility(p_user, p_credential) v WHERE v.scope_id IS NULL;
+  SELECT md5(jsonb_build_array(spam_level, spam_allow, spam_block)::text) INTO fingerprint
+    FROM imap_credentials WHERE id = p_credential AND user_id = p_user;
+  SELECT md5(fingerprint || ':' || coalesce(string_agg(v.scope_key || ':' || v.revision, ',' ORDER BY v.scope_key), '')) INTO fingerprint
+  FROM imap_source_versions v WHERE v.user_id = p_user AND v.scope_key = ANY(ARRAY(
+    SELECT 'a:' || md5(address) FROM unnest(addresses) AS scopes(address)
+    UNION ALL SELECT 'd:' || md5(domain) FROM unnest(domains) AS scopes(domain)));
+  scanned_fingerprint := fingerprint;
+  IF checkpoint.source_fingerprint IS DISTINCT FROM fingerprint OR checkpoint.source_pending_at <= now() THEN
+    SELECT array_agg(mm.id), array_agg(DISTINCT mb.id) INTO hidden_ids, hidden_mailboxes
+    FROM imap_mailbox_messages mm JOIN imap_mailboxes mb ON mm.mailbox_id = mb.id
+    WHERE mb.user_id = p_user AND mb.credential_id = p_credential AND mm.raw_source = 'structured'
+      AND NOT EXISTS (SELECT 1 FROM structured_emails se WHERE se.id = mm.structured_email_id AND se.user_id = p_user
+        AND se.guard_blocked IS NOT TRUE AND (lower(se.recipient) = ANY(addresses)
+          OR (split_part(lower(se.recipient), '@', 2) = ANY(domains) AND split_part(lower(se.recipient), '@', 1) <> 'dmarc')
+          OR EXISTS (SELECT 1 FROM unnest(se.envelope_recipients) AS envelope(address) WHERE lower(envelope.address) = ANY(addresses)
+            OR (split_part(lower(envelope.address), '@', 2) = ANY(domains) AND split_part(lower(envelope.address), '@', 1) <> 'dmarc'))));
+  END IF;
+  PERFORM imap_lock(p_user, p_credential, ARRAY[p_mailbox] || coalesce(hidden_mailboxes, '{}'), true);
   PERFORM imap_authorize(p_user, p_credential);
   SELECT * INTO box FROM imap_mailboxes WHERE id = p_mailbox AND user_id = p_user AND credential_id = p_credential;
   IF NOT FOUND THEN RAISE EXCEPTION 'Mailbox not found'; END IF;
+  SELECT * INTO checkpoint FROM imap_mailboxes WHERE user_id = p_user AND credential_id = p_credential AND path = 'INBOX';
+  SELECT * INTO policy FROM imap_spam_policy(p_user, p_credential);
+  SELECT v.addresses, v.domains INTO addresses, domains FROM imap_scope_visibility(p_user, p_credential) v WHERE v.scope_id IS NULL;
+  SELECT md5(policy.revision || ':' || coalesce(string_agg(v.scope_key || ':' || v.revision, ',' ORDER BY v.scope_key), '')) INTO fingerprint
+  FROM imap_source_versions v WHERE v.user_id = p_user AND v.scope_key = ANY(ARRAY(
+    SELECT 'a:' || md5(address) FROM unnest(addresses) AS scopes(address)
+    UNION ALL SELECT 'd:' || md5(domain) FROM unnest(domains) AS scopes(domain)));
   SELECT max(e.modseq) INTO floor FROM imap_mailbox_expunges e WHERE e.mailbox_id = p_mailbox AND e.created_at < now() - interval '7 days';
   IF floor IS NOT NULL THEN
     UPDATE imap_mailboxes SET expunge_floor = greatest(expunge_floor, floor) WHERE id = p_mailbox;
     DELETE FROM imap_mailbox_expunges WHERE mailbox_id = p_mailbox AND created_at < now() - interval '7 days';
   END IF;
-  SELECT v.addresses, v.domains INTO addresses, domains FROM imap_scope_visibility(p_user, p_credential) v WHERE v.scope_id IS NULL;
-  SELECT md5(coalesce(string_agg(v.scope_key || ':' || v.revision, ',' ORDER BY v.scope_key), '')) INTO fingerprint
-  FROM imap_source_versions v WHERE v.user_id = p_user AND v.scope_key = ANY(ARRAY(
-    SELECT 'a:' || md5(address) FROM unnest(addresses) AS scopes(address)
-    UNION ALL SELECT 'd:' || md5(domain) FROM unnest(domains) AS scopes(domain)));
-  IF box.source_fingerprint = fingerprint AND (box.source_pending_at IS NULL OR box.source_pending_at > now()) THEN
+  IF checkpoint.source_fingerprint = fingerprint AND (checkpoint.source_pending_at IS NULL OR checkpoint.source_pending_at > now()) THEN
     RETURN QUERY SELECT * FROM imap_mailboxes WHERE id = p_mailbox AND user_id = p_user AND credential_id = p_credential;
     RETURN;
   END IF;
-  SELECT spam_level, spam_allow, spam_block INTO level, allow_list, block_list FROM imap_credentials WHERE id = p_credential AND user_id = p_user;
-  default_spam := level IS NULL AND coalesce(cardinality(allow_list), 0) = 0 AND coalesce(cardinality(block_list), 0) = 0;
   rules := imap_filter_rules(p_user, p_credential);
   SELECT coalesce(jsonb_object_agg(key, id), '{}') INTO folders FROM (
     SELECT mb.id::text, unnest(ARRAY[mb.id::text, mb.path::text]) AS key FROM imap_mailboxes mb
     WHERE mb.user_id = p_user AND mb.credential_id = p_credential AND mb.scope_id IS NULL AND mb.path <> 'Scopes' AND mb.path NOT LIKE 'Scopes/%'
   ) targets;
-  DELETE FROM imap_mailbox_messages mm USING imap_mailboxes mb
-  WHERE mm.mailbox_id = mb.id AND mb.user_id = p_user AND mb.credential_id = p_credential AND mm.raw_source = 'structured'
+  DELETE FROM imap_mailbox_messages mm WHERE mm.id = ANY(hidden_ids)
     AND NOT EXISTS (SELECT 1 FROM structured_emails se WHERE se.id = mm.structured_email_id AND se.user_id = p_user
       AND se.guard_blocked IS NOT TRUE AND (lower(se.recipient) = ANY(addresses)
         OR (split_part(lower(se.recipient), '@', 2) = ANY(domains) AND split_part(lower(se.recipient), '@', 1) <> 'dmarc')
@@ -346,32 +465,34 @@ BEGIN
     SELECT se.id, se.created_at
     FROM structured_emails se LEFT JOIN mailbox_message_state state
       ON state.credential_id = p_credential AND state.structured_email_id = se.id
-    WHERE se.user_id = p_user AND se.raw_content IS NOT NULL AND se.guard_blocked IS NOT TRUE AND state.initialized IS NOT TRUE
+    WHERE se.user_id = p_user AND se.raw_content IS NOT NULL AND se.guard_blocked IS NOT TRUE
+      AND (state.initialized IS NOT TRUE OR state.spam_revision IS DISTINCT FROM policy.revision
+        OR (NOT policy.default_policy AND state.junk_override IS NULL AND state.spam_source_updated_at IS DISTINCT FROM se.junk_updated_at))
       AND (lower(se.recipient) = ANY(addresses)
         OR (cardinality(domains) > 0 AND split_part(lower(se.recipient), '@', 2) = ANY(domains) AND split_part(lower(se.recipient), '@', 1) <> 'dmarc')
         OR (se.envelope_recipients IS DISTINCT FROM ARRAY[se.recipient::text]
           AND EXISTS (SELECT 1 FROM unnest(se.envelope_recipients) AS envelope(address) WHERE lower(envelope.address) = ANY(addresses)
             OR (cardinality(domains) > 0 AND split_part(lower(envelope.address), '@', 2) = ANY(domains) AND split_part(lower(envelope.address), '@', 1) <> 'dmarc'))))
       AND NOT EXISTS (SELECT 1 FROM imap_mailbox_removals r WHERE r.credential_id = p_credential AND r.structured_email_id = se.id)
-      AND (se.created_at < now() - interval '2 minutes'
-        OR (CASE WHEN default_spam THEN coalesce(state.junk_override, se.is_junk)
-          ELSE imap_mailbox_junk(se.is_junk, se.junk_reason, se.from_data, se.jev_classification,
-            level, allow_list, block_list, state.junk_override) END) IS NOT NULL)
+      AND (state.initialized OR se.created_at < now() - interval '2 minutes' OR se.is_junk IS NOT NULL
+        OR state.junk_override IS NOT NULL OR policy.level = 'off' OR se.jev_classification IS NOT NULL
+        OR cardinality(policy.allow_addresses) > 0 OR cardinality(policy.allow_domains) > 0
+        OR cardinality(policy.block_addresses) > 0 OR cardinality(policy.block_domains) > 0)
     ORDER BY se.created_at DESC, se.id LIMIT 501
   ) pending;
   backlog := coalesce(cardinality(pending_ids), 0) > 500;
   WITH candidates AS MATERIALIZED (
-    SELECT se.id, state.junk_override, state.filter_versions, state.filter_flags, state.filter_mailbox_id,
+    SELECT se.id, se.created_at, se.junk_updated_at, state.initialized, state.junk_override, state.filter_versions, state.filter_flags, state.filter_mailbox_id,
       se.from_data, se.to_data, se.cc_data, se.envelope_recipients, se.recipient, se.subject, se.headers,
       coalesce(se.text_body, se.html_body) AS body, se.attachments, octet_length(se.raw_content) AS size, se.jev_classification,
-      CASE WHEN default_spam THEN coalesce(state.junk_override, se.is_junk)
-        ELSE imap_mailbox_junk(se.is_junk, se.junk_reason, se.from_data, se.jev_classification,
-          level, allow_list, block_list, state.junk_override) END AS effective_junk
+      CASE WHEN policy.default_policy THEN coalesce(state.junk_override, se.is_junk)
+        ELSE imap_mailbox_junk_prepared(se.is_junk, se.junk_reason, se.from_data, se.jev_classification,
+          policy.level, policy.allow_addresses, policy.allow_domains, policy.block_addresses, policy.block_domains, state.junk_override) END AS effective_junk
     FROM structured_emails se LEFT JOIN mailbox_message_state state
       ON state.credential_id = p_credential AND state.structured_email_id = se.id
     WHERE se.user_id = p_user AND se.id = ANY(pending_ids[1:500]) AND se.raw_content IS NOT NULL AND se.guard_blocked IS NOT TRUE
   ), evaluated AS MATERIALIZED (
-    SELECT se.id, CASE WHEN rules = '[]'::jsonb OR EXISTS (
+    SELECT se.id, se.junk_updated_at, se.effective_junk, CASE WHEN se.initialized OR rules = '[]'::jsonb OR EXISTS (
       SELECT 1 FROM imap_mailboxes mb JOIN imap_mailbox_messages mm ON mm.mailbox_id = mb.id
       WHERE mb.user_id = p_user AND mb.credential_id = p_credential AND mm.raw_source = 'structured' AND mm.structured_email_id = se.id)
       THEN jsonb_build_object('junk', se.junk_override, 'versions', coalesce(se.filter_versions, '{}'),
@@ -380,35 +501,41 @@ BEGIN
         array_append(coalesce(se.envelope_recipients, '{}'), se.recipient), se.subject, se.headers,
         se.body, se.attachments, se.size, se.jev_classification), rules, folders, se.effective_junk,
         se.junk_override, se.filter_flags, se.filter_mailbox_id, se.filter_versions) END AS result
-    FROM candidates se
+    FROM candidates se WHERE se.initialized OR se.effective_junk IS NOT NULL OR se.created_at < now() - interval '2 minutes'
   )
-  INSERT INTO mailbox_message_state (credential_id, structured_email_id, junk_override, filter_versions, filter_flags, filter_mailbox_id, initialized)
+  INSERT INTO mailbox_message_state (credential_id, structured_email_id, junk_override, filter_versions, filter_flags, filter_mailbox_id, initialized,
+    spam_revision, effective_junk, spam_source_updated_at)
   SELECT p_credential, id, (result ->> 'junk')::boolean, result -> 'versions',
-    ARRAY(SELECT jsonb_array_elements_text(result -> 'flags')), result ->> 'destination', true FROM evaluated
+    ARRAY(SELECT jsonb_array_elements_text(result -> 'flags')), result ->> 'destination', true, policy.revision,
+    coalesce((result ->> 'junk')::boolean, CASE WHEN policy.default_policy THEN NULL ELSE effective_junk END), junk_updated_at FROM evaluated
   ON CONFLICT (credential_id, structured_email_id) DO UPDATE SET junk_override = excluded.junk_override,
-    filter_versions = excluded.filter_versions, filter_flags = excluded.filter_flags, filter_mailbox_id = excluded.filter_mailbox_id, initialized = true;
+    filter_versions = excluded.filter_versions, filter_flags = excluded.filter_flags, filter_mailbox_id = excluded.filter_mailbox_id, initialized = true,
+    spam_revision = excluded.spam_revision, effective_junk = excluded.effective_junk, spam_source_updated_at = excluded.spam_source_updated_at;
   PERFORM imap_reconcile(p_user, p_credential);
   WITH visibility AS MATERIALIZED (SELECT * FROM imap_scope_visibility(p_user, p_credential)),
-  candidates AS MATERIALIZED (
+  placements AS MATERIALIZED (
+    SELECT mb.id AS mailbox_id, mb.scope_id, state.structured_email_id, state.filter_flags
+    FROM mailbox_message_state state JOIN imap_mailboxes mb ON mb.user_id = p_user AND mb.credential_id = p_credential
+      AND CASE WHEN state.filter_mailbox_id IS NOT NULL THEN mb.id = state.filter_mailbox_id
+        WHEN coalesce(state.effective_junk, (SELECT se.is_junk FROM structured_emails se
+          WHERE se.id = state.structured_email_id AND se.user_id = p_user)) IS TRUE THEN mb.path = 'Junk' AND mb.scope_id IS NULL
+        ELSE mb.path = 'INBOX' OR mb.scope_id IS NOT NULL END
+    WHERE state.credential_id = p_credential AND state.initialized AND state.spam_revision IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM imap_mailbox_messages mm WHERE mm.mailbox_id = mb.id AND mm.structured_email_id = state.structured_email_id)
+      AND NOT EXISTS (SELECT 1 FROM imap_mailbox_removals r WHERE r.credential_id = p_credential AND r.structured_email_id = state.structured_email_id)
+  ), candidates AS MATERIALIZED (
     SELECT mb.id AS mailbox_id, se.id, se.created_at, octet_length(se.raw_content) AS size,
       coalesce(canonical.flags, to_jsonb(state.filter_flags)::text, '[]') AS flags
-    FROM mailbox_message_state state JOIN structured_emails se ON se.id = state.structured_email_id AND se.user_id = p_user
-    JOIN imap_mailboxes mb ON mb.user_id = p_user AND mb.credential_id = p_credential
-      AND CASE WHEN state.filter_mailbox_id IS NOT NULL THEN mb.id = state.filter_mailbox_id
-        WHEN (CASE WHEN default_spam THEN coalesce(state.junk_override, se.is_junk)
-          ELSE imap_mailbox_junk(se.is_junk, se.junk_reason, se.from_data, se.jev_classification,
-            level, allow_list, block_list, state.junk_override) END) IS TRUE THEN mb.path = 'Junk' AND mb.scope_id IS NULL
-        ELSE mb.path = 'INBOX' OR mb.scope_id IS NOT NULL END
+    FROM placements state JOIN structured_emails se ON se.id = state.structured_email_id AND se.user_id = p_user
+    JOIN imap_mailboxes mb ON mb.id = state.mailbox_id
     JOIN visibility v ON v.scope_id IS NOT DISTINCT FROM mb.scope_id
     LEFT JOIN imap_mailboxes inbox ON mb.scope_id IS NOT NULL AND inbox.credential_id = p_credential AND inbox.path = 'INBOX'
     LEFT JOIN imap_mailbox_messages canonical ON canonical.mailbox_id = inbox.id AND canonical.raw_source = 'structured' AND canonical.structured_email_id = se.id
-    WHERE state.credential_id = p_credential AND state.initialized AND se.raw_content IS NOT NULL AND se.guard_blocked IS NOT TRUE
+    WHERE se.raw_content IS NOT NULL AND se.guard_blocked IS NOT TRUE
       AND (lower(se.recipient) = ANY(v.addresses)
         OR (split_part(lower(se.recipient), '@', 2) = ANY(v.domains) AND split_part(lower(se.recipient), '@', 1) <> 'dmarc')
         OR EXISTS (SELECT 1 FROM unnest(se.envelope_recipients) AS envelope(address) WHERE lower(envelope.address) = ANY(v.addresses)
           OR (split_part(lower(envelope.address), '@', 2) = ANY(v.domains) AND split_part(lower(envelope.address), '@', 1) <> 'dmarc')))
-      AND NOT EXISTS (SELECT 1 FROM imap_mailbox_messages mm WHERE mm.mailbox_id = mb.id AND mm.structured_email_id = se.id)
-      AND NOT EXISTS (SELECT 1 FROM imap_mailbox_removals r WHERE r.credential_id = p_credential AND r.structured_email_id = se.id)
   ), numbered AS (
     SELECT candidates.*, row_number() OVER (PARTITION BY mailbox_id ORDER BY created_at, id)::integer AS rn FROM candidates
   ), bumped AS (
@@ -428,8 +555,8 @@ BEGIN
         OR (split_part(lower(envelope.address), '@', 2) = ANY(domains) AND split_part(lower(envelope.address), '@', 1) <> 'dmarc')))
     AND NOT EXISTS (SELECT 1 FROM mailbox_message_state state WHERE state.credential_id = p_credential AND state.structured_email_id = se.id AND state.initialized)
     AND NOT EXISTS (SELECT 1 FROM imap_mailbox_removals r WHERE r.credential_id = p_credential AND r.structured_email_id = se.id);
-  UPDATE imap_mailboxes SET source_fingerprint = CASE WHEN backlog THEN NULL ELSE fingerprint END, source_pending_at = pending_at
-  WHERE user_id = p_user AND credential_id = p_credential;
+  UPDATE imap_mailboxes SET source_fingerprint = CASE WHEN backlog OR scanned_fingerprint IS DISTINCT FROM fingerprint THEN NULL ELSE fingerprint END, source_pending_at = pending_at
+  WHERE id = checkpoint.id;
   RETURN QUERY SELECT * FROM imap_mailboxes WHERE id = p_mailbox AND user_id = p_user AND credential_id = p_credential;
 END;
 $$;
@@ -437,12 +564,12 @@ $$;
 CREATE FUNCTION imap_apply_filters(p_user text, p_credential text, p_mailbox text, p_after_uid integer, p_limit integer, p_filter text DEFAULT NULL)
 RETURNS TABLE(processed integer, last_uid integer) LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp SET plan_cache_mode = force_custom_plan AS $$
 DECLARE box imap_mailboxes; ids text[]; move_ids text[]; rules jsonb; current_versions jsonb; folders jsonb;
-  level text; allow_list text[]; block_list text[]; default_spam boolean;
+  policy record;
 BEGIN
   PERFORM imap_authorize(p_user, p_credential, true);
   IF p_after_uid IS NULL OR p_after_uid < 0 OR p_limit IS NULL OR p_limit < 1 THEN RAISE EXCEPTION 'Invalid filter batch'; END IF;
   PERFORM imap_ensure(p_user, p_credential);
-  PERFORM imap_lock(p_user, p_credential, '{}', true);
+  PERFORM imap_lock(p_user, p_credential, ARRAY[p_mailbox], true);
   PERFORM imap_authorize(p_user, p_credential, true);
   SELECT * INTO box FROM imap_mailboxes WHERE id = p_mailbox AND user_id = p_user AND credential_id = p_credential;
   IF NOT FOUND THEN RAISE EXCEPTION 'Mailbox not found'; END IF;
@@ -462,33 +589,38 @@ BEGIN
   LEFT JOIN mailbox_message_state state ON state.credential_id = p_credential AND state.structured_email_id = batch.id
   WHERE NOT coalesce(state.filter_versions @> current_versions, false);
   IF ids IS NULL THEN RETURN NEXT; RETURN; END IF;
-  SELECT spam_level, spam_allow, spam_block INTO level, allow_list, block_list FROM imap_credentials WHERE id = p_credential AND user_id = p_user;
-  default_spam := level IS NULL AND coalesce(cardinality(allow_list), 0) = 0 AND coalesce(cardinality(block_list), 0) = 0;
+  SELECT * INTO policy FROM imap_spam_policy(p_user, p_credential);
   SELECT coalesce(jsonb_object_agg(key, id), '{}') INTO folders FROM (
     SELECT mb.id::text, unnest(ARRAY[mb.id::text, mb.path::text]) AS key FROM imap_mailboxes mb
     WHERE mb.user_id = p_user AND mb.credential_id = p_credential AND mb.scope_id IS NULL AND mb.path <> 'Scopes' AND mb.path NOT LIKE 'Scopes/%'
   ) targets;
-  WITH evaluated AS MATERIALIZED (
-    SELECT se.id, imap_evaluate_filters(imap_filter_email(se.from_data, se.to_data, se.cc_data,
-      array_append(coalesce(se.envelope_recipients, '{}'), se.recipient), se.subject, se.headers,
-      coalesce(se.text_body, se.html_body), se.attachments, octet_length(se.raw_content), se.jev_classification), rules, folders,
-      CASE WHEN default_spam THEN coalesce(state.junk_override, se.is_junk)
-        ELSE imap_mailbox_junk(se.is_junk, se.junk_reason, se.from_data, se.jev_classification, level, allow_list, block_list, state.junk_override) END,
-      state.junk_override, ARRAY(SELECT jsonb_array_elements_text(mm.flags::jsonb)),
-      state.filter_mailbox_id, state.filter_versions) AS result
+  WITH candidates AS MATERIALIZED (
+    SELECT se.*, state.junk_override, state.filter_mailbox_id, state.filter_versions, mm.flags,
+      CASE WHEN policy.default_policy THEN coalesce(state.junk_override, se.is_junk)
+        ELSE imap_mailbox_junk_prepared(se.is_junk, se.junk_reason, se.from_data, se.jev_classification,
+          policy.level, policy.allow_addresses, policy.allow_domains, policy.block_addresses, policy.block_domains, state.junk_override) END AS effective_junk
     FROM imap_mailbox_messages mm JOIN structured_emails se ON se.id = mm.structured_email_id AND se.user_id = p_user
     LEFT JOIN mailbox_message_state state ON state.credential_id = p_credential AND state.structured_email_id = se.id
     WHERE mm.mailbox_id = p_mailbox AND mm.structured_email_id = ANY(ids) AND mm.raw_source = 'structured'
       AND imap_visible(p_user, p_credential, se.id)
+  ), evaluated AS MATERIALIZED (
+    SELECT se.id, se.junk_updated_at, se.effective_junk, imap_evaluate_filters(imap_filter_email(se.from_data, se.to_data, se.cc_data,
+      array_append(coalesce(se.envelope_recipients, '{}'), se.recipient), se.subject, se.headers,
+      coalesce(se.text_body, se.html_body), se.attachments, octet_length(se.raw_content), se.jev_classification), rules, folders,
+      se.effective_junk, se.junk_override, ARRAY(SELECT jsonb_array_elements_text(se.flags::jsonb)),
+      se.filter_mailbox_id, se.filter_versions) AS result FROM candidates se
   ), written AS (
-    INSERT INTO mailbox_message_state (credential_id, structured_email_id, junk_override, filter_versions, filter_flags, filter_mailbox_id, initialized)
+    INSERT INTO mailbox_message_state (credential_id, structured_email_id, junk_override, filter_versions, filter_flags, filter_mailbox_id, initialized,
+      spam_revision, effective_junk, spam_source_updated_at)
     SELECT p_credential, id, (result ->> 'junk')::boolean, result -> 'versions',
-      ARRAY(SELECT jsonb_array_elements_text(result -> 'flags')), result ->> 'destination', true FROM evaluated
+      ARRAY(SELECT jsonb_array_elements_text(result -> 'flags')), result ->> 'destination', true, policy.revision,
+      coalesce((result ->> 'junk')::boolean, CASE WHEN policy.default_policy THEN NULL ELSE effective_junk END), junk_updated_at FROM evaluated
     ON CONFLICT (credential_id, structured_email_id) DO UPDATE SET junk_override = excluded.junk_override,
-      filter_versions = excluded.filter_versions, filter_flags = excluded.filter_flags, filter_mailbox_id = excluded.filter_mailbox_id, initialized = true
+      filter_versions = excluded.filter_versions, filter_flags = excluded.filter_flags, filter_mailbox_id = excluded.filter_mailbox_id, initialized = true,
+      spam_revision = excluded.spam_revision, effective_junk = excluded.effective_junk, spam_source_updated_at = excluded.spam_source_updated_at
     RETURNING structured_email_id
   )
-  SELECT array_agg(evaluated.id) FILTER (WHERE (evaluated.result ->> 'move')::boolean) INTO move_ids
+  SELECT array_agg(written.structured_email_id), array_agg(evaluated.id) FILTER (WHERE (evaluated.result ->> 'move')::boolean) INTO ids, move_ids
   FROM evaluated JOIN written ON written.structured_email_id = evaluated.id;
   WITH changed AS MATERIALIZED (
     SELECT mm.id, mm.mailbox_id, mm.uid, to_jsonb(state.filter_flags)::text AS flags,
@@ -506,14 +638,15 @@ BEGIN
   UPDATE imap_mailbox_messages mm SET flags = changed.flags, modseq = bumped.first_modseq + changed.rn
   FROM changed JOIN bumped ON bumped.id = changed.mailbox_id WHERE mm.id = changed.id;
   IF move_ids IS NOT NULL THEN PERFORM imap_reconcile_filters(p_user, p_credential, move_ids, p_mailbox); END IF;
-  UPDATE imap_mailboxes SET source_fingerprint = NULL WHERE user_id = p_user AND credential_id = p_credential;
+  UPDATE imap_mailboxes SET source_fingerprint = NULL WHERE user_id = p_user AND credential_id = p_credential
+    AND (path IN ('INBOX', 'Junk') OR scope_id IS NOT NULL OR id = p_mailbox);
   RETURN NEXT;
 END;
 $$;
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION imap_transfer(p_user text, p_credential text, p_source text, p_destination text, p_uids integer[], p_move boolean)
 RETURNS TABLE(source_uid integer, destination_uid integer) LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp AS $$
-DECLARE source imap_mailboxes; destination imap_mailboxes; received text[]; copied_source integer[]; copied_destination integer[]; inserted integer;
+DECLARE source imap_mailboxes; destination imap_mailboxes; received text[]; copied_source integer[]; copied_destination integer[]; inserted integer; policy record;
 BEGIN
   PERFORM imap_authorize(p_user, p_credential, true);
   PERFORM imap_lock(p_user, p_credential, ARRAY[p_source, p_destination], true);
@@ -533,13 +666,22 @@ BEGIN
   WHERE mm.mailbox_id = p_source AND mm.uid = ANY(p_uids) AND mm.raw_source = 'structured'
     AND imap_visible(p_user, p_credential, mm.structured_email_id, source.scope_id);
   IF received IS NOT NULL AND (p_move OR destination.path IN ('INBOX', 'Junk')) THEN
-    INSERT INTO mailbox_message_state (credential_id, structured_email_id, junk_override, filter_mailbox_id)
+    SELECT * INTO policy FROM imap_spam_policy(p_user, p_credential);
+    INSERT INTO mailbox_message_state (credential_id, structured_email_id, junk_override, filter_mailbox_id, spam_revision, effective_junk, spam_source_updated_at)
     SELECT p_credential, r.id, CASE WHEN destination.path IN ('INBOX', 'Junk') THEN destination.path = 'Junk' END,
-      CASE WHEN destination.path NOT IN ('INBOX', 'Junk') THEN destination.id END FROM unnest(received) AS r(id)
+      CASE WHEN destination.path NOT IN ('INBOX', 'Junk') THEN destination.id END, policy.revision,
+      CASE WHEN destination.path IN ('INBOX', 'Junk') THEN destination.path = 'Junk'
+        WHEN policy.default_policy THEN state.junk_override
+        ELSE imap_mailbox_junk_prepared(se.is_junk, se.junk_reason, se.from_data, se.jev_classification,
+          policy.level, policy.allow_addresses, policy.allow_domains, policy.block_addresses, policy.block_domains, state.junk_override) END,
+      se.junk_updated_at FROM unnest(received) AS r(id) JOIN structured_emails se ON se.id = r.id AND se.user_id = p_user
+      LEFT JOIN mailbox_message_state state ON state.credential_id = p_credential AND state.structured_email_id = r.id
     ON CONFLICT (credential_id, structured_email_id) DO UPDATE SET
       junk_override = CASE WHEN destination.path IN ('INBOX', 'Junk') THEN excluded.junk_override ELSE mailbox_message_state.junk_override END,
-      filter_mailbox_id = excluded.filter_mailbox_id;
-    UPDATE imap_mailboxes SET source_fingerprint = NULL WHERE user_id = p_user AND credential_id = p_credential;
+      filter_mailbox_id = excluded.filter_mailbox_id, spam_revision = excluded.spam_revision,
+      effective_junk = excluded.effective_junk, spam_source_updated_at = excluded.spam_source_updated_at;
+    UPDATE imap_mailboxes SET source_fingerprint = NULL WHERE user_id = p_user AND credential_id = p_credential
+      AND (path IN ('INBOX', 'Junk') OR scope_id IS NOT NULL OR id IN (p_source, p_destination));
     IF destination.path IN ('INBOX', 'Junk') THEN
       DELETE FROM imap_mailbox_removals WHERE credential_id = p_credential AND structured_email_id = ANY(received);
     END IF;
@@ -679,7 +821,10 @@ BEGIN
       ON CONFLICT (credential_id, path) DO NOTHING RETURNING *;
     RETURN;
   END IF;
-  IF p_operation = 'delete' THEN PERFORM imap_lock(p_user, p_credential, '{}', true); END IF;
+  IF p_operation = 'delete' THEN
+    PERFORM imap_lock(p_user, p_credential, ARRAY(SELECT id::text FROM imap_mailboxes
+      WHERE user_id = p_user AND credential_id = p_credential AND path = p_path), true);
+  END IF;
   PERFORM mb.id FROM imap_mailboxes mb WHERE mb.user_id = p_user AND mb.credential_id = p_credential
     AND (mb.path = p_path OR (p_operation = 'rename' AND left(mb.path, char_length(p_path) + 1) = p_path || '/'))
     ORDER BY mb.id FOR UPDATE;
@@ -710,6 +855,91 @@ BEGIN
 END;
 $$;
 --> statement-breakpoint
+CREATE OR REPLACE FUNCTION imap_stamp_verdict()
+RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp AS $$
+BEGIN
+  IF (NEW.is_junk, NEW.junk_reason, NEW.from_data, NEW.jev_classification)
+    IS DISTINCT FROM (OLD.is_junk, OLD.junk_reason, OLD.from_data, OLD.jev_classification) THEN
+    NEW.junk_updated_at := clock_timestamp();
+  END IF;
+  RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+DROP TRIGGER imap_stamp_verdict ON structured_emails;
+--> statement-breakpoint
+CREATE TRIGGER imap_stamp_verdict BEFORE UPDATE OF is_junk, junk_reason, from_data, jev_classification ON structured_emails
+FOR EACH ROW EXECUTE FUNCTION imap_stamp_verdict();
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION imap_notify_credential_changed()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    PERFORM pg_notify('imap_credential_changed', OLD.id);
+    RETURN OLD;
+  END IF;
+  IF (OLD.api_key_id, OLD.login_address, OLD.type, OLD.access_mode, OLD.sending_mode,
+    OLD.sending_name, OLD.sending_address, OLD.enabled, OLD.protocols, OLD.allowed_ips, OLD.self_service)
+    IS DISTINCT FROM (NEW.api_key_id, NEW.login_address, NEW.type, NEW.access_mode, NEW.sending_mode,
+    NEW.sending_name, NEW.sending_address, NEW.enabled, NEW.protocols, NEW.allowed_ips, NEW.self_service) THEN
+    PERFORM pg_notify('imap_credential_changed', NEW.id);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION imap_flags(p_user text, p_credential text, p_mailbox text, p_uids integer[], p_action text, p_flags text[])
+RETURNS SETOF imap_mailbox_messages LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp AS $$
+DECLARE box imap_mailboxes;
+BEGIN
+  PERFORM imap_authorize(p_user, p_credential, true);
+  IF p_action NOT IN ('set', 'add', 'remove') OR p_action IS NULL THEN RAISE EXCEPTION 'Invalid flag action'; END IF;
+  p_flags := imap_normalize_flags(p_flags);
+  SELECT * INTO box FROM imap_mailboxes WHERE id = p_mailbox AND user_id = p_user AND credential_id = p_credential;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Mailbox not found'; END IF;
+  PERFORM imap_lock(p_user, p_credential, ARRAY[p_mailbox], box.path = 'INBOX');
+  PERFORM imap_authorize(p_user, p_credential, true);
+  SELECT * INTO box FROM imap_mailboxes WHERE id = p_mailbox AND user_id = p_user AND credential_id = p_credential;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Mailbox not found'; END IF;
+  IF box.scope_id IS NOT NULL OR box.path = 'Scopes' OR box.path LIKE 'Scopes/%' THEN
+    RAISE EXCEPTION 'Scope mailbox is read-only' USING ERRCODE = '42501';
+  END IF;
+  WITH selected AS MATERIALIZED (
+    SELECT mm.* FROM imap_mailbox_messages mm WHERE mm.mailbox_id = p_mailbox AND mm.uid = ANY(p_uids)
+  ), targets AS MATERIALIZED (
+    SELECT * FROM selected
+    UNION ALL
+    SELECT mm.* FROM selected source JOIN imap_mailbox_messages mm ON mm.structured_email_id = source.structured_email_id
+    JOIN imap_mailboxes mb ON mb.id = mm.mailbox_id
+    WHERE box.path = 'INBOX' AND mb.user_id = p_user AND mb.credential_id = p_credential AND mb.scope_id IS NOT NULL
+      AND source.raw_source = 'structured' AND mm.raw_source = 'structured'
+  ), proposed AS MATERIALIZED (
+    SELECT mm.id, mm.mailbox_id, mm.uid, mm.flags::jsonb AS old_flags,
+      to_jsonb(CASE p_action
+        WHEN 'set' THEN p_flags
+        WHEN 'add' THEN imap_normalize_flags(ARRAY(SELECT jsonb_array_elements_text(mm.flags::jsonb)) || p_flags)
+        ELSE ARRAY(SELECT flag FROM jsonb_array_elements_text(mm.flags::jsonb) AS existing(flag)
+          WHERE NOT lower(flag) = ANY(ARRAY(SELECT lower(flag) FROM unnest(p_flags) AS removed(flag))))
+      END) AS new_flags FROM targets mm
+  ), changed AS MATERIALIZED (
+    SELECT proposed.*, row_number() OVER (PARTITION BY mailbox_id ORDER BY uid)::integer AS ordinal,
+      count(*) OVER (PARTITION BY mailbox_id)::integer AS total
+    FROM proposed WHERE
+      ARRAY(SELECT DISTINCT lower(flag) FROM jsonb_array_elements_text(new_flags) AS f(flag) ORDER BY lower(flag))
+      IS DISTINCT FROM
+      ARRAY(SELECT DISTINCT lower(flag) FROM jsonb_array_elements_text(old_flags) AS f(flag) ORDER BY lower(flag))
+  ), bumped AS (
+    UPDATE imap_mailboxes mb SET modseq = mb.modseq + counts.total, updated_at = now()
+    FROM (SELECT mailbox_id, count(*)::integer AS total FROM changed GROUP BY mailbox_id) counts
+    WHERE mb.id = counts.mailbox_id RETURNING mb.id, mb.modseq
+  )
+  UPDATE imap_mailbox_messages mm SET flags = changed.new_flags::text,
+    modseq = bumped.modseq - changed.total + changed.ordinal
+  FROM changed JOIN bumped ON bumped.id = changed.mailbox_id WHERE mm.id = changed.id;
+  RETURN QUERY SELECT * FROM imap_mailbox_messages WHERE mailbox_id = p_mailbox AND uid = ANY(p_uids) ORDER BY uid;
+END;
+$$;
+--> statement-breakpoint
 CREATE OR REPLACE FUNCTION imap_record_received_update()
 RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp AS $$
 BEGIN
@@ -718,10 +948,14 @@ BEGIN
       new_row.user_id, new_row.recipient, new_row.envelope_recipients
     FROM old_emails old_row FULL JOIN new_emails new_row USING (id)
     WHERE (old_row.user_id, old_row.recipient, old_row.envelope_recipients, old_row.raw_content IS NULL,
-      old_row.guard_blocked, old_row.is_junk, old_row.created_at, old_row.jev_classification, old_row.from_data, old_row.junk_reason)
+      old_row.guard_blocked, old_row.is_junk, old_row.created_at)
       IS DISTINCT FROM
       (new_row.user_id, new_row.recipient, new_row.envelope_recipients, new_row.raw_content IS NULL,
-      new_row.guard_blocked, new_row.is_junk, new_row.created_at, new_row.jev_classification, new_row.from_data, new_row.junk_reason)
+      new_row.guard_blocked, new_row.is_junk, new_row.created_at)
+      OR ((old_row.jev_classification, old_row.from_data, old_row.junk_reason)
+        IS DISTINCT FROM (new_row.jev_classification, new_row.from_data, new_row.junk_reason)
+        AND EXISTS (SELECT 1 FROM imap_credentials c WHERE c.user_id = new_row.user_id
+          AND (c.spam_level IS NOT NULL OR cardinality(c.spam_allow) > 0 OR cardinality(c.spam_block) > 0)))
   ), recipients AS (
     SELECT old_user_id AS user_id, unnest(array_append(coalesce(old_envelope, '{}'::text[]), old_recipient)) AS address FROM changed
     UNION ALL
@@ -742,6 +976,8 @@ CREATE TRIGGER imap_notify_received AFTER INSERT OR UPDATE OF recipient, envelop
   is_junk, user_id, jev_classification, from_data, junk_reason ON structured_emails FOR EACH ROW EXECUTE FUNCTION imap_notify_received();
 --> statement-breakpoint
 REVOKE ALL ON FUNCTION imap_filter_text(text), imap_filter_json(text),
+  imap_classification_summary(jsonb), imap_spam_policy(text, text),
+  imap_mailbox_junk_prepared(boolean, text, text, text, text, text[], text[], text[], text[], boolean),
   imap_mailbox_junk(boolean, text, text, text, text, text[], text[], boolean), imap_filter_condition(jsonb, jsonb, boolean),
   imap_filter_rules(text, text, text), imap_evaluate_filters(jsonb, jsonb, jsonb, boolean, boolean, text[], text, jsonb),
   imap_filter_email(text, text, text, text[], text, text, text, text, integer, text), imap_invalidate_spam_settings(),
@@ -755,6 +991,8 @@ BEGIN
     GRANT SELECT ON mailbox_filters TO imap_gateway;
     GRANT SELECT, INSERT, UPDATE ON mailbox_message_state TO imap_gateway;
     GRANT EXECUTE ON FUNCTION imap_filter_text(text), imap_filter_json(text),
+      imap_classification_summary(jsonb), imap_spam_policy(text, text),
+      imap_mailbox_junk_prepared(boolean, text, text, text, text, text[], text[], text[], text[], boolean),
       imap_mailbox_junk(boolean, text, text, text, text, text[], text[], boolean), imap_filter_condition(jsonb, jsonb, boolean),
       imap_filter_rules(text, text, text), imap_evaluate_filters(jsonb, jsonb, jsonb, boolean, boolean, text[], text, jsonb),
       imap_filter_email(text, text, text, text[], text, text, text, text, integer, text),

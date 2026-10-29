@@ -3407,6 +3407,24 @@
           "primaryKey": false,
           "notNull": false
         },
+        "spam_revision": {
+          "name": "spam_revision",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "effective_junk": {
+          "name": "effective_junk",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spam_source_updated_at": {
+          "name": "spam_source_updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "filter_versions": {
           "name": "filter_versions",
           "type": "jsonb",

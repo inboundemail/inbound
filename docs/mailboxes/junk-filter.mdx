@@ -86,7 +86,7 @@ curl -X PUT "https://inbound.new/api/e2/mailboxes/YOUR_MAILBOX_ID/spam" \
 - `level` is `off`, `lenient`, `standard`, `strict` or `null`. `null` uses the account level.
 - `allow` and `block` hold up to 1,000 patterns each. A pattern is an exact email address, such as `boss@example.net`, or a whole domain written as `@partner.example`. Patterns are stored in lowercase and compared with the message's first `From` address; a domain pattern doesn't include subdomains. A pattern can't be on both lists, and removing one that isn't on the list returns `404`.
 - Allowed senders stay in `INBOX`; blocked senders go to `Junk`. Blocking doesn't reject or drop mail.
-- Settings apply to new mail as it arrives. Changing the level or lists also re-sorts mail already in this mailbox's `INBOX` and `Junk` under the new settings. Messages with a decision of their own (step 1 below) and messages a filter moved to another folder stay where they are.
+- Settings apply to new mail as it arrives. Changing the level or lists also re-sorts mail already in this mailbox's `INBOX` and `Junk` under the new settings, in batches of at most 500 messages per sync, newest first. Later mailbox reads and syncs continue the catch-up; a settings update does not reclassify the whole mailbox before returning. Until a message is processed, its previous verdict remains in use. Messages with a decision of their own (step 1 below) and messages a filter moved to another folder stay where they are.
 
 For each received message, the mailbox decides in this order:
 

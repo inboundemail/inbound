@@ -1386,6 +1386,9 @@ export const mailboxMessageState = pgTable(
 			.notNull()
 			.references(() => structuredEmails.id, { onDelete: "cascade" }),
 		junkOverride: boolean("junk_override"),
+		spamRevision: text("spam_revision"),
+		effectiveJunk: boolean("effective_junk"),
+		spamSourceUpdatedAt: timestamp("spam_source_updated_at"),
 		filterVersions: jsonb("filter_versions")
 			.$type<Record<string, string>>()
 			.notNull()

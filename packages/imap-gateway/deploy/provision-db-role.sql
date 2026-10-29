@@ -54,6 +54,8 @@ GRANT EXECUTE ON FUNCTION imap_folder(text, text, text, text, text, boolean) TO 
 GRANT EXECUTE ON FUNCTION imap_normalize_flags(text[]) TO imap_gateway;
 GRANT EXECUTE ON FUNCTION imap_normalize_path(text) TO imap_gateway;
 GRANT EXECUTE ON FUNCTION imap_filter_text(text), imap_filter_json(text),
+  imap_classification_summary(jsonb), imap_spam_policy(text, text),
+  imap_mailbox_junk_prepared(boolean, text, text, text, text, text[], text[], text[], text[], boolean),
   imap_mailbox_junk(boolean, text, text, text, text, text[], text[], boolean), imap_filter_condition(jsonb, jsonb, boolean),
   imap_filter_rules(text, text, text), imap_evaluate_filters(jsonb, jsonb, jsonb, boolean, boolean, text[], text, jsonb),
   imap_filter_email(text, text, text, text[], text, text, text, text, integer, text),
