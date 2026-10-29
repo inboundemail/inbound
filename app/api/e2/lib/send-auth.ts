@@ -4,10 +4,12 @@ import {
 	enforceAuthenticatedUserAndRateLimit,
 	enforceMailboxAuthenticationRateLimit,
 	getGatewayClientIp,
+	getGatewayClientName,
 	getTrustedHttpClientIp,
 	isMailboxGatewayRequest,
 	validateAndRateLimit,
 } from "@/app/api/e2/lib/auth";
+import { userAgentProduct } from "@/app/api/e2/mailboxes/activity-log";
 import {
 	type MailboxPasswordUse,
 	type ManagedMailCredential,
@@ -60,9 +62,17 @@ export function httpMailboxPasswordUse(
 	options: { allowGateway: boolean },
 ): MailboxPasswordUse {
 	if (options.allowGateway && isMailboxGatewayRequest(request)) {
-		return { protocol: "smtp", clientIp: getGatewayClientIp(request) };
+		return {
+			protocol: "smtp",
+			clientIp: getGatewayClientIp(request),
+			client: getGatewayClientName(request),
+		};
 	}
-	return { protocol: "api", clientIp: getTrustedHttpClientIp(request) };
+	return {
+		protocol: "api",
+		clientIp: getTrustedHttpClientIp(request),
+		client: userAgentProduct(request.headers.get("user-agent")),
+	};
 }
 
 /**

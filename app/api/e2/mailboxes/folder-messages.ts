@@ -8,6 +8,7 @@ import {
 	type MailboxAccess,
 	receivedVisibleTo,
 } from "@/app/api/e2/mailboxes/access";
+import { recordMailboxActivity } from "@/app/api/e2/mailboxes/activity-log";
 import {
 	type FolderContext,
 	fail,
@@ -1112,7 +1113,23 @@ export const appendFolderMessage = new Elysia().post(
 				uidValidity: appended.uidValidity,
 			};
 		} catch (error) {
-			return handleStateError(set, error);
+			const response = handleStateError(set, error);
+			const use = context.access.credential.use;
+			if (set.status === 413 && use) {
+				await recordMailboxActivity({
+					userId: context.access.userId,
+					credentialId: context.access.credential.credentialId,
+					protocol: use.protocol,
+					event: "quota_exceeded",
+					reason: "storage_quota",
+					clientIp: use.clientIp,
+					client: use.client,
+					detail: {
+						limit: context.access.credential.storageQuotaBytes ?? 0,
+					},
+				});
+			}
+			return response;
 		}
 	},
 	{

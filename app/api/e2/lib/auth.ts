@@ -322,6 +322,29 @@ export function getGatewayClientIp(request: Request): string | null {
 	return null;
 }
 
+export const MAILBOX_GATEWAY_CLIENT_NAME_HEADER = "x-inbound-client-name";
+export const MAILBOX_GATEWAY_AUTH_PURPOSE_HEADER = "x-inbound-auth-purpose";
+
+/**
+ * The end client's name and version (IMAP ID) as forwarded by a gateway, or
+ * null without a valid gateway secret.
+ */
+export function getGatewayClientName(request: Request): string | null {
+	const name = request.headers.get(MAILBOX_GATEWAY_CLIENT_NAME_HEADER)?.trim();
+	return name && hasValidGatewaySecret(request) ? name.slice(0, 100) : null;
+}
+
+/**
+ * Whether a gateway is re-checking the password of an open session rather
+ * than signing a client in (kept out of the activity log).
+ */
+export function isGatewayRevalidation(request: Request): boolean {
+	return (
+		request.headers.get(MAILBOX_GATEWAY_AUTH_PURPOSE_HEADER) === "revalidate" &&
+		hasValidGatewaySecret(request)
+	);
+}
+
 /**
  * The client IP of a direct HTTP request, taken only from a header the
  * platform sets and clients cannot spoof: on Vercel, `x-vercel-forwarded-for`

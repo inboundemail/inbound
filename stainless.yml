@@ -100,7 +100,11 @@ resources:
       update: put /api/e2/mailboxes/{id}
       delete: delete /api/e2/mailboxes/{id}
       rotate_password: post /api/e2/mailboxes/{id}/rotate-password
+      list_all_activity: get /api/e2/mailboxes/activity
     subresources:
+      activity:
+        methods:
+          list: get /api/e2/mailboxes/{id}/activity
       folders:
         methods:
           list: get /api/e2/mailboxes/{id}/folders

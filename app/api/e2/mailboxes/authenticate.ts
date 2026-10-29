@@ -3,9 +3,14 @@ import {
 	enforceMailboxAuthenticationRateLimit,
 	enforceMailboxGatewayAuthorization,
 	getGatewayClientIp,
+	getGatewayClientName,
+	isGatewayRevalidation,
+	isMailboxGatewayRequest,
 } from "@/app/api/e2/lib/auth";
+import { recordLoginRateLimited } from "@/app/api/e2/mailboxes/activity-log";
 import {
 	authenticateManagedMailCredential,
+	type MailboxPasswordUse,
 	MailboxErrorSchema,
 	MailboxScopeSchema,
 	normalizeEmailAddress,
@@ -33,14 +38,60 @@ function unauthorized(set: { status?: number | string }) {
 	return { error: "Invalid mailbox credentials" };
 }
 
+/** How a gateway sign-in uses the password: protocol, client IP and client name. */
+export function gatewayPasswordUse(
+	request: Request,
+	protocol: "imap" | "smtp",
+): MailboxPasswordUse {
+	return {
+		protocol,
+		clientIp: getGatewayClientIp(request),
+		client: getGatewayClientName(request),
+		record: !isGatewayRevalidation(request),
+	};
+}
+
+/**
+ * Applies the mailbox sign-in rate limit; a limited gateway sign-in to a
+ * known mailbox is recorded in its activity log as `rate_limited`.
+ */
+export async function enforceGatewayLoginRateLimit(
+	request: Request,
+	loginAddress: string | null,
+	rawLoginAddress: string,
+	set: { status?: number | string; headers?: unknown },
+	protocol: "imap" | "smtp",
+): Promise<void> {
+	try {
+		await enforceMailboxAuthenticationRateLimit(
+			request,
+			loginAddress ?? rawLoginAddress.trim().toLowerCase(),
+			set,
+		);
+	} catch (error) {
+		const use = gatewayPasswordUse(request, protocol);
+		if (
+			set.status === 429 &&
+			loginAddress &&
+			use.record &&
+			isMailboxGatewayRequest(request)
+		) {
+			await recordLoginRateLimited(loginAddress, use);
+		}
+		throw error;
+	}
+}
+
 export const authenticateMailbox = new Elysia().post(
 	"/mailboxes/authenticate",
 	async ({ request, body, set }) => {
 		const loginAddress = normalizeEmailAddress(body.loginAddress);
-		await enforceMailboxAuthenticationRateLimit(
+		await enforceGatewayLoginRateLimit(
 			request,
-			loginAddress ?? body.loginAddress.trim().toLowerCase(),
+			loginAddress,
+			body.loginAddress,
 			set,
+			"imap",
 		);
 		enforceMailboxGatewayAuthorization(request, set);
 		if (!loginAddress) return unauthorized(set);
@@ -48,7 +99,7 @@ export const authenticateMailbox = new Elysia().post(
 		const credential = await authenticateManagedMailCredential(body.password, {
 			loginAddress,
 			requireType: "mailbox",
-			use: { protocol: "imap", clientIp: getGatewayClientIp(request) },
+			use: gatewayPasswordUse(request, "imap"),
 		});
 		if (!credential) return unauthorized(set);
 

@@ -1,9 +1,9 @@
 import { Elysia, t } from "elysia";
+import { enforceMailboxGatewayAuthorization } from "@/app/api/e2/lib/auth";
 import {
-	enforceMailboxAuthenticationRateLimit,
-	enforceMailboxGatewayAuthorization,
-	getGatewayClientIp,
-} from "@/app/api/e2/lib/auth";
+	enforceGatewayLoginRateLimit,
+	gatewayPasswordUse,
+} from "@/app/api/e2/mailboxes/authenticate";
 import {
 	authenticateManagedMailCredential,
 	MailboxErrorSchema,
@@ -38,17 +38,19 @@ export const authenticateSmtp = new Elysia().post(
 	"/mailboxes/authenticate-smtp",
 	async ({ request, body, set }) => {
 		const loginAddress = normalizeEmailAddress(body.loginAddress);
-		await enforceMailboxAuthenticationRateLimit(
+		await enforceGatewayLoginRateLimit(
 			request,
-			loginAddress ?? body.loginAddress.trim().toLowerCase(),
+			loginAddress,
+			body.loginAddress,
 			set,
+			"smtp",
 		);
 		enforceMailboxGatewayAuthorization(request, set);
 		if (!loginAddress) return unauthorized(set);
 
 		const credential = await authenticateManagedMailCredential(body.password, {
 			loginAddress,
-			use: { protocol: "smtp", clientIp: getGatewayClientIp(request) },
+			use: gatewayPasswordUse(request, "smtp"),
 		});
 		if (!credential) return unauthorized(set);
 

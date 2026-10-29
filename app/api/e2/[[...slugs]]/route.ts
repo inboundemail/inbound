@@ -57,6 +57,11 @@ import { AuthError } from "../lib/auth";
 import { getThread } from "../mail/threads-get";
 // Inbox routes (threaded conversations)
 import { listThreads } from "../mail/threads-list";
+import {
+	ingestMailboxActivity,
+	listAllMailboxActivity,
+	listMailboxActivity,
+} from "@/app/api/e2/mailboxes/activity";
 import { authenticateMailbox } from "../mailboxes/authenticate";
 import { authenticateSmtp } from "../mailboxes/authenticate-smtp";
 import { createMailbox } from "../mailboxes/create";
@@ -536,6 +541,9 @@ https://inbound.new/api/e2
 	.use(listThreads)
 	.use(getThread)
 	.use(listMailboxes)
+	.use(listAllMailboxActivity)
+	.use(ingestMailboxActivity)
+	.use(listMailboxActivity)
 	.use(createMailbox)
 	.use(updateMailbox)
 	.use(deleteMailbox)
