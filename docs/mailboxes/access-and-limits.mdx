@@ -46,7 +46,7 @@ When no trusted address is available and `allowedIps` is set, authentication fai
   A disabled protocol or a disallowed IP address fails like a wrong password: IMAP returns `NO [AUTHENTICATIONFAILED]`, SMTP returns `535`, and HTTP returns `401`. The response doesn't say which check failed, so check these settings when a correct password is refused.
 </Note>
 
-Protocol and IP changes apply to each new login or request. Open IMAP sessions are rechecked periodically, currently about every five minutes, and closed when they no longer pass. Don't rely on a change ending an open session right away; [rotate the password](/mailboxes/manage-credentials#rotate-a-password) when access must end at once.
+Protocol and IP changes apply to each new login or request. Changing `protocols`, `allowedIps` or `selfService` immediately logs out the credential's active IMAP sessions. Clients must reconnect using the current settings. You can also [rotate the password](/mailboxes/manage-credentials#rotate-a-password) to revoke the previous password.
 
 ## Storage quota
 
@@ -77,6 +77,8 @@ Over the limit, HTTP sends return `429` and SMTP returns a temporary `451`. Retr
 | `filters` | [Filters](/mailboxes/filters) at `/mailboxes/me/filters` |
 | `spam` | [Spam settings](/mailboxes/junk-filter#per-mailbox-spam-settings) at `/mailboxes/me/spam` |
 | `password` | `POST /mailboxes/me/rotate-password` |
+
+`filters` works for read-only mailboxes too: their password can list, create, update and delete filters. Applying filters to existing mail (the `apply` endpoints) still needs a Read & write mailbox.
 
 `null` turns all three off, and so does a key left out. On update, the keys you send are merged with the current values. Requests for a setting that isn't enabled return `403`. The account API key can always manage these settings through `/mailboxes/{id}/...`.
 

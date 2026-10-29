@@ -9,10 +9,10 @@ import {
 	validateAndRateLimit,
 } from "@/app/api/e2/lib/auth";
 import {
-	authenticateManagedMailCredential,
 	type MailboxPasswordUse,
 	type ManagedMailCredential,
 	normalizeEmailAddress,
+	verifyManagedMailCredential,
 } from "@/app/api/e2/mailboxes/shared";
 
 export interface ManagedSenderPolicy {
@@ -67,10 +67,12 @@ export function httpMailboxPasswordUse(
 
 /**
  * Verifies a mailbox or SMTP password (`mail_…`/`imap_…`) presented as a
- * bearer token and applies its protocol and IP controls for `use`. Failures
- * count against the mailbox authentication rate limit (per client IP and per
- * token hash), and once that limit is hit even a correct password is refused
- * with 429 until it resets.
+ * bearer token and applies its protocol and IP controls for `use`. A wrong
+ * password counts against the mailbox authentication rate limit per client IP
+ * and per token hash; a correct password refused by its protocol or IP
+ * controls counts only per client IP, so refused attempts cannot lock the
+ * password out where it is allowed. Both return null (the same 401). Once a
+ * limit is hit even a correct password is refused with 429 until it resets.
  */
 export async function authenticateRateLimitedMailToken(
 	request: Request,
@@ -80,13 +82,16 @@ export async function authenticateRateLimitedMailToken(
 ): Promise<ManagedMailCredential | null> {
 	const rateLimitKey = mailTokenRateLimitKey(token);
 	await enforceMailboxAuthenticationRateLimit(request, rateLimitKey, set, {
-		consume: false,
+		login: "check",
+		ip: "check",
 	});
-	const credential = await authenticateManagedMailCredential(token, options);
-	if (!credential) {
-		await enforceMailboxAuthenticationRateLimit(request, rateLimitKey, set);
-	}
-	return credential;
+	const outcome = await verifyManagedMailCredential(token, options);
+	if (outcome.status === "authenticated") return outcome.credential;
+	await enforceMailboxAuthenticationRateLimit(request, rateLimitKey, set, {
+		login: outcome.status === "refused" ? "skip" : "consume",
+		ip: "consume",
+	});
+	return null;
 }
 
 /**

@@ -373,17 +373,25 @@ export function enforceMailboxGatewayAuthorization(
 }
 
 /**
- * Counts one mailbox authentication attempt against the per-IP and per-login
- * limits and throws 429 once either is exhausted. With `consume: false` it
- * only checks that both limits have attempts left, without counting one.
+ * How one mailbox authentication limiter treats an attempt: `consume` counts
+ * it, `check` only verifies attempts are left, `skip` ignores that limiter.
+ */
+export type MailboxRateLimitMode = "consume" | "check" | "skip";
+
+/**
+ * Applies the per-login (client IP + login) and per-IP mailbox authentication
+ * limits and throws 429 once an applied limit is exhausted. By default it
+ * counts one attempt against both; `login` and `ip` set each limiter's mode.
  */
 export async function enforceMailboxAuthenticationRateLimit(
 	request: Request,
 	loginAddress: string,
 	set: { status?: number | string; headers?: unknown },
-	options: { consume?: boolean } = {},
+	options: { login?: MailboxRateLimitMode; ip?: MailboxRateLimitMode } = {},
 ): Promise<void> {
-	const consume = options.consume ?? true;
+	const loginMode = options.login ?? "consume";
+	const ipMode = options.ip ?? "consume";
+	if (loginMode === "skip" && ipMode === "skip") return;
 	if (!mailboxLoginRatelimit || !mailboxIpRatelimit) {
 		if (ALLOW_REQUESTS_WITHOUT_RATE_LIMIT) return;
 
@@ -413,30 +421,39 @@ export async function enforceMailboxAuthenticationRateLimit(
 		remaining: number;
 		reset: number;
 	}>;
+	const apply = async (
+		limiter: NonNullable<typeof mailboxLoginRatelimit>,
+		identifier: string,
+		mode: MailboxRateLimitMode,
+		limit: number,
+	) => {
+		if (mode === "consume") return limiter.limit(identifier);
+		const remaining = await limiter.getRemaining(identifier);
+		return { success: remaining.remaining > 0, limit, ...remaining };
+	};
 	try {
-		if (consume) {
-			results = await Promise.all([
-				mailboxLoginRatelimit.limit(loginKey),
-				mailboxIpRatelimit.limit(clientIp),
-			]);
-		} else {
-			const [login, ip] = await Promise.all([
-				mailboxLoginRatelimit.getRemaining(loginKey),
-				mailboxIpRatelimit.getRemaining(clientIp),
-			]);
-			results = [
-				{
-					success: login.remaining > 0,
-					limit: MAILBOX_LOGIN_ATTEMPTS_PER_MINUTE,
-					...login,
-				},
-				{
-					success: ip.remaining > 0,
-					limit: MAILBOX_IP_ATTEMPTS_PER_MINUTE,
-					...ip,
-				},
-			];
-		}
+		results = await Promise.all([
+			...(loginMode === "skip"
+				? []
+				: [
+						apply(
+							mailboxLoginRatelimit,
+							loginKey,
+							loginMode,
+							MAILBOX_LOGIN_ATTEMPTS_PER_MINUTE,
+						),
+					]),
+			...(ipMode === "skip"
+				? []
+				: [
+						apply(
+							mailboxIpRatelimit,
+							clientIp,
+							ipMode,
+							MAILBOX_IP_ATTEMPTS_PER_MINUTE,
+						),
+					]),
+		]);
 	} catch (error) {
 		console.error(
 			"Mailbox authentication rate limiting service failure:",

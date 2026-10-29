@@ -55,6 +55,29 @@ describe("smtpFailureForApiStatus", () => {
 		expect(smtpFailureForApiStatus(409, "in progress").responseCode).toBe(451);
 	});
 
+	it("tells the client which send limit it hit on a 429", () => {
+		expect(
+			smtpFailureForApiStatus(
+				429,
+				"This mailbox has reached its daily sending limit. Try again after 00:00 UTC.",
+			),
+		).toEqual({
+			responseCode: 451,
+			message:
+				"4.7.0 This mailbox has reached its daily sending limit. Try again after 00:00 UTC.",
+		});
+		expect(smtpFailureForApiStatus(429, "  ").message).toBe(
+			"4.7.0 Rate limited, try again later",
+		);
+		const { message } = smtpFailureForApiStatus(
+			429,
+			`Limit\r\n250 2.0.0 OK\u0085\t${"x".repeat(500)}`,
+		);
+		expect(message).toStartWith("4.7.0 Limit 250 2.0.0 OK x");
+		expect(message).not.toMatch(/[\x00-\x1f\x7f-\x9f]/);
+		expect(message.length).toBeLessThanOrEqual(206);
+	});
+
 	it("keeps upstream messages on a single bounded SMTP reply line", () => {
 		const { message } = smtpFailureForApiStatus(
 			422,
@@ -216,12 +239,42 @@ describe("InboundApiClient.sendEmail", () => {
 
 	it("maps a daily sending limit 429 to a transient SMTP failure", async () => {
 		spyOn(globalThis, "fetch").mockResolvedValue(
-			Response.json({ error: "daily limit" }, { status: 429 }),
+			Response.json(
+				{
+					error:
+						"This mailbox has reached its daily sending limit. Try again after 00:00 UTC.",
+				},
+				{ status: 429 },
+			),
 		);
 
 		await expect(
 			client().sendEmail("secret", payload, "key"),
-		).rejects.toMatchObject({ responseCode: 451 });
+		).rejects.toMatchObject({
+			responseCode: 451,
+			message:
+				"4.7.0 This mailbox has reached its daily sending limit. Try again after 00:00 UTC.",
+		});
+	});
+
+	it("uses the detail message of a rate-limit 429", async () => {
+		spyOn(globalThis, "fetch").mockResolvedValue(
+			Response.json(
+				{
+					error: "Too Many Requests",
+					message: "Rate limit exceeded. Please try again later.",
+					statusCode: 429,
+				},
+				{ status: 429 },
+			),
+		);
+
+		await expect(
+			client().sendEmail("secret", payload, "key"),
+		).rejects.toMatchObject({
+			responseCode: 451,
+			message: "4.7.0 Rate limit exceeded. Please try again later.",
+		});
 	});
 
 	it("includes upstream rejection details in SMTP failures", async () => {

@@ -535,6 +535,19 @@ export function credentialAllowsUse(
 	return ipAllowed(credential.allowedIps, use.clientIp);
 }
 
+/**
+ * Internal outcome of checking a mailbox password. `refused` means the
+ * password itself is correct but its protocol or IP controls do not allow
+ * this use. Callers use it only to decide which rate limits to count, and
+ * must answer it exactly like `invalid` so the policy is never revealed.
+ */
+export type ManagedMailAuthOutcome =
+	| { status: "authenticated"; credential: ManagedMailCredential }
+	| { status: "invalid" }
+	| { status: "refused" };
+
+const INVALID_MAIL_AUTH: ManagedMailAuthOutcome = { status: "invalid" };
+
 export async function authenticateManagedMailCredential(
 	password: string,
 	options: {
@@ -543,6 +556,23 @@ export async function authenticateManagedMailCredential(
 		use?: MailboxPasswordUse;
 	} = {},
 ): Promise<ManagedMailCredential | null> {
+	const outcome = await verifyManagedMailCredential(password, options);
+	return outcome.status === "authenticated" ? outcome.credential : null;
+}
+
+/**
+ * Like `authenticateManagedMailCredential`, but tells a wrong password apart
+ * from a correct one refused by protocol or IP controls (see
+ * `ManagedMailAuthOutcome`).
+ */
+export async function verifyManagedMailCredential(
+	password: string,
+	options: {
+		loginAddress?: string;
+		requireType?: "mailbox";
+		use?: MailboxPasswordUse;
+	} = {},
+): Promise<ManagedMailAuthOutcome> {
 	let verification: Awaited<ReturnType<typeof auth.api.verifyApiKey>> | null =
 		null;
 	let verificationFailed = false;
@@ -566,16 +596,16 @@ export async function authenticateManagedMailCredential(
 	}
 	if (!verification) {
 		if (verificationFailed) throw verificationError;
-		return null;
+		return INVALID_MAIL_AUTH;
 	}
 
 	const apiKeyId = verification.valid ? verification.key?.id : null;
 	const apiKeyOwnerId = verification.valid
 		? verification.key?.referenceId
 		: null;
-	if (!apiKeyId || !apiKeyOwnerId) return null;
+	if (!apiKeyId || !apiKeyOwnerId) return INVALID_MAIL_AUTH;
 
-	return resolveManagedMailCredential(
+	return resolveManagedMailCredentialOutcome(
 		{
 			userId: apiKeyOwnerId,
 			apiKeyId,
@@ -602,7 +632,20 @@ export async function resolveManagedMailCredential(
 	},
 	options: { requireType?: "mailbox"; use?: MailboxPasswordUse } = {},
 ): Promise<ManagedMailCredential | null> {
-	if (!where.apiKeyId && !where.credentialId) return null;
+	const outcome = await resolveManagedMailCredentialOutcome(where, options);
+	return outcome.status === "authenticated" ? outcome.credential : null;
+}
+
+async function resolveManagedMailCredentialOutcome(
+	where: {
+		userId: string;
+		apiKeyId?: string;
+		credentialId?: string;
+		loginAddress?: string;
+	},
+	options: { requireType?: "mailbox"; use?: MailboxPasswordUse },
+): Promise<ManagedMailAuthOutcome> {
+	if (!where.apiKeyId && !where.credentialId) return INVALID_MAIL_AUTH;
 	const conditions = [eq(imapCredentials.userId, where.userId)];
 	if (where.apiKeyId) {
 		conditions.push(eq(imapCredentials.apiKeyId, where.apiKeyId));
@@ -640,23 +683,26 @@ export async function resolveManagedMailCredential(
 		.innerJoin(user, eq(imapCredentials.userId, user.id))
 		.where(and(...conditions))
 		.limit(1);
-	if (!credential?.enabled) return null;
-	if (credential.type !== "mailbox" && credential.type !== "smtp") return null;
+	if (!credential?.enabled) return INVALID_MAIL_AUTH;
+	if (credential.type !== "mailbox" && credential.type !== "smtp")
+		return INVALID_MAIL_AUTH;
 	if (options.requireType && credential.type !== options.requireType)
-		return null;
-	if (options.use && !credentialAllowsUse(credential, options.use)) return null;
+		return INVALID_MAIL_AUTH;
+	if (options.use && !credentialAllowsUse(credential, options.use)) {
+		return { status: "refused" };
+	}
 	if (
 		credential.type === "mailbox" &&
 		credential.accessMode !== "read" &&
 		credential.accessMode !== "read_write"
 	) {
-		return null;
+		return INVALID_MAIL_AUTH;
 	}
 	if (
 		credential.sendingMode !== "identity" &&
 		credential.sendingMode !== "scoped_domains"
 	) {
-		return null;
+		return INVALID_MAIL_AUTH;
 	}
 
 	const banExpires = credential.banExpires
@@ -666,11 +712,11 @@ export async function resolveManagedMailCredential(
 		credential.banned &&
 		(!banExpires || banExpires.getTime() >= Date.now())
 	) {
-		return null;
+		return INVALID_MAIL_AUTH;
 	}
 
 	const normalizedLogin = normalizeEmailAddress(credential.loginAddress);
-	if (!normalizedLogin) return null;
+	if (!normalizedLogin) return INVALID_MAIL_AUTH;
 	const loginDomain = normalizedLogin.slice(
 		normalizedLogin.lastIndexOf("@") + 1,
 	);
@@ -685,12 +731,12 @@ export async function resolveManagedMailCredential(
 			),
 		)
 		.limit(1);
-	if (!verifiedLoginDomain) return null;
+	if (!verifiedLoginDomain) return INVALID_MAIL_AUTH;
 
 	const verifiedScopes = (
 		await loadCredentialScopes(credential.userId, [credential.id], true)
 	).filter((scope) => scope.credentialId === credential.id);
-	if (verifiedScopes.length === 0) return null;
+	if (verifiedScopes.length === 0) return INVALID_MAIL_AUTH;
 
 	let sendingAddress: string | null = null;
 	let allowedDomains: string[] = [];
@@ -698,7 +744,7 @@ export async function resolveManagedMailCredential(
 		sendingAddress = credential.sendingAddress
 			? normalizeEmailAddress(credential.sendingAddress)
 			: null;
-		if (!sendingAddress) return null;
+		if (!sendingAddress) return INVALID_MAIL_AUTH;
 		const sendingDomain = sendingAddress.slice(
 			sendingAddress.lastIndexOf("@") + 1,
 		);
@@ -709,7 +755,7 @@ export async function resolveManagedMailCredential(
 					(scope.type === "address" && scope.address === sendingAddress),
 			)
 		) {
-			return null;
+			return INVALID_MAIL_AUTH;
 		}
 	} else {
 		allowedDomains = [
@@ -728,33 +774,36 @@ export async function resolveManagedMailCredential(
 		);
 
 	return {
-		credentialId: credential.id,
-		userId: credential.userId,
-		loginAddress: credential.loginAddress,
-		type: credential.type,
-		sendingMode: credential.sendingMode,
-		sendingName: credential.sendingName,
-		sendingAddress,
-		allowedDomains,
-		accessMode:
-			credential.type === "smtp"
-				? "read_write"
-				: (credential.accessMode as "read" | "read_write"),
-		scopes: verifiedScopes.map((scope) => ({
-			id: scope.id,
-			type: scope.type as "domain" | "address",
-			domainId: scope.domainId,
-			domain: scope.domain,
-			address: scope.address,
-		})),
-		protocols: resolveProtocols(credential.protocols),
-		allowedIps: credential.allowedIps ?? [],
-		storageQuotaBytes: credential.storageQuotaBytes,
-		dailySendLimit: credential.dailySendLimit,
-		selfService: resolveSelfService(credential.selfService),
-		spamLevel: credential.spamLevel,
-		spamAllow: credential.spamAllow,
-		spamBlock: credential.spamBlock,
+		status: "authenticated",
+		credential: {
+			credentialId: credential.id,
+			userId: credential.userId,
+			loginAddress: credential.loginAddress,
+			type: credential.type,
+			sendingMode: credential.sendingMode,
+			sendingName: credential.sendingName,
+			sendingAddress,
+			allowedDomains,
+			accessMode:
+				credential.type === "smtp"
+					? "read_write"
+					: (credential.accessMode as "read" | "read_write"),
+			scopes: verifiedScopes.map((scope) => ({
+				id: scope.id,
+				type: scope.type as "domain" | "address",
+				domainId: scope.domainId,
+				domain: scope.domain,
+				address: scope.address,
+			})),
+			protocols: resolveProtocols(credential.protocols),
+			allowedIps: credential.allowedIps ?? [],
+			storageQuotaBytes: credential.storageQuotaBytes,
+			dailySendLimit: credential.dailySendLimit,
+			selfService: resolveSelfService(credential.selfService),
+			spamLevel: credential.spamLevel,
+			spamAllow: credential.spamAllow,
+			spamBlock: credential.spamBlock,
+		},
 	};
 }
 
