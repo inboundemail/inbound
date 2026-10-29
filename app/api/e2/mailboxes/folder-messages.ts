@@ -887,7 +887,7 @@ export const moveFolderMessage = new Elysia().post(
 			tags: ["Mailboxes"],
 			summary: "Move a folder message",
 			description:
-				"Requires a read_write mailbox. Moves the message to another folder, like IMAP MOVE. Moving received mail to Junk or INBOX also sets its junk verdict account-wide.",
+				"Requires a read_write mailbox. Moves the message to another folder, like IMAP MOVE. Moving received mail to Junk or INBOX marks it as junk or not junk for this mailbox only; the account-level verdict is unchanged.",
 		},
 	},
 );
@@ -904,7 +904,7 @@ export const copyFolderMessage = new Elysia().post(
 			tags: ["Mailboxes"],
 			summary: "Copy a folder message",
 			description:
-				"Requires a read_write mailbox. Copies the message to another folder, like IMAP COPY. Copying received mail to Junk or INBOX also sets its junk verdict account-wide.",
+				"Requires a read_write mailbox. Copies the message to another folder, like IMAP COPY. Copying received mail to Junk or INBOX marks it as junk or not junk for this mailbox only; the account-level verdict is unchanged.",
 		},
 	},
 );
