@@ -669,7 +669,7 @@ export class SmtpGateway {
 					idempotencyKey,
 				));
 			console.log(
-				`[smtp-gateway] relayed ${rawResult ? "raw " : ""}message ${result.id} from=${mapped.payload.from} recipients=${envelope.rcptTo.length}`,
+				`[smtp-gateway] relayed ${rawResult ? "raw " : ""}message ${result.id} recipients=${envelope.rcptTo.length}`,
 			);
 			return `Queued as ${result.id}`;
 		} finally {
