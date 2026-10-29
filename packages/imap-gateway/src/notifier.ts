@@ -7,6 +7,7 @@ import { sanitizeLogValue } from "./log.ts";
 interface SessionLike {
 	user?: AuthenticatedMailbox & { address?: string };
 	remoteAddress?: string;
+	selected?: { mailbox?: string } | false | null;
 }
 
 type ListenerCallback = (message?: unknown) => void;
@@ -76,6 +77,17 @@ export class PgNotifier {
 	async stop(): Promise<void> {
 		if (this.pollTimer) clearInterval(this.pollTimer);
 		await this.sql.end({ timeout: 2 }).catch(() => undefined);
+	}
+
+	/** Wakes sessions that have one of these mailboxes selected, so they fetch EXPUNGE updates. */
+	wakeMailboxes(mailboxIds: string[]): void {
+		const ids = new Set(mailboxIds);
+		for (const [session, callback] of this.listeners) {
+			const selected = session.selected;
+			if (selected && selected.mailbox && ids.has(selected.mailbox)) {
+				callback();
+			}
+		}
 	}
 
 	sessions(): Iterable<[SessionLike, ListenerCallback]> {

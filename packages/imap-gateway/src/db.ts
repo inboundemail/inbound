@@ -15,7 +15,7 @@ export interface MailboxRow {
 }
 
 export interface JournalEntry {
-	command: "EXISTS";
+	command: "EXISTS" | "EXPUNGE";
 	uid: number;
 	modseq: number;
 	_id: string;
@@ -138,15 +138,125 @@ interface RemovedRow {
 	raw_source: string;
 }
 
+interface DeletedRow {
+	mailbox_id: string;
+	uid: number;
+}
+
+export interface PendingExpunge {
+	mailboxId: string;
+	uid: number;
+	modseq: number;
+}
+
+const JOURNAL_MAX_PER_MAILBOX = 2000;
+const JOURNAL_MAX_MAILBOXES = 10_000;
+const JOURNAL_MAX_AGE_MS = 15 * 60 * 1000;
+
+/**
+ * Recent server-side removals per mailbox, so selected sessions receive
+ * EXPUNGE for messages that another session or a sync removed. In memory on
+ * the single gateway host; a session older than the retained entries sees the
+ * change when it selects the folder again.
+ */
+export class ExpungeJournal {
+	private entries = new Map<
+		string,
+		Array<{ uid: number; modseq: number; at: number }>
+	>();
+
+	constructor(private now: () => number = Date.now) {}
+
+	record(pending: PendingExpunge[]): void {
+		const at = this.now();
+		for (const entry of pending) {
+			const list = this.entries.get(entry.mailboxId) ?? [];
+			this.entries.delete(entry.mailboxId);
+			list.push({ uid: entry.uid, modseq: entry.modseq, at });
+			this.entries.set(entry.mailboxId, this.prune(list, at));
+		}
+		while (this.entries.size > JOURNAL_MAX_MAILBOXES) {
+			const oldest = this.entries.keys().next().value;
+			if (oldest === undefined) break;
+			this.entries.delete(oldest);
+		}
+	}
+
+	since(mailboxId: string, modseq: number): Array<{ uid: number; modseq: number }> {
+		const list = this.entries.get(mailboxId);
+		if (!list) return [];
+		const kept = this.prune(list, this.now());
+		if (kept.length === 0) {
+			this.entries.delete(mailboxId);
+			return [];
+		}
+		this.entries.set(mailboxId, kept);
+		return kept
+			.filter((entry) => entry.modseq > modseq)
+			.map(({ uid, modseq: entryModseq }) => ({ uid, modseq: entryModseq }));
+	}
+
+	private prune(
+		list: Array<{ uid: number; modseq: number; at: number }>,
+		now: number,
+	) {
+		const fresh = list.filter((entry) => now - entry.at <= JOURNAL_MAX_AGE_MS);
+		return fresh.slice(-JOURNAL_MAX_PER_MAILBOX);
+	}
+}
+
+/** Bumps each mailbox's modseq once per removed message and queues EXPUNGE entries. */
+async function journalDeletes(
+	sql: postgres.TransactionSql,
+	rows: DeletedRow[],
+	pending: PendingExpunge[],
+): Promise<void> {
+	const byMailbox = new Map<string, number[]>();
+	for (const row of rows) {
+		const uids = byMailbox.get(row.mailbox_id) ?? [];
+		uids.push(row.uid);
+		byMailbox.set(row.mailbox_id, uids);
+	}
+	for (const mailboxId of [...byMailbox.keys()].sort()) {
+		const uids = (byMailbox.get(mailboxId) ?? []).sort((x, y) => x - y);
+		const bumped = await sql<{ modseq: number }[]>`
+			UPDATE imap_mailboxes
+			SET modseq = modseq + ${uids.length}, updated_at = now()
+			WHERE id = ${mailboxId}
+			RETURNING modseq`;
+		const top = bumped[0]?.modseq;
+		if (top === undefined) continue;
+		uids.forEach((uid, index) => {
+			pending.push({ mailboxId, uid, modseq: top - uids.length + 1 + index });
+		});
+	}
+}
+
+/** Locks the credential's received views and the given mailboxes, in id order. */
+async function lockMailboxes(
+	sql: postgres.TransactionSql,
+	owner: MailboxOwner,
+	mailboxIds: string[],
+): Promise<void> {
+	await sql`
+		SELECT id FROM imap_mailboxes
+		WHERE user_id = ${owner.userId}
+		  AND credential_id = ${owner.credentialId}
+		  AND (id = ANY(${mailboxIds})
+		       OR path = 'INBOX' OR path = 'Junk' OR scope_id IS NOT NULL)
+		ORDER BY id
+		FOR UPDATE`;
+}
+
 async function removeFromMirroredMailboxes(
 	sql: postgres.TransactionSql,
 	mailboxId: string,
 	removed: RemovedRow[],
-): Promise<void> {
+): Promise<DeletedRow[]> {
 	const ids = removed
 		.filter((row) => row.raw_source === "structured")
 		.map((row) => row.structured_email_id);
-	if (ids.length === 0) return;
+	if (ids.length === 0) return [];
 	const rows = await sql<
 		{ credential_id: string | null; mirrored: boolean; junk: boolean }[]
 	>`
@@ -155,7 +265,7 @@ async function removeFromMirroredMailboxes(
 		       (path = 'Junk' AND scope_id IS NULL) AS junk
 		FROM imap_mailboxes WHERE id = ${mailboxId}`;
 	const credentialId = rows[0]?.credential_id;
-	if (!credentialId) return;
+	if (!credentialId) return [];
 	if (rows[0]?.junk) {
 		await sql`
 			INSERT INTO imap_mailbox_removals (credential_id, structured_email_id)
@@ -168,15 +278,9 @@ async function removeFromMirroredMailboxes(
 				  AND mm.raw_source = 'structured'
 				  AND mm.structured_email_id = removed.id)
 			ON CONFLICT DO NOTHING`;
-		return;
+		return [];
 	}
-	if (!rows[0]?.mirrored) return;
-	await sql`
-		SELECT id FROM imap_mailboxes
-		WHERE credential_id = ${credentialId}
-		  AND (path = 'INBOX' OR scope_id IS NOT NULL)
-		ORDER BY id
-		FOR UPDATE`;
+	if (!rows[0]?.mirrored) return [];
 	await sql`
 		INSERT INTO imap_mailbox_removals (credential_id, structured_email_id)
 		SELECT ${credentialId}, removed.id FROM unnest(${ids}::text[]) AS removed(id)
@@ -188,14 +292,194 @@ async function removeFromMirroredMailboxes(
 			  AND mm.raw_source = 'structured'
 			  AND mm.structured_email_id = removed.id)
 		ON CONFLICT DO NOTHING`;
-	await sql`
+	return sql<DeletedRow[]>`
 		DELETE FROM imap_mailbox_messages mm
 		USING imap_mailboxes mb
 		WHERE mm.mailbox_id = mb.id
 		  AND mb.credential_id = ${credentialId}
 		  AND (mb.path = 'INBOX' OR mb.scope_id IS NOT NULL)
 		  AND mm.raw_source = 'structured'
-		  AND mm.structured_email_id = ANY(${ids})`;
+		  AND mm.structured_email_id = ANY(${ids})
+		RETURNING mm.mailbox_id, mm.uid`;
+}
+
+async function deleteOrphanedAppended(
+	sql: postgres.TransactionSql,
+	deleted: RemovedRow[],
+): Promise<void> {
+	const appendedIds = deleted
+		.filter((row) => row.raw_source === "appended")
+		.map((row) => row.structured_email_id);
+	if (appendedIds.length === 0) return;
+	await sql`
+		DELETE FROM imap_appended_messages am
+		WHERE am.id = ANY(${appendedIds})
+		  AND NOT EXISTS (
+			SELECT 1 FROM imap_mailbox_messages mm
+			WHERE mm.raw_source = 'appended'
+			  AND mm.structured_email_id = am.id)`;
+}
+
+/**
+ * Moves received messages whose verdict changed from one view to the other
+ * (INBOX -> Junk when junk, Junk -> INBOX otherwise), keeping their flags.
+ */
+async function transferBetweenViews(
+	sql: postgres.TransactionSql,
+	fromId: string,
+	toId: string,
+	toJunk: boolean,
+	pending: PendingExpunge[],
+): Promise<void> {
+	const moved = await sql<
+		{
+			mailbox_id: string;
+			uid: number;
+			structured_email_id: string;
+			flags: string;
+			internal_date: Date;
+			size: number | null;
+		}[]
+	>`
+		DELETE FROM imap_mailbox_messages mm
+		USING structured_emails se
+		WHERE mm.mailbox_id = ${fromId}
+		  AND mm.raw_source = 'structured'
+		  AND se.id = mm.structured_email_id
+		  AND ${toJunk ? sql`se.is_junk IS TRUE` : sql`se.is_junk IS NOT TRUE`}
+		RETURNING mm.mailbox_id, mm.uid, mm.structured_email_id, mm.flags,
+		          mm.internal_date, mm.size`;
+	if (moved.length === 0) return;
+	await journalDeletes(sql, moved, pending);
+	const target = await sql<{ uid_next: number; modseq: number }[]>`
+		SELECT uid_next, modseq FROM imap_mailboxes WHERE id = ${toId}`;
+	if (!target[0]) return;
+	let uid = target[0].uid_next;
+	let modseq = target[0].modseq;
+	for (const row of [...moved].sort((x, y) => x.uid - y.uid)) {
+		const inserted = await sql<{ uid: number }[]>`
+			INSERT INTO imap_mailbox_messages
+				(id, mailbox_id, structured_email_id, raw_source, uid, flags, internal_date, size, modseq)
+			VALUES (${`${toId}:${uid}`}, ${toId}, ${row.structured_email_id},
+				'structured', ${uid}, ${row.flags}, ${row.internal_date}, ${row.size},
+				${modseq + 1})
+			ON CONFLICT (mailbox_id, structured_email_id) DO NOTHING
+			RETURNING uid`;
+		if (inserted.length === 0) continue;
+		uid++;
+		modseq++;
+	}
+	await sql`
+		UPDATE imap_mailboxes
+		SET uid_next = ${uid}, modseq = ${modseq}, updated_at = now()
+		WHERE id = ${toId}`;
+}
+
+type CopyResult = {
+	uidValidity: number;
+	sourceUid: number[];
+	destinationUid: number[];
+};
+
+async function copyWithin(
+	sql: postgres.TransactionSql,
+	owner: MailboxOwner,
+	sourceMailboxId: string,
+	destination: MailboxRow,
+	uids: number[],
+): Promise<CopyResult> {
+	const source = await sql<
+		{
+			structured_email_id: string;
+			raw_source: string;
+			uid: number;
+			flags: string;
+			internal_date: Date;
+			size: number | null;
+		}[]
+	>`
+		SELECT structured_email_id, raw_source, uid, flags, internal_date, size
+		FROM imap_mailbox_messages
+		WHERE mailbox_id = ${sourceMailboxId} AND uid = ANY(${uids})
+		  AND ${ownedMailbox(sql, sourceMailboxId, owner)}
+		ORDER BY uid ASC`;
+	const locked = await sql<{ uid_next: number; modseq: number }[]>`
+		SELECT uid_next, modseq FROM imap_mailboxes
+		WHERE id = ${destination.id}
+		  AND user_id = ${owner.userId}
+		  AND credential_id = ${owner.credentialId}
+		FOR UPDATE`;
+	if (!locked[0]) throw new Error("Destination mailbox not found");
+	const restored = source
+		.filter((row) => row.raw_source === "structured")
+		.map((row) => row.structured_email_id);
+	const junkVerdict = receivedViewJunkVerdict(destination);
+	if (destination.credentialId && junkVerdict !== null && restored.length > 0) {
+		await sql`
+			DELETE FROM imap_mailbox_removals
+			WHERE credential_id = ${destination.credentialId}
+			  AND structured_email_id = ANY(${restored})`;
+		await sql`
+			SELECT id FROM structured_emails
+			WHERE id = ANY(${restored}) AND user_id = ${owner.userId}
+			ORDER BY id
+			FOR UPDATE`;
+		await sql`
+			UPDATE structured_emails
+			SET is_junk = ${junkVerdict},
+			    junk_reason = 'user',
+			    junk_updated_at = now()
+			WHERE id = ANY(${restored})
+			  AND user_id = ${owner.userId}
+			  AND is_junk IS DISTINCT FROM ${junkVerdict}`;
+	}
+	let nextUid = locked[0].uid_next;
+	let nextModseq = locked[0].modseq;
+	const sourceUid: number[] = [];
+	const destinationUid: number[] = [];
+	for (const row of source) {
+		const inserted = await sql<{ uid: number }[]>`
+			INSERT INTO imap_mailbox_messages
+				(id, mailbox_id, structured_email_id, raw_source, uid, flags, internal_date, size, modseq)
+			VALUES (${`${destination.id}:${nextUid}`}, ${destination.id},
+				${row.structured_email_id}, ${row.raw_source}, ${nextUid},
+				${row.flags}, ${row.internal_date}, ${row.size}, ${nextModseq + 1})
+			ON CONFLICT (mailbox_id, structured_email_id) DO NOTHING
+			RETURNING uid`;
+		if (inserted.length === 0) continue;
+		sourceUid.push(row.uid);
+		destinationUid.push(nextUid);
+		nextUid++;
+		nextModseq++;
+	}
+	await sql`
+		UPDATE imap_mailboxes
+		SET uid_next = ${nextUid}, modseq = ${nextModseq}, updated_at = now()
+		WHERE id = ${destination.id}`;
+	return { uidValidity: destination.uidValidity, sourceUid, destinationUid };
+}
+
+async function deleteWithin(
+	sql: postgres.TransactionSql,
+	owner: MailboxOwner,
+	mailboxId: string,
+	uids: number[] | null,
+	onlyDeletedFlag: boolean,
+	pending: PendingExpunge[],
+): Promise<number[]> {
+	const deleted = await sql<
+		{ mailbox_id: string; uid: number; structured_email_id: string; raw_source: string }[]
+	>`
+		DELETE FROM imap_mailbox_messages
+		WHERE mailbox_id = ${mailboxId}
+		  AND ${ownedMailbox(sql, mailboxId, owner)}
+		  AND ${onlyDeletedFlag ? sql`flags::jsonb ? '\\Deleted'` : sql`TRUE`}
+		  AND ${uids ? sql`uid = ANY(${uids})` : sql`TRUE`}
+		RETURNING mailbox_id, uid, structured_email_id, raw_source`;
+	const mirrored = await removeFromMirroredMailboxes(sql, mailboxId, deleted);
+	await journalDeletes(sql, [...deleted, ...mirrored], pending);
+	await deleteOrphanedAppended(sql, deleted);
+	return deleted.map((row) => row.uid).sort((x, y) => x - y);
 }
 
 function parseFlags(raw: string): string[] {
@@ -212,10 +496,26 @@ function parseFlags(raw: string): string[] {
 export class MailStore {
 	private sql: postgres.Sql;
 	private options: MailStoreOptions;
+	private journal = new ExpungeJournal();
+	/** Called with the mailboxes that lost messages, after the change commits. */
+	onExpunged: ((mailboxIds: string[]) => void) | null = null;
 
 	constructor(databaseUrl: string, options: MailStoreOptions) {
 		this.sql = postgres(databaseUrl, { max: 10, idle_timeout: 30 });
 		this.options = options;
+	}
+
+	/** Runs a transaction and records the EXPUNGEs it queued once it commits. */
+	private async journaled<T>(
+		fn: (sql: postgres.TransactionSql, pending: PendingExpunge[]) => Promise<T>,
+	): Promise<T> {
+		const pending: PendingExpunge[] = [];
+		const result = (await this.sql.begin((sql) => fn(sql, pending))) as T;
+		if (pending.length > 0) {
+			this.journal.record(pending);
+			this.onExpunged?.([...new Set(pending.map((entry) => entry.mailboxId))]);
+		}
+		return result;
 	}
 
 	async ensureMailbox(
@@ -281,13 +581,17 @@ export class MailStore {
 		principal: AuthenticatedMailbox,
 	): Promise<MailboxRow[]> {
 		const scopeIds = principal.scopes.map((scope) => scope.id);
-		await this.sql.begin(async (sql) => {
+		await this.journaled(async (sql, pending) => {
+			await sql`
+				SELECT id FROM imap_mailboxes
+				WHERE credential_id = ${principal.credentialId}
+				ORDER BY id
+				FOR UPDATE`;
 			const stale = await sql<{ id: string }[]>`
 				SELECT id FROM imap_mailboxes
 				WHERE credential_id = ${principal.credentialId}
 				  AND scope_id IS NOT NULL
-				  AND NOT (scope_id = ANY(${scopeIds}))
-				FOR UPDATE`;
+				  AND NOT (scope_id = ANY(${scopeIds}))`;
 			const staleIds = stale.map((row) => row.id);
 			if (staleIds.length > 0) {
 				await sql`
@@ -297,7 +601,7 @@ export class MailStore {
 					DELETE FROM imap_mailboxes
 					WHERE id = ANY(${staleIds})`;
 			}
-			await sql`
+			const revoked = await sql<DeletedRow[]>`
 				DELETE FROM imap_mailbox_messages mm
 				USING imap_mailboxes mb, structured_emails se
 				WHERE mm.mailbox_id = mb.id
@@ -305,7 +609,9 @@ export class MailStore {
 				  AND mb.user_id = ${principal.userId}
 				  AND mm.raw_source = 'structured'
 				  AND se.id = mm.structured_email_id
-				  AND NOT ${visibleToScopes(sql, principal.scopes)}`;
+				  AND NOT ${visibleToScopes(sql, principal.scopes)}
+				RETURNING mm.mailbox_id, mm.uid`;
+			await journalDeletes(sql, revoked, pending);
 		});
 		const result: MailboxRow[] = [];
 		for (const scope of principal.scopes) {
@@ -510,85 +816,41 @@ export class MailStore {
 		sourceMailboxId: string,
 		destination: MailboxRow,
 		uids: number[],
-	): Promise<{
-		uidValidity: number;
-		sourceUid: number[];
-		destinationUid: number[];
-	}> {
-		return this.sql.begin(async (sql) => {
-			const source = await sql<
-				{
-					structured_email_id: string;
-					raw_source: string;
-					uid: number;
-					flags: string;
-					internal_date: Date;
-					size: number | null;
-				}[]
-			>`
-				SELECT structured_email_id, raw_source, uid, flags, internal_date, size
-				FROM imap_mailbox_messages
-				WHERE mailbox_id = ${sourceMailboxId} AND uid = ANY(${uids})
-				  AND ${ownedMailbox(sql, sourceMailboxId, owner)}
-				ORDER BY uid ASC`;
-			const locked = await sql<{ uid_next: number; modseq: number }[]>`
-				SELECT uid_next, modseq FROM imap_mailboxes
-				WHERE id = ${destination.id}
-				  AND user_id = ${owner.userId}
-				  AND credential_id = ${owner.credentialId}
-				FOR UPDATE`;
-			if (!locked[0]) throw new Error("Destination mailbox not found");
-			const restored = source
-				.filter((row) => row.raw_source === "structured")
-				.map((row) => row.structured_email_id);
-			const junkVerdict = receivedViewJunkVerdict(destination);
-			if (
-				destination.credentialId &&
-				junkVerdict !== null &&
-				restored.length > 0
-			) {
-				await sql`
-					DELETE FROM imap_mailbox_removals
-					WHERE credential_id = ${destination.credentialId}
-					  AND structured_email_id = ANY(${restored})`;
-				await sql`
-					UPDATE structured_emails
-					SET is_junk = ${junkVerdict},
-					    junk_reason = 'user',
-					    junk_updated_at = now()
-					WHERE id = ANY(${restored})
-					  AND user_id = ${owner.userId}
-					  AND (is_junk IS DISTINCT FROM ${junkVerdict}
-					       OR junk_reason IS DISTINCT FROM 'user')`;
-			}
-			let nextUid = locked[0]?.uid_next ?? 1;
-			let nextModseq = locked[0]?.modseq ?? 0;
-			const sourceUid: number[] = [];
-			const destinationUid: number[] = [];
-			for (const row of source) {
-				const inserted = await sql<{ uid: number }[]>`
-					INSERT INTO imap_mailbox_messages
-						(id, mailbox_id, structured_email_id, raw_source, uid, flags, internal_date, size, modseq)
-					VALUES (${`${destination.id}:${nextUid}`}, ${destination.id},
-						${row.structured_email_id}, ${row.raw_source}, ${nextUid},
-						${row.flags}, ${row.internal_date}, ${row.size}, ${nextModseq + 1})
-					ON CONFLICT (mailbox_id, structured_email_id) DO NOTHING
-					RETURNING uid`;
-				if (inserted.length === 0) continue;
-				sourceUid.push(row.uid);
-				destinationUid.push(nextUid);
-				nextUid++;
-				nextModseq++;
-			}
-			await sql`
-				UPDATE imap_mailboxes
-				SET uid_next = ${nextUid}, modseq = ${nextModseq}, updated_at = now()
-				WHERE id = ${destination.id}`;
-			return {
-				uidValidity: destination.uidValidity,
-				sourceUid,
-				destinationUid,
-			};
+	): Promise<CopyResult> {
+		return this.journaled(async (sql) => {
+			await lockMailboxes(sql, owner, [sourceMailboxId, destination.id]);
+			return copyWithin(sql, owner, sourceMailboxId, destination, uids);
+		});
+	}
+
+	/**
+	 * MOVE in one transaction: copies into the destination, then removes the
+	 * source messages (and their mirrors). Returns the source UIDs removed.
+	 */
+	async moveMessages(
+		owner: MailboxOwner,
+		sourceMailboxId: string,
+		destination: MailboxRow,
+		uids: number[],
+	): Promise<CopyResult & { expunged: number[] }> {
+		return this.journaled(async (sql, pending) => {
+			await lockMailboxes(sql, owner, [sourceMailboxId, destination.id]);
+			const copied = await copyWithin(
+				sql,
+				owner,
+				sourceMailboxId,
+				destination,
+				uids,
+			);
+			const expunged = await deleteWithin(
+				sql,
+				owner,
+				sourceMailboxId,
+				uids,
+				false,
+				pending,
+			);
+			return { ...copied, expunged };
 		});
 	}
 
@@ -597,28 +859,9 @@ export class MailStore {
 		mailboxId: string,
 		uids: number[],
 	): Promise<number[]> {
-		return this.sql.begin(async (sql) => {
-			const deleted = await sql<
-				{ uid: number; structured_email_id: string; raw_source: string }[]
-			>`
-				DELETE FROM imap_mailbox_messages
-				WHERE mailbox_id = ${mailboxId} AND uid = ANY(${uids})
-				  AND ${ownedMailbox(sql, mailboxId, owner)}
-				RETURNING uid, structured_email_id, raw_source`;
-			await removeFromMirroredMailboxes(sql, mailboxId, deleted);
-			const appendedIds = deleted
-				.filter((row) => row.raw_source === "appended")
-				.map((row) => row.structured_email_id);
-			if (appendedIds.length > 0) {
-				await sql`
-					DELETE FROM imap_appended_messages am
-					WHERE am.id = ANY(${appendedIds})
-					  AND NOT EXISTS (
-						SELECT 1 FROM imap_mailbox_messages mm
-						WHERE mm.raw_source = 'appended'
-						  AND mm.structured_email_id = am.id)`;
-			}
-			return deleted.map((row) => row.uid).sort((a, b) => a - b);
+		return this.journaled(async (sql, pending) => {
+			await lockMailboxes(sql, owner, [mailboxId]);
+			return deleteWithin(sql, owner, mailboxId, uids, false, pending);
 		});
 	}
 
@@ -629,29 +872,54 @@ export class MailStore {
 		const scope = mailbox.scopeId
 			? principal.scopes.find((item) => item.id === mailbox.scopeId)
 			: null;
-		const junk = receivedViewJunkVerdict(mailbox) === true;
-		if (mailbox.path !== "INBOX" && !scope && !junk) return 0;
+		const view = receivedViewJunkVerdict(mailbox);
+		if (view === null && !scope) return 0;
+		const junk = view === true;
 
 		const scopes = scope ? [scope] : principal.scopes;
 		if (scopes.length === 0) return 0;
 
-		return this.sql.begin(async (sql) => {
-			const locked = await sql<{ uid_next: number; modseq: number }[]>`
-				SELECT uid_next, modseq FROM imap_mailboxes
-				WHERE id = ${mailbox.id}
-				  AND user_id = ${principal.userId}
+		return this.journaled(async (sql, pending) => {
+			const locked = await sql<
+				{ uid_next: number; modseq: number; id: string; path: string }[]
+			>`
+				SELECT uid_next, modseq, id, path FROM imap_mailboxes
+				WHERE user_id = ${principal.userId}
 				  AND credential_id = ${principal.credentialId}
+				  AND (id = ${mailbox.id}
+				       OR (${view !== null} AND scope_id IS NULL
+				           AND path IN ('INBOX', 'Junk')))
+				ORDER BY id
 				FOR UPDATE`;
-			if (!locked[0]) return 0;
-			const uidNext = locked[0].uid_next;
-			const modseq = locked[0].modseq;
-			await sql`
-				DELETE FROM imap_mailbox_messages mm
-				USING structured_emails se
-				WHERE mm.mailbox_id = ${mailbox.id}
-				  AND mm.raw_source = 'structured'
-				  AND se.id = mm.structured_email_id
-				  AND ${junk ? sql`se.is_junk IS FALSE` : sql`se.is_junk IS TRUE`}`;
+			if (!locked.some((row) => row.id === mailbox.id)) return 0;
+			if (view !== null) {
+				const inbox = locked.find((row) => row.path === "INBOX");
+				const junkBox = locked.find((row) => row.path === "Junk");
+				if (inbox && junkBox) {
+					await transferBetweenViews(sql, inbox.id, junkBox.id, true, pending);
+					await transferBetweenViews(sql, junkBox.id, inbox.id, false, pending);
+				}
+			} else {
+				const misplaced = await sql<DeletedRow[]>`
+					DELETE FROM imap_mailbox_messages mm
+					USING structured_emails se
+					WHERE mm.mailbox_id = ${mailbox.id}
+					  AND mm.raw_source = 'structured'
+					  AND se.id = mm.structured_email_id
+					  AND se.is_junk IS TRUE
+					RETURNING mm.mailbox_id, mm.uid`;
+				await journalDeletes(sql, misplaced, pending);
+			}
+			const current = await sql<{ uid_next: number; modseq: number }[]>`
+				SELECT uid_next, modseq FROM imap_mailboxes WHERE id = ${mailbox.id}`;
+			const uidNext =
+				current[0]?.uid_next ??
+				locked.find((row) => row.id === mailbox.id)?.uid_next ??
+				1;
+			const modseq =
+				current[0]?.modseq ??
+				locked.find((row) => row.id === mailbox.id)?.modseq ??
+				0;
 			const inserted = await sql<{ uid: number }[]>`
 				WITH new_msgs AS (
 					SELECT se.id AS seid, se.created_at,
@@ -661,7 +929,12 @@ export class MailStore {
 					WHERE se.user_id = ${principal.userId}
 					  AND se.raw_content IS NOT NULL
 					  AND ${visibleToScopes(sql, scopes)}
-					  AND ${junk ? sql`se.is_junk IS TRUE` : sql`se.is_junk IS NOT TRUE`}
+					  AND ${
+							junk
+								? sql`se.is_junk IS TRUE`
+								: sql`se.is_junk IS NOT TRUE
+					  AND (se.is_junk IS NOT NULL OR se.created_at < now() - interval '2 minutes')`
+						}
 					  AND NOT EXISTS (
 						SELECT 1 FROM imap_mailbox_messages mm
 						WHERE mm.mailbox_id = ${mailbox.id}
@@ -734,12 +1007,37 @@ export class MailStore {
 			  AND ${ownedMailbox(this.sql, mailboxId, owner)}
 			ORDER BY modseq ASC
 			LIMIT 500`;
-		return rows.map((row) => ({
+		const updates: JournalEntry[] = rows.map((row) => ({
 			command: "EXISTS" as const,
 			uid: row.uid,
 			modseq: row.modseq,
 			_id: `${mailboxId}:${row.uid}`,
 		}));
+		const upTo =
+			rows.length === 500
+				? (rows[rows.length - 1]?.modseq ?? Number.POSITIVE_INFINITY)
+				: Number.POSITIVE_INFINITY;
+		const expunges = this.journal
+			.since(mailboxId, sinceModseq)
+			.filter((entry) => entry.modseq <= upTo);
+		if (expunges.length > 0) {
+			const owned = await this.sql<{ id: string }[]>`
+				SELECT id FROM imap_mailboxes
+				WHERE id = ${mailboxId}
+				  AND user_id = ${owner.userId}
+				  AND credential_id = ${owner.credentialId}`;
+			if (owned.length > 0) {
+				for (const entry of expunges) {
+					updates.push({
+						command: "EXPUNGE",
+						uid: entry.uid,
+						modseq: entry.modseq,
+						_id: `${mailboxId}:expunge:${entry.uid}:${entry.modseq}`,
+					});
+				}
+			}
+		}
+		return updates.sort((x, y) => x.modseq - y.modseq);
 	}
 
 	async listMessages(
@@ -896,39 +1194,16 @@ export class MailStore {
 		mailboxId: string,
 		requestedUids?: number[],
 	): Promise<number[]> {
-		return this.sql.begin(async (sql) => {
-			const deleted = requestedUids
-				? await sql<
-						{ uid: number; structured_email_id: string; raw_source: string }[]
-					>`
-					DELETE FROM imap_mailbox_messages
-					WHERE mailbox_id = ${mailboxId}
-					  AND ${ownedMailbox(sql, mailboxId, owner)}
-					  AND flags::jsonb ? '\\Deleted'
-					  AND uid = ANY(${requestedUids})
-					RETURNING uid, structured_email_id, raw_source`
-				: await sql<
-						{ uid: number; structured_email_id: string; raw_source: string }[]
-					>`
-					DELETE FROM imap_mailbox_messages
-					WHERE mailbox_id = ${mailboxId}
-					  AND ${ownedMailbox(sql, mailboxId, owner)}
-					  AND flags::jsonb ? '\\Deleted'
-					RETURNING uid, structured_email_id, raw_source`;
-			await removeFromMirroredMailboxes(sql, mailboxId, deleted);
-			const appendedIds = deleted
-				.filter((row) => row.raw_source === "appended")
-				.map((row) => row.structured_email_id);
-			if (appendedIds.length > 0) {
-				await sql`
-					DELETE FROM imap_appended_messages am
-					WHERE am.id = ANY(${appendedIds})
-					  AND NOT EXISTS (
-						SELECT 1 FROM imap_mailbox_messages mm
-						WHERE mm.raw_source = 'appended'
-						  AND mm.structured_email_id = am.id)`;
-			}
-			return deleted.map((row) => row.uid).sort((a, b) => a - b);
+		return this.journaled(async (sql, pending) => {
+			await lockMailboxes(sql, owner, [mailboxId]);
+			return deleteWithin(
+				sql,
+				owner,
+				mailboxId,
+				requestedUids ?? null,
+				true,
+				pending,
+			);
 		});
 	}
 

@@ -562,21 +562,16 @@ export function buildHandlers(
 				) {
 					return { success: "CANNOT" as const, info: null };
 				}
-				const info = await store.copyMessages(
+				const { expunged, ...info } = await store.moveMessages(
 					user,
 					mailboxId,
 					destination,
 					update.messages,
 				);
-				const moved = await store.deleteMessages(
-					user,
-					mailboxId,
-					update.messages,
-				);
 				notifySelected(
 					session,
 					mailboxId,
-					moved.map((uid) => ({ command: "EXPUNGE", uid })),
+					expunged.map((uid) => ({ command: "EXPUNGE", uid })),
 				);
 				return { success: true as const, info };
 			})()
