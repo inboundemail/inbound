@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AuthenticatedMailbox } from "./auth.ts";
-import { sanitizeLogValue } from "./log.ts";
+import { logEvent, sanitizeLogValue } from "./log.ts";
 
 export interface RevalidatedSession {
 	user?: AuthenticatedMailbox & { address?: string };
@@ -125,6 +125,7 @@ export class SessionRevalidator {
 			if (!user) continue;
 			const state = this.states.get(session);
 			if (!state) {
+				logEvent("session_dropped", { reason: "unverifiable" });
 				callback({
 					command: "LOGOUT",
 					reason: "Session can no longer be verified, please log in again",
@@ -133,6 +134,7 @@ export class SessionRevalidator {
 			}
 			if (now - state.authenticatedAt >= this.options.maxAgeMs) {
 				this.forget(session);
+				logEvent("session_dropped", { reason: "expired" });
 				callback({
 					command: "LOGOUT",
 					reason: "Session expired, please log in again",
@@ -177,6 +179,9 @@ export class SessionRevalidator {
 						continue;
 					}
 					this.forget(session);
+					logEvent("session_dropped", {
+						reason: fresh ? "changed" : "invalid",
+					});
 					callback({
 						command: "LOGOUT",
 						reason: fresh
