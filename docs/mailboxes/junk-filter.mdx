@@ -13,12 +13,16 @@ Inbound checks every received email for spam, phishing, fraud, malware and imper
 
 Set the level in the [Mailboxes & SMTP dashboard](https://inbound.new/mailboxes) or with `PUT /api/e2/spam-filter`. It applies to the whole account and to emails received after the change.
 
-| Level | Marks as junk |
+Each email gets a level from 0 (none) to 4 (clear) for spam, phishing, fraud, malware and impersonation, plus how confident the classifier is in its answer. Failed authentication (for example a DMARC failure) can raise a level without making the classifier more confident, so the default level only acts on confident answers.
+
+| Level | Marks as junk when any of them is |
 | --- | --- |
-| `strict` | Possible spam or threats (level 2 of 4 or higher) |
-| `standard` (default) | Likely spam or threats (level 3 or higher) |
-| `lenient` | Only clear spam or threats (level 4) |
+| `strict` | Level 3 or higher, or level 2 with a confident answer |
+| `standard` (default) | Level 3 or higher with a confident answer |
+| `lenient` | Level 4 with a confident answer |
 | `off` | Nothing automatically |
+
+Prompt injection (text aimed at an AI reading the email) is checked too, but never marks an email as junk by itself. An attachment that fails the receiving server's virus scan counts as clear malware.
 
 Unless the level is `off`, an email that fails the receiving server's spam check is also marked as junk.
 

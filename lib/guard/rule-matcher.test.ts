@@ -1076,33 +1076,107 @@ describe("Jev classification summary", () => {
 
 describe("junk verdict", () => {
 	type Summary = Parameters<typeof classifierJunkVerdict>[1];
-	function summaryWith(levels: Partial<Record<string, number>>): Summary {
-		const dimension = (level = 0) => ({ level, confidence: 0.9 });
+	type Label = { level: number; confidence: number; base_level?: number };
+	const JUNK_LABELS = ["spam", "phishing", "fraud", "malware", "impersonation"];
+	function summaryWith(labels: Partial<Record<string, number | Label>>): Summary {
+		const dimension = (value: number | Label = 0) =>
+			typeof value === "number" ? { level: value, confidence: 0.9 } : value;
 		return {
-			spam: dimension(levels.spam),
-			phishing: dimension(levels.phishing),
-			fraud: dimension(levels.fraud),
-			impersonation: dimension(levels.impersonation),
-			malware: dimension(levels.malware),
-			prompt_injection: dimension(levels.prompt_injection),
+			spam: dimension(labels.spam),
+			phishing: dimension(labels.phishing),
+			fraud: dimension(labels.fraud),
+			impersonation: dimension(labels.impersonation),
+			malware: dimension(labels.malware),
+			prompt_injection: dimension(labels.prompt_injection),
 			risk: 0,
 		};
 	}
 
+	// [filter level, label level, confidence, junk]
 	it.each([
-		["strict", 1, false],
-		["strict", 2, true],
-		["standard", 2, false],
-		["standard", 3, true],
-		["lenient", 3, false],
-		["lenient", 4, true],
-		["off", 4, false],
-	] as const)("at %s, level %d is junk: %s", (level, value, junk) => {
-		for (const dimension of ["spam", "phishing", "fraud", "malware", "impersonation"]) {
+		["strict", 1, 0.9, false],
+		["strict", 2, 0.5, false],
+		["strict", 2, 0.6, true],
+		["strict", 3, 0.1, true],
+		["standard", 2, 0.9, false],
+		["standard", 3, 0.59, false],
+		["standard", 3, 0.6, true],
+		["standard", 4, 0.3, false],
+		["standard", 4, 0.9, true],
+		["lenient", 3, 0.9, false],
+		["lenient", 4, 0.5, false],
+		["lenient", 4, 0.6, true],
+		["off", 4, 1, false],
+	] as const)("at %s, level %d with confidence %p is junk: %s", (level, value, confidence, junk) => {
+		for (const dimension of JUNK_LABELS) {
 			expect(
-				classifierJunkVerdict(level, summaryWith({ [dimension]: value }), "PASS")
-					?.isJunk,
+				classifierJunkVerdict(
+					level,
+					summaryWith({ [dimension]: { level: value, confidence } }),
+					"PASS",
+				)?.isJunk,
 			).toBe(junk);
+		}
+	});
+
+	it("does not count a confident answer below level 2 that the auth rules raised", () => {
+		// A noul of 0.2 (confident "no", confidence 0.6) raised to 3 by failed DMARC
+		const raised = { level: 3, confidence: 0.6, base_level: 1 };
+		for (const level of ["lenient", "standard"] as const) {
+			expect(
+				classifierJunkVerdict(level, summaryWith({ impersonation: raised }), null)?.isJunk,
+			).toBe(false);
+		}
+		expect(
+			classifierJunkVerdict("strict", summaryWith({ impersonation: raised }), null)?.isJunk,
+		).toBe(true);
+		expect(
+			classifierJunkVerdict(
+				"standard",
+				summaryWith({ phishing: { level: 3, confidence: 0.9, base_level: 2 } }),
+				null,
+			)?.isJunk,
+		).toBe(true);
+	});
+
+	it("keeps an unsure impersonation raised by failed DMARC out of junk at standard", () => {
+		const summary = summarizeClassification(
+			{ impersonation: { noul: 0.64 } },
+			{
+				spf: "PASS",
+				dkim: "PASS",
+				dmarc: "FAIL",
+				ses_spam: "DISABLED",
+				ses_virus: "DISABLED",
+				sender_domain: "example.com",
+				link_domains: [],
+				reply_to_differs_from_sender: false,
+				display_name_contains_other_address: false,
+			},
+		);
+		expect(summary.impersonation.level).toBe(4);
+		expect(summary.impersonation.confidence).toBeCloseTo(0.28);
+		expect(classifierJunkVerdict("standard", summary, "DISABLED")?.isJunk).toBe(false);
+		expect(classifierJunkVerdict("strict", summary, "DISABLED")?.isJunk).toBe(true);
+	});
+
+	it("junks an SES virus failure at every level but off", () => {
+		const summary = summarizeClassification(
+			{ malware: { noul: 0.1 } },
+			{
+				spf: "PASS",
+				dkim: "PASS",
+				dmarc: "PASS",
+				ses_spam: "PASS",
+				ses_virus: "FAIL",
+				sender_domain: "example.com",
+				link_domains: [],
+				reply_to_differs_from_sender: false,
+				display_name_contains_other_address: false,
+			},
+		);
+		for (const level of ["lenient", "standard", "strict"] as const) {
+			expect(classifierJunkVerdict(level, summary, "PASS")?.isJunk).toBe(true);
 		}
 	});
 

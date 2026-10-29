@@ -115,8 +115,18 @@ export const CLASSIFICATION_DIMENSIONS = Object.keys(
 export interface DimensionSummary {
 	/** 0 (none) to 4 (clear). */
 	level: number;
-	/** 0 to 1, from Jev's answer. */
+	/**
+	 * 0 to 1: how sure Jev is of its own answer, before the facts adjust the
+	 * level. For scores it is Jev's confidence in the score; for nouls it is
+	 * |2p - 1|, which is high for a confident "no" as well as a confident "yes".
+	 */
 	confidence: number;
+	/**
+	 * 0 to 4: the level from Jev's answer alone, before the authentication and
+	 * reply-to rules raise it. Pairs with `confidence` to tell whether Jev itself
+	 * leaned towards the label. Missing in summaries stored before it existed.
+	 */
+	base_level?: number;
 }
 
 export type ClassificationSummary = Record<
@@ -152,13 +162,15 @@ function noulLevel(probability: number): number {
 function dimension(answer: JevAnswer | undefined): DimensionSummary {
 	const score = scoreOf(answer);
 	if (score) {
-		return { level: clampLevel(score.score), confidence: score.confidence };
+		const level = clampLevel(score.score);
+		return { level, confidence: score.confidence, base_level: level };
 	}
 	const noul = noulOf(answer);
 	if (noul !== undefined) {
-		return { level: noulLevel(noul), confidence: Math.abs(2 * noul - 1) };
+		const level = noulLevel(noul);
+		return { level, confidence: Math.abs(2 * noul - 1), base_level: level };
 	}
-	return { level: 0, confidence: 0 };
+	return { level: 0, confidence: 0, base_level: 0 };
 }
 
 /**
@@ -171,7 +183,9 @@ function dimension(answer: JevAnswer | undefined): DimensionSummary {
  *   ("Jane (jane@corp.com) via Service" is a legitimate pattern when authentication passes).
  * - Failed auth with impersonation at 2+: impersonation +1.
  * - Reply-To on another domain with fraud at 2+: fraud +1 (payment-redirect pattern).
- * - SES virus verdict FAIL: malware 4. SES spam verdict FAIL: spam at least 3.
+ * - SES virus verdict FAIL: malware 4 with base level 4 and confidence 1 (the scanner's verdict is definitive).
+ * - SES spam verdict FAIL: spam at least 3.
+ * - These rules raise `level` only; `confidence` and `base_level` stay Jev's own.
  * - risk = max of phishing, fraud, impersonation, malware, prompt_injection, and spam capped at 2.
  */
 export function summarizeClassification(
@@ -195,7 +209,11 @@ export function summarizeClassification(
 	}
 	if (authFailed && impersonation.level >= 2) impersonation.level += 1;
 	if (facts.reply_to_differs_from_sender && fraud.level >= 2) fraud.level += 1;
-	if (facts.ses_virus === "FAIL") malware.level = MAX_LEVEL;
+	if (facts.ses_virus === "FAIL") {
+		malware.level = MAX_LEVEL;
+		malware.base_level = MAX_LEVEL;
+		malware.confidence = 1;
+	}
 	if (facts.ses_spam === "FAIL") spam.level = Math.max(spam.level, 3);
 
 	for (const item of [
