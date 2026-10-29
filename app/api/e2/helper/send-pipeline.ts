@@ -8,7 +8,10 @@ import {
 	readIdempotencyKey,
 } from "@/app/api/e2/helper/idempotency";
 import { buildSentEmailTags } from "@/app/api/e2/helper/ses-email-tags";
-import { sesSendErrorResponse } from "@/app/api/e2/helper/ses-send-errors";
+import {
+	isSendingPausedError,
+	sesSendErrorResponse,
+} from "@/app/api/e2/helper/ses-send-errors";
 import {
 	type ManagedSenderPolicy,
 	senderPolicyAllowsAddress,
@@ -19,7 +22,7 @@ import {
 	type TenantSendingInfo,
 } from "@/lib/aws-ses/identity-arn-helper";
 import { db } from "@/lib/db";
-import { SENT_EMAIL_STATUS, sentEmails } from "@/lib/db/schema";
+import { SENT_EMAIL_STATUS, sentEmails, sesTenants } from "@/lib/db/schema";
 import { getRootDomain, isSubdomain } from "@/lib/domains-and-dns/domain-utils";
 import {
 	fromAddressMatchesSender,
@@ -265,6 +268,29 @@ export async function checkEmailSendAllowance(
 	return { unlimited: Boolean(emailCheck.unlimited) };
 }
 
+/**
+ * Whether SES "sending paused" can be the account-wide pause rather than this
+ * user's tenant: agent mail is sent outside any tenant, and the outbound
+ * guard already stops inactive tenants before SES is called.
+ */
+async function tenantSendingActive(
+	userId: string,
+	isAgentEmail: boolean,
+): Promise<boolean> {
+	if (isAgentEmail) return true;
+	try {
+		const [tenant] = await db
+			.select({ status: sesTenants.status })
+			.from(sesTenants)
+			.where(eq(sesTenants.userId, userId))
+			.limit(1);
+		return tenant?.status === "active";
+	} catch (error) {
+		console.error("❌ Failed to read tenant status after SES pause:", error);
+		return true;
+	}
+}
+
 export type SentEmailContent = Pick<
 	typeof sentEmails.$inferInsert,
 	| "from"
@@ -477,7 +503,11 @@ export async function deliverSentEmail(input: {
 			})
 			.where(eq(sentEmails.id, emailId));
 
-		const failure = sesSendErrorResponse(sesError);
+		const failure = sesSendErrorResponse(sesError, {
+			tenantSendingActive: isSendingPausedError(sesError)
+				? await tenantSendingActive(userId, sender.isAgentEmail)
+				: true,
+		});
 		return sendError(failure.status, failure.error);
 	}
 }
