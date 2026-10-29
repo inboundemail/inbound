@@ -47,14 +47,16 @@ Nodemailer and Python's `send_message` build the envelope from `To`, `Cc`, and `
 
 ## How messages are rebuilt
 
-Inbound parses each submitted message and sends it again through the email API; it does not relay the raw bytes. The delivered message keeps:
+Inbound parses each submitted message and sends it again through the email API; it doesn't relay the raw bytes. The delivered message keeps:
 
 - `From`, `To`, `Cc`, `Reply-To`, and `Subject`
 - The plain-text and HTML bodies
 - Attachments, including inline images referenced by `Content-ID`
 - `In-Reply-To`, `References`, and custom `X-` headers (except `X-SES-*`)
 
-Other headers, such as your own `Message-ID` or `Date`, are not preserved. Line breaks and control characters are removed from header values.
+Other headers, such as `Date`, `Sender` or `List-Unsubscribe`, are not kept, and the delivered message gets a new `Message-ID`. A valid `Message-ID` you set is kept on the copy saved to `Sent`, so a client that also saves its own copy doesn't create a duplicate. Line breaks and control characters in header values are replaced with spaces.
+
+S/MIME signed messages (`multipart/signed`) are the exception: they are relayed unchanged so the signature stays valid, including their `Date`, `Message-ID`, and `To` and `Cc` headers.
 
 ## Limits
 
@@ -63,14 +65,18 @@ Other headers, such as your own `Message-ID` or `Date`, are not preserved. Line 
 | Maximum message size | 3 MiB (`3,145,728` bytes), advertised as `SIZE 3145728` |
 | Recipients per message | 50 distinct envelope recipients |
 | Simultaneous connections per client IP address | 10 |
+| Time to authenticate after connecting | 30 seconds |
 | Idle connection timeout | 60 seconds |
+| Maximum session length | 10 minutes |
 | Failed logins | 10 per login address and IP address, and 50 per IP address, in a 15-minute window |
 
 The size limit applies to the complete MIME message. Base64 encoding makes attachments about a third larger than the original files. If the client sends a `SIZE` parameter above the limit, the message is rejected before `DATA`.
 
-When a login is throttled, further attempts from that address fail with `421` until the 15-minute window ends, even with the correct password. Authentication requests are also rate-limited by the API.
+Connections over the per-IP limit are closed without a reply. When a login is throttled, further attempts from that address fail with `421` until the 15-minute window ends, even with the correct password. Authentication requests are also rate-limited by the API.
 
-SMTP sends count toward your account's sending limits and [API rate limits](/api-reference/rate-limits). SMTP does not save a copy in the IMAP `Sent` folder; see [Sent mail is not saved automatically](/mailboxes/imap-behavior#sent-mail-is-not-saved-automatically).
+SMTP sends count toward your account's sending limits, the credential's [daily send limit](/mailboxes/access-and-limits#daily-send-limit) and the [API rate limits](/api-reference/rate-limits).
+
+Messages sent with a **Mailbox + SMTP** credential are saved to its IMAP `Sent` folder automatically, a few seconds after they are accepted. **SMTP only** credentials have no mailbox and save no copy. See [Sent mail](/mailboxes/imap-behavior#sent-mail).
 
 ## Supported extensions
 
@@ -78,28 +84,29 @@ The server advertises `PIPELINING`, `8BITMIME`, `SIZE`, `STARTTLS` (port `587`, 
 
 `SMTPUTF8`, `DSN`, and `ENHANCEDSTATUSCODES` are not supported:
 
-- Addresses must be ASCII. A non-ASCII local part is rejected with `553`. Non-ASCII display names, subjects, and bodies work normally when MIME-encoded.
+- Envelope addresses (`MAIL FROM` and `RCPT TO`) must have an ASCII local part; a non-ASCII local part is rejected with `553`. Internationalized domain names are accepted. Non-ASCII display names, subjects, and bodies work normally when MIME-encoded.
 - `MAIL FROM` accepts only the `SIZE`, `BODY`, and `AUTH` parameters, and `RCPT TO` accepts none. Others, such as the DSN parameters `RET`, `ENVID`, `NOTIFY`, and `ORCPT`, are rejected with `555`. In Nodemailer, leave the `dsn` option unset.
 
 After `STARTTLS`, send `EHLO` again before `AUTH`. SMTP libraries do this automatically.
 
 ## Reply codes
 
-Reply text includes an enhanced status code, such as `5.7.8`, even though `ENHANCEDSTATUSCODES` is not advertised.
+Most replies include an enhanced status code in their text, such as `5.7.8`, even though `ENHANCEDSTATUSCODES` is not advertised. Some protocol replies, such as `530`, `538` and `250 ... Queued as`, don't.
 
 | Code | Meaning | What to do |
 | --- | --- | --- |
 | `250` | Accepted. The reply text includes `Queued as` and the Inbound email ID. | Nothing |
-| `421` | Too many connections from your IP address, too many failed logins, or the connection is closing | Reduce concurrent connections, or wait out the 15-minute login window. Reconnect with backoff. |
-| `451` | Temporary failure: rate limited, the credential's [daily send limit](/mailboxes/access-and-limits#daily-send-limit) reached, the same message is already being processed, the gateway is busy, or the email API is unavailable | Retry later with backoff |
+| `421` | Too many failed logins, an authentication or session timeout, or the server is closing the connection | Wait out the 15-minute login window, authenticate promptly, and reconnect with backoff |
+| `451` | Temporary failure: rate limited, the credential's [daily send limit](/mailboxes/access-and-limits#daily-send-limit) reached (reply text: `This mailbox has reached its daily sending limit`), the same message is already being processed, too many messages in flight for this credential or address, the gateway is busy, or the email API is unavailable | Retry later with backoff. For the daily limit, retry after 00:00 UTC. |
 | `452` | More than 50 recipients | Send the remaining recipients in another message |
-| `454` | The authentication service is unavailable | Retry later with backoff |
+| `454` | The authentication service is unavailable or rate limited | Retry later with backoff |
 | `530` | `MAIL FROM` was sent before authenticating | Authenticate first |
-| `535` | Invalid login email or password, disabled credential, a **Read only** credential, SMTP turned off in the credential's `protocols`, a client address outside its `allowedIps`, or the domain or scope is no longer verified | Check the credential, its [access settings](/mailboxes/access-and-limits), and give it **Read & write** access to send. Repeated failures lead to `421`. |
+| `535` | Invalid login email or password, disabled credential, a **Read only** credential, SMTP turned off in the credential's `protocols`, a client address outside its `allowedIps`, or the login, scope or sender domain is no longer verified | Check the credential, its [access settings](/mailboxes/access-and-limits), and give it **Read & write** access to send. Repeated failures lead to `421`. |
 | `538` | `AUTH` was attempted before TLS | Use port `465`, or run `STARTTLS` on port `587` first |
-| `550` | The email API rejected the message (for example, not authorized or invalid content), or the message has no sender or recipients | Read the reply text and fix the message or account. Don't retry unchanged. |
+| `550` | The email API rejected the message (for example, not authorized or invalid content), or the message has no sender or recipients. A credential that was disabled, rotated or restricted after you logged in gets `550 5.7.1 Not authorized` on its next message. | Read the reply text and fix the message, account or credential. Don't retry unchanged. |
 | `552` | The message is larger than 3 MiB | Reduce the size or remove attachments |
 | `553` | The sender isn't allowed by the credential's sender policy, or an address contains non-ASCII characters | Use an allowed From and `MAIL FROM` address |
+| `554` | The message couldn't be parsed, for example its header block is too large or it has more than 500 MIME parts | Simplify the message |
 | `555` | Unsupported `MAIL FROM` or `RCPT TO` parameter, such as DSN or `SMTPUTF8` | Remove the parameter |
 
 Inbound derives an idempotency key from the credential, envelope sender, recipients, and exact message bytes. If a client resubmits an identical message that was already sent, for example after a dropped connection, Inbound returns the original result instead of sending it twice. Libraries that generate a new `Message-ID` or `Date` for each attempt produce a different message, so this only covers retries of the same bytes.
@@ -168,7 +175,7 @@ For port `465` in Python, use `smtplib.SMTP_SSL("smtp.inboundemail.com", 465, co
 | Username | Your credential's login email |
 | Password | Your credential's generated password |
 
-Set the account's email address to an address your sender policy allows. To receive mail in the same client, add the [IMAP settings](/mailboxes/connect-imap#connection-settings).
+Set the account's email address to an address your sender policy allows. For step-by-step setup in Apple Mail, iPhone and iPad, Thunderbird and Outlook, including the IMAP settings, see [Set up an email client](/mailboxes/connect-imap#set-up-an-email-client).
 
 ## Test the connection
 
