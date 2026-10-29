@@ -15,8 +15,12 @@ export interface JunkVerdict {
 	reason: JunkReason | null;
 }
 
-/** Confidence (0-1) at which Jev's answer counts as confident. */
+/** Confidence (0-1) at which a noul answer counts as confident. */
 export const CONFIDENT = 0.6;
+/** Probability mass at which a score answer counts as likely. */
+export const LIKELY = 0.7;
+/** Probability mass at which a score answer counts as possible (strict only). */
+export const POSSIBLE = 0.5;
 
 const JUNK_DIMENSIONS = [
 	"spam",
@@ -27,11 +31,12 @@ const JUNK_DIMENSIONS = [
 ] as const;
 
 /**
- * Whether Jev itself is confident the label applies: its confidence is at
- * least 0.6 and its own answer, before the authentication and reply-to rules
- * raised the level, was level 2 or higher. Without the second check a
- * confident "no" (a noul of 0.2, or a score of 1) raised by those rules would
- * count as confident. For a noul at level 3+ this means a probability of 0.8+.
+ * Noul labels (and score labels without probabilities): whether Jev itself is
+ * confident the label applies. Its confidence is at least 0.6 and its own
+ * answer, before the authentication and reply-to rules raised the level, was
+ * level 2 or higher. Without the second check a confident "no" (a noul of
+ * 0.2) raised by those rules would count as confident. For a noul at level 3+
+ * this means a probability of 0.8+.
  */
 function isConfident(dimension: DimensionSummary): boolean {
 	return (
@@ -43,17 +48,37 @@ function isConfident(dimension: DimensionSummary): boolean {
 /**
  * Whether one label makes the email junk at a filter level.
  *
+ * Score labels (spam, phishing, fraud) with probabilities use Jev's
+ * probability mass on the junk side, since score confidence only measures how
+ * peaked the answer is ({3: 0.5, 4: 0.5} has confidence 0.58 but is clearly
+ * level 3+):
+ * - lenient: P(level 4) >= 0.7.
+ * - standard: P(level >= 3) >= 0.7.
+ * - strict: level 3+, or P(level >= 3) >= 0.5, or P(level >= 2) >= 0.7.
+ *
+ * Noul labels (malware, impersonation) and score labels without probabilities:
  * - lenient: level 4 and confident.
  * - standard: level 3+ and confident.
  * - strict: level 3+ at any confidence, or level 2 and confident.
  *
- * Levels raised only by the authentication rules, without a confident answer
- * from Jev, count at strict but not at standard or lenient.
+ * Levels raised only by the authentication rules, without Jev backing them,
+ * count at strict but not at standard or lenient.
  */
 function dimensionIsJunk(
 	level: Exclude<SpamFilterLevel, "off">,
 	dimension: DimensionSummary,
 ): boolean {
+	const { p_ge2, p_ge3, p_eq4 } = dimension;
+	if (p_ge2 !== undefined && p_ge3 !== undefined && p_eq4 !== undefined) {
+		switch (level) {
+			case "lenient":
+				return p_eq4 >= LIKELY;
+			case "standard":
+				return p_ge3 >= LIKELY;
+			case "strict":
+				return dimension.level >= 3 || p_ge3 >= POSSIBLE || p_ge2 >= LIKELY;
+		}
+	}
 	const confident = isConfident(dimension);
 	switch (level) {
 		case "lenient":

@@ -127,6 +127,15 @@ export interface DimensionSummary {
 	 * leaned towards the label. Missing in summaries stored before it existed.
 	 */
 	base_level?: number;
+	/**
+	 * Score labels only, when Jev returned probabilities: Jev's probability
+	 * that the level is at least 2, at least 3, and exactly 4. Score confidence
+	 * measures how peaked the distribution is, so an answer split between 3 and
+	 * 4 has low confidence while being clearly at least 3; these capture that.
+	 */
+	p_ge2?: number;
+	p_ge3?: number;
+	p_eq4?: number;
 }
 
 export type ClassificationSummary = Record<
@@ -159,11 +168,36 @@ function noulLevel(probability: number): number {
 	return 0;
 }
 
+/** P(level >= 2), P(level >= 3) and P(level = 4) from a score answer's probabilities. */
+function levelMass(
+	probabilities: Record<string, number>,
+): Pick<DimensionSummary, "p_ge2" | "p_ge3" | "p_eq4"> {
+	let total = 0;
+	let ge2 = 0;
+	let ge3 = 0;
+	let eq4 = 0;
+	for (const [key, p] of Object.entries(probabilities)) {
+		const level = Number(key);
+		if (!Number.isFinite(level)) continue;
+		total += p;
+		if (level >= 2) ge2 += p;
+		if (level >= 3) ge3 += p;
+		if (level >= MAX_LEVEL) eq4 += p;
+	}
+	if (total <= 0) return {};
+	return { p_ge2: ge2 / total, p_ge3: ge3 / total, p_eq4: eq4 / total };
+}
+
 function dimension(answer: JevAnswer | undefined): DimensionSummary {
 	const score = scoreOf(answer);
 	if (score) {
 		const level = clampLevel(score.score);
-		return { level, confidence: score.confidence, base_level: level };
+		return {
+			level,
+			confidence: score.confidence,
+			base_level: level,
+			...levelMass(score.probabilities ?? {}),
+		};
 	}
 	const noul = noulOf(answer);
 	if (noul !== undefined) {
@@ -185,7 +219,7 @@ function dimension(answer: JevAnswer | undefined): DimensionSummary {
  * - Reply-To on another domain with fraud at 2+: fraud +1 (payment-redirect pattern).
  * - SES virus verdict FAIL: malware 4 with base level 4 and confidence 1 (the scanner's verdict is definitive).
  * - SES spam verdict FAIL: spam at least 3.
- * - These rules raise `level` only; `confidence` and `base_level` stay Jev's own.
+ * - These rules raise `level` only; `confidence`, `base_level` and the `p_*` masses stay Jev's own.
  * - risk = max of phishing, fraud, impersonation, malware, prompt_injection, and spam capped at 2.
  */
 export function summarizeClassification(

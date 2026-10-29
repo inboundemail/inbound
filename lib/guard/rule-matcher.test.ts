@@ -1092,6 +1092,7 @@ describe("junk verdict", () => {
 		};
 	}
 
+	// Noul labels, and score labels without probabilities
 	// [filter level, label level, confidence, junk]
 	it.each([
 		["strict", 1, 0.9, false],
@@ -1178,6 +1179,69 @@ describe("junk verdict", () => {
 		for (const level of ["lenient", "standard", "strict"] as const) {
 			expect(classifierJunkVerdict(level, summary, "PASS")?.isJunk).toBe(true);
 		}
+	});
+
+	const cleanFacts = {
+		spf: "PASS",
+		dkim: "PASS",
+		dmarc: "PASS",
+		ses_spam: "PASS",
+		ses_virus: "PASS",
+		sender_domain: "example.com",
+		link_domains: [],
+		reply_to_differs_from_sender: false,
+		display_name_contains_other_address: false,
+	};
+	function scoreAnswer(probabilities: Record<string, number>) {
+		const entries = Object.entries(probabilities);
+		const score = entries.reduce((sum, [level, p]) => sum + Number(level) * p, 0);
+		const peak = Math.max(...entries.map(([, p]) => p));
+		return { score, confidence: peak, probabilities };
+	}
+
+	// Score labels: [probabilities, lenient, standard, strict]
+	it.each([
+		[{ "3": 0.5, "4": 0.5 }, false, true, true],
+		[{ "4": 0.7, "3": 0.3 }, true, true, true],
+		[{ "0": 0.3, "3": 0.7 }, false, true, true],
+		[{ "2": 0.4, "3": 0.6 }, false, false, true],
+		[{ "1": 0.3, "2": 0.7 }, false, false, true],
+		[{ "1": 0.4, "2": 0.6 }, false, false, false],
+	] as const)("score probabilities %j junk at lenient/standard/strict: %p/%p/%p", (probabilities, lenient, standard, strict) => {
+		for (const label of ["spam", "phishing", "fraud"]) {
+			const summary = summarizeClassification(
+				{ [label]: scoreAnswer(probabilities) },
+				cleanFacts,
+			);
+			expect(classifierJunkVerdict("lenient", summary, "PASS")?.isJunk).toBe(lenient);
+			expect(classifierJunkVerdict("standard", summary, "PASS")?.isJunk).toBe(standard);
+			expect(classifierJunkVerdict("strict", summary, "PASS")?.isJunk).toBe(strict);
+		}
+	});
+
+	it("junks a score split between 3 and 4 despite its low confidence", () => {
+		const summary = summarizeClassification(
+			{ spam: { score: 3.5, confidence: 0.583, probabilities: { "3": 0.5, "4": 0.5 } } },
+			cleanFacts,
+		);
+		expect(summary.spam).toMatchObject({ level: 4, p_ge3: 1, p_eq4: 0.5 });
+		expect(classifierJunkVerdict("standard", summary, "PASS")?.isJunk).toBe(true);
+		expect(classifierJunkVerdict("lenient", summary, "PASS")?.isJunk).toBe(false);
+	});
+
+	it("does not let the auth rules raise a confident low score into standard junk", () => {
+		const summary = summarizeClassification(
+			{ phishing: scoreAnswer({ "1": 0.9, "2": 0.1 }) },
+			{
+				...cleanFacts,
+				dmarc: "FAIL",
+				reply_to_differs_from_sender: true,
+				display_name_contains_other_address: true,
+			},
+		);
+		expect(summary.phishing.level).toBe(3);
+		expect(classifierJunkVerdict("standard", summary, "PASS")?.isJunk).toBe(false);
+		expect(classifierJunkVerdict("strict", summary, "PASS")?.isJunk).toBe(true);
 	});
 
 	it("ignores prompt injection, which is not junk by itself", () => {
