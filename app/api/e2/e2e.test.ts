@@ -2924,6 +2924,18 @@ describe("E2 API - Email E2E", () => {
 				}),
 			});
 			expect(badAction.status).toBe(400);
+			const legacy = await apiJson<{ data: { id: string; actions: string } }>("/guard", {
+				method: "POST",
+				body: JSON.stringify({
+					name: `Legacy action ${token}`,
+					type: "explicit",
+					config: { subject: { operator: "OR", values: [`never-${token}`] } },
+					action: '{"action":"flag","color":"red"}',
+				}),
+			});
+			expect(legacy.response.status).toBe(201);
+			expect(JSON.parse(legacy.data.data.actions)).toEqual({ action: "flag" });
+			await apiRequest(`/guard/${legacy.data.data.id}`, { method: "DELETE" });
 			const rule = await apiJson<{ success: true; data: { id: string; actions: string } }>(
 				"/guard",
 				{
@@ -2978,6 +2990,18 @@ describe("E2 API - Email E2E", () => {
 					spam?: { is_junk: boolean; reason: string | null };
 				}>(`/emails/${emailId}`);
 				expect(detail.data.spam).toEqual({ is_junk: true, reason: "guard_rule" });
+				type JunkList = {
+					data: Array<{ id: string; spam?: { is_junk: boolean } }>;
+				};
+				const junkList = await apiJson<JunkList>(
+					`/emails${queryString({ type: "received", is_junk: "true", search: token, time_range: "1h" })}`,
+				);
+				expect(junkList.data.data.map((email) => email.id)).toEqual([emailId]);
+				expect(junkList.data.data[0]?.spam?.is_junk).toBe(true);
+				const cleanList = await apiJson<JunkList>(
+					`/emails${queryString({ is_junk: "false", search: token, time_range: "1h" })}`,
+				);
+				expect(cleanList.data.data).toEqual([]);
 
 				const mailbox = await apiJson<{ data: { id: string } }>("/mailboxes", {
 					method: "POST",
