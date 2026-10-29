@@ -1,3 +1,5 @@
+import { logEvent, shortHash } from "./log.ts";
+
 interface FailureRecord {
 	count: number;
 	windowStart: number;
@@ -48,7 +50,10 @@ export class ConnectionLimits {
 	acceptSocket(socket: AcceptedSocket): boolean {
 		const ip = normalizeIp(socket.remoteAddress);
 		const current = this.perIp.get(ip) ?? 0;
-		if (current >= this.maxPerIp) return false;
+		if (current >= this.maxPerIp) {
+			logEvent("conn_limit", { ip });
+			return false;
+		}
 		this.perIp.set(ip, current + 1);
 		let released = false;
 		const release = () => {
@@ -83,26 +88,41 @@ export class ConnectionLimits {
 			now,
 		);
 		const aggregate = this.getActiveFailure(this.ipFailures, ip, now);
+		const accountLimited = Boolean(
+			account && account.count >= this.failureLimit,
+		);
 		if (
-			(account && account.count >= this.failureLimit) ||
+			accountLimited ||
 			(aggregate && aggregate.count >= this.failureLimit * 5)
 		) {
+			logEvent("auth_throttled", {
+				ip,
+				scope: accountLimited ? "credential" : "ip",
+			});
 			return new Error("Too many failed authentication attempts");
 		}
 		return null;
 	}
 
+	// The auth events carry the client IP (imap-core logs a PTR hostname instead when it resolves).
 	recordAuthFailure(ip: string, username: string): void {
+		logEvent("auth", { result: "fail", ip: normalizeIp(ip) });
 		const now = Date.now();
 		this.incrementFailure(this.failures, this.authKey(ip, username), now);
 		this.incrementFailure(this.ipFailures, ip, now);
 	}
 
 	recordMalformedAuth(ip: string): void {
+		logEvent("auth", { result: "fail", ip: normalizeIp(ip), reason: "malformed" });
 		this.incrementFailure(this.ipFailures, ip, Date.now());
 	}
 
 	recordAuthSuccess(ip: string, username: string): void {
+		logEvent("auth", {
+			result: "ok",
+			ip: normalizeIp(ip),
+			cred: shortHash(username),
+		});
 		this.failures.delete(this.authKey(ip, username));
 	}
 

@@ -1,0 +1,404 @@
+#!/bin/bash
+# Gateway health from the journal, published through inbound-alert (SNS inbound-gateway-alerts).
+# usage: inbound-health check [--dry-run]    every 10 minutes (inbound-health-check.timer): alert when a
+#                                           HEALTH_* threshold is crossed since the previous check
+#        inbound-health report [--dry-run]   daily (inbound-health-report.timer): summary of the last 24 hours
+# --dry-run prints the message instead of publishing it and leaves the state in /var/lib/inbound-health alone.
+# Messages carry counts, codes, timings and client IPs only: never log lines, addresses, usernames or secrets.
+set -euo pipefail
+umask 077
+. /etc/inbound/host.env
+# SSM overrides (/inbound/gateways/health/*), rendered by inbound-render-env health: digits only.
+if [ -r /etc/inbound/health.env ]; then . /etc/inbound/health.env; fi
+
+usage() {
+	echo "usage: inbound-health check|report [--dry-run]" >&2
+	exit 2
+}
+mode="${1:-}" dry_run=0
+[[ "$mode" =~ ^(check|report)$ ]] && [ "$#" -le 2 ] || usage
+case "${2:-}" in
+"") ;;
+--dry-run) dry_run=1 ;;
+*) usage ;;
+esac
+
+# knob <name> <default> [minimum]: a whole number, or the default when unset, malformed or below the
+# minimum (1 for counts, where 0 would alert on every run).
+knob() {
+	local value="${!1:-}"
+	[[ "$value" =~ ^[0-9]{1,9}$ ]] && [ "$value" -ge "${3:-1}" ] || value="$2"
+	printf -v "$1" '%s' "$value"
+}
+knob HEALTH_BACKEND_ERRORS 20
+knob HEALTH_NEW_ERROR_LOOKBACK_HOURS 24
+knob HEALTH_AUTH_FAILURES 50
+knob HEALTH_AUTH_FAILURES_PER_IP 20
+knob HEALTH_THROTTLED 10
+knob HEALTH_TLS_FAILURES 100
+knob HEALTH_RESTARTS 1 0
+knob HEALTH_CRASH_LOOP_RESTARTS 3
+knob HEALTH_SESSION_DROPS 20
+knob HEALTH_MEMORY_PERCENT 85
+knob HEALTH_FD_PERCENT 80
+knob ALERT_MIN_INTERVAL_SECONDS 1800 0
+
+state=/var/lib/inbound-health
+install -d -m 0700 "$state"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+instance="$(cat /var/lib/cloud/data/instance-id 2>/dev/null || hostname)"
+gateways=(imap smtp)
+now="$(date +%s)"
+utc() { date -u -d "@$1" "+%Y-%m-%d %H:%M"; }
+
+# Counts one gateway's journal between two epoch seconds. Output lines: "<key> <n>", "<kind> <key> <n>"
+# (err, failip, throttleip, limitip, tlsip, tlscode, drop, datacode, api) and "ms <n>" per relayed message.
+# Logins come from the gateways' event=auth lines (client IP and a hashed credential, only counted).
+scan() {
+	journalctl -u "$1-gateway.service" --since "@$2" --until "@$3" -o cat --no-pager -q 2>/dev/null |
+		awk -v unit="$1-gateway.service" -v prefix="[$1-gateway]" '
+		function code(s) { return (s ~ /^[A-Za-z0-9_.-]+$/ && length(s) <= 40) ? s : "other" }
+		function ipv(s) {
+			sub(/^::ffff:/, "", s)
+			return (s ~ /^[0-9A-Fa-f:.]+$/ && length(s) <= 45) ? s : "-"
+		}
+		function kv(key,   i) {
+			for (i = 3; i <= NF; i++) if (index($i, key "=") == 1) return substr($i, length(key) + 2)
+			return ""
+		}
+		# systemd lines about the unit
+		index($0, unit ": Scheduled restart job") == 1 { c["restarts"]++; next }
+		index($0, unit ": Failed with result") == 1 {
+			c["crashes"]++
+			if (index($0, "oom-kill")) c["oom_kills"]++
+			next
+		}
+		index($0, "Started " unit) == 1 { c["starts"]++; next }
+		# event lines (packages/*-gateway/src/log.ts logEvent)
+		$1 == prefix && $2 ~ /^event=/ {
+			ev = substr($2, 7)
+			if (ev == "connect") c["connections"]++
+			else if (ev == "conn_limit") { c["conn_limit"]++; limitip[ipv(kv("ip"))]++ }
+			else if (ev == "tls_fail") { c["tls_fail"]++; tlsip[ipv(kv("ip"))]++; tlscode[code(kv("code"))]++ }
+			else if (ev == "auth_throttled") { c["auth_throttled"]++; throttleip[ipv(kv("ip"))]++ }
+			else if (ev == "session_dropped") { c["session_dropped"]++; drop[code(kv("reason"))]++ }
+			else if (ev == "auth") {
+				r = kv("result")
+				if (r == "ok") { c["auth_ok"]++; creds[kv("cred")] = 1 }
+				else if (r == "fail") { c["auth_fail"]++; failip[ipv(kv("ip"))]++ }
+				else if (r == "throttled") { c["auth_throttled"]++; throttleip[ipv(kv("ip"))]++ }
+				else c["auth_" code(r)]++
+			} else if (ev == "data") {
+				if (kv("result") == "ok") { c["data_ok"]++; ms = kv("ms"); if (ms ~ /^[0-9]+$/) print "ms", ms }
+				else { c["data_fail"]++; datacode[code(kv("code"))]++ }
+			} else if (ev == "api") {
+				s = code(kv("status")); api[s]++
+				if (s !~ /^[0-9]+$/ || s + 0 >= 500) err["api_" s]++
+				else if (s == "403" && index(kv("path"), "authenticate")) err["api_403_auth"]++
+			}
+			next
+		}
+		# imap-core (vendor/imap-core) and imap-gateway lines
+		$1 == "[imap]" && $2 == "backend" && $3 == "error" { err[code($4)]++; next }
+		$1 == "[imap]" && $2 == "TLS" && $3 == "handshake" && $4 == "failed" {
+			ip = $6; sub(/:$/, "", ip)
+			c["tls_fail"]++; tlsip[ipv(ip)]++; tlscode[code($7)]++
+			next
+		}
+		# imap-core logs a PTR hostname instead of the IP when reverse DNS resolves, so its login lines
+		# are not counted; limits.ts logs event=auth with the IP.
+		$1 == "[imap]" && $2 ~ /^\[[^]]+\]$/ {
+			if (($3 == "Secure" && $4 == "connection" && $5 == "from") || ($3 == "Connection" && $4 == "from")) c["connections"]++
+			else if ($0 ~ / Authentication error for .* using (LOGIN|PLAIN)/) err["auth_unavailable"]++
+			next
+		}
+		index($0, "[imap-gateway] server error ") == 1 { err["server_" code($4)]++; next }
+		index($0, "[imap-gateway] session revalidation failed") == 1 { err["revalidation_failed"]++; next }
+		index($0, "[imap-gateway] TLS certificate reload failed") == 1 { err["cert_reload"]++; next }
+		index($0, "[sessions] revalidation unavailable") == 1 { err["revalidation_unavailable"]++; next }
+		$1 == "[notifier]" && $2 == "listener" && $3 == "added" {
+			t = $0; sub(/.*total=/, "", t); sub(/[^0-9].*$/, "", t)
+			if (t != "" && t + 0 > c["peak_sessions"]) c["peak_sessions"] = t + 0
+			next
+		}
+		$1 == "[notifier]" && / failed/ {
+			s = $0; sub(/^\[notifier\] /, "", s); sub(/ failed.*$/, "", s); gsub(/[^a-z]+/, "_", s)
+			err["notifier_" code(s)]++
+			next
+		}
+		# smtp-gateway lines outside logEvent
+		index($0, "[smtp-gateway] unexpected error") == 1 { err["unexpected"]++; next }
+		index($0, "[smtp-gateway] parse worker failed") == 1 { err["parse_worker"]++; next }
+		index($0, "[smtp-gateway] parse worker could not start") == 1 { err["parse_start"]++; next }
+		index($0, "[smtp-gateway] message mapping failed") == 1 { err["mapping"]++; next }
+		index($0, "[smtp-gateway] fatal ") == 1 { err["fatal"]++; next }
+		$1 == "[smtp-gateway]" && / listener error/ { err["listener"]++; next }
+		END {
+			for (k in c) print k, c[k]
+			n = 0; for (k in creds) if (k != "") n++
+			print "credentials", n
+			for (k in err) print "err", k, err[k]
+			for (k in failip) print "failip", k, failip[k]
+			for (k in throttleip) print "throttleip", k, throttleip[k]
+			for (k in limitip) print "limitip", k, limitip[k]
+			for (k in tlsip) print "tlsip", k, tlsip[k]
+			for (k in tlscode) print "tlscode", k, tlscode[k]
+			for (k in drop) print "drop", k, drop[k]
+			for (k in datacode) print "datacode", k, datacode[k]
+			for (k in api) print "api", k, api[k]
+		}'
+}
+
+# get <file> <key>: a counter (0 when absent).
+get() { awk -v k="$2" '$1 == k && NF == 2 { n = $2 } END { print n + 0 }' "$1"; }
+# total <file> <kind>: sum of a kind ("err", "failip", ...).
+total() { awk -v k="$2" '$1 == k && NF == 3 { n += $3 } END { print n + 0 }' "$1"; }
+# top <file> <kind> [n]: "key xN, key xN" by count, largest first ("-", an unknown IP, left out).
+top() {
+	awk -v k="$2" '$1 == k && NF == 3 && $2 != "-" { print $3, $2 }' "$1" | sort -k1,1nr -k2,2 | head -n "${3:-3}" |
+		awk '{ printf "%s%s x%s", (NR > 1 ? ", " : ""), $2, $1 } END { if (!NR) printf "none" }'
+}
+# extra <n> <text>: " (<text>)" when n > 0. Always succeeds, so it can end an assignment under set -e.
+extra() {
+	if [ "$1" -gt 0 ]; then printf ' (%s)' "$2"; fi
+	return 0
+}
+# topcount <file> <kind>: the largest count of a kind, not counting "-" (an unknown IP).
+topcount() { awk -v k="$2" '$1 == k && NF == 3 && $2 != "-" && $3 > n { n = $3 } END { print n + 0 }' "$1"; }
+# A new error code alerts on one occurrence only when it can't be transient: Postgres class 42 (undefined
+# function, table or column, syntax: a bad deploy or migration), class 28 (invalid authorization) and a 403
+# from the SMTP auth endpoint (gateway secret mismatch). Anything else needs two in the window.
+always_new() { [[ "$1" =~ ^(42|28)[0-9A-Z]{3}$|^api_403_auth$ ]]; }
+# percentiles <file>: "p50 X ms, p95 Y ms (N messages)" over the "ms" lines (nearest rank), or nothing.
+percentiles() {
+	awk '$1 == "ms" { print $2 }' "$1" | sort -n | awk '
+		{ v[NR] = $1 }
+		END {
+			if (!NR) exit
+			i = int((NR * 50 + 99) / 100); j = int((NR * 95 + 99) / 100)
+			printf "p50 %d ms, p95 %d ms (%d messages)", v[i], v[j], NR
+		}'
+}
+human() { numfmt --to=iec --suffix=B "$1" 2>/dev/null || echo "${1}B"; }
+
+# Live unit state: <gw>_active, _nrestarts, _mem, _mem_max, _mem_peak, _fds, _fd_max, _since.
+declare -A unit
+unit_state() {
+	local gw="$1" key value pid=0
+	while IFS='=' read -r key value; do
+		case "$key" in
+		ActiveState) unit[${gw}_active]="$value" ;;
+		NRestarts) unit[${gw}_nrestarts]="$value" ;;
+		MemoryCurrent) unit[${gw}_mem]="$value" ;;
+		MemoryMax) unit[${gw}_mem_max]="$value" ;;
+		MemoryPeak) unit[${gw}_mem_peak]="$value" ;;
+		LimitNOFILE) unit[${gw}_fd_max]="$value" ;;
+		MainPID) pid="$value" ;;
+		ActiveEnterTimestamp) unit[${gw}_since]="$value" ;;
+		esac
+	done < <(systemctl show "$gw-gateway.service" \
+		--property=ActiveState,NRestarts,MemoryCurrent,MemoryMax,MemoryPeak,LimitNOFILE,MainPID,ActiveEnterTimestamp 2>/dev/null || true)
+	unit[${gw}_fds]=""
+	if [[ "$pid" =~ ^[1-9][0-9]*$ ]] && [ -d "/proc/$pid/fd" ]; then
+		unit[${gw}_fds]="$(find "/proc/$pid/fd" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)"
+	fi
+}
+digits() { [[ "${1:-}" =~ ^[0-9]+$ ]]; }
+percent() { if digits "$1" && digits "$2" && [ "$2" -gt 0 ]; then echo $(($1 * 100 / $2)); else echo ""; fi; }
+resources() {
+	local gw="$1" out=""
+	digits "${unit[${gw}_mem]:-}" && out="memory $(human "${unit[${gw}_mem]}")"
+	digits "${unit[${gw}_mem_peak]:-}" && out+=" (peak $(human "${unit[${gw}_mem_peak]}"))"
+	digits "${unit[${gw}_mem_max]:-}" && out+=" of $(human "${unit[${gw}_mem_max]}")"
+	[ -n "${unit[${gw}_fds]:-}" ] && out+="${out:+, }open files ${unit[${gw}_fds]} of ${unit[${gw}_fd_max]:-?}"
+	echo "${out:-not running}"
+}
+
+publish() {
+	local subject="$1"
+	shift
+	if [ "$dry_run" = 1 ]; then
+		printf 'Subject: %s\nKeys: %s\n\n' "$subject" "$*"
+		cat
+		return 0
+	fi
+	/usr/local/sbin/inbound-alert --publish "$subject" "$@"
+}
+
+if [ "$mode" = check ]; then
+	# The window runs from the previous check (at most an hour back) to now, so no line is missed or
+	# counted twice when a run is late.
+	since="$(cat "$state/last-check" 2>/dev/null || true)"
+	if ! digits "$since" || [ "$since" -ge "$now" ] || [ $((now - since)) -gt 3600 ]; then
+		since=$((now - 600))
+	fi
+	lookback=$((HEALTH_NEW_ERROR_LOOKBACK_HOURS * 3600))
+	seen="$state/seen-errors"
+	[ -f "$seen" ] || : > "$work/seen.baseline"
+
+	body="" keys=() headline=""
+	# add <key> <detail> <headline>: one problem for the current gateway ($gw).
+	add() {
+		[ "${#reasons[@]}" -gt 0 ] || headline+="${headline:+; }$gw:"
+		[ "${#reasons[@]}" -eq 0 ] || headline+=","
+		headline+=" $3"
+		reasons+=("$2")
+		keys+=("health-$gw-$1")
+	}
+	for gw in "${gateways[@]}"; do
+		stats="$work/$gw"
+		scan "$gw" "$since" "$now" > "$stats"
+		unit_state "$gw"
+		# First run: the previous 24 hours are the baseline for "new error code", not alerts.
+		if [ -e "$work/seen.baseline" ]; then
+			scan "$gw" $((since - lookback)) "$since" | awk -v gw="$gw" -v t="$since" '$1 == "err" { print gw, $2, t }' >> "$work/seen.baseline"
+		fi
+
+		reasons=()
+		errors="$(total "$stats" err)"
+		[ "$errors" -ge "$HEALTH_BACKEND_ERRORS" ] &&
+			add backend_errors "backend errors: $errors (threshold $HEALTH_BACKEND_ERRORS): $(top "$stats" err 5)" "backend errors"
+		known="$( { cat "$seen" "$work/seen.baseline" 2>/dev/null || true; } |
+			awk -v gw="$gw" -v min=$((now - lookback)) '$1 == gw && $3 >= min { print $2 }' | sort -u)"
+		while read -r error_code count; do
+			[ -n "$error_code" ] || continue
+			grep -qxF "$error_code" <<<"$known" && continue
+			[ "$count" -ge 2 ] || always_new "$error_code" || continue
+			add "new_error-$error_code" "new backend error code, not seen in the previous ${HEALTH_NEW_ERROR_LOOKBACK_HOURS}h: $error_code (${count}x)" "new error $error_code"
+		done < <(awk '$1 == "err" { print $2, $3 }' "$stats" | sort)
+		failed="$(get "$stats" auth_fail)"
+		[ "$failed" -ge "$HEALTH_AUTH_FAILURES" ] &&
+			add auth_failures "failed logins: $failed (threshold $HEALTH_AUTH_FAILURES); top IPs $(top "$stats" failip)" "failed logins"
+		ip_failed="$(topcount "$stats" failip)"
+		[ "$ip_failed" -ge "$HEALTH_AUTH_FAILURES_PER_IP" ] &&
+			add auth_failures_ip "failed logins from one IP: $ip_failed (threshold $HEALTH_AUTH_FAILURES_PER_IP): $(top "$stats" failip)" "failed logins from one IP"
+		throttled=$(($(get "$stats" auth_throttled) + $(get "$stats" conn_limit)))
+		[ "$throttled" -ge "$HEALTH_THROTTLED" ] &&
+			add throttled "rate limited: $throttled (threshold $HEALTH_THROTTLED): login lockouts $(get "$stats" auth_throttled) [$(top "$stats" throttleip)], per-IP connection rejects $(get "$stats" conn_limit) [$(top "$stats" limitip)]" "rate limiting"
+		tls="$(get "$stats" tls_fail)"
+		[ "$tls" -ge "$HEALTH_TLS_FAILURES" ] &&
+			add tls_failures "TLS handshake failures: $tls (threshold $HEALTH_TLS_FAILURES): $(top "$stats" tlscode); top IPs $(top "$stats" tlsip)" "TLS failures"
+		# Automatic restarts: the journal's "Scheduled restart job" lines, or the NRestarts increase
+		# (NRestarts resets when a deploy restarts the unit).
+		restarts="$(get "$stats" restarts)"
+		current="${unit[${gw}_nrestarts]:-}"
+		previous="$(cat "$state/nrestarts-$gw" 2>/dev/null || true)"
+		if digits "$current" && digits "$previous"; then
+			delta=$((current >= previous ? current - previous : current))
+			[ "$delta" -gt "$restarts" ] && restarts="$delta"
+		fi
+		crashes="$(get "$stats" crashes) crashes, $(get "$stats" oom_kills) OOM kills"
+		if [ "$restarts" -ge "$HEALTH_CRASH_LOOP_RESTARTS" ]; then
+			add crash_loop "crash loop: $restarts automatic restarts (threshold $HEALTH_CRASH_LOOP_RESTARTS), $crashes" "crash loop"
+		elif [ "$restarts" -ge "$HEALTH_RESTARTS" ] && [ "$HEALTH_RESTARTS" -gt 0 ]; then
+			add restarts "automatic restarts: $restarts, $crashes" "restarted"
+		fi
+		[ "$(get "$stats" oom_kills)" -gt 0 ] && add oom "killed by the OOM killer $(get "$stats" oom_kills)x ($(resources "$gw"))" "OOM kill"
+		drops="$(get "$stats" session_dropped)"
+		[ "$drops" -ge "$HEALTH_SESSION_DROPS" ] &&
+			add session_drops "sessions dropped by revalidation: $drops (threshold $HEALTH_SESSION_DROPS): $(top "$stats" drop)" "sessions dropped"
+		mem_pct="$(percent "${unit[${gw}_mem]:-}" "${unit[${gw}_mem_max]:-}")"
+		[ -n "$mem_pct" ] && [ "$mem_pct" -ge "$HEALTH_MEMORY_PERCENT" ] &&
+			add memory "memory at ${mem_pct}% of MemoryMax (threshold ${HEALTH_MEMORY_PERCENT}%): $(resources "$gw")" "memory ${mem_pct}%"
+		fd_pct="$(percent "${unit[${gw}_fds]:-}" "${unit[${gw}_fd_max]:-}")"
+		[ -n "$fd_pct" ] && [ "$fd_pct" -ge "$HEALTH_FD_PERCENT" ] &&
+			add fds "open files at ${fd_pct}% of LimitNOFILE (threshold ${HEALTH_FD_PERCENT}%): $(resources "$gw")" "open files ${fd_pct}%"
+		if [ -e "/opt/inbound/current-$gw" ] && ! [[ "${unit[${gw}_active]:-}" =~ ^(active|activating|reloading)$ ]]; then
+			add down "not running: unit is ${unit[${gw}_active]:-unknown}" "down"
+		fi
+
+		summary="connections $(get "$stats" connections), logins ok $(get "$stats" auth_ok) / failed $failed, rate limited $throttled, TLS failures $tls, backend errors $errors, restarts $restarts"
+		body+="
+$gw-gateway: $([ "${#reasons[@]}" -gt 0 ] && echo "${#reasons[@]} problem(s)" || echo ok)"
+		for reason in "${reasons[@]}"; do body+="
+  ! $reason"; done
+		body+="
+  $summary
+  $(resources "$gw")
+"
+	done
+
+	if [ "${#keys[@]}" -gt 0 ]; then
+		subject="inbound-gateway-host: $headline"
+		{
+			echo "Gateway health check on $instance, $(utc "$since") to $(utc "$now") UTC ($(((now - since) / 60)) min)."
+			echo "$body"
+			echo "Thresholds: HEALTH_* in /etc/inbound/host.env, overridable in SSM $PARAMETER_PREFIX/health/ (see infra/gateways/README.md)."
+			echo "Each condition repeats at most every $((ALERT_MIN_INTERVAL_SECONDS / 60)) minutes."
+			echo "Logs: aws ssm start-session --target $instance, then journalctl -u imap-gateway -u smtp-gateway --since \"$(utc "$since")\""
+		} | publish "${subject:0:100}" "${keys[@]}"
+	else
+		echo "healthy: $(utc "$since") to $(utc "$now") UTC"
+	fi
+
+	[ "$dry_run" = 1 ] && exit 0
+	# Only after a successful publish (set -e), so a failed alert is retried with the next window.
+	for gw in "${gateways[@]}"; do
+		digits "${unit[${gw}_nrestarts]:-}" && printf '%s\n' "${unit[${gw}_nrestarts]}" > "$state/nrestarts-$gw"
+		# A single transient code isn't recorded, so a later burst of it still counts as new.
+		awk '$1 == "err" { print $2, $3 }' "$work/$gw" | while read -r error_code count; do
+			if [ "$count" -ge 2 ] || always_new "$error_code"; then echo "$gw $error_code $now"; fi
+		done >> "$work/seen.new"
+	done
+	# seen-errors: "<gateway> <code> <last seen>", newest per code, a week kept.
+	{ cat "$seen" "$work/seen.baseline" "$work/seen.new" 2>/dev/null || true; } |
+		awk -v min=$((now - 7 * 86400)) 'NF == 3 && $3 >= min { k = $1 " " $2; if ($3 > t[k]) t[k] = $3 } END { for (k in t) print k, t[k] }' |
+		sort > "$work/seen.merged"
+	install -m 0600 "$work/seen.merged" "$seen"
+	printf '%s\n' "$now" > "$state/last-check"
+	exit 0
+fi
+
+# Daily report.
+since=$((now - 86400))
+report="Inbound gateway daily report, $(utc "$since") to $(utc "$now") UTC, $instance
+"
+for gw in "${gateways[@]}"; do
+	stats="$work/$gw"
+	scan "$gw" "$since" "$now" > "$stats"
+	unit_state "$gw"
+	release="no release"
+	[ -L "/opt/inbound/current-$gw" ] && release="$(basename "$(readlink -f "/opt/inbound/current-$gw")")"
+	cert="/etc/inbound/tls/$gw/fullchain.pem"
+	if end="$(openssl x509 -in "$cert" -noout -enddate 2>/dev/null)"; then
+		end="$(date -u -d "${end#notAfter=}" +%s)"
+		cert_line="expires $(date -u -d "@$end" +%Y-%m-%d) ($(((end - now) / 86400)) days)"
+	else
+		cert_line="unreadable ($cert)"
+	fi
+	report+="
+$gw-gateway (${release:0:${#gw}+13}, ${unit[${gw}_active]:-unknown} since ${unit[${gw}_since]:-?})
+  connections   $(get "$stats" connections)$(extra "$(get "$stats" peak_sessions)" "peak notifier sessions $(get "$stats" peak_sessions)")
+  logins        ok $(get "$stats" auth_ok), failed $(get "$stats" auth_fail), distinct credentials $(get "$stats" credentials)
+  failed from   $(top "$stats" failip 5)
+  rate limited  login lockouts $(get "$stats" auth_throttled), per-IP connection rejects $(get "$stats" conn_limit)
+  backend errs  $(total "$stats" err)$(extra "$(total "$stats" err)" "$(top "$stats" err 8)")
+  TLS failures  $(get "$stats" tls_fail)$(extra "$(get "$stats" tls_fail)" "$(top "$stats" tlscode)")
+  restarts      automatic $(get "$stats" restarts), crashes $(get "$stats" crashes), OOM kills $(get "$stats" oom_kills), starts $(get "$stats" starts) (NRestarts now ${unit[${gw}_nrestarts]:-?})"
+	if [ "$gw" = imap ]; then
+		report+="
+  dropped       sessions logged out by revalidation $(get "$stats" session_dropped)$(extra "$(get "$stats" session_dropped)" "$(top "$stats" drop)")"
+	else
+		timing="$(percentiles "$stats")"
+		report+="
+  messages      relayed $(get "$stats" data_ok), rejected $(get "$stats" data_fail)$(extra "$(get "$stats" data_fail)" "$(top "$stats" datacode 5)")
+  DATA timing   ${timing:-no messages}
+  API non-2xx   $(top "$stats" api 6)"
+	fi
+	report+="
+  certificate   $cert_line
+  resources     $(resources "$gw")
+"
+done
+# _UID=0: only lines root wrote (inbound-deploy), not anything another user logged with the same tag.
+deploys="$(journalctl -t inbound-deploy _UID=0 --since "@$since" --until "@$now" -o cat --no-pager -q 2>/dev/null |
+	grep -E '^(deployed|deploy of) ' | tail -n 5 || true)"
+report+="
+host
+  deploys       $( [ -n "$deploys" ] && printf '%s' "$deploys" | awk '{ printf "%s%s", (NR > 1 ? "; " : ""), $0 }' || echo none)
+  disk          / $(df --output=pcent / | tail -1 | tr -d ' ') used, $(df -h --output=avail / | tail -1 | tr -d ' ') free; $(journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[KMGT]' | head -1 || echo '?') of journal
+
+Counts from the journal (journalctl -u imap-gateway -u smtp-gateway); IPs and codes only.
+"
+printf '%s' "$report" | publish "inbound-gateway-host: daily report $(date -u -d "@$now" +%Y-%m-%d)" "daily-report-$(date -u -d "@$now" +%Y%m%d)"

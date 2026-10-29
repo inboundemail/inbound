@@ -1,0 +1,11 @@
+[Unit]
+Description=Gateway health check: journal counts against HEALTH_* thresholds, alert (SNS) when crossed
+ConditionPathExists=/etc/inbound/host-runtime.env
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/inbound-health check
+TimeoutStartSec=5min
+Nice=10
+IOSchedulingClass=idle
+MemoryMax=256M

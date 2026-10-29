@@ -3,11 +3,14 @@
 # Later lines win in systemd EnvironmentFile. Values are never printed. Only the variables the gateway reads in
 # packages/<gateway>-gateway/src/config.ts are rendered; hostnames, ports, TLS paths and plaintext/insecure-auth
 # switches are host-managed and cannot be set from SSM.
+# "health" renders /etc/inbound/health.env (root only) from health/* only: the allowlisted inbound-health
+# thresholds, digits only, overriding the defaults in host.env.
 set -euo pipefail
 . /etc/inbound/host.env
 export AWS_REGION AWS_DEFAULT_REGION="$AWS_REGION" PATH="$PATH:/snap/bin"
 
 gateway="${1:-}"
+target="/etc/inbound/${gateway}-gateway.env" group="${gateway}gw" sources=(shared "$gateway") numeric=false
 case "$gateway" in
 smtp)
 	required=(MAILBOX_GATEWAY_AUTH_SECRET)
@@ -44,8 +47,19 @@ imap)
 	# IMAP_ALLOW_PLAINTEXT opens 143; with TLS configured it offers STARTTLS and LOGINDISABLED until TLS.
 	[ "$IMAP_STARTTLS_PORT_ENABLED" = true ] && defaults+=("IMAP_ALLOW_PLAINTEXT=true")
 	;;
+health)
+	# Sourced by root (inbound-health), so only names from this list with digit values are written.
+	required=()
+	allowed=(
+		HEALTH_BACKEND_ERRORS HEALTH_NEW_ERROR_LOOKBACK_HOURS HEALTH_AUTH_FAILURES HEALTH_AUTH_FAILURES_PER_IP
+		HEALTH_THROTTLED HEALTH_TLS_FAILURES HEALTH_RESTARTS HEALTH_CRASH_LOOP_RESTARTS HEALTH_SESSION_DROPS
+		HEALTH_MEMORY_PERCENT HEALTH_FD_PERCENT
+	)
+	defaults=()
+	target=/etc/inbound/health.env group=root sources=(health) numeric=true
+	;;
 *)
-	echo "usage: inbound-render-env smtp|imap" >&2
+	echo "usage: inbound-render-env smtp|imap|health" >&2
 	exit 2
 	;;
 esac
@@ -54,17 +68,26 @@ fetch() {
 	aws ssm get-parameters-by-path --path "$PARAMETER_PREFIX/$1" --with-decryption \
 		--query 'Parameters[].{name: Name, value: Value}' --output json
 }
-shared_params="$(fetch shared)"
-gateway_params="$(fetch "$gateway")"
+all_params="" gateway_params=""
+for source in "${sources[@]}"; do
+	fetched="$(fetch "$source")"
+	all_params+="$fetched"
+	[ "$source" != "$gateway" ] || gateway_params="$fetched"
+done
 allowed_json="$(printf '%s\n' "${allowed[@]}" | jq -R . | jq -s .)"
 params="$(jq -s --argjson allowed "$allowed_json" \
-	'add | map(.name |= split("/")[-1]) | map(select(.name as $n | $allowed | index($n)))' <<<"$shared_params$gateway_params")"
+	'add | map(.name |= split("/")[-1]) | map(select(.name as $n | $allowed | index($n)))' <<<"$all_params")"
+if [ "$numeric" = true ]; then
+	invalid="$(jq -r 'map(select(.value | test("^[0-9]{1,9}$") | not) | .name) | unique | join(", ")' <<<"$params")"
+	[ -z "$invalid" ] || echo "ignoring $PARAMETER_PREFIX/$gateway parameters that are not whole numbers: $invalid" >&2
+	params="$(jq 'map(select(.value | test("^[0-9]{1,9}$")))' <<<"$params")"
+fi
 ignored="$(jq -r --argjson allowed "$allowed_json" \
 	'map(.name | split("/")[-1]) | map(select(. as $n | $allowed | index($n) | not)) | unique | join(", ")' <<<"$gateway_params")"
-[ -z "$ignored" ] || echo "ignoring $PARAMETER_PREFIX/$gateway parameters the $gateway gateway does not read: $ignored" >&2
+[ -z "$ignored" ] || echo "ignoring $PARAMETER_PREFIX/$gateway parameters $gateway does not read: $ignored" >&2
 
 missing=()
-for name in "${required[@]}"; do
+for name in ${required[@]+"${required[@]}"}; do
 	jq -e --arg n "$name" 'any(.[]; .name == $n and .value != "")' <<<"$params" >/dev/null || missing+=("$name")
 done
 if [ "${#missing[@]}" -gt 0 ]; then
@@ -72,14 +95,13 @@ if [ "${#missing[@]}" -gt 0 ]; then
 	exit 1
 fi
 
-target="/etc/inbound/${gateway}-gateway.env"
-tmp="$(mktemp "/etc/inbound/.${gateway}-gateway.env.XXXXXX")"
+tmp="$(mktemp "$(dirname "$target")/.$(basename "$target").XXXXXX")"
 trap 'rm -f "$tmp"' EXIT
 chmod 0640 "$tmp"
-chown "root:${gateway}gw" "$tmp"
+chown "root:$group" "$tmp"
 {
 	printf '%s\n' "# Rendered by inbound-render-env from SSM $PARAMETER_PREFIX. Do not edit."
-	printf '%s\n' "${defaults[@]}"
+	[ "${#defaults[@]}" -eq 0 ] || printf '%s\n' "${defaults[@]}"
 	jq -r '.[] | "\(.name)=\"\(.value | gsub("(?<c>[\"\\\\`$])"; "\\\(.c)"))\""' <<<"$params"
 } > "$tmp"
 mv -f "$tmp" "$target"

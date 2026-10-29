@@ -2,11 +2,18 @@
 # Publishes a short alert to the stack's SNS topic (inbound-gateway-alerts) with the instance role.
 # usage: inbound-alert <unit>   OnFailure= hook (inbound-alert@<unit>.service): the unit failed
 #        inbound-alert --disk   hourly (inbound-disk-check.timer): alert when / is DISK_ALERT_PERCENT% full
-# At most one message per subject every ALERT_MIN_INTERVAL_SECONDS. Never includes log lines.
+#        inbound-alert --publish <subject> <key>...   message on stdin (inbound-health): sent when at
+#                               least one key is outside its ALERT_MIN_INTERVAL_SECONDS window
+# At most one message per key every ALERT_MIN_INTERVAL_SECONDS. Never includes log lines.
 set -euo pipefail
 . /etc/inbound/host.env
 . /etc/inbound/host-runtime.env
 export AWS_REGION AWS_DEFAULT_REGION="$AWS_REGION" PATH="$PATH:/snap/bin"
+
+usage() {
+	echo "usage: inbound-alert <unit>|--disk|--publish <subject> <key>..." >&2
+	exit 2
+}
 
 target="${1:-}"
 instance="$(cat /var/lib/cloud/data/instance-id 2>/dev/null || hostname)"
@@ -14,16 +21,24 @@ instance="$(cat /var/lib/cloud/data/instance-id 2>/dev/null || hostname)"
 if [ "$target" = --disk ]; then
 	used="$(df --output=pcent / | tail -1 | tr -dc 0-9)"
 	[ "$used" -ge "$DISK_ALERT_PERCENT" ] || exit 0
-	key=disk
+	keys=(disk)
 	subject="inbound-gateway-host: root disk ${used}% full"
 	message="The root filesystem on $instance is ${used}% full (alert threshold ${DISK_ALERT_PERCENT}%).
 Check: sudo du -xh --max-depth=2 / | sort -h | tail; journalctl --disk-usage"
+elif [ "$target" = --publish ]; then
+	[ "$#" -ge 3 ] || usage
+	# SNS subjects: printable ASCII, at most 100 characters.
+	subject="$(printf '%s' "$2" | tr -cd '[:print:]' | cut -c1-100)"
+	shift 2
+	keys=("$@")
+	for key in "${keys[@]}"; do
+		[[ "$key" =~ ^[A-Za-z0-9@._-]{1,128}$ ]] || usage
+	done
+	message="$(cat)"
+	[ -n "$subject" ] && [ -n "$message" ] || usage
 else
-	[[ "$target" =~ ^[A-Za-z0-9@._-]+\.(service|timer)$ ]] || {
-		echo "usage: inbound-alert <unit>|--disk" >&2
-		exit 2
-	}
-	key="$target"
+	[[ "$target" =~ ^[A-Za-z0-9@._-]+\.(service|timer)$ ]] || usage
+	keys=("$target")
 	show() { systemctl show -P "$1" "$target" 2>/dev/null || echo "?"; }
 	subject="inbound-gateway-host: $target failed"
 	message="$target failed on $instance at $(date -u +%Y-%m-%dT%H:%M:%SZ).
@@ -33,21 +48,29 @@ Logs: aws ssm start-session --target $instance, then journalctl -u $target -n 10
 fi
 
 install -d -m 0700 /run/inbound-alert
-stamp="/run/inbound-alert/$key"
 now="$(date +%s)"
-if [ -e "$stamp" ] && [ $((now - $(stat -c %Y "$stamp"))) -lt "$ALERT_MIN_INTERVAL_SECONDS" ]; then
-	echo "alert for $key suppressed (sent one less than ${ALERT_MIN_INTERVAL_SECONDS}s ago)"
+fresh=()
+for key in "${keys[@]}"; do
+	stamp="/run/inbound-alert/$key"
+	if [ -e "$stamp" ] && [ $((now - $(stat -c %Y "$stamp"))) -lt "$ALERT_MIN_INTERVAL_SECONDS" ]; then
+		continue
+	fi
+	fresh+=("$key")
+done
+if [ "${#fresh[@]}" -eq 0 ]; then
+	echo "alert for ${keys[*]} suppressed (sent one less than ${ALERT_MIN_INTERVAL_SECONDS}s ago)"
 	exit 0
 fi
-touch "$stamp"
+for key in "${fresh[@]}"; do touch "/run/inbound-alert/$key"; done
 
 for attempt in 1 2 3; do
 	if aws sns publish --topic-arn "$ALERT_TOPIC_ARN" --subject "$subject" --message "$message" \
 		--query MessageId --output text; then
+		echo "alert sent for ${fresh[*]}"
 		exit 0
 	fi
 	sleep $((attempt * 10))
 done
-rm -f "$stamp"
-echo "could not publish the alert for $key" >&2
+for key in "${fresh[@]}"; do rm -f "/run/inbound-alert/$key"; done
+echo "could not publish the alert for ${fresh[*]}" >&2
 exit 1

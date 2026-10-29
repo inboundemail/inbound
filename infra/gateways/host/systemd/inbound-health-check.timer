@@ -1,0 +1,10 @@
+[Unit]
+Description=Gateway health check every 10 minutes
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=10min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

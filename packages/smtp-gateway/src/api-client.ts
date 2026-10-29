@@ -1,4 +1,5 @@
 import type { GatewayConfig } from "./config.ts";
+import { logEvent } from "./log.ts";
 
 export interface SmtpIdentity {
 	credentialId: string;
@@ -218,13 +219,25 @@ export class InboundApiClient {
 		timeoutMs: number,
 		failure: SmtpFailure,
 	): Promise<Response> {
+		let path = "-";
+		let response: Response;
 		try {
-			return await fetch(url, {
+			path = new URL(url).pathname;
+			response = await fetch(url, {
 				...options,
 				signal: AbortSignal.timeout(timeoutMs),
 			});
-		} catch {
+		} catch (error) {
+			logEvent("api", {
+				path,
+				status:
+					(error as Error | null)?.name === "TimeoutError"
+						? "timeout"
+						: "network",
+			});
 			throw new SmtpRelayError(failure);
 		}
+		if (!response.ok) logEvent("api", { path, status: response.status });
+		return response;
 	}
 }

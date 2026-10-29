@@ -18,6 +18,7 @@ EC2 t4g.small, Ubuntu 24.04 arm64, Elastic IP, IMDSv2, sshd masked (Session Mana
   inbound-host-sync    verifies the host bundle (infra/gateways/host, a CDK asset) against its SHA-256 manifest, then re-applies it
   inbound-firewall     nftables: per-source connection and new-connection limits on 465/587/993
   inbound-alert        SNS inbound-gateway-alerts when a gateway or certificate run fails, or the disk fills
+  inbound-health       journal counts every 10 minutes → SNS when a HEALTH_* threshold is crossed; daily report at 13:00 UTC
   inbound-deploy       download → verify sha256 → bun install → switch symlink → restart → health check → roll back on failure
   inbound-render-env   SSM /inbound/gateways/{shared,<gateway>}/* (allowlisted names) → /etc/inbound/<gateway>-gateway.env
   inbound-certs        lego DNS-01 via Route 53, daily timer, installs certs into /etc/inbound/tls/<gateway>/versions/, switches the live symlink
@@ -122,7 +123,9 @@ EC2 t4g.small, Ubuntu 24.04 arm64, Elastic IP, IMDSv2, sshd masked (Session Mana
   `inbound-alert`, which publishes the unit state (never log lines) with the instance role
   (`sns:Publish` on this topic only). Gateway units go through "failed" on every crash before
   they restart, so alerts are limited to one per unit per 30 minutes. `inbound-disk-check.timer`
-  alerts hourly while `/` is at least 85% full.
+  alerts hourly while `/` is at least 85% full. `inbound-health` adds threshold alerts on what users
+  hit (backend errors, failed logins, lockouts, crash loops) and a daily report; see
+  [Health alerts and daily report](#health-alerts-and-daily-report).
 - **Replacement guard:** a CloudFormation stack policy (`scripts/set-stack-policy.sh`)
   denies `Update:Replace` and `Update:Delete` on the instance, the Elastic IP and the EIP
   association, so a stack change that would replace the host or move the IP fails instead.
@@ -269,7 +272,8 @@ example, `export AWS_PROFILE=inbound AWS_REGION=us-east-2`).
   stack, `bundle-url` and `bundle-sha256` can briefly disagree; re-run the deploy after it
   finishes.)
 - **Session transcripts:** `aws logs tail /inbound/gateways/ssm-sessions --since 1d`.
-- **Alerts:** `journalctl -u 'inbound-alert@*'` shows what the host sent or suppressed.
+- **Alerts:** `journalctl -u 'inbound-alert@*'` shows what the host sent or suppressed;
+  `journalctl -u inbound-health-check -u inbound-health-report` the health check's.
 - **Secret rotation:** run `put-secrets.sh`, then redeploy. Every deploy re-renders the
   env files.
 - **Rollback:** re-run the workflow from the previous commit. Releases already on the host
@@ -279,6 +283,69 @@ example, `export AWS_PROFILE=inbound AWS_REGION=us-east-2`).
   off termination protection, deploy, re-run steps 8–10, turn protection back on, and run
   `./scripts/set-stack-policy.sh` again. The EIP is a separate resource and follows the new
   instance.
+
+## Health alerts and daily report
+
+`inbound-health` (`host/sbin`) reads the `smtp-gateway` and `imap-gateway` journals and publishes
+through `inbound-alert --publish`, so it uses the same topic, instance role (`sns:Publish` on
+`inbound-gateway-alerts` only) and per-key rate limit (`ALERT_MIN_INTERVAL_SECONDS`, 30 minutes).
+Messages carry counts, error codes, timings and client IPs only (at most the top 3 to 5): never log
+lines, addresses, usernames, credential IDs or message content. The gateways log credentials only as
+the first 12 hex characters of a SHA-256, which the report uses to count distinct credentials.
+
+- **`inbound-health-check.timer`** (every 10 minutes) counts the journal since the previous check
+  (at most an hour back) and alerts per gateway when a count reaches its threshold. One email lists
+  every current problem, and is sent when at least one of them hasn't been reported in the last 30
+  minutes, so a new problem breaks through while an ongoing one repeats at most every 30 minutes.
+- **`inbound-health-report.timer`** (13:00 UTC) sends a summary of the last 24 hours per gateway:
+  connections, logins (ok, failed, distinct credentials), top failing IPs, lockouts and per-IP
+  rejects, backend errors by code, TLS failures, restarts, crashes and OOM kills, IMAP sessions
+  dropped by revalidation, SMTP messages relayed and rejected with DATA p50/p95, SMTP API non-2xx
+  statuses, release, certificate days left, memory and open files, deploys (journal tag
+  `inbound-deploy` written by root, `_UID=0`), disk and journal usage.
+- State is in `/var/lib/inbound-health` (window start, NRestarts, last time each error code was
+  seen). On the first run the previous 24 hours become the baseline for "new error code".
+- Try it on the host without sending anything: `sudo inbound-health check --dry-run` or
+  `sudo inbound-health report --dry-run`.
+
+| Threshold (`host/host.env`) | Default | Alert when, since the previous check |
+|---|---|---|
+| `HEALTH_BACKEND_ERRORS` | 20 | backend errors reach this many |
+| `HEALTH_NEW_ERROR_LOOKBACK_HOURS` | 24 | an error code that wasn't seen in this many hours appears at least twice, or once for codes that can't be transient (Postgres classes 42 and 28, such as `42883` and `42P01`, and `api_403_auth`) |
+| `HEALTH_AUTH_FAILURES` | 50 | failed logins reach this many |
+| `HEALTH_AUTH_FAILURES_PER_IP` | 20 | one client IP reaches this many failed logins |
+| `HEALTH_THROTTLED` | 10 | login lockouts plus per-IP connection rejects reach this many |
+| `HEALTH_TLS_FAILURES` | 100 | TLS handshake failures reach this many |
+| `HEALTH_RESTARTS` | 1 | automatic restarts (journal or NRestarts) reach this many; 0 disables (the only threshold that can be 0) |
+| `HEALTH_CRASH_LOOP_RESTARTS` | 3 | as above, reported as a crash loop |
+| `HEALTH_SESSION_DROPS` | 20 | IMAP sessions logged out by revalidation reach this many |
+| `HEALTH_MEMORY_PERCENT` | 85 | memory reaches this share of `MemoryMax` (checked now) |
+| `HEALTH_FD_PERCENT` | 80 | open files reach this share of `LimitNOFILE` (checked now) |
+
+Every other threshold must be at least 1 (a 0 would alert on every run), otherwise its default
+applies. Any OOM kill alerts, and so does a gateway that has a release but isn't running. To change a
+threshold without a stack deploy, put a plain String parameter under `/inbound/gateways/health/`
+(for example `aws ssm put-parameter --name /inbound/gateways/health/HEALTH_AUTH_FAILURES --type String --value 100`).
+`inbound-render-env health` writes the allowlisted names with whole-number values to
+`/etc/inbound/health.env` (root only) on the next deploy or host sync, and skips anything else with
+a warning. Without overrides the `host.env` defaults apply.
+
+What counts as what, from the gateway logs:
+
+| Count | IMAP | SMTP |
+|---|---|---|
+| connections | imap-core `[id] Secure connection from …` | `event=connect` |
+| logins, failing IPs | `event=auth result=ok\|fail ip=` (from `limits.ts`; imap-core's own login lines log the PTR hostname instead of the IP when reverse DNS resolves, so they aren't used) | `event=auth result=ok\|fail ip=` |
+| lockouts, per-IP rejects | `event=auth_throttled`, `event=conn_limit` | `event=auth result=throttled`, `event=conn_limit` |
+| backend errors (code) | `[imap] backend error <SQLSTATE>`, `Authentication error` (`auth_unavailable`), notifier, session revalidation, `server error`, certificate reload | `event=api status=<5xx>\|timeout\|network` (`api_<status>`), a 403 from the auth endpoint (`api_403_auth`), parse worker, mapping, unexpected and fatal errors |
+| TLS failures | imap-core `TLS handshake failed from <ip>: <code>` | `event=tls_fail` (implicit TLS on 465) |
+| sessions dropped | `event=session_dropped reason=…` | |
+| timings | none logged yet | `event=data result=ok ms=` (DATA to reply) |
+| restarts | systemd `Scheduled restart job`, `Failed with result`, NRestarts | same |
+
+`event=` lines come from `logEvent` in `packages/smtp-gateway/src/log.ts` and
+`packages/imap-gateway/src/log.ts`. If a log line these patterns match changes, update `scan()` in
+`host/sbin/inbound-health` in the same change.
 
 ## Cutover and decommission (done)
 
