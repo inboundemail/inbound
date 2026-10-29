@@ -18,6 +18,7 @@ import {
 	SmtpRelayError,
 } from "./api-client.ts";
 import type { GatewayConfig } from "./config.ts";
+import { clientIp, logEvent } from "./log.ts";
 import { idempotencyKeyFor, mapRawMessageInWorker } from "./mapper.ts";
 
 interface ConnectionInternals {
@@ -203,6 +204,10 @@ export class SmtpGateway {
 			maxClients: this.config.maxConnections,
 			...(tls ?? {}),
 			onConnect: (session, callback) => {
+				logEvent("connect", {
+					ip: clientIp(session.remoteAddress),
+					tls: session.secure ? 1 : 0,
+				});
 				this.startSessionTimers(session.id);
 				callback();
 			},
@@ -211,9 +216,26 @@ export class SmtpGateway {
 				callback();
 			},
 			onAuth: (auth, session, callback) => {
+				const ip = clientIp(session.remoteAddress);
 				this.handleAuth(auth, session)
-					.then((response) => callback(null, response))
-					.catch((error: unknown) => callback(toSmtpError(error)));
+					.then((response) => {
+						const user = response.user as AuthenticatedUser;
+						logEvent("auth", {
+							result: "ok",
+							ip,
+							cred: user.identity.credentialId,
+						});
+						callback(null, response);
+					})
+					.catch((error: unknown) => {
+						const smtpError = toSmtpError(error);
+						logEvent("auth", {
+							result: authResult(smtpError.responseCode),
+							ip,
+							code: smtpError.responseCode,
+						});
+						callback(smtpError);
+					});
 			},
 			onMailFrom: (address, session, callback) => {
 				try {
@@ -264,12 +286,25 @@ export class SmtpGateway {
 				};
 				this.sessionData.set(session.id, entry);
 				this.handleData(stream, session, entry.controller.signal)
-					.then((message) => callback(null, message))
+					.then((message) => {
+						logEvent("data", {
+							result: "ok",
+							ms: Date.now() - startedAt,
+							rcpt: session.envelope.rcptTo.length,
+						});
+						callback(null, message);
+					})
 					.catch((error: unknown) => {
 						if (!stream.destroyed && !stream.readableEnded) {
 							this.drainRejectedData(stream, session.id, startedAt);
 						}
-						callback(toSmtpError(error));
+						const smtpError = toSmtpError(error);
+						logEvent("data", {
+							result: "fail",
+							code: smtpError.responseCode,
+							ms: Date.now() - startedAt,
+						});
+						callback(smtpError);
 					})
 					.finally(() => {
 						if (this.sessionData.get(session.id) === entry) {
@@ -316,7 +351,13 @@ export class SmtpGateway {
 				accept.emit("connection", socket);
 			},
 		)
-			.on("tlsClientError", (_error, socket) => socket.destroy())
+			.on("tlsClientError", (error: Error & { code?: string }, socket) => {
+				logEvent("tls_fail", {
+					ip: clientIp(socket.remoteAddress),
+					code: error.code ?? "-",
+				});
+				socket.destroy();
+			})
 			.on("error", (error) => smtp.emit("error", error));
 		return smtp;
 	}
@@ -330,6 +371,7 @@ export class SmtpGateway {
 		server.removeAllListeners("connection");
 		server.on("connection", (socket: Socket) => {
 			if (!this.admitSocket(socket)) {
+				logEvent("conn_limit", { ip: clientIp(socket.remoteAddress) });
 				socket.destroy();
 				return;
 			}
@@ -1014,6 +1056,14 @@ function assertAsciiAddress(address: string): void {
 			message: "5.6.7 Non-ASCII addresses are not supported",
 		});
 	}
+}
+
+// Result label of an `event=auth` line, by the SMTP reply code the client got.
+function authResult(responseCode: number | undefined): string {
+	if (responseCode === 535) return "fail";
+	if (responseCode === 421) return "throttled";
+	if (responseCode === 538) return "tls_required";
+	return "error";
 }
 
 function smtpError(responseCode: number, message: string) {
