@@ -157,7 +157,7 @@ for unit in "$HOST_DIR"/systemd/*; do
 done
 # A failed gateway or certificate run publishes an alert (inbound-alert, at most one per unit per
 # ALERT_MIN_INTERVAL_SECONDS). Gateway units pass through "failed" on every crash before restarting.
-for name in smtp-gateway.service imap-gateway.service inbound-certs.service; do
+for name in smtp-gateway.service imap-gateway.service inbound-certs.service inbound-health-check.service inbound-health-report.service; do
 	put_file 0644 "/etc/systemd/system/$name.d/50-inbound-alert.conf" <<'EOF' && units_changed+=("$name.d/50-inbound-alert.conf")
 [Unit]
 OnFailure=inbound-alert@%n.service
@@ -165,7 +165,7 @@ EOF
 done
 systemctl daemon-reload
 systemctl enable smtp-gateway.service imap-gateway.service >/dev/null
-systemctl enable --now inbound-certs.timer inbound-disk-check.timer >/dev/null
+systemctl enable --now inbound-certs.timer inbound-disk-check.timer inbound-health-check.timer inbound-health-report.timer >/dev/null
 if [ "${#units_changed[@]}" -gt 0 ]; then
 	log "units updated: ${units_changed[*]} (gateway unit changes apply on next deploy or restart)"
 fi
@@ -294,6 +294,7 @@ mv -f "$runtime" /etc/inbound/host-runtime.env
 for gateway in smtp imap; do
 	/usr/local/sbin/inbound-render-env "$gateway" || log "env for $gateway not rendered yet (put secrets, then deploy)"
 done
+/usr/local/sbin/inbound-render-env health || log "health thresholds not rendered (inbound-health uses the host.env defaults)"
 
 if [ -n "$BUNDLE_URL" ]; then
 	printf '%s\n' "$BUNDLE_URL" > /etc/inbound/host-bundle

@@ -7,6 +7,11 @@ umask 022
 export AWS_REGION AWS_DEFAULT_REGION="$AWS_REGION" PATH="/usr/local/bin:$PATH:/snap/bin"
 
 log() { echo "[deploy $(date -u +%H:%M:%S)] $*"; }
+# Outcome lines also go to the journal (tag inbound-deploy) for the daily report.
+record() {
+	log "$*"
+	logger -t inbound-deploy -- "$*" 2>/dev/null || true
+}
 fail() {
 	log "ERROR: $*"
 	exit 1
@@ -155,6 +160,7 @@ for gw in "${gateways[@]}"; do
 	fi
 	/usr/local/sbin/inbound-render-env "$gw" || fail "$gw: env render failed"
 done
+/usr/local/sbin/inbound-render-env health || log "health thresholds not rendered (inbound-health uses the host.env defaults)"
 
 declare -A previous=()
 switched=()
@@ -181,6 +187,7 @@ for gw in "${gateways[@]}"; do
 	log "$gw: switched current-$gw -> $gw-$revision (previous: ${previous[$gw]:-none})"
 	if ! restart_and_check "$gw"; then
 		rollback
+		record "deploy of $gw at $revision failed, rolled back"
 		fail "$gw: deploy of $revision failed, rolled back"
 	fi
 done
@@ -197,4 +204,4 @@ for gw in "${gateways[@]}"; do
 		done
 done
 
-log "deployed ${gateways[*]} at $revision"
+record "deployed ${gateways[*]} at $revision"
