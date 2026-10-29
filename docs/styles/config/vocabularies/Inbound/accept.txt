@@ -35,3 +35,6 @@ UIDs
 (?i)deduplicat(e|ed|es|ing|ion)
 (?i)backfill(ed|ing|s)?
 Postgres
+(?i)enums?
+(?i)rollouts?
+(?i)unprocessable
