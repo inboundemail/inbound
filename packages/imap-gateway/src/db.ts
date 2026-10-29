@@ -505,7 +505,7 @@ export class MailStore {
 				: await this.sql<{ raw_content: string | null }[]>`
 				SELECT se.raw_content FROM structured_emails se
 				WHERE se.id = ${messageId} AND se.user_id = ${principal.userId}
-				  AND imap_visible(${principal.userId}::text, ${principal.credentialId}::text, se.id) LIMIT 1`;
+				  AND imap_visible(${principal.userId}::text, ${principal.credentialId}::text, se.id::text) LIMIT 1`;
 		const raw = rows[0]?.raw_content;
 		return typeof raw === "string" ? Buffer.from(raw, "utf8") : null;
 	}
