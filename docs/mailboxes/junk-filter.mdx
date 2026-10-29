@@ -98,7 +98,7 @@ For each received message, the mailbox decides in this order:
 
 ## Correcting a verdict
 
-Moving a message between `INBOX` and `Junk` in an email client, or setting `isJunk` with `PATCH /api/e2/mailboxes/{id}/messages/{messageId}`, records your decision for that mailbox credential only. It doesn't change the account verdict, other credentials, the email API's `spam` fields or webhooks.
+Moving a message between `INBOX` and `Junk` in an email client, or setting `isJunk` with `PATCH /api/e2/mailboxes/{id}/messages/{messageId}`, records your decision for that mailbox credential only. It doesn't change the account verdict, other credentials, the `spam` fields in the email API or webhooks.
 
 Setting `is_junk` with `PATCH /api/e2/emails/{id}` records your decision for the email across the account. Mailboxes follow it unless they have their own decision for the message or the sender is on their allow or block list. Automatic verdicts never override a decision you made.
 
