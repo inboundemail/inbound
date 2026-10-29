@@ -174,6 +174,7 @@ export const sendRawEmail = new Elysia().post(
 			403: ErrorResponse,
 			409: ErrorResponse,
 			413: ErrorResponse,
+			422: ErrorResponse,
 			429: ErrorResponse,
 			500: ErrorResponse,
 		},

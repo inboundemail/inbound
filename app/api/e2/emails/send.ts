@@ -126,12 +126,11 @@ export const sendEmail = new Elysia().post(
 		}
 		const idempotencyKey = idempotency.key;
 
-		// Validate required fields
-		if (!body.from || !body.to || !body.subject) {
+		if (!body.from || !body.to) {
 			console.log("⚠️ Missing required fields");
 			set.status = 400;
 			return {
-				error: "Missing required fields: from, to, and subject are required",
+				error: "Missing required fields: from and to are required",
 			};
 		}
 
@@ -139,13 +138,6 @@ export const sendEmail = new Elysia().post(
 		if (unsafeHeaderInput) {
 			set.status = 400;
 			return { error: unsafeHeaderInput };
-		}
-
-		// Validate email content
-		if (!body.html && !body.text) {
-			console.log("⚠️ No email content provided");
-			set.status = 400;
-			return { error: "Either html or text content must be provided" };
 		}
 
 		// Handle scheduled_at if provided
@@ -340,6 +332,7 @@ export const sendEmail = new Elysia().post(
 			401: ErrorResponse,
 			403: ErrorResponse,
 			409: ErrorResponse,
+			422: ErrorResponse,
 			429: ErrorResponse,
 			500: ErrorResponse,
 		},

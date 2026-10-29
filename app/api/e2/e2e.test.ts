@@ -1950,7 +1950,10 @@ describe("E2 API - Email E2E", () => {
 				headers: { "Idempotency-Key": idempotencyKey },
 				body: payload,
 			});
-			expect(failed.status).toBe(500);
+			expect(failed.status).toBe(422);
+			expect(((await failed.json()) as { error: string }).error).toContain(
+				"Email rejected by the email provider",
+			);
 
 			const retried = await apiJson<SendEmailResponse>("/emails", {
 				method: "POST",
@@ -1966,6 +1969,37 @@ describe("E2 API - Email E2E", () => {
 				body: payload,
 			});
 			expect(replay.data.id).toBe(retried.data.id);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"sends messages with an empty subject and no body",
+		async () => {
+			const token = makeToken("empty");
+			const sent = await apiJson<SendEmailResponse>("/emails", {
+				method: "POST",
+				body: JSON.stringify({
+					from: E2E_SENDER_ADDRESS,
+					to: E2E_RECIPIENT_ADDRESS,
+					subject: "",
+					headers: { "X-E2E-Token": token },
+				}),
+			});
+			expect(sent.response.status).toBe(200);
+			expect(sent.data.id).toBeDefined();
+
+			const message = await pollFor(
+				"empty message at the SES stub",
+				POLL_CONFIG.threadTimeoutMs,
+				async () =>
+					(mailServer?.messages ?? []).find((item) =>
+						item.raw.includes(`X-E2E-Token: ${token}`),
+					) ?? null,
+			);
+			expect(message?.raw).toContain("Subject: \r\n");
+			expect(message?.raw).toContain("Content-Type: text/plain; charset=UTF-8");
+			expect(message?.raw).not.toContain("[No content]");
 		},
 		TEST_TIMEOUT_MS,
 	);

@@ -282,4 +282,20 @@ describe("InboundApiClient.sendRawEmail", () => {
 			client().sendRawEmail("secret", payload, "key"),
 		).rejects.toMatchObject({ responseCode: 550 });
 	});
+
+	it("fails permanently, without falling back, when the provider rejects the message", async () => {
+		spyOn(globalThis, "fetch").mockResolvedValue(
+			Response.json(
+				{ error: "Email rejected by the email provider: Illegal header" },
+				{ status: 422 },
+			),
+		);
+
+		await expect(
+			client().sendRawEmail("secret", payload, "key"),
+		).rejects.toMatchObject({
+			responseCode: 550,
+			message: expect.stringContaining("Illegal header"),
+		});
+	});
 });
