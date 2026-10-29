@@ -96,7 +96,7 @@ await withClient(url, async (client) => {
 			const processed = await db.transaction(async (tx) => {
 				const locked = await tx.execute<{ path: string }>(sql`
 					SELECT id, path FROM imap_mailboxes WHERE user_id = ${owner} AND credential_id = ${id}
-						AND (path IN ('INBOX', 'Archive') OR scope_id IS NOT NULL) ORDER BY id FOR UPDATE`);
+						AND (path IN ('INBOX', 'Junk', 'Archive') OR scope_id IS NOT NULL) ORDER BY id FOR UPDATE`);
 				if (!locked.rows.some((folder) => folder.path === "Archive")) throw new Error(`Archive missing for credential ${id}`);
 				const selected = await tx.execute<{ id: string; is_read: boolean; is_archived: boolean }>(sql`
 					SELECT DISTINCT se.id, se.is_read, se.is_archived
