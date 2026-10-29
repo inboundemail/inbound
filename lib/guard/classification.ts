@@ -279,6 +279,35 @@ export function summarizeClassification(
 	};
 }
 
+/**
+ * Whether a stored summary has every field the junk filter reads. Summaries
+ * stored before `base_level` and the `p_*` masses existed are recomputed from
+ * the stored answers and facts instead.
+ */
+export function hasCurrentSummary(stored: StoredClassification): boolean {
+	return CLASSIFICATION_DIMENSIONS.every((id) => {
+		const summary = stored.summary?.[id];
+		if (!summary || summary.base_level === undefined) return false;
+		const score = scoreOf(stored.answers[id]);
+		const hasMass = score
+			? Object.keys(levelMass(score.probabilities ?? {})).length > 0
+			: false;
+		return !hasMass || summary.p_ge3 !== undefined;
+	});
+}
+
+/** The stored classification with its summary recomputed when it is out of date. */
+export function withCurrentSummary(
+	stored: StoredClassification,
+): StoredClassification {
+	return hasCurrentSummary(stored)
+		? stored
+		: {
+				...stored,
+				summary: summarizeClassification(stored.answers, stored.facts),
+			};
+}
+
 export function buildStoredClassification(
 	model: string,
 	answers: Record<string, JevAnswer | undefined>,

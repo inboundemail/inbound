@@ -15,9 +15,12 @@ const {
 const { buildJevEmailState, STATE_CHAR_LIMIT } = await import(
 	"@/lib/guard/email-state"
 );
-const { CLASSIFICATION_DIMENSIONS, summarizeClassification } = await import(
-	"@/lib/guard/classification"
-);
+const {
+	CLASSIFICATION_DIMENSIONS,
+	hasCurrentSummary,
+	summarizeClassification,
+	withCurrentSummary,
+} = await import("@/lib/guard/classification");
 const { classifierJunkVerdict, resolveJunkVerdict } = await import(
 	"@/lib/guard/junk-verdict"
 );
@@ -702,7 +705,14 @@ describe("guard AI prompt rules (Jev)", () => {
 			guard: false,
 		});
 		expect(requests).toHaveLength(0);
-		expect(unguarded.classification as unknown).toEqual(stored);
+		// The stored summary predates the junk-filter fields, so it is recomputed
+		expect(unguarded.classification as unknown).toEqual({
+			...stored,
+			summary: summarizeClassification(
+				stored.answers,
+				stored.facts as Parameters<typeof summarizeClassification>[1],
+			),
+		});
 
 		rules = [buildRule({ id: "rule_ai" })];
 		responses.push(() => jevResponse({ rule_0: 0.9 }));
@@ -1242,6 +1252,26 @@ describe("junk verdict", () => {
 		expect(summary.phishing.level).toBe(3);
 		expect(classifierJunkVerdict("standard", summary, "PASS")?.isJunk).toBe(false);
 		expect(classifierJunkVerdict("strict", summary, "PASS")?.isJunk).toBe(true);
+	});
+
+	it("recomputes stored summaries that predate the junk-filter fields", () => {
+		const answers = { spam: scoreAnswer({ "3": 0.5, "4": 0.5 }) };
+		const current = {
+			version: 1 as const,
+			model: "jev",
+			classified_at: "2026-10-01T00:00:00.000Z",
+			answers,
+			facts: cleanFacts,
+			summary: summarizeClassification(answers, cleanFacts),
+		};
+		expect(hasCurrentSummary(current)).toBe(true);
+		expect(withCurrentSummary(current)).toBe(current);
+		const old = {
+			...current,
+			summary: { ...current.summary, spam: { level: 4, confidence: 0.5 } },
+		};
+		expect(hasCurrentSummary(old)).toBe(false);
+		expect(withCurrentSummary(old).summary.spam).toMatchObject({ p_ge3: 1, base_level: 4 });
 	});
 
 	it("ignores prompt injection, which is not junk by itself", () => {
