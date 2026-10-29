@@ -8,6 +8,7 @@ import {
 	readIdempotencyKey,
 } from "@/app/api/e2/helper/idempotency";
 import { buildSentEmailTags } from "@/app/api/e2/helper/ses-email-tags";
+import { sesSendErrorResponse } from "@/app/api/e2/helper/ses-send-errors";
 import {
 	type ManagedSenderPolicy,
 	senderPolicyAllowsAddress,
@@ -476,6 +477,7 @@ export async function deliverSentEmail(input: {
 			})
 			.where(eq(sentEmails.id, emailId));
 
-		return sendError(500, "Failed to send email. Please try again later.");
+		const failure = sesSendErrorResponse(sesError);
+		return sendError(failure.status, failure.error);
 	}
 }

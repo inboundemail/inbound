@@ -332,6 +332,7 @@ export const sendEmail = new Elysia().post(
 			401: ErrorResponse,
 			403: ErrorResponse,
 			409: ErrorResponse,
+			422: ErrorResponse,
 			429: ErrorResponse,
 			500: ErrorResponse,
 		},

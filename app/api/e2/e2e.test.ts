@@ -1950,7 +1950,10 @@ describe("E2 API - Email E2E", () => {
 				headers: { "Idempotency-Key": idempotencyKey },
 				body: payload,
 			});
-			expect(failed.status).toBe(500);
+			expect(failed.status).toBe(422);
+			expect(((await failed.json()) as { error: string }).error).toContain(
+				"Email rejected by the email provider",
+			);
 
 			const retried = await apiJson<SendEmailResponse>("/emails", {
 				method: "POST",
