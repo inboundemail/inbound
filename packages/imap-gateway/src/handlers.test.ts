@@ -31,13 +31,36 @@ function createHarness(
 		scopeId: null,
 	};
 	const store = {
+		ensureAllMailboxes: mock(async () => [
+			{ ...mailbox, subscribed: true },
+			{ ...destination, subscribed: false },
+		]),
+		listMailboxes: mock(async () => [
+			{ ...mailbox, subscribed: true },
+			{ ...destination, subscribed: false },
+		]),
+		subscribeMailbox: mock(
+			async (
+				_principal: AuthenticatedMailbox,
+				_path: string,
+				_subscribed: boolean,
+			) => true,
+		),
+		createMailbox: mock(async () => true),
+		renameMailbox: mock(async () => true),
+		deleteMailbox: mock(async () => true),
 		ensureDefaultMailboxes: mock(async () => [mailbox]),
 		ensureScopeMailboxes: mock(async () => []),
 		getMailboxByPath: mock(
-			async (_principal: AuthenticatedMailbox, path: string) =>
+			async (
+				_principal: AuthenticatedMailbox,
+				path: string,
+			): Promise<MailboxRow | null> =>
 				path === "Archive" ? destination : mailbox,
 		),
 		syncMailbox: mock(async () => 0),
+		countMessages: mock(async () => 1),
+		unseenCount: mock(async () => 1),
 		listUids: mock(async () => [1]),
 		listMessagesInBatches: mock(async function* () {
 			yield [
@@ -101,7 +124,7 @@ function createHarness(
 		selected: {
 			mailbox: mailbox.id,
 			path: mailbox.path,
-			readOnly: accessMode !== "read_write",
+			readOnly: accessMode !== "read_write" || scopeId !== null,
 		},
 		formatResponse: () => ({ tag: "*", command: "FETCH", attributes: [] }),
 		getQueryResponse: () => [],
@@ -127,22 +150,103 @@ function callbackResult(
 }
 
 describe("IMAP backend authorization", () => {
+	it("lists only subscribed mailboxes and persists subscribe/unsubscribe", async () => {
+		const { handlers, session, store } = createHarness("read_write");
+		const [folders] = await callbackResult((callback) =>
+			handlers.onLsub("*", session, callback),
+		);
+		expect(folders).toEqual([{ path: "INBOX", flags: [] }]);
+		const [subscribed] = await callbackResult((callback) =>
+			handlers.onSubscribe("Archive", session, callback),
+		);
+		const [unsubscribed] = await callbackResult((callback) =>
+			handlers.onUnsubscribe("INBOX", session, callback),
+		);
+		expect([subscribed, unsubscribed]).toEqual([true, true]);
+		expect(store.subscribeMailbox).toHaveBeenNthCalledWith(
+			1,
+			session.user,
+			"Archive",
+			true,
+		);
+		expect(store.subscribeMailbox).toHaveBeenNthCalledWith(
+			2,
+			session.user,
+			"INBOX",
+			false,
+		);
+	});
+
+	it("advertises Archive special use and protects it from rename/delete", async () => {
+		const { handlers, session, store } = createHarness("read_write");
+		const [folders] = await callbackResult((callback) =>
+			handlers.onList("*", session, callback),
+		);
+		expect(folders).toContainEqual({
+			path: "Archive",
+			flags: [],
+			specialUse: "\\Archive",
+		});
+		expect(store.ensureAllMailboxes).toHaveBeenCalledTimes(1);
+		expect(store.ensureDefaultMailboxes).not.toHaveBeenCalled();
+		expect(store.ensureScopeMailboxes).not.toHaveBeenCalled();
+		expect(store.listMailboxes).not.toHaveBeenCalled();
+		const [renamed] = await callbackResult((callback) =>
+			handlers.onRename("Archive", "Old", session, callback),
+		);
+		const [deleted] = await callbackResult((callback) =>
+			handlers.onDelete("Archive", session, callback),
+		);
+		expect([renamed, deleted]).toEqual(["CANNOT", "CANNOT"]);
+		expect(store.renameMailbox).not.toHaveBeenCalled();
+		expect(store.deleteMailbox).not.toHaveBeenCalled();
+	});
+
 	it.each([
 		["read", null, true],
-		["read_write", "scope", false],
+		["read_write", "scope", true],
+		["read_write", null, false],
 	] as const)("opens %s credential folders with readOnly=%s for scope %s", async (mode, scopeId, readOnly) => {
-		const { handlers, mailbox, session } = createHarness(mode, scopeId);
+		const { handlers, mailbox, session, store } = createHarness(mode, scopeId);
 		const [selected] = await callbackResult((callback) => {
 			handlers.onOpen(mailbox.path, session, callback);
 		});
 		expect(selected).toMatchObject({ readOnly });
+		expect(store.ensureAllMailboxes).toHaveBeenCalledTimes(1);
+		expect(store.ensureDefaultMailboxes).not.toHaveBeenCalled();
+		expect(store.ensureScopeMailboxes).not.toHaveBeenCalled();
 	});
 
-	it("allows STORE, EXPUNGE, and MOVE from scope folders", async () => {
+	it.each([
+		"scope-id",
+		"scope-path",
+	])("opens a folder identified by %s as read-only", async (identity) => {
+		const { handlers, mailbox, session } = createHarness("read_write", "scope");
+		if (identity === "scope-id") mailbox.path = "Scoped view";
+		else mailbox.scopeId = null;
+		const [selected] = await callbackResult((callback) =>
+			handlers.onOpen(mailbox.path, session, callback),
+		);
+		expect(selected).toMatchObject({ readOnly: true });
+	});
+
+	it("ensures all folders only once for STATUS", async () => {
+		const { handlers, mailbox, session, store } = createHarness("read_write");
+		const [status] = await callbackResult((callback) =>
+			handlers.onStatus(mailbox.path, session, callback),
+		);
+		expect(status).toMatchObject({ messages: 1, unseen: 1 });
+		expect(store.ensureAllMailboxes).toHaveBeenCalledTimes(1);
+		expect(store.ensureDefaultMailboxes).not.toHaveBeenCalled();
+		expect(store.ensureScopeMailboxes).not.toHaveBeenCalled();
+	});
+
+	it("rejects STORE, EXPUNGE, and MOVE from scope paths even if selected readOnly is false", async () => {
 		const { handlers, mailbox, session, store } = createHarness(
 			"read_write",
 			"scope",
 		);
+		if (session.selected) session.selected.readOnly = false;
 		const [stored] = await callbackResult((callback) => {
 			handlers.onStore(
 				mailbox.id,
@@ -169,15 +273,14 @@ describe("IMAP backend authorization", () => {
 			);
 		});
 
-		expect([stored, expunged, moved]).toEqual([true, true, true]);
-		expect(store.updateFlags).toHaveBeenCalledTimes(1);
-		expect(store.expunge).toHaveBeenCalledTimes(1);
-		expect(store.moveMessages).toHaveBeenCalledWith(
-			session.user,
-			mailbox.id,
-			expect.objectContaining({ path: "Archive" }),
-			[1],
-		);
+		expect([stored, expunged, moved]).toEqual([
+			"READ-ONLY",
+			"READ-ONLY",
+			"READ-ONLY",
+		]);
+		expect(store.updateFlags).not.toHaveBeenCalled();
+		expect(store.expunge).not.toHaveBeenCalled();
+		expect(store.moveMessages).not.toHaveBeenCalled();
 	});
 
 	it("moves INBOX messages into Junk in one store call and reports every removed UID", async () => {
@@ -207,7 +310,11 @@ describe("IMAP backend authorization", () => {
 		});
 
 		expect(moved).toBe(true);
-		expect(info).toEqual({ uidValidity: 1, sourceUid: [1], destinationUid: [7] });
+		expect(info).toEqual({
+			uidValidity: 1,
+			sourceUid: [1],
+			destinationUid: [7],
+		});
 		expect(store.moveMessages).toHaveBeenCalledWith(
 			session.user,
 			mailbox.id,
@@ -237,7 +344,7 @@ describe("IMAP backend authorization", () => {
 		expect(store.moveMessages).not.toHaveBeenCalled();
 	});
 
-	it("refuses MOVE from a scope folder into INBOX, which already holds the message", async () => {
+	it("refuses MOVE from a read-only scope folder into INBOX", async () => {
 		const { handlers, mailbox, session, store } = createHarness(
 			"read_write",
 			"scope",
@@ -258,7 +365,7 @@ describe("IMAP backend authorization", () => {
 			);
 		});
 
-		expect(result).toBe("CANNOT");
+		expect(result).toBe("READ-ONLY");
 		expect(store.moveMessages).not.toHaveBeenCalled();
 	});
 
@@ -359,8 +466,13 @@ describe("IMAP backend authorization", () => {
 		expect(store.expunge).toHaveBeenCalledTimes(1);
 	});
 
-	it("allows CLOSE-style expunges of scope folders but not mismatched mailboxes", async () => {
+	it.each([
+		"scope-id",
+		"scope-path",
+	])("rejects CLOSE-style expunges identified by %s and mismatched mailboxes", async (identity) => {
 		const scoped = createHarness("read_write", "scope");
+		if (identity === "scope-id") scoped.mailbox.path = "Scoped view";
+		else scoped.mailbox.scopeId = null;
 		scoped.session.selected = false;
 		const [scopeResult] = await callbackResult((callback) => {
 			scoped.handlers.onExpunge(
@@ -381,9 +493,9 @@ describe("IMAP backend authorization", () => {
 			);
 		});
 
-		expect(scopeResult).toBe(true);
+		expect(scopeResult).toBe("READ-ONLY");
 		expect(mismatchResult).toBe("READ-ONLY");
-		expect(scoped.store.expunge).toHaveBeenCalledTimes(1);
+		expect(scoped.store.expunge).not.toHaveBeenCalled();
 		expect(writable.store.expunge).not.toHaveBeenCalled();
 	});
 
@@ -424,6 +536,41 @@ describe("IMAP backend authorization", () => {
 		expect(
 			(store.appendMessage.mock.calls[0] as unknown[] | undefined)?.[1],
 		).toMatchObject({ userId: "user", credentialId: "credential" });
+	});
+
+	it.each([
+		Buffer.from([0xff]),
+		Buffer.from("Subject: test\r\n\r\n\0body"),
+	])("rejects APPEND bytes that cannot round-trip through Postgres text", async (raw) => {
+		const { handlers, session, store } = createHarness("read_write");
+		await expect(
+			callbackResult((callback) => {
+				handlers.onAppend("INBOX", [], undefined, raw, session, callback);
+			}),
+		).rejects.toMatchObject({
+			responseMessage:
+				"APPEND requires UTF-8 content without NUL bytes; use MIME transfer encoding for binary content",
+		});
+		expect(store.appendMessage).not.toHaveBeenCalled();
+		expect(store.ensureDefaultMailboxes).not.toHaveBeenCalled();
+	});
+
+	it("preserves UTF-8 and MIME transfer-encoded APPEND content exactly", async () => {
+		const { handlers, session, store } = createHarness("read_write");
+		const raw =
+			"Subject: café\r\nContent-Transfer-Encoding: base64\r\n\r\n/wA=";
+		const [success] = await callbackResult((callback) => {
+			handlers.onAppend(
+				"INBOX",
+				[],
+				undefined,
+				Buffer.from(raw),
+				session,
+				callback,
+			);
+		});
+		expect(success).toBe(true);
+		expect((store.appendMessage.mock.calls[0] as unknown[])[2]).toBe(raw);
 	});
 
 	it("reports EXPUNGE for every message removed by EXPUNGE and MOVE", async () => {
@@ -539,6 +686,54 @@ describe("FETCH content handling", () => {
 			original: { value: "BODY", section: [] },
 		},
 	];
+
+	it.each([
+		"scope-id",
+		"scope-path",
+	])("serves scope BODY[] identified by %s without adding Seen", async (identity) => {
+		const budget = new ContentBudget(1024, 50);
+		const { handlers, mailbox, session, store } = createHarness(
+			"read_write",
+			"scope",
+			budget,
+		);
+		if (identity === "scope-id") mailbox.path = "Scoped view";
+		else mailbox.scopeId = null;
+		const [opened] = await callbackResult((callback) =>
+			handlers.onOpen(mailbox.path, session, callback),
+		);
+		const selected = opened as { _id: string; path: string; readOnly: boolean };
+		session.selected = {
+			mailbox: selected._id,
+			path: selected.path,
+			readOnly: selected.readOnly,
+		};
+		let message: { flags?: string[]; raw?: unknown } | undefined;
+		session.getQueryResponse = (_query, data) => {
+			message = data as typeof message;
+			return [];
+		};
+		const [success] = await callbackResult((callback) =>
+			handlers.onFetch(
+				mailbox.id,
+				{
+					messages: [1],
+					query: bodyQuery,
+					metadataOnly: false,
+					markAsSeen: true,
+					isUid: true,
+				},
+				session,
+				callback,
+			),
+		);
+		expect(selected.readOnly).toBe(true);
+		expect(success).toBe(true);
+		expect(Buffer.isBuffer(message?.raw)).toBe(true);
+		expect(message?.flags).toEqual([]);
+		expect(store.addFlag).not.toHaveBeenCalled();
+		expect(budget.used).toBe(0);
+	});
 
 	it("passes stored bytes to the response builder and releases the budget", async () => {
 		const budget = new ContentBudget(1024, 50);
@@ -682,10 +877,78 @@ describe("FETCH content handling", () => {
 });
 
 describe("backend error mapping", () => {
+	it("rejects managed-folder CREATE before SQL and reports existing custom folders", async () => {
+		const { handlers, session, store } = createHarness("read_write");
+		for (const path of [
+			"inbox",
+			"Sent",
+			"Drafts",
+			"Trash",
+			"Junk",
+			"Archive",
+			"Scopes",
+			"Scopes/user@example.com",
+		]) {
+			const [result] = await callbackResult((callback) =>
+				handlers.onCreate(path, session, callback),
+			);
+			expect(result).toBe("CANNOT");
+		}
+		expect(store.createMailbox).not.toHaveBeenCalled();
+		store.createMailbox.mockImplementation(async () => false);
+		const [result] = await callbackResult((callback) =>
+			handlers.onCreate("Projects", session, callback),
+		);
+		expect(result).toBe("ALREADYEXISTS");
+	});
+
+	it("maps invalid CREATE paths and expected SQL folder refusals to CANNOT", async () => {
+		const { handlers, session, store } = createHarness("read_write");
+		const invalid = await callbackResult((callback) =>
+			handlers.onCreate("Projects//Invalid", session, callback),
+		).catch((err: unknown) => err);
+		expect(invalid).toMatchObject({ code: "CANNOT" });
+		expect(store.createMailbox).not.toHaveBeenCalled();
+		for (const message of [
+			"Invalid mailbox path",
+			"Special mailboxes are managed",
+			"Scope mailboxes are managed",
+		]) {
+			store.createMailbox.mockImplementation(async () => {
+				throw Object.assign(new Error(message), { code: "P0001" });
+			});
+			const error = await callbackResult((callback) =>
+				handlers.onCreate("Projects", session, callback),
+			).catch((err: unknown) => err);
+			expect(error).toMatchObject({ code: "CANNOT" });
+		}
+	});
+
+	it("maps rejected descendant rename paths to CANNOT and collisions to ALREADYEXISTS", async () => {
+		const { handlers, session, store } = createHarness("read_write");
+		store.getMailboxByPath.mockImplementation(async () => null);
+		for (const [code, message, expected] of [
+			["P0001", "Invalid destination path", "CANNOT"],
+			["23505", "private unique constraint", "ALREADYEXISTS"],
+		]) {
+			store.renameMailbox.mockImplementation(async () => {
+				throw Object.assign(new Error(message), { code });
+			});
+			const error = await callbackResult((callback) =>
+				handlers.onRename("Projects", "Clients", session, callback),
+			).catch((err: unknown) => err);
+			expect(error).toMatchObject({ code: expected });
+			expect((error as Error).message).not.toContain(message ?? "private");
+		}
+	});
+
 	it("never exposes raw Postgres codes or messages", () => {
-		const unique = Object.assign(new Error('duplicate key value violates "x"'), {
-			code: "23505",
-		});
+		const unique = Object.assign(
+			new Error('duplicate key value violates "x"'),
+			{
+				code: "23505",
+			},
+		);
 		const timeout = Object.assign(new Error("canceling statement"), {
 			code: "57014",
 		});
@@ -697,7 +960,9 @@ describe("backend error mapping", () => {
 		);
 		expect(
 			(
-				toImapError(Object.assign(new Error("x"), { code: "08006" })) as Error & {
+				toImapError(
+					Object.assign(new Error("x"), { code: "08006" }),
+				) as Error & {
 					code: string;
 				}
 			).code,

@@ -196,7 +196,7 @@ module.exports = {
                 // do not return actual error to user
                 return callback(null, {
                     response: 'NO',
-                    code: 'TEMPFAIL',
+                    code: err.imapCode || 'TEMPFAIL',
                     message: err.responseMessage
                 });
             }

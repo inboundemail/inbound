@@ -22,6 +22,12 @@ export interface MappedRawMessage {
 }
 
 const FORWARDED_HEADERS = ["in-reply-to", "references"];
+const MESSAGE_ID_ATOM = /[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*/
+	.source;
+const MESSAGE_ID = new RegExp(
+	`^<${MESSAGE_ID_ATOM}@(?:${MESSAGE_ID_ATOM}|\\[[!-Z^-~]*\\])>$`,
+);
+const MAX_MESSAGE_ID_LENGTH = 500;
 
 export const DEFAULT_MAX_MIME_PARTS = 500;
 
@@ -206,6 +212,12 @@ function customHeaders(parsed: ParsedMail): Record<string, string> | undefined {
 	return Object.keys(headers).length > 0 ? headers : undefined;
 }
 
+function messageId(parsed: ParsedMail): string | undefined {
+	const value = parsed.messageId?.trim();
+	if (!value || value.length > MAX_MESSAGE_ID_LENGTH) return undefined;
+	return MESSAGE_ID.test(value) ? value : undefined;
+}
+
 export function idempotencyKeyFor(
 	raw: Buffer,
 	credentialId: string,
@@ -301,6 +313,7 @@ export async function mapRawMessage(
 			...(attachment.cid ? { content_id: phrase(attachment.cid) } : {}),
 		}));
 	const headers = customHeaders(parsed);
+	const originalMessageId = messageId(parsed);
 
 	return {
 		fromAddress: fromAddress.toLowerCase(),
@@ -314,6 +327,7 @@ export async function mapRawMessage(
 			...(cc.length > 0 ? { cc } : {}),
 			...(bcc.length > 0 ? { bcc } : {}),
 			...(replyTo.length > 0 ? { reply_to: replyTo } : {}),
+			...(originalMessageId ? { message_id: originalMessageId } : {}),
 			...(headers ? { headers } : {}),
 			...(attachments.length > 0 ? { attachments } : {}),
 		},

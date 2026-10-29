@@ -2,6 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { createRequire } from "node:module";
 import net from "node:net";
 import tls from "node:tls";
+import type { ApiAuth } from "./auth.ts";
+import { MailboxResyncError, type JournalEntry, type MailStore } from "./db.ts";
+import { buildHandlers } from "./handlers.ts";
+import type { ConnectionLimits } from "./limits.ts";
+import { PgNotifier } from "./notifier.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -656,7 +661,9 @@ describe("FETCH raw content", () => {
 			{ raw, size: raw.length },
 		);
 		expect(values[0]).toBe(raw);
-		expect((values[1] as Buffer).toString()).toBe(raw.subarray(2, 7).toString());
+		expect((values[1] as Buffer).toString()).toBe(
+			raw.subarray(2, 7).toString(),
+		);
 		expect(values[2]).toBe(raw);
 		expect((values[3] as Buffer).toString()).toBe("body é\r\n");
 	});
@@ -697,13 +704,14 @@ describe("FETCH raw content", () => {
 
 describe("STARTTLS parser reset", () => {
 	it("drops buffered plaintext so it is never prepended to encrypted commands", async () => {
-		const { IMAPStream } = require("../vendor/imap-core/lib/imap-stream.js") as {
-			IMAPStream: new () => {
-				oncommand: (command: { value: string }, done: () => void) => void;
-				write: (chunk: Buffer, done: () => void) => void;
-				reset: () => void;
+		const { IMAPStream } =
+			require("../vendor/imap-core/lib/imap-stream.js") as {
+				IMAPStream: new () => {
+					oncommand: (command: { value: string }, done: () => void) => void;
+					write: (chunk: Buffer, done: () => void) => void;
+					reset: () => void;
+				};
 			};
-		};
 		const parser = new IMAPStream();
 		const lines: string[] = [];
 		parser.oncommand = (command, done) => {
@@ -747,7 +755,9 @@ describe("connection admission", () => {
 			debug: () => undefined,
 			error: () => undefined,
 		};
-		await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+		await new Promise<void>((resolve) =>
+			server.listen(0, "127.0.0.1", resolve),
+		);
 		const address = server.server.address() as net.AddressInfo;
 		return { server, port: address.port };
 	}
@@ -759,9 +769,198 @@ describe("connection admission", () => {
 			data += chunk.toString();
 		});
 		socket.on("error", () => undefined);
-		const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+		const closed = new Promise<void>((resolve) =>
+			socket.once("close", () => resolve()),
+		);
 		return { socket, closed, output: () => data };
 	}
+
+	it("returns NO CANNOT with an encoding explanation for invalid UTF-8 and NUL APPEND literals", async () => {
+		const { onAppend } = buildHandlers(
+			{} as ApiAuth,
+			{} as MailStore,
+			{} as ConnectionLimits,
+		);
+		const { server, port } = await startServer({ idleTimeout: 2000 });
+		Object.assign(server, {
+			onAppend,
+			notifier: {
+				addListener: () => undefined,
+				removeListener: () => undefined,
+			},
+			onAuth: (
+				_auth: unknown,
+				_session: unknown,
+				callback: (err: null, result: object) => void,
+			) =>
+				callback(null, {
+					user: {
+						id: "user",
+						userId: "user",
+						credentialId: "credential",
+						username: "user@example.com",
+						address: "user@example.com",
+						loginAddress: "user@example.com",
+						accessMode: "read_write",
+						scopes: [],
+					},
+				}),
+		});
+		const client = connect(port);
+		const waitFor = async (text: string) => {
+			const deadline = Date.now() + 1000;
+			while (!client.output().includes(text) && Date.now() < deadline)
+				await Bun.sleep(5);
+			expect(client.output()).toContain(text);
+		};
+		try {
+			await waitFor("* OK");
+			client.socket.write("a LOGIN user@example.com secret\r\n");
+			await waitFor("a OK");
+			for (const [index, byte] of [0xff, 0].entries()) {
+				const raw = Buffer.concat([
+					Buffer.from("Subject: test\r\n\r\n"),
+					Buffer.from([byte]),
+				]);
+				const tag = `append${index}`;
+				client.socket.write(
+					Buffer.concat([
+						Buffer.from(`${tag} APPEND INBOX {${raw.length}}\r\n`),
+						raw,
+						Buffer.from("\r\n"),
+					]),
+				);
+				await waitFor(
+					`${tag} NO [CANNOT] APPEND requires UTF-8 content without NUL bytes; use MIME transfer encoding for binary content`,
+				);
+			}
+			expect(client.output()).not.toContain("[TEMPFAIL]");
+		} finally {
+			client.socket.destroy();
+			await new Promise<void>((resolve) => server.close(resolve));
+		}
+	});
+
+	it("pushes flag changes and removals over IDLE, then disconnects stale cursors", async () => {
+		const changes: JournalEntry[] = [];
+		const cursors: number[] = [];
+		let expired = false;
+		const store = {
+			getUpdatesSince: async (
+				_owner: unknown,
+				_mailbox: string,
+				since: number,
+			) => {
+				if (expired) throw new MailboxResyncError("expired");
+				cursors.push(since);
+				const remaining = changes.filter((change) => change.modseq > since);
+				const upTo = remaining[499]?.modseq ?? Number.POSITIVE_INFINITY;
+				return remaining.filter((change) => change.modseq <= upTo);
+			},
+		};
+		const notifier = new PgNotifier(
+			"postgres://localhost/inbound",
+			store as unknown as MailStore,
+		);
+		const { server, port } = await startServer({ idleTimeout: 2000 });
+		Object.assign(server, {
+			notifier,
+			onAuth: (
+				_auth: unknown,
+				_session: unknown,
+				callback: (err: null, result: object) => void,
+			) =>
+				callback(null, {
+					user: {
+						id: "user",
+						userId: "user",
+						credentialId: "credential",
+						username: "user@example.com",
+						loginAddress: "user@example.com",
+						scopes: [],
+					},
+				}),
+			onOpen: (
+				_path: string,
+				_session: unknown,
+				callback: (err: null, result: object) => void,
+			) =>
+				callback(null, {
+					_id: "inbox",
+					path: "INBOX",
+					uidList: [1, 2],
+					uidNext: 3,
+					uidValidity: 1,
+					modifyIndex: 1,
+					flags: [],
+					readOnly: false,
+				}),
+		});
+		const client = connect(port);
+		const waitFor = async (text: string) => {
+			const deadline = Date.now() + 1000;
+			while (!client.output().includes(text) && Date.now() < deadline)
+				await Bun.sleep(5);
+			expect(client.output()).toContain(text);
+		};
+		const wake = () => {
+			for (const [, callback] of notifier.sessions()) callback();
+		};
+		try {
+			await waitFor("* OK");
+			client.socket.write("a LOGIN user@example.com secret\r\n");
+			await waitFor("a OK");
+			client.socket.write("b SELECT INBOX\r\n");
+			await waitFor("b OK");
+			client.socket.write("c IDLE\r\n");
+			await waitFor("+ idling");
+			changes.push({
+				command: "FETCH",
+				uid: 2,
+				modseq: 2,
+				flags: ["\\Seen"],
+				_id: "inbox:2:2",
+			});
+			wake();
+			await waitFor("* 2 FETCH (FLAGS (\\Seen))");
+			changes.push({
+				command: "FETCH",
+				uid: 2,
+				modseq: 3,
+				flags: ["\\Flagged"],
+				_id: "inbox:2:3",
+			});
+			wake();
+			await waitFor("* 2 FETCH (FLAGS (\\Flagged))");
+			changes.push({ command: "EXPUNGE", uid: 1, modseq: 4, _id: "inbox:1:4" });
+			wake();
+			await waitFor("* 1 EXPUNGE");
+			await waitFor("* 1 EXISTS");
+			cursors.length = 0;
+			for (let index = 0; index < 1100; index++) {
+				const uid = index + 3;
+				const modseq = 5 + Math.floor(index / 3);
+				changes.push({
+					command: "EXISTS",
+					uid,
+					modseq,
+					_id: `inbox:${uid}:${modseq}`,
+				});
+			}
+			wake();
+			await waitFor("* 1101 EXISTS");
+			expect(cursors).toEqual([4, 171, 338]);
+			expired = true;
+			wake();
+			await client.closed;
+			expect(client.output()).toContain(
+				"* BYE Selected mailbox was deleted, have to disconnect",
+			);
+		} finally {
+			client.socket.destroy();
+			await new Promise<void>((resolve) => server.close(resolve));
+		}
+	});
 
 	it("drops connections over the per-IP cap at TCP accept, before any processing", async () => {
 		const { ConnectionLimits } = await import("./limits.ts");

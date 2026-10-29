@@ -1,13 +1,17 @@
 import postgres from "postgres";
 import type { AuthenticatedMailbox } from "./auth.ts";
-import type { MailStore } from "./db.ts";
-import { scopeMailboxPath } from "./db.ts";
+import {
+	MailboxResyncError,
+	MESSAGE_BATCH_SIZE,
+	type MailStore,
+} from "./db.ts";
+import { scopeMailboxPath } from "./mailbox-rules.ts";
 import { sanitizeLogValue } from "./log.ts";
 
 interface SessionLike {
 	user?: AuthenticatedMailbox & { address?: string };
 	remoteAddress?: string;
-	selected?: { mailbox?: string } | false | null;
+	selected?: { mailbox?: string; modifyIndex?: number } | false | null;
 }
 
 type ListenerCallback = (message?: unknown) => void;
@@ -21,7 +25,11 @@ export class PgNotifier {
 	private store: MailStore;
 	private listeners = new Map<SessionLike, ListenerCallback>();
 	private pollTimer: ReturnType<typeof setInterval> | null = null;
-	private polling = false;
+	private pending = new Map<
+		string,
+		{ dirty: boolean; paths: Set<string>; running: Promise<void> }
+	>();
+	private updates = new WeakMap<SessionLike, Promise<void>>();
 	private listenCount = 0;
 	onReconnect: (() => void) | null = null;
 
@@ -31,14 +39,16 @@ export class PgNotifier {
 	}
 
 	async start(): Promise<void> {
-		await this.sql.listen("imap_changed", (payload) => {
-			this.handleChange(payload).catch((err: Error) => {
-				console.error(
-					"[notifier] change handling failed",
-					sanitizeLogValue(err.message),
-				);
+		for (const channel of ["imap_state_changed", "imap_received_changed"]) {
+			await this.sql.listen(channel, (payload) => {
+				this.handleChange(channel, payload).catch((err: Error) => {
+					console.error(
+						"[notifier] change handling failed",
+						sanitizeLogValue(err.message),
+					);
+				});
 			});
-		});
+		}
 		await this.sql.listen(
 			"imap_credential_changed",
 			(credentialId) => {
@@ -70,113 +80,143 @@ export class PgNotifier {
 			});
 		}, POLL_INTERVAL_MS);
 		console.log(
-			"[notifier] LISTEN imap_changed + imap_credential_changed active",
+			"[notifier] LISTEN imap_state_changed + imap_received_changed + imap_credential_changed active",
 		);
 	}
 
 	async stop(): Promise<void> {
 		if (this.pollTimer) clearInterval(this.pollTimer);
+		await Promise.allSettled(
+			[...this.pending.values()].map((item) => item.running),
+		);
 		await this.sql.end({ timeout: 2 }).catch(() => undefined);
-	}
-
-	/** Wakes sessions that have one of these mailboxes selected, so they fetch EXPUNGE updates. */
-	wakeMailboxes(mailboxIds: string[]): void {
-		const ids = new Set(mailboxIds);
-		for (const [session, callback] of this.listeners) {
-			const selected = session.selected;
-			if (selected && selected.mailbox && ids.has(selected.mailbox)) {
-				callback();
-			}
-		}
 	}
 
 	sessions(): Iterable<[SessionLike, ListenerCallback]> {
 		return this.listeners.entries();
 	}
 
-	private sessionsFor(address: string): Array<[SessionLike, ListenerCallback]> {
-		const callbacks: Array<[SessionLike, ListenerCallback]> = [];
-		for (const [session, callback] of this.listeners) {
-			const user = session.user;
-			if (!user) continue;
-			const matches =
-				user.loginAddress === address ||
-				user.scopes.some((scope) =>
-					scope.type === "domain"
-						? address.split("@")[1] === scope.domain
-						: address === scope.address,
+	private async handleChange(channel: string, payload: string): Promise<void> {
+		const sync = channel === "imap_received_changed";
+		const prefix = sync ? "user:" : "cred:";
+		let id: string;
+		let addresses: string[] | undefined;
+		if (payload.startsWith(prefix)) {
+			id = payload.slice(prefix.length);
+		} else if (sync) {
+			let change: { userId?: unknown; addresses?: unknown } | null;
+			try {
+				change = JSON.parse(payload);
+			} catch {
+				return;
+			}
+			if (!change || typeof change.userId !== "string") return;
+			id = change.userId;
+			if (
+				Array.isArray(change.addresses) &&
+				change.addresses.every((value) => typeof value === "string")
+			) {
+				addresses = change.addresses.map((value: string) =>
+					value.toLowerCase(),
 				);
-			if (matches) callbacks.push([session, callback]);
+			}
+		} else {
+			return;
 		}
-		return callbacks;
+		const principals = new Map<string, AuthenticatedMailbox>();
+		for (const [session] of this.listeners) {
+			const user = session.user;
+			if (user && (sync ? user.userId === id : user.credentialId === id)) {
+				principals.set(`${user.userId}:${user.credentialId}`, user);
+			}
+		}
+		const affectedAddresses = addresses;
+		await Promise.all(
+			[...principals.values()].map((user) => {
+				if (!sync) return this.schedule(user);
+				const scopes = affectedAddresses
+					? user.scopes.filter((scope) =>
+							affectedAddresses.some((address) =>
+								scope.type === "address"
+									? address === scope.address?.toLowerCase()
+									: address.endsWith(`@${scope.domain.toLowerCase()}`),
+							),
+						)
+					: user.scopes;
+				if (affectedAddresses && !scopes.length) return;
+				return this.schedule(user, [
+					...RECEIVED_VIEWS,
+					...scopes.map(scopeMailboxPath),
+				]);
+			}),
+		);
 	}
 
-	private async handleChange(address: string): Promise<void> {
-		const callbacks = this.sessionsFor(address);
-		if (callbacks.length === 0) return;
-		console.log(`[notifier] change delivered to ${callbacks.length} session(s)`);
-		for (const [session] of callbacks) {
-			if (!session.user) continue;
-			for (const path of RECEIVED_VIEWS) {
-				const view = await this.store.getMailboxByPath(session.user, path);
-				if (view) {
-					await this.store
-						.syncMailbox(view, session.user)
-						.catch(() => undefined);
-				}
-			}
-			for (const scope of session.user.scopes) {
-				const scopeMatches =
-					scope.type === "domain"
-						? address.split("@")[1] === scope.domain
-						: address === scope.address;
-				if (!scopeMatches) continue;
-				const mailbox = await this.store.getMailboxByPath(
-					session.user,
-					scopeMailboxPath(scope),
-				);
-				if (mailbox) {
-					await this.store
-						.syncMailbox(mailbox, session.user)
-						.catch(() => undefined);
-				}
-			}
+	private schedule(
+		user: AuthenticatedMailbox,
+		paths: readonly string[] = [],
+	): Promise<void> {
+		const key = `${user.userId}:${user.credentialId}`;
+		const existing = this.pending.get(key);
+		if (existing) {
+			existing.dirty = true;
+			for (const path of paths) existing.paths.add(path);
+			return existing.running;
 		}
-		for (const [, callback] of callbacks) callback();
+		const state = {
+			dirty: true,
+			paths: new Set(paths),
+			running: Promise.resolve(),
+		};
+		this.pending.set(key, state);
+		state.running = Promise.resolve().then(async () => {
+			try {
+				do {
+					state.dirty = false;
+					for (const path of [...state.paths]) {
+						state.paths.delete(path);
+						try {
+							const mailbox = await this.store.getMailboxByPath(user, path);
+							if (mailbox) await this.store.syncMailbox(mailbox, user);
+						} catch (err) {
+							console.error(
+								"[notifier] sync failed",
+								sanitizeLogValue((err as Error).message),
+							);
+						}
+					}
+					for (const [session, callback] of this.listeners) {
+						if (
+							session.user?.userId === user.userId &&
+							session.user.credentialId === user.credentialId
+						)
+							callback();
+					}
+				} while (state.dirty);
+			} finally {
+				this.pending.delete(key);
+			}
+		});
+		return state.running;
 	}
 
 	private async pollAll(): Promise<void> {
-		if (this.polling) return;
-		this.polling = true;
-		try {
-			for (const [session, callback] of [...this.listeners]) {
-				if (!session.user) continue;
-				try {
-					for (const path of RECEIVED_VIEWS) {
-						const view = await this.store.getMailboxByPath(
-							session.user,
-							path,
-						);
-						if (view) await this.store.syncMailbox(view, session.user);
-					}
-					for (const scope of session.user.scopes) {
-						const mailbox = await this.store.getMailboxByPath(
-							session.user,
-							scopeMailboxPath(scope),
-						);
-						if (mailbox) await this.store.syncMailbox(mailbox, session.user);
-					}
-					callback();
-				} catch (err) {
-					console.error(
-						"[notifier] session poll failed",
-						sanitizeLogValue((err as Error).message),
-					);
-				}
-			}
-		} finally {
-			this.polling = false;
+		const users = new Map<string, AuthenticatedMailbox>();
+		for (const [session] of this.listeners) {
+			if (session.user)
+				users.set(
+					`${session.user.userId}:${session.user.credentialId}`,
+					session.user,
+				);
 		}
+		await Promise.all(
+			[...users.values()].map((user) =>
+				this.schedule(user, [
+					...RECEIVED_VIEWS,
+					...user.scopes.map(scopeMailboxPath),
+				]),
+			),
+		);
 	}
 
 	addListener(session: SessionLike, callback: ListenerCallback): void {
@@ -205,13 +245,41 @@ export class PgNotifier {
 				? mailbox
 				: ((mailbox as { _id?: string })?._id ?? "");
 		const user = session?.user;
-		if (!user) {
+		if (!session || !user) {
 			callback(null, []);
 			return;
 		}
-		this.store
-			.getUpdatesSince(user, mailboxId, modifyIndex || 0)
-			.then((updates) => callback(null, updates))
-			.catch((err: Error) => callback(err));
+		const previous = this.updates.get(session) ?? Promise.resolve();
+		const pending = previous
+			.catch(() => undefined)
+			.then(async () => {
+				const selected = session.selected;
+				const since =
+					selected && selected.mailbox === mailboxId
+						? Math.max(modifyIndex || 0, selected.modifyIndex ?? 0)
+						: modifyIndex || 0;
+				try {
+					const rows = await this.store.getUpdatesSince(user, mailboxId, since);
+					callback(null, rows);
+					if (
+						rows.length >= MESSAGE_BATCH_SIZE &&
+						session.selected &&
+						session.selected.mailbox === mailboxId &&
+						(session.selected.modifyIndex ?? 0) > since
+					)
+						this.listeners.get(session)?.();
+				} catch (err) {
+					if (err instanceof MailboxResyncError) {
+						this.listeners.get(session)?.({
+							command: "DROP",
+							mailbox: mailboxId,
+						});
+						callback(null, []);
+						return;
+					}
+					callback(err as Error);
+				}
+			});
+		this.updates.set(session, pending);
 	}
 }

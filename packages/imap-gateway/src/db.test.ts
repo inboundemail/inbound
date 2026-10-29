@@ -1,18 +1,23 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import type { AuthenticatedMailbox } from "./auth.ts";
-import { ExpungeJournal, type MailboxRow, MailStore } from "./db.ts";
+import {
+	AppendQuotaError,
+	MailboxResyncError,
+	type JournalEntry,
+	type MailboxRow,
+	MailStore,
+} from "./db.ts";
+import {
+	normalizeFlags,
+	normalizeMailboxPath,
+	isProtectedMailboxPath,
+	SPECIAL_USE,
+} from "./mailbox-rules.ts";
+import { PgNotifier } from "./notifier.ts";
 
 interface SqlRequest {
 	statement: string;
 	values: unknown[];
-}
-
-interface SqlStub {
-	<T extends readonly object[]>(
-		strings: TemplateStringsArray,
-		...values: unknown[]
-	): Promise<T>;
-	begin: <T>(callback: (transaction: SqlStub) => Promise<T>) => Promise<T>;
 }
 
 const principal: AuthenticatedMailbox = {
@@ -38,6 +43,18 @@ const principal: AuthenticatedMailbox = {
 	],
 };
 
+const storedMailbox = {
+	id: "inbox",
+	address: "user@example.com",
+	path: "INBOX",
+	uid_validity: 1,
+	uid_next: 1,
+	modseq: 0,
+	credential_id: "credential",
+	scope_id: null,
+	subscribed: true,
+};
+
 const mailbox: MailboxRow = {
 	id: "inbox",
 	address: "user@example.com",
@@ -47,18 +64,17 @@ const mailbox: MailboxRow = {
 	modseq: 0,
 	credentialId: "credential",
 	scopeId: null,
+	subscribed: true,
 };
 
 const fragment = Symbol("fragment");
 
-function createStore(
-	respond?: (statement: string) => unknown[] | undefined,
-): { store: MailStore; requests: SqlRequest[] } {
+function createStore(respond?: (request: SqlRequest) => unknown[]) {
 	const requests: SqlRequest[] = [];
-	function execute<T extends readonly object[]>(
+	function execute(
 		strings: TemplateStringsArray,
 		...inputs: unknown[]
-	): Promise<T> {
+	): unknown {
 		let statement = strings[0] ?? "";
 		const values: unknown[] = [];
 		inputs.forEach((input, index) => {
@@ -72,489 +88,526 @@ function createStore(
 			}
 			statement += strings[index + 1] ?? "";
 		});
-		const result = () => {
-			requests.push({ statement, values });
-			const custom = respond?.(statement);
-			if (custom) return custom;
-			if (/SELECT id FROM imap_mailboxes\s+WHERE id = \?/.test(statement)) {
-				return [{ id: "owned" }];
-			}
-			if (statement.includes("SELECT uid_next, modseq")) {
-				return [
-					{ uid_next: 1, modseq: 0, id: "inbox", path: "INBOX" },
-					{ uid_next: 1, modseq: 0, id: "junk", path: "Junk" },
-				];
-			}
-			if (statement.includes("raw_content FROM")) {
-				return [{ raw_content: "message" }];
-			}
-			return [];
-		};
+		const request = { statement, values };
 		return {
-			[fragment]: { statement, values },
-			then: (resolve: (value: T) => unknown, reject: (err: unknown) => unknown) =>
+			[fragment]: request,
+			then: (
+				resolve: (rows: unknown[]) => unknown,
+				reject: (error: unknown) => unknown,
+			) =>
 				Promise.resolve()
-					.then(result)
-					.then((rows) => resolve(rows as unknown as T), reject),
-		} as unknown as Promise<T>;
+					.then(() => {
+						requests.push(request);
+						return respond?.(request) ?? [];
+					})
+					.then(resolve, reject),
+		};
 	}
-	const sql: SqlStub = Object.assign(execute, {
-		begin: <T>(callback: (transaction: SqlStub) => Promise<T>) => callback(sql),
-	});
 	const store = new MailStore("postgres://localhost/inbound", {
 		appendMaxBytesPerUser: 1024,
 		appendMaxMessagesPerUser: 10,
 	});
-	Object.assign(store, { sql });
+	Object.assign(store, { sql: execute });
 	return { store, requests };
 }
 
-describe("MailStore Guard and scope enforcement", () => {
-	it("excludes Guard-blocked messages from sync and matches envelope recipients", async () => {
-		const { store, requests } = createStore();
-		await store.syncMailbox(mailbox, principal);
-		const sync = requests.find((request) =>
-			request.statement.includes("WITH new_msgs AS"),
-		);
-		expect(sync?.statement).toContain("se.guard_blocked IS NOT TRUE");
-		expect(sync?.statement).toContain("se.envelope_recipients");
-	});
-
-	it("restricts structured raw content to unblocked, currently authorized scopes", async () => {
-		const { store, requests } = createStore();
+describe("MailStore function boundary", () => {
+	it("uses the shared ensure result for defaults and scope folders", async () => {
+		const { store, requests } = createStore(() => [
+			storedMailbox,
+			{ ...storedMailbox, id: "archive", path: "Archive" },
+			{
+				...storedMailbox,
+				id: "scope",
+				path: "Scopes/user@example.com",
+				scope_id: "scope",
+			},
+		]);
 		expect(
-			(await store.getRawContent("message", "structured", principal))?.toString(),
-		).toBe("message");
-		const request = requests[0];
-		expect(request?.statement).toContain("guard_blocked IS NOT TRUE");
-		expect(request?.statement).toContain("lower(se.recipient) = ANY");
-		expect(request?.statement).toContain("se.envelope_recipients");
-		expect(request?.values).toContainEqual(["user@example.com"]);
-		expect(request?.values).toContainEqual(["example.com"]);
+			(await store.ensureDefaultMailboxes(principal)).map((row) => row.path),
+		).toEqual(["INBOX", "Archive"]);
+		expect(
+			(await store.ensureScopeMailboxes(principal)).map((row) => row.id),
+		).toEqual(["scope"]);
+		for (const request of requests)
+			expect(request.values).toEqual(["user", "credential"]);
 	});
 
-	it("preserves appended-message ownership checks without applying structured scopes", async () => {
-		const { store, requests } = createStore();
+	it("syncs through the database's owned mailbox function", async () => {
+		const { store, requests } = createStore(() => [
+			{ ...storedMailbox, uid_next: 3 },
+		]);
+		expect(await store.syncMailbox(mailbox, principal)).toBe(2);
+		expect(requests[0]?.values).toEqual(["user", "credential", "inbox"]);
+	});
+
+	it("maps persisted flags and passes normalized flags with both ownership keys", async () => {
+		const { store, requests } = createStore(() => [
+			{ uid: 2, flags: '["\\\\Seen"]' },
+		]);
+		expect(
+			await store.updateFlags(principal, "inbox", [2], "add", [
+				"\\seen",
+				"\\Seen",
+				"\\Recent",
+			]),
+		).toEqual([{ uid: 2, flags: ["\\Seen"] }]);
+		expect(requests[0]?.values).toEqual([
+			"user",
+			"credential",
+			"inbox",
+			[2],
+			"add",
+			["\\Seen"],
+		]);
+	});
+
+	it("uses one atomic transfer and includes removed UIDs whose destination was already present", async () => {
+		const { store, requests } = createStore(({ statement }) =>
+			statement.includes("FROM imap_mailbox_expunges")
+				? [{ uid: 2 }, { uid: 5 }]
+				: [{ source_uid: 2, destination_uid: 9 }],
+		);
+		const destination = {
+			...mailbox,
+			id: "archive",
+			path: "Archive",
+			uidValidity: 8,
+		};
+		expect(
+			await store.moveMessages(principal, "inbox", destination, [2, 5]),
+		).toEqual({
+			uidValidity: 8,
+			sourceUid: [2],
+			destinationUid: [9],
+			expunged: [2, 5],
+		});
+		expect(requests).toHaveLength(2);
+		expect(requests[0]?.values).toEqual([
+			"user",
+			"credential",
+			"inbox",
+			"archive",
+			[2, 5],
+			true,
+		]);
+		await store.copyMessages(principal, "inbox", destination, [2]);
+		expect(requests[2]?.values).toEqual([
+			"user",
+			"credential",
+			"inbox",
+			"archive",
+			[2],
+			false,
+		]);
+	});
+
+	it("distinguishes Deleted-only EXPUNGE from explicit forced removal", async () => {
+		const { store, requests } = createStore(() => [{ uid: 5 }, { uid: 2 }]);
+		expect(await store.expunge(principal, "inbox")).toEqual([2, 5]);
+		await store.expunge(principal, "inbox", [2]);
+		await store.deleteMessages(principal, "inbox", [5]);
+		expect(requests.map((request) => request.values)).toEqual([
+			["user", "credential", "inbox", null, false],
+			["user", "credential", "inbox", [2], false],
+			["user", "credential", "inbox", [5], true],
+		]);
+	});
+
+	it("passes APPEND quotas and returns database UIDVALIDITY", async () => {
+		const { store, requests } = createStore(() => [
+			{ uid: 4, uid_validity: 3 },
+		]);
+		const date = new Date(0);
+		expect(
+			await store.appendMessage(mailbox, principal, "raw", ["\\seen"], date),
+		).toEqual({ uid: 4, uidValidity: 3 });
+		expect(requests[0]?.values).toEqual([
+			"user",
+			"credential",
+			"inbox",
+			"raw",
+			["\\Seen"],
+			date,
+			1024,
+			10,
+		]);
+		const quota = createStore(() => {
+			throw new Error("APPEND quota exceeded");
+		});
+		await expect(
+			quota.store.appendMessage(mailbox, principal, "raw", [], date),
+		).rejects.toBeInstanceOf(AppendQuotaError);
+	});
+
+	it("persists folder mutations and subscription changes through the same function", async () => {
+		const { store, requests } = createStore(() => [storedMailbox]);
+		expect(await store.createMailbox(principal, "Projects")).toBe(true);
+		expect(await store.renameMailbox(principal, "Projects", "Clients")).toBe(
+			true,
+		);
+		expect(await store.deleteMailbox(principal, "Clients")).toBe(true);
+		expect(await store.subscribeMailbox(principal, "inbox", false)).toBe(true);
+		expect(requests.map((request) => request.values)).toEqual([
+			["user", "credential", "create", "Projects", null, null],
+			["user", "credential", "rename", "Projects", "Clients", null],
+			["user", "credential", "delete", "Clients", null, null],
+			["user", "credential", "subscribe", "INBOX", null, false],
+		]);
+	});
+});
+
+describe("MailStore reads and persistent updates", () => {
+	it("delegates raw structured content visibility to the shared authorization function", async () => {
+		const { store, requests } = createStore(() => [{ raw_content: "message" }]);
+		expect(
+			(
+				await store.getRawContent("message", "structured", principal)
+			)?.toString(),
+		).toBe("message");
+		expect(requests[0]?.statement).toContain("imap_visible");
+		expect(requests[0]?.values).toEqual([
+			"message",
+			"user",
+			"user",
+			"credential",
+		]);
+	});
+
+	it("preserves appended-message ownership checks", async () => {
+		const { store, requests } = createStore(() => [{ raw_content: "message" }]);
 		expect(
 			(await store.getRawContent("message", "appended", principal))?.toString(),
 		).toBe("message");
-		expect(requests[0]?.statement).toContain("FROM imap_appended_messages");
+		expect(requests[0]?.values).toEqual(["message", "user"]);
 		expect(requests[0]?.statement).not.toContain("guard_blocked");
-		expect(requests[0]?.values).toContain("user");
 	});
 
-	it("reconciles structured mappings in every credential-owned folder when scopes are revoked", async () => {
+	it("scopes mailbox-id reads to both user and credential", async () => {
 		const { store, requests } = createStore();
-		await store.ensureScopeMailboxes({ ...principal, scopes: [] });
-		const reconciliation = requests.find((request) =>
-			request.statement.includes("DELETE FROM imap_mailbox_messages mm"),
-		);
-		expect(reconciliation?.statement).not.toContain("mb.path = 'INBOX'");
-		expect(reconciliation?.statement).toContain("mb.credential_id = ?");
-		expect(reconciliation?.statement).toContain("mb.user_id = ?");
-		expect(reconciliation?.statement).toContain("mm.raw_source = 'structured'");
-		expect(reconciliation?.statement).not.toContain(
-			"mm.raw_source = 'appended'",
-		);
-		expect(reconciliation?.statement).toContain(
-			"NOT (se.guard_blocked IS NOT TRUE",
-		);
-		expect(reconciliation?.statement).toContain("se.envelope_recipients");
-		expect(reconciliation?.values).toContain("credential");
-		expect(reconciliation?.values).toContain("user");
-		expect(
-			requests.some((request) =>
-				request.statement.includes("DELETE FROM structured_emails"),
-			),
-		).toBe(false);
-	});
-});
-
-describe("MailStore tenant isolation", () => {
-	it("scopes mailbox-id queries to the session's user and credential", async () => {
-		const { store, requests } = createStore();
-		const owner = { userId: "user", credentialId: "credential" };
-		await store.searchMessages(owner, "inbox", []);
-		await store.listMessages(owner, "inbox", [1]);
-		await store.listUids(owner, "inbox");
-		await store.countMessages(owner, "inbox");
-		await store.unseenCount(owner, "inbox");
-		await store.getUpdatesSince(owner, "inbox", 0);
-		await store.deleteMessages(owner, "inbox", [1]);
-		await store.expunge(owner, "inbox");
-		await store.expunge(owner, "inbox", [1]);
-		await store.copyMessages(owner, "inbox", mailbox, [1]);
-		await store.updateFlags(owner, "inbox", [1], "add", ["\\Seen"]);
-
-		const messageQueries = requests.filter((request) =>
-			/FROM imap_mailbox_messages|DELETE FROM imap_mailbox_messages/.test(
-				request.statement,
-			) && request.statement.includes("mailbox_id = ?"),
-		);
-		expect(messageQueries.length).toBeGreaterThanOrEqual(10);
-		for (const request of messageQueries) {
-			expect(request.statement).toContain("owner.user_id = ?");
-			expect(request.statement).toContain("owner.credential_id = ?");
+		await store.searchMessages(principal, "inbox", []);
+		await store.listMessages(principal, "inbox", [1]);
+		await store.listUids(principal, "inbox");
+		await store.countMessages(principal, "inbox");
+		await store.unseenCount(principal, "inbox");
+		for (const request of requests) {
 			expect(request.values).toContain("user");
 			expect(request.values).toContain("credential");
 		}
-		const flagsMailbox = requests.find((request) =>
-			request.statement.includes("AS mirrored"),
-		);
-		expect(flagsMailbox?.statement).toContain("credential_id = ?");
-		expect(flagsMailbox?.values).toContain("user");
 	});
 
-	it("refuses to sync a mailbox the principal does not own", async () => {
-		const { store, requests } = createStore();
-		await store.syncMailbox(mailbox, principal);
-		const lock = requests.find((request) =>
-			request.statement.includes("SELECT uid_next, modseq"),
+	it("returns EXISTS, flags FETCH, and durable EXPUNGE with distinct revision keys", async () => {
+		const updates = [
+			{ expunge_floor: 2, command: "EXISTS", uid: 8, modseq: 5, flags: "[]" },
+			{
+				expunge_floor: 2,
+				command: "FETCH",
+				uid: 3,
+				modseq: 6,
+				flags: '["\\\\Seen"]',
+			},
+			{ expunge_floor: 2, command: "EXPUNGE", uid: 1, modseq: 7, flags: null },
+		];
+		const first = createStore(() => updates);
+		const restarted = createStore(() => updates);
+		const expected: JournalEntry[] = [
+			{ command: "EXISTS", uid: 8, modseq: 5, _id: "inbox:8:5" },
+			{
+				command: "FETCH",
+				uid: 3,
+				modseq: 6,
+				_id: "inbox:3:6",
+				flags: ["\\Seen"],
+			},
+			{ command: "EXPUNGE", uid: 1, modseq: 7, _id: "inbox:1:7" },
+		];
+		expect(await first.store.getUpdatesSince(principal, "inbox", 2)).toEqual(
+			expected,
 		);
-		expect(lock?.statement).toContain("user_id = ?");
-		expect(lock?.statement).toContain("credential_id = ?");
+		expect(
+			await restarted.store.getUpdatesSince(principal, "inbox", 2),
+		).toEqual(expected);
+	});
+
+	it("requires resync only below the retained tombstone floor or after mailbox removal", async () => {
+		const { store } = createStore(() => [
+			{ expunge_floor: 5, command: null, uid: null, modseq: null, flags: null },
+		]);
+		await expect(
+			store.getUpdatesSince(principal, "inbox", 4),
+		).rejects.toBeInstanceOf(MailboxResyncError);
+		expect(await store.getUpdatesSince(principal, "inbox", 5)).toEqual([]);
+		await expect(
+			createStore().store.getUpdatesSince(principal, "inbox", 5),
+		).rejects.toBeInstanceOf(MailboxResyncError);
 	});
 });
 
-describe("MailStore Junk view", () => {
-	const structuredRow = {
-		uid: 1,
-		structured_email_id: "email",
-		raw_source: "structured",
-		flags: "[]",
-		internal_date: new Date(0),
-		size: 10,
+describe("shared mailbox rules", () => {
+	it("canonicalizes system flags, drops Recent, and deduplicates case-insensitively", () => {
+		expect(
+			normalizeFlags([
+				"\\seen",
+				"\\Seen",
+				"\\RECENT",
+				"Tag",
+				"tag",
+				"\\flagged",
+			]),
+		).toEqual(["\\Seen", "Tag", "\\Flagged"]);
+		expect(() => normalizeFlags(["\\Unknown"])).toThrow();
+		expect(() => normalizeFlags(["two words"])).toThrow();
+	});
+
+	it("normalizes INBOX, protects managed folders, and rejects invalid paths", () => {
+		expect(normalizeMailboxPath("inbox")).toBe("INBOX");
+		expect(normalizeMailboxPath("Projects/Client")).toBe("Projects/Client");
+		for (const path of ["", "../Inbox", "Projects//Client", "Inbox\r\n"])
+			expect(() => normalizeMailboxPath(path)).toThrow();
+		for (const path of ["INBOX", "Archive", "Scopes", "Scopes/a@example.com"])
+			expect(isProtectedMailboxPath(path)).toBe(true);
+		expect(SPECIAL_USE.Archive).toBe("\\Archive");
+	});
+});
+
+function notifierHarness(sync?: () => Promise<number>) {
+	const store = {
+		getMailboxByPath: mock(
+			async (_user: AuthenticatedMailbox, path: string) => ({
+				...mailbox,
+				path,
+			}),
+		),
+		syncMailbox: mock(sync ?? (async () => 0)),
+		getUpdatesSince: mock(
+			async () => [] as Awaited<ReturnType<MailStore["getUpdatesSince"]>>,
+		),
 	};
-	const junk: MailboxRow = { ...mailbox, id: "junk", path: "Junk" };
-
-	it("keeps undecided and junk mail out of INBOX", async () => {
-		const { store, requests } = createStore();
-		await store.syncMailbox(mailbox, principal);
-		const sync = requests.find((request) =>
-			request.statement.includes("WITH new_msgs AS"),
-		);
-		expect(sync?.statement).toContain("se.is_junk IS NOT TRUE");
-		expect(sync?.statement).toContain(
-			"se.is_junk IS NOT NULL OR se.created_at < now() - interval '2 minutes'",
-		);
+	const notifier = new PgNotifier(
+		"postgres://localhost/inbound",
+		store as unknown as MailStore,
+	);
+	const callbacks = new Map<string, (payload: string) => void>();
+	Object.assign(notifier, {
+		sql: {
+			listen: async (channel: string, callback: (payload: string) => void) => {
+				callbacks.set(channel, callback);
+			},
+			end: async () => undefined,
+		},
 	});
+	return { notifier, store, callbacks };
+}
 
-	it("moves messages whose verdict changed between INBOX and Junk, keeping flags and journaling EXPUNGE", async () => {
-		const moved = {
-			mailbox_id: "inbox",
-			uid: 4,
-			structured_email_id: "email",
-			flags: '["\\\\Seen"]',
-			internal_date: new Date(0),
-			size: 10,
-		};
-		const { store, requests } = createStore((statement) => {
-			if (statement.includes("RETURNING mm.mailbox_id, mm.uid, mm.structured_email_id, mm.flags")) {
-				return statement.includes("se.is_junk IS TRUE") ? [moved] : [];
-			}
-			if (statement.includes("RETURNING modseq")) return [{ modseq: 9 }];
-			if (statement.includes("RETURNING uid") && statement.includes("ON CONFLICT")) {
-				return [{ uid: 1 }];
-			}
-			return undefined;
-		});
-		await store.syncMailbox(mailbox, principal);
-		const lock = requests[0];
-		expect(lock?.statement).toContain("path IN ('INBOX', 'Junk')");
-		expect(lock?.values).toContain(true);
-		expect(lock?.statement).toContain("ORDER BY id");
-		const transfers = requests.filter((request) =>
-			request.statement.includes("USING structured_emails se"),
+describe("Postgres notifications", () => {
+	it("routes credential state changes without sync and user changes across secondary recipients", async () => {
+		const { notifier, store, callbacks } = notifierHarness();
+		const wake = mock(() => undefined);
+		const other = mock(() => undefined);
+		notifier.addListener({ user: principal }, wake);
+		notifier.addListener(
+			{ user: { ...principal, credentialId: "second", scopes: [] } },
+			wake,
 		);
-		expect(transfers[0]?.statement).toContain("se.is_junk IS TRUE");
-		expect(transfers[0]?.values).toContain("inbox");
-		expect(transfers[1]?.statement).toContain("se.is_junk IS NOT TRUE");
-		expect(transfers[1]?.values).toContain("junk");
-		const copy = requests.find(
-			(request) =>
-				request.statement.includes("INSERT INTO imap_mailbox_messages") &&
-				request.values.includes("email"),
+		notifier.addListener(
+			{ user: { ...principal, userId: "other", credentialId: "other" } },
+			other,
 		);
-		expect(copy?.values).toContain("junk");
-		expect(copy?.values).toContain(moved.flags);
-		const updates = await store.getUpdatesSince(
-			{ userId: "user", credentialId: "credential" },
-			"inbox",
-			0,
-		);
-		expect(updates).toContainEqual(
-			expect.objectContaining({ command: "EXPUNGE", uid: 4, modseq: 9 }),
-		);
-	});
-
-	it("fills Junk with junk mail from every scope", async () => {
-		const { store, requests } = createStore();
-		await store.syncMailbox(junk, principal);
-		const sync = requests.find((request) =>
-			request.statement.includes("WITH new_msgs AS"),
-		);
-		expect(sync?.statement).toContain("se.is_junk IS TRUE");
-		expect(sync?.statement).not.toContain("interval '2 minutes'");
-		expect(sync?.statement).toContain("se.guard_blocked IS NOT TRUE");
-		expect(sync?.statement).toContain("imap_mailbox_removals");
-		expect(sync?.values).toContainEqual(["user@example.com"]);
-		expect(sync?.values).toContainEqual(["example.com"]);
-	});
-
-	it("removes junk from scope folders and journals the EXPUNGE", async () => {
-		const scoped: MailboxRow = {
-			...mailbox,
-			id: "inbox",
-			path: "Scopes/user@example.com",
-			scopeId: "address-scope",
-		};
-		const { store, requests } = createStore((statement) => {
-			if (statement.includes("se.is_junk IS TRUE") && statement.includes("DELETE")) {
-				return [{ mailbox_id: "inbox", uid: 3 }];
-			}
-			if (statement.includes("RETURNING modseq")) return [{ modseq: 5 }];
-			return undefined;
-		});
-		await store.syncMailbox(scoped, principal);
-		expect(requests[0]?.values).toContain(false);
-		const updates = await store.getUpdatesSince(
-			{ userId: "user", credentialId: "credential" },
-			"inbox",
-			4,
-		);
-		expect(updates).toContainEqual({
-			command: "EXPUNGE",
-			uid: 3,
-			modseq: 5,
-			_id: "inbox:expunge:3:5",
-		});
-		expect(
-			await store.getUpdatesSince(
-				{ userId: "user", credentialId: "credential" },
-				"inbox",
-				5,
-			),
-		).toEqual([]);
-	});
-
-	it("does not sync received mail into other folders", async () => {
-		const { store, requests } = createStore();
-		expect(
-			await store.syncMailbox({ ...mailbox, id: "trash", path: "Trash" }, principal),
-		).toBe(0);
-		expect(requests).toHaveLength(0);
-	});
-
-	it("marks received messages copied into Junk as junk for the account", async () => {
-		const { store, requests } = createStore((statement) =>
-			statement.includes("SELECT structured_email_id, raw_source, uid")
-				? [structuredRow]
-				: undefined,
-		);
-		const owner = { userId: "user", credentialId: "credential" };
-		await store.copyMessages(owner, "inbox", junk, [1]);
-		const update = requests.find((request) =>
-			request.statement.includes("UPDATE structured_emails"),
-		);
-		expect(update?.statement).toContain("junk_reason = 'user'");
-		expect(update?.statement).toContain("user_id = ?");
-		expect(update?.statement).toContain("is_junk IS DISTINCT FROM ?");
-		expect(update?.statement).not.toContain("junk_reason IS DISTINCT FROM");
-		const rowLock = requests.findIndex((request) =>
-			request.statement.includes("FROM structured_emails"),
-		);
-		expect(requests[rowLock]?.statement).toContain("ORDER BY id");
-		expect(requests[rowLock]?.statement).toContain("FOR UPDATE");
-		expect(rowLock).toBeLessThan(
-			requests.findIndex((request) =>
-				request.statement.includes("UPDATE structured_emails"),
-			),
-		);
-		expect(update?.values).toContain(true);
-		expect(update?.values).toContain("user");
-		expect(update?.values).toContainEqual(["email"]);
-		expect(
-			requests.some((request) =>
-				request.statement.includes("DELETE FROM imap_mailbox_removals"),
-			),
-		).toBe(true);
-	});
-
-	it("marks received messages copied into INBOX as not junk", async () => {
-		const { store, requests } = createStore((statement) =>
-			statement.includes("SELECT structured_email_id, raw_source, uid")
-				? [structuredRow]
-				: undefined,
-		);
-		await store.copyMessages(
-			{ userId: "user", credentialId: "credential" },
-			"junk",
-			mailbox,
-			[1],
-		);
-		const update = requests.find((request) =>
-			request.statement.includes("UPDATE structured_emails"),
-		);
-		expect(update?.values).toContain(false);
-	});
-
-	it("leaves the verdict alone for appended messages and other folders", async () => {
-		const appended = createStore((statement) =>
-			statement.includes("SELECT structured_email_id, raw_source, uid")
-				? [{ ...structuredRow, raw_source: "appended" }]
-				: undefined,
-		);
-		await appended.store.copyMessages(
-			{ userId: "user", credentialId: "credential" },
-			"inbox",
-			junk,
-			[1],
-		);
-		const other = createStore((statement) =>
-			statement.includes("SELECT structured_email_id, raw_source, uid")
-				? [structuredRow]
-				: undefined,
-		);
-		await other.store.copyMessages(
-			{ userId: "user", credentialId: "credential" },
-			"inbox",
-			{ ...mailbox, id: "trash", path: "Trash" },
-			[1],
-		);
-		for (const { requests } of [appended, other]) {
-			expect(
-				requests.some((request) =>
-					request.statement.includes("UPDATE structured_emails"),
-				),
-			).toBe(false);
+		await notifier.start();
+		try {
+			expect(callbacks.has("imap_changed")).toBe(false);
+			callbacks.get("imap_state_changed")?.("cred:credential");
+			await Bun.sleep(0);
+			expect(wake).toHaveBeenCalledTimes(1);
+			expect(store.syncMailbox).not.toHaveBeenCalled();
+			callbacks.get("imap_received_changed")?.(
+				JSON.stringify({ userId: "user" }),
+			);
+			await Bun.sleep(0);
+			expect(wake).toHaveBeenCalledTimes(3);
+			expect(other).not.toHaveBeenCalled();
+			expect(store.syncMailbox).toHaveBeenCalledTimes(6);
+		} finally {
+			await notifier.stop();
 		}
 	});
 
-	it("does not record a removal when a message moves from INBOX into Junk", async () => {
-		const { store, requests } = createStore((statement) => {
-			if (statement.includes("AS mirrored")) {
-				return [{ credential_id: "credential", mirrored: true, junk: false }];
-			}
-			if (statement.includes("RETURNING mailbox_id, uid, structured_email_id, raw_source")) {
-				return [{ ...structuredRow, mailbox_id: "inbox" }];
-			}
-			return undefined;
+	it("coalesces a credential's sessions and reruns when received work arrives mid-sync", async () => {
+		let release: (() => void) | undefined;
+		let entered: (() => void) | undefined;
+		const started = new Promise<void>((resolve) => {
+			entered = resolve;
 		});
-		await store.deleteMessages(
-			{ userId: "user", credentialId: "credential" },
-			"inbox",
-			[1],
-		);
-		const removal = requests.find((request) =>
-			request.statement.includes("INSERT INTO imap_mailbox_removals"),
-		);
-		expect(removal?.statement).toContain("NOT EXISTS");
-		expect(removal?.statement).toContain("mb.path = 'Junk'");
+		let calls = 0;
+		let active = 0;
+		let peak = 0;
+		const { notifier, callbacks, store } = notifierHarness(async () => {
+			active++;
+			peak = Math.max(peak, active);
+			if (++calls === 1) {
+				entered?.();
+				await new Promise<void>((resolve) => {
+					release = resolve;
+				});
+			}
+			active--;
+			return 0;
+		});
+		const wake = mock(() => undefined);
+		notifier.addListener({ user: principal }, wake);
+		notifier.addListener({ user: principal }, wake);
+		await notifier.start();
+		try {
+			callbacks.get("imap_received_changed")?.("user:user");
+			await started;
+			callbacks.get("imap_received_changed")?.("user:user");
+			callbacks.get("imap_received_changed")?.("user:user");
+			callbacks.get("imap_state_changed")?.("cred:credential");
+			release?.();
+			await Bun.sleep(0);
+			expect(peak).toBe(1);
+			expect(store.syncMailbox).toHaveBeenCalledTimes(5);
+			expect(wake).toHaveBeenCalledTimes(4);
+		} finally {
+			release?.();
+			await notifier.stop();
+		}
 	});
 
-	it("records a removal when a message is deleted from Junk, unless it moved to INBOX", async () => {
-		const { store, requests } = createStore((statement) => {
-			if (statement.includes("AS mirrored")) {
-				return [{ credential_id: "credential", mirrored: false, junk: true }];
-			}
-			if (statement.includes("RETURNING mailbox_id, uid, structured_email_id, raw_source")) {
-				return [{ ...structuredRow, mailbox_id: "inbox" }];
-			}
-			return undefined;
-		});
-		await store.deleteMessages(
-			{ userId: "user", credentialId: "credential" },
-			"junk",
-			[1],
-		);
-		const removal = requests.find((request) =>
-			request.statement.includes("INSERT INTO imap_mailbox_removals"),
-		);
-		expect(removal?.statement).toContain(
-			"(mb.path = 'INBOX' OR mb.scope_id IS NOT NULL)",
-		);
-		expect(removal?.values).toContain("credential");
-		expect(
-			requests.some(
-				(request) =>
-					request.statement.includes("DELETE FROM imap_mailbox_messages mm") &&
-					request.statement.includes("USING imap_mailboxes mb"),
-			),
-		).toBe(false);
-	});
-});
-
-describe("MailStore MOVE", () => {
-	it("copies and removes in one transaction, locking mailboxes in id order first", async () => {
-		const { store, requests } = createStore((statement) => {
-			if (statement.includes("SELECT structured_email_id, raw_source, uid")) {
-				return [
-					{
-						uid: 1,
-						structured_email_id: "email",
-						raw_source: "structured",
-						flags: "[]",
-						internal_date: new Date(0),
-						size: 1,
+	it("filters received changes by recipient and domain before scheduling credentials and views", async () => {
+		const { notifier, store, callbacks } = notifierHarness();
+		const wake = mock(() => undefined);
+		const unrelated = mock(() => undefined);
+		notifier.addListener({ user: principal }, wake);
+		notifier.addListener({ user: principal }, wake);
+		for (let index = 0; index < 100; index++) {
+			notifier.addListener(
+				{
+					user: {
+						...principal,
+						credentialId: `unrelated-${index}`,
+						scopes: [
+							{
+								...principal.scopes[0]!,
+								address: `user${index}@other.example`,
+							},
+						],
 					},
-				];
+				},
+				unrelated,
+			);
+		}
+		notifier.addListener(
+			{ user: { ...principal, userId: "other-owner" } },
+			unrelated,
+		);
+		await notifier.start();
+		try {
+			callbacks.get("imap_received_changed")?.(
+				JSON.stringify({
+					userId: "user",
+					addresses: ["secondary@example.com"],
+				}),
+			);
+			await Bun.sleep(0);
+			expect(store.getMailboxByPath.mock.calls.map((call) => call[1])).toEqual([
+				"INBOX",
+				"Junk",
+				"Scopes/*@Example.com",
+			]);
+			expect(wake).toHaveBeenCalledTimes(2);
+			expect(unrelated).not.toHaveBeenCalled();
+			store.getMailboxByPath.mockClear();
+			callbacks.get("imap_received_changed")?.(
+				JSON.stringify({
+					userId: "user",
+					addresses: ["USER@EXAMPLE.COM", "secondary@example.com"],
+				}),
+			);
+			await Bun.sleep(0);
+			expect(store.getMailboxByPath.mock.calls.map((call) => call[1])).toEqual([
+				"INBOX",
+				"Junk",
+				"Scopes/User@Example.com",
+				"Scopes/*@Example.com",
+			]);
+			expect(unrelated).not.toHaveBeenCalled();
+			store.getMailboxByPath.mockClear();
+			for (const payload of [
+				"not-json",
+				"null",
+				JSON.stringify({ userId: "user", addresses: [] }),
+				JSON.stringify({ userId: "user", addresses: ["user@notexample.com"] }),
+			]) {
+				callbacks.get("imap_received_changed")?.(payload);
 			}
-			if (statement.includes("RETURNING mailbox_id, uid, structured_email_id, raw_source")) {
-				return [
-					{ mailbox_id: "inbox", uid: 1, structured_email_id: "email", raw_source: "structured" },
-				];
-			}
-			return undefined;
+			await Bun.sleep(0);
+			expect(store.getMailboxByPath).not.toHaveBeenCalled();
+		} finally {
+			await notifier.stop();
+		}
+	});
+
+	it("delivers stale-cursor DROP through the listener, not the journal", async () => {
+		const { notifier, store } = notifierHarness();
+		const session = { user: principal, selected: { mailbox: "inbox" } };
+		const wake = mock(() => undefined);
+		notifier.addListener(session, wake);
+		store.getUpdatesSince.mockImplementation(async () => {
+			throw new MailboxResyncError("expired");
 		});
-		let transactions = 0;
-		const sql = (store as unknown as { sql: { begin: (cb: unknown) => unknown } }).sql;
-		const begin = sql.begin;
-		sql.begin = (cb: unknown) => {
-			transactions++;
-			return begin(cb);
+		const updates = await new Promise<unknown>((resolve, reject) => {
+			notifier.getUpdates(
+				"inbox",
+				0,
+				(err, rows) => (err ? reject(err) : resolve(rows)),
+				session,
+			);
+		});
+		expect(updates).toEqual([]);
+		expect(wake).toHaveBeenCalledWith({ command: "DROP", mailbox: "inbox" });
+	});
+
+	it("serializes overlapping journal reads against the core's updated selected cursor", async () => {
+		const { notifier, store } = notifierHarness();
+		const session = {
+			user: principal,
+			selected: { mailbox: "inbox", modifyIndex: 1 },
 		};
-		const result = await store.moveMessages(
-			{ userId: "user", credentialId: "credential" },
-			"inbox",
-			{ ...mailbox, id: "junk", path: "Junk" },
-			[1],
-		);
-		expect(transactions).toBe(1);
-		expect(result.expunged).toEqual([1]);
-		expect(requests[0]?.statement).toContain("ORDER BY id");
-		expect(requests[0]?.statement).toContain("FOR UPDATE");
-		const insert = requests.findIndex((request) =>
-			request.statement.includes("INSERT INTO imap_mailbox_messages"),
-		);
-		const remove = requests.findIndex((request) =>
-			request.statement.includes("RETURNING mailbox_id, uid, structured_email_id"),
-		);
-		expect(insert).toBeGreaterThan(0);
-		expect(remove).toBeGreaterThan(insert);
-	});
-});
-
-describe("ExpungeJournal", () => {
-	it("drops entries older than the retention window", () => {
-		let now = 0;
-		const journal = new ExpungeJournal(() => now);
-		journal.record([{ mailboxId: "m", uid: 1, modseq: 2 }]);
-		expect(journal.since("m", 0)).toEqual([{ uid: 1, modseq: 2 }]);
-		now = 16 * 60 * 1000;
-		expect(journal.since("m", 0)).toEqual([]);
-	});
-
-	it("keeps a bounded number of entries per mailbox", () => {
-		const journal = new ExpungeJournal(() => 0);
-		journal.record(
-			Array.from({ length: 2500 }, (_, index) => ({
-				mailboxId: "m",
-				uid: index,
-				modseq: index + 1,
-			})),
-		);
-		const kept = journal.since("m", 0);
-		expect(kept).toHaveLength(2000);
-		expect(kept[0]).toEqual({ uid: 500, modseq: 501 });
+		const cursors: number[] = [];
+		Object.assign(store, {
+			getUpdatesSince: async (
+				_owner: unknown,
+				_mailbox: string,
+				since: number,
+			) => {
+				cursors.push(since);
+				await Bun.sleep(0);
+				return since < 2
+					? [{ command: "EXISTS", uid: 2, modseq: 2, _id: "inbox:2:2" }]
+					: [];
+			},
+		});
+		const receive = () =>
+			new Promise<unknown>((resolve, reject) => {
+				notifier.getUpdates(
+					"inbox",
+					1,
+					(err, updates) => {
+						if (err) return reject(err);
+						const rows = updates as JournalEntry[];
+						if (rows.length)
+							session.selected.modifyIndex = rows[rows.length - 1]?.modseq ?? 1;
+						resolve(rows);
+					},
+					session,
+				);
+			});
+		const results = await Promise.all([receive(), receive()]);
+		expect(cursors).toEqual([1, 2]);
+		expect(results[0]).toEqual([
+			{ command: "EXISTS", uid: 2, modseq: 2, _id: "inbox:2:2" },
+		]);
+		expect(results[1]).toEqual([]);
 	});
 });
