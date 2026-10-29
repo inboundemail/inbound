@@ -19,6 +19,7 @@ import {
 	parseEmail,
 } from "@/lib/email-management/email-parser";
 import { routeEmail } from "@/lib/email-management/email-router";
+import { settleJunkVerdict } from "@/lib/guard/junk";
 import {
 	buildInboundDedupeFingerprint,
 	envelopeRecipientsOf,
@@ -957,6 +958,9 @@ export async function POST(request: NextRequest) {
 					}
 					// ========== END DSN DETECTION ==========
 
+					if (isDsnEmail || senderBlocked) {
+						await settleJunkVerdict(structuredEmailId, userId);
+					}
 					if (isDsnEmail) {
 						emailProcessingRecord.webhookDelivery = {
 							success: true,
@@ -985,6 +989,7 @@ export async function POST(request: NextRequest) {
 								`❌ Webhook - Failed to route email ${structuredEmailId}:`,
 								routingError,
 							);
+							await settleJunkVerdict(structuredEmailId, userId);
 							emailProcessingRecord.webhookDelivery = {
 								success: false,
 								error:

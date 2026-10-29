@@ -54,3 +54,30 @@ export async function storeJunkVerdict(
 			),
 		);
 }
+
+/**
+ * Stores "not junk" when no verdict was made yet, so mail that skipped or
+ * failed classification shows up in IMAP INBOX right away. Never throws.
+ */
+export async function settleJunkVerdict(
+	structuredEmailId: string,
+	userId: string,
+): Promise<void> {
+	try {
+		await db
+			.update(structuredEmails)
+			.set({ isJunk: false, junkReason: null, junkUpdatedAt: new Date() })
+			.where(
+				and(
+					eq(structuredEmails.id, structuredEmailId),
+					eq(structuredEmails.userId, userId),
+					isNull(structuredEmails.isJunk),
+				),
+			);
+	} catch (error) {
+		console.error(
+			"⚠️ Junk filter - Failed to settle verdict:",
+			error instanceof Error ? error.name : "unknown",
+		);
+	}
+}
