@@ -1,0 +1,44 @@
+---
+title: "Junk Filter"
+description: "How Inbound marks spam and threats as junk, and how to tune it"
+---
+
+Inbound checks every received email for spam, phishing, fraud, malware and impersonation. Emails that cross your account's threshold are marked as **junk**. Junk mail is never dropped:
+
+- **Webhooks** still receive it, with `email.spam.isJunk: true`. See [Webhook Structure](/api-reference/webhook#junk-filter-verdict).
+- **IMAP** shows it in the `Junk` folder instead of `INBOX` and the scope folders. See [IMAP Behavior](/mailboxes/imap-behavior#junk).
+- **The mailbox API** lists it under `folder=junk`, and the email API returns `spam.is_junk`.
+
+## Filter levels
+
+Set the level in the [Mailboxes & SMTP dashboard](https://inbound.new/mailboxes) or with `PUT /api/e2/spam-filter`. It applies to the whole account and to emails received after the change.
+
+| Level | Marks as junk |
+| --- | --- |
+| `strict` | Possible spam or threats (level 2 of 4 or higher) |
+| `standard` (default) | Likely spam or threats (level 3 or higher) |
+| `lenient` | Only clear spam or threats (level 4) |
+| `off` | Nothing automatically |
+
+Unless the level is `off`, an email that fails the receiving server's spam check is also marked as junk.
+
+```bash
+curl -X PUT https://inbound.new/api/e2/spam-filter \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"level": "strict"}'
+```
+
+## Guard rules
+
+Guard rules take precedence over the filter level:
+
+- The `junk` action marks matching emails as junk without blocking them.
+- The `allow` action marks matching emails as not junk, even if the filter would flag them.
+- The `block` action still blocks delivery entirely.
+
+## Correcting a verdict
+
+Moving a message between `INBOX` and `Junk` in an email client, or setting `isJunk` with `PATCH /api/e2/mailboxes/{id}/messages/{messageId}` or `is_junk` with `PATCH /api/e2/emails/{id}`, records your decision for the email across the account. Automatic verdicts never override a decision you made.
+
+The webhook and API report why an email was marked: `classifier`, `ses_spam`, `guard_rule` or `user`.
