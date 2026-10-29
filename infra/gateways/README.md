@@ -290,7 +290,8 @@ example, `export AWS_PROFILE=inbound AWS_REGION=us-east-2`).
 through `inbound-alert --publish`, so it uses the same topic, instance role (`sns:Publish` on
 `inbound-gateway-alerts` only) and per-key rate limit (`ALERT_MIN_INTERVAL_SECONDS`, 30 minutes).
 Messages carry counts, error codes, timings and client IPs only (at most the top 3 to 5): never log
-lines, addresses, usernames, credential IDs or message content.
+lines, addresses, usernames, credential IDs or message content. The gateways log credentials only as
+the first 12 hex characters of a SHA-256, which the report uses to count distinct credentials.
 
 - **`inbound-health-check.timer`** (every 10 minutes) counts the journal since the previous check
   (at most an hour back) and alerts per gateway when a count reaches its threshold. One email lists
@@ -301,7 +302,7 @@ lines, addresses, usernames, credential IDs or message content.
   rejects, backend errors by code, TLS failures, restarts, crashes and OOM kills, IMAP sessions
   dropped by revalidation, SMTP messages relayed and rejected with DATA p50/p95, SMTP API non-2xx
   statuses, release, certificate days left, memory and open files, deploys (journal tag
-  `inbound-deploy`), disk and journal usage.
+  `inbound-deploy` written by root, `_UID=0`), disk and journal usage.
 - State is in `/var/lib/inbound-health` (window start, NRestarts, last time each error code was
   seen). On the first run the previous 24 hours become the baseline for "new error code".
 - Try it on the host without sending anything: `sudo inbound-health check --dry-run` or
@@ -310,18 +311,19 @@ lines, addresses, usernames, credential IDs or message content.
 | Threshold (`host/host.env`) | Default | Alert when, since the previous check |
 |---|---|---|
 | `HEALTH_BACKEND_ERRORS` | 20 | backend errors reach this many |
-| `HEALTH_NEW_ERROR_LOOKBACK_HOURS` | 24 | an error code appears that wasn't seen in this many hours (fires on the first occurrence) |
+| `HEALTH_NEW_ERROR_LOOKBACK_HOURS` | 24 | an error code that wasn't seen in this many hours appears at least twice, or once for codes that can't be transient (Postgres classes 42 and 28, such as `42883` and `42P01`, and `api_403_auth`) |
 | `HEALTH_AUTH_FAILURES` | 50 | failed logins reach this many |
 | `HEALTH_AUTH_FAILURES_PER_IP` | 20 | one client IP reaches this many failed logins |
 | `HEALTH_THROTTLED` | 10 | login lockouts plus per-IP connection rejects reach this many |
 | `HEALTH_TLS_FAILURES` | 100 | TLS handshake failures reach this many |
-| `HEALTH_RESTARTS` | 1 | automatic restarts (journal or NRestarts) reach this many; 0 disables |
+| `HEALTH_RESTARTS` | 1 | automatic restarts (journal or NRestarts) reach this many; 0 disables (the only threshold that can be 0) |
 | `HEALTH_CRASH_LOOP_RESTARTS` | 3 | as above, reported as a crash loop |
 | `HEALTH_SESSION_DROPS` | 20 | IMAP sessions logged out by revalidation reach this many |
 | `HEALTH_MEMORY_PERCENT` | 85 | memory reaches this share of `MemoryMax` (checked now) |
 | `HEALTH_FD_PERCENT` | 80 | open files reach this share of `LimitNOFILE` (checked now) |
 
-Any OOM kill alerts, and so does a gateway that has a release but isn't running. To change a
+Every other threshold must be at least 1 (a 0 would alert on every run), otherwise its default
+applies. Any OOM kill alerts, and so does a gateway that has a release but isn't running. To change a
 threshold without a stack deploy, put a plain String parameter under `/inbound/gateways/health/`
 (for example `aws ssm put-parameter --name /inbound/gateways/health/HEALTH_AUTH_FAILURES --type String --value 100`).
 `inbound-render-env health` writes the allowlisted names with whole-number values to
@@ -333,7 +335,7 @@ What counts as what, from the gateway logs:
 | Count | IMAP | SMTP |
 |---|---|---|
 | connections | imap-core `[id] Secure connection from …` | `event=connect` |
-| logins | imap-core `… authenticated using …`, `Authentication failed for …` (client IP joined by connection ID) | `event=auth result=ok\|fail` |
+| logins, failing IPs | `event=auth result=ok\|fail ip=` (from `limits.ts`; imap-core's own login lines log the PTR hostname instead of the IP when reverse DNS resolves, so they aren't used) | `event=auth result=ok\|fail ip=` |
 | lockouts, per-IP rejects | `event=auth_throttled`, `event=conn_limit` | `event=auth result=throttled`, `event=conn_limit` |
 | backend errors (code) | `[imap] backend error <SQLSTATE>`, `Authentication error` (`auth_unavailable`), notifier, session revalidation, `server error`, certificate reload | `event=api status=<5xx>\|timeout\|network` (`api_<status>`), a 403 from the auth endpoint (`api_403_auth`), parse worker, mapping, unexpected and fatal errors |
 | TLS failures | imap-core `TLS handshake failed from <ip>: <code>` | `event=tls_fail` (implicit TLS on 465) |

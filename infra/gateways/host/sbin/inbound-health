@@ -23,9 +23,11 @@ case "${2:-}" in
 *) usage ;;
 esac
 
+# knob <name> <default> [minimum]: a whole number, or the default when unset, malformed or below the
+# minimum (1 for counts, where 0 would alert on every run).
 knob() {
 	local value="${!1:-}"
-	[[ "$value" =~ ^[0-9]{1,9}$ ]] || value="$2"
+	[[ "$value" =~ ^[0-9]{1,9}$ ]] && [ "$value" -ge "${3:-1}" ] || value="$2"
 	printf -v "$1" '%s' "$value"
 }
 knob HEALTH_BACKEND_ERRORS 20
@@ -34,12 +36,12 @@ knob HEALTH_AUTH_FAILURES 50
 knob HEALTH_AUTH_FAILURES_PER_IP 20
 knob HEALTH_THROTTLED 10
 knob HEALTH_TLS_FAILURES 100
-knob HEALTH_RESTARTS 1
+knob HEALTH_RESTARTS 1 0
 knob HEALTH_CRASH_LOOP_RESTARTS 3
 knob HEALTH_SESSION_DROPS 20
 knob HEALTH_MEMORY_PERCENT 85
 knob HEALTH_FD_PERCENT 80
-knob ALERT_MIN_INTERVAL_SECONDS 1800
+knob ALERT_MIN_INTERVAL_SECONDS 1800 0
 
 state=/var/lib/inbound-health
 install -d -m 0700 "$state"
@@ -52,7 +54,7 @@ utc() { date -u -d "@$1" "+%Y-%m-%d %H:%M"; }
 
 # Counts one gateway's journal between two epoch seconds. Output lines: "<key> <n>", "<kind> <key> <n>"
 # (err, failip, throttleip, limitip, tlsip, tlscode, drop, datacode, api) and "ms <n>" per relayed message.
-# Usernames and credential IDs are only counted (distinct "credentials"), never printed.
+# Logins come from the gateways' event=auth lines (client IP and a hashed credential, only counted).
 scan() {
 	journalctl -u "$1-gateway.service" --since "@$2" --until "@$3" -o cat --no-pager -q 2>/dev/null |
 		awk -v unit="$1-gateway.service" -v prefix="[$1-gateway]" '
@@ -104,31 +106,11 @@ scan() {
 			c["tls_fail"]++; tlsip[ipv(ip)]++; tlscode[code($7)]++
 			next
 		}
+		# imap-core logs a PTR hostname instead of the IP when reverse DNS resolves, so its login lines
+		# are not counted; limits.ts logs event=auth with the IP.
 		$1 == "[imap]" && $2 ~ /^\[[^]]+\]$/ {
-			cid = $2
-			if ($3 == "Secure" && $4 == "connection" && $5 == "from") host = $6
-			else if ($3 == "Connection" && $4 == "from") host = $5
-			else host = ""
-			if (host != "") {
-				c["connections"]++
-				if (host ~ /^\[.*\]$/) cidip[cid] = ipv(substr(host, 2, length(host) - 2))
-				next
-			}
-			if ($3 == "Resolved") { cidip[cid] = ipv($4); next }
-			if ($3 == "Connection" && $4 == "closed") { delete cidip[cid]; next }
-			if ($0 ~ / Authentication failed for .* using (LOGIN|PLAIN)$/) {
-				c["auth_fail"]++
-				failip[(cid in cidip) ? cidip[cid] : "-"]++
-				next
-			}
-			if ($0 ~ / Authentication error for .* using (LOGIN|PLAIN)/) { err["auth_unavailable"]++; next }
-			if ($0 ~ / authenticated using (LOGIN|PLAIN)$/) {
-				user = $0
-				sub(/^\[imap\] \[[^]]*\] /, "", user)
-				sub(/ authenticated using [A-Z]+$/, "", user)
-				c["auth_ok"]++; creds[user] = 1
-				next
-			}
+			if (($3 == "Secure" && $4 == "connection" && $5 == "from") || ($3 == "Connection" && $4 == "from")) c["connections"]++
+			else if ($0 ~ / Authentication error for .* using (LOGIN|PLAIN)/) err["auth_unavailable"]++
 			next
 		}
 		index($0, "[imap-gateway] server error ") == 1 { err["server_" code($4)]++; next }
@@ -172,9 +154,9 @@ scan() {
 get() { awk -v k="$2" '$1 == k && NF == 2 { n = $2 } END { print n + 0 }' "$1"; }
 # total <file> <kind>: sum of a kind ("err", "failip", ...).
 total() { awk -v k="$2" '$1 == k && NF == 3 { n += $3 } END { print n + 0 }' "$1"; }
-# top <file> <kind> [n]: "key xN, key xN" by count, largest first.
+# top <file> <kind> [n]: "key xN, key xN" by count, largest first ("-", an unknown IP, left out).
 top() {
-	awk -v k="$2" '$1 == k && NF == 3 { print $3, $2 }' "$1" | sort -k1,1nr -k2,2 | head -n "${3:-3}" |
+	awk -v k="$2" '$1 == k && NF == 3 && $2 != "-" { print $3, $2 }' "$1" | sort -k1,1nr -k2,2 | head -n "${3:-3}" |
 		awk '{ printf "%s%s x%s", (NR > 1 ? ", " : ""), $2, $1 } END { if (!NR) printf "none" }'
 }
 # extra <n> <text>: " (<text>)" when n > 0. Always succeeds, so it can end an assignment under set -e.
@@ -182,8 +164,12 @@ extra() {
 	if [ "$1" -gt 0 ]; then printf ' (%s)' "$2"; fi
 	return 0
 }
-# topcount <file> <kind>: the largest count of a kind.
-topcount() { awk -v k="$2" '$1 == k && NF == 3 && $3 > n { n = $3 } END { print n + 0 }' "$1"; }
+# topcount <file> <kind>: the largest count of a kind, not counting "-" (an unknown IP).
+topcount() { awk -v k="$2" '$1 == k && NF == 3 && $2 != "-" && $3 > n { n = $3 } END { print n + 0 }' "$1"; }
+# A new error code alerts on one occurrence only when it can't be transient: Postgres class 42 (undefined
+# function, table or column, syntax: a bad deploy or migration), class 28 (invalid authorization) and a 403
+# from the SMTP auth endpoint (gateway secret mismatch). Anything else needs two in the window.
+always_new() { [[ "$1" =~ ^(42|28)[0-9A-Z]{3}$|^api_403_auth$ ]]; }
 # percentiles <file>: "p50 X ms, p95 Y ms (N messages)" over the "ms" lines (nearest rank), or nothing.
 percentiles() {
 	awk '$1 == "ms" { print $2 }' "$1" | sort -n | awk '
@@ -275,11 +261,12 @@ if [ "$mode" = check ]; then
 			add backend_errors "backend errors: $errors (threshold $HEALTH_BACKEND_ERRORS): $(top "$stats" err 5)" "backend errors"
 		known="$( { cat "$seen" "$work/seen.baseline" 2>/dev/null || true; } |
 			awk -v gw="$gw" -v min=$((now - lookback)) '$1 == gw && $3 >= min { print $2 }' | sort -u)"
-		while read -r error_code; do
+		while read -r error_code count; do
 			[ -n "$error_code" ] || continue
 			grep -qxF "$error_code" <<<"$known" && continue
-			add "new_error-$error_code" "new backend error code, not seen in the previous ${HEALTH_NEW_ERROR_LOOKBACK_HOURS}h: $error_code ($(awk -v k="$error_code" '$1 == "err" && $2 == k { print $3 }' "$stats")x)" "new error $error_code"
-		done < <(awk '$1 == "err" { print $2 }' "$stats" | sort)
+			[ "$count" -ge 2 ] || always_new "$error_code" || continue
+			add "new_error-$error_code" "new backend error code, not seen in the previous ${HEALTH_NEW_ERROR_LOOKBACK_HOURS}h: $error_code (${count}x)" "new error $error_code"
+		done < <(awk '$1 == "err" { print $2, $3 }' "$stats" | sort)
 		failed="$(get "$stats" auth_fail)"
 		[ "$failed" -ge "$HEALTH_AUTH_FAILURES" ] &&
 			add auth_failures "failed logins: $failed (threshold $HEALTH_AUTH_FAILURES); top IPs $(top "$stats" failip)" "failed logins"
@@ -349,7 +336,10 @@ $gw-gateway: $([ "${#reasons[@]}" -gt 0 ] && echo "${#reasons[@]} problem(s)" ||
 	# Only after a successful publish (set -e), so a failed alert is retried with the next window.
 	for gw in "${gateways[@]}"; do
 		digits "${unit[${gw}_nrestarts]:-}" && printf '%s\n' "${unit[${gw}_nrestarts]}" > "$state/nrestarts-$gw"
-		awk -v gw="$gw" -v t="$now" '$1 == "err" { print gw, $2, t }' "$work/$gw" >> "$work/seen.new"
+		# A single transient code isn't recorded, so a later burst of it still counts as new.
+		awk '$1 == "err" { print $2, $3 }' "$work/$gw" | while read -r error_code count; do
+			if [ "$count" -ge 2 ] || always_new "$error_code"; then echo "$gw $error_code $now"; fi
+		done >> "$work/seen.new"
 	done
 	# seen-errors: "<gateway> <code> <last seen>", newest per code, a week kept.
 	{ cat "$seen" "$work/seen.baseline" "$work/seen.new" 2>/dev/null || true; } |
@@ -401,7 +391,8 @@ $gw-gateway (${release:0:${#gw}+13}, ${unit[${gw}_active]:-unknown} since ${unit
   resources     $(resources "$gw")
 "
 done
-deploys="$(journalctl -t inbound-deploy --since "@$since" --until "@$now" -o cat --no-pager -q 2>/dev/null |
+# _UID=0: only lines root wrote (inbound-deploy), not anything another user logged with the same tag.
+deploys="$(journalctl -t inbound-deploy _UID=0 --since "@$since" --until "@$now" -o cat --no-pager -q 2>/dev/null |
 	grep -E '^(deployed|deploy of) ' | tail -n 5 || true)"
 report+="
 host
