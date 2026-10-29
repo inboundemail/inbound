@@ -214,6 +214,8 @@ export default function CreateGuardRulePage() {
       actionConfig = { action: "allow" };
     } else if (action === "block") {
       actionConfig = { action: "block" };
+    } else if (action === "junk") {
+      actionConfig = { action: "junk" };
     } else {
       actionConfig = { action: "route", endpointId: routeEndpointId };
     }
@@ -728,7 +730,12 @@ export default function CreateGuardRulePage() {
               type="single"
               value={action}
               onValueChange={(v) => {
-                if (v === "allow" || v === "block" || v === "route") {
+                if (
+                  v === "allow" ||
+                  v === "block" ||
+                  v === "junk" ||
+                  v === "route"
+                ) {
                   setAction(v);
                 }
               }}
@@ -745,6 +752,12 @@ export default function CreateGuardRulePage() {
                 className="h-8 rounded-full px-4 border data-[state=on]:bg-primary data-[state=on]:text-white"
               >
                 BLOCK
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="junk"
+                className="h-8 rounded-full px-4 border data-[state=on]:bg-primary data-[state=on]:text-white"
+              >
+                JUNK
               </ToggleGroupItem>
               <ToggleGroupItem
                 value="route"

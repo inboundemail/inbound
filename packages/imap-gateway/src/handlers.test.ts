@@ -63,6 +63,12 @@ function createHarness(
 			destinationUid: [1],
 		})),
 		deleteMessages: mock(async () => [] as number[]),
+		moveMessages: mock(async () => ({
+			uidValidity: 1,
+			sourceUid: [1],
+			destinationUid: [1],
+			expunged: [1],
+		})),
 		appendMessage: mock(async () => ({ uidValidity: 1, uid: 1 })),
 	};
 	const handlers = buildHandlers(
@@ -166,11 +172,69 @@ describe("IMAP backend authorization", () => {
 		expect([stored, expunged, moved]).toEqual([true, true, true]);
 		expect(store.updateFlags).toHaveBeenCalledTimes(1);
 		expect(store.expunge).toHaveBeenCalledTimes(1);
-		expect(store.deleteMessages).toHaveBeenCalledWith(
+		expect(store.moveMessages).toHaveBeenCalledWith(
 			session.user,
 			mailbox.id,
+			expect.objectContaining({ path: "Archive" }),
 			[1],
 		);
+	});
+
+	it("moves INBOX messages into Junk in one store call and reports every removed UID", async () => {
+		const { handlers, mailbox, session, store } = createHarness("read_write");
+		const notifications: unknown[] = [];
+		session.selected = {
+			mailbox: mailbox.id,
+			path: mailbox.path,
+			readOnly: false,
+			notifications,
+		};
+		const junk: MailboxRow = { ...mailbox, id: "junk", path: "Junk" };
+		store.getMailboxByPath.mockImplementation(async () => junk);
+		store.moveMessages.mockImplementation(async () => ({
+			uidValidity: 1,
+			sourceUid: [1],
+			destinationUid: [7],
+			expunged: [1, 2],
+		}));
+		const [moved, info] = await callbackResult((callback) => {
+			handlers.onMove(
+				mailbox.id,
+				{ destination: "Junk", messages: [1, 2] },
+				session,
+				callback,
+			);
+		});
+
+		expect(moved).toBe(true);
+		expect(info).toEqual({ uidValidity: 1, sourceUid: [1], destinationUid: [7] });
+		expect(store.moveMessages).toHaveBeenCalledWith(
+			session.user,
+			mailbox.id,
+			junk,
+			[1, 2],
+		);
+		expect(store.copyMessages).not.toHaveBeenCalled();
+		expect(store.deleteMessages).not.toHaveBeenCalled();
+		expect(notifications).toEqual([
+			{ command: "EXPUNGE", uid: 1 },
+			{ command: "EXPUNGE", uid: 2 },
+		]);
+	});
+
+	it("refuses to move messages into Junk for read-only credentials", async () => {
+		const { handlers, mailbox, session, store } = createHarness("read");
+		const [result] = await callbackResult((callback) => {
+			handlers.onMove(
+				mailbox.id,
+				{ destination: "Junk", messages: [1] },
+				session,
+				callback,
+			);
+		});
+
+		expect(result).toBe("READ-ONLY");
+		expect(store.moveMessages).not.toHaveBeenCalled();
 	});
 
 	it("refuses MOVE from a scope folder into INBOX, which already holds the message", async () => {
@@ -195,7 +259,7 @@ describe("IMAP backend authorization", () => {
 		});
 
 		expect(result).toBe("CANNOT");
-		expect(store.deleteMessages).not.toHaveBeenCalled();
+		expect(store.moveMessages).not.toHaveBeenCalled();
 	});
 
 	it("fails closed when selected mailbox does not match the mutation source", async () => {
@@ -372,11 +436,11 @@ describe("IMAP backend authorization", () => {
 			notifications,
 		};
 		store.expunge.mockImplementation(async () => [2, 5]);
-		store.deleteMessages.mockImplementation(async () => [1]);
-		store.copyMessages.mockImplementation(async () => ({
+		store.moveMessages.mockImplementation(async () => ({
 			uidValidity: 1,
 			sourceUid: [],
 			destinationUid: [],
+			expunged: [1, 3],
 		}));
 		await callbackResult((callback) => {
 			handlers.onExpunge(mailbox.id, { isUid: false }, session, callback);
@@ -391,15 +455,11 @@ describe("IMAP backend authorization", () => {
 		});
 
 		expect(moved).toBe(true);
-		expect(store.deleteMessages).toHaveBeenCalledWith(
-			session.user,
-			mailbox.id,
-			[1],
-		);
 		expect(notifications).toEqual([
 			{ command: "EXPUNGE", uid: 2 },
 			{ command: "EXPUNGE", uid: 5 },
 			{ command: "EXPUNGE", uid: 1 },
+			{ command: "EXPUNGE", uid: 3 },
 		]);
 	});
 
@@ -415,7 +475,7 @@ describe("IMAP backend authorization", () => {
 		});
 
 		expect(result).toBe("CANNOT");
-		expect(store.deleteMessages).not.toHaveBeenCalled();
+		expect(store.moveMessages).not.toHaveBeenCalled();
 	});
 
 	it("returns updated flags for non-silent STORE only", async () => {

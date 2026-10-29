@@ -168,6 +168,7 @@ function buildMockInboundWebhookPayload(endpoint: {
 			receivedAt: nowIso,
 			threadId: null,
 			threadPosition: null,
+			spam: { isJunk: false, reason: null },
 			parsedData: {
 				messageId: msgId,
 				date: new Date(nowIso),

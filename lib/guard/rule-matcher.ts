@@ -36,7 +36,7 @@ export interface GuardEvaluationResult {
   shouldBlock: boolean;
   routeToEndpointId?: string;
   matchedRule?: GuardRule;
-  action?: 'allow' | 'block' | 'route' | 'flag' | 'label';
+  action?: 'allow' | 'block' | 'junk' | 'route' | 'flag' | 'label';
   reason?: string;
   metadata?: Record<string, unknown>;
 }

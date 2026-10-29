@@ -2886,6 +2886,184 @@ describe("E2 API - Email E2E", () => {
 	);
 
 	it(
+		"filters junk: spam filter settings, Guard junk rules, webhook spam field and mailbox Junk folder",
+		async () => {
+			type SpamFilter = { level: string; isDefault: boolean; updatedAt: string | null };
+			const initial = await apiJson<SpamFilter>("/spam-filter");
+			expect(initial.response.status).toBe(200);
+			expect(initial.data).toMatchObject({ level: "standard", isDefault: true });
+			const strict = await apiJson<SpamFilter>("/spam-filter", {
+				method: "PUT",
+				body: JSON.stringify({ level: "strict" }),
+			});
+			expect(strict.response.status).toBe(200);
+			expect(strict.data).toMatchObject({ level: "strict", isDefault: false });
+			expect((await apiJson<SpamFilter>("/spam-filter")).data.level).toBe("strict");
+			const invalid = await apiRequest("/spam-filter", {
+				method: "PUT",
+				body: JSON.stringify({ level: "paranoid" }),
+			});
+			expect(invalid.status).toBe(400);
+			const other = await apiJsonWithKey<SpamFilter>("/spam-filter", ALT_API_KEY);
+			expect(other.data).toMatchObject({ level: "standard", isDefault: true });
+			const reset = await apiJson<SpamFilter>("/spam-filter", {
+				method: "PUT",
+				body: JSON.stringify({ level: "standard" }),
+			});
+			expect(reset.data.level).toBe("standard");
+
+			const token = makeToken("junk");
+			const subject = `E2E Junk ${token}`;
+			const badAction = await apiRequest("/guard", {
+				method: "POST",
+				body: JSON.stringify({
+					name: `Bad action ${token}`,
+					type: "explicit",
+					config: { subject: { operator: "OR", values: [token] } },
+					action: { action: "explode" },
+				}),
+			});
+			expect(badAction.status).toBe(400);
+			const legacy = await apiJson<{ data: { id: string; actions: string } }>("/guard", {
+				method: "POST",
+				body: JSON.stringify({
+					name: `Legacy action ${token}`,
+					type: "explicit",
+					config: { subject: { operator: "OR", values: [`never-${token}`] } },
+					action: '{"action":"flag","color":"red"}',
+				}),
+			});
+			expect(legacy.response.status).toBe(201);
+			expect(JSON.parse(legacy.data.data.actions)).toEqual({ action: "flag" });
+			await apiRequest(`/guard/${legacy.data.data.id}`, { method: "DELETE" });
+			const rule = await apiJson<{ success: true; data: { id: string; actions: string } }>(
+				"/guard",
+				{
+					method: "POST",
+					body: JSON.stringify({
+						name: `Junk ${token}`,
+						type: "explicit",
+						priority: 1000,
+						config: { subject: { operator: "OR", values: [token] } },
+						action: { action: "junk" },
+					}),
+				},
+			);
+			expect(rule.response.status).toBe(201);
+			expect(JSON.parse(rule.data.data.actions)).toEqual({ action: "junk" });
+
+			try {
+				await postSyntheticInboundRecord({
+					subject,
+					messageId: `${token}@example.test`,
+					recipient: E2E_RECIPIENT_ADDRESS,
+					text: `Junk test ${token}`,
+				});
+				const received = await waitForExactSubjectEmailCount("received", subject, 1);
+				const emailId = received?.[0]?.id ?? "";
+				expect(emailId).not.toBe("");
+
+				const webhook = await pollFor(
+					"webhook for the junk email",
+					POLL_CONFIG.inboundTimeoutMs,
+					async () =>
+						receivedWebhooks.find(
+							(item) => item.path === TEST_WEBHOOK_PATH && item.body.includes(emailId),
+						) ?? null,
+				);
+				const payload = JSON.parse(webhook?.body ?? "{}") as {
+					email?: { spam?: { isJunk: boolean; reason: string | null } };
+				};
+				expect(payload.email?.spam).toEqual({ isJunk: true, reason: "guard_rule" });
+
+				const [isJunk, junkReason, guardAction, guardBlocked] = psql(
+					`select is_junk, junk_reason, guard_action, guard_blocked from structured_emails where id = '${emailId}';`,
+					E2E_DATABASE,
+				).split("|");
+				expect([isJunk, junkReason, guardAction, guardBlocked]).toEqual([
+					"t",
+					"guard_rule",
+					"junk",
+					"f",
+				]);
+				const detail = await apiJson<EmailDetailResponse & {
+					spam?: { is_junk: boolean; reason: string | null };
+				}>(`/emails/${emailId}`);
+				expect(detail.data.spam).toEqual({ is_junk: true, reason: "guard_rule" });
+				type JunkList = {
+					data: Array<{ id: string; spam?: { is_junk: boolean } }>;
+				};
+				const junkList = await apiJson<JunkList>(
+					`/emails${queryString({ type: "received", is_junk: "true", search: token, time_range: "1h" })}`,
+				);
+				expect(junkList.data.data.map((email) => email.id)).toEqual([emailId]);
+				expect(junkList.data.data[0]?.spam?.is_junk).toBe(true);
+				const cleanList = await apiJson<JunkList>(
+					`/emails${queryString({ is_junk: "false", search: token, time_range: "1h" })}`,
+				);
+				expect(cleanList.data.data).toEqual([]);
+
+				const mailbox = await apiJson<{ data: { id: string } }>("/mailboxes", {
+					method: "POST",
+					body: JSON.stringify({
+						name: `Junk mailbox ${token}`,
+						loginAddress: `junk-${token}@${E2E_DOMAIN}`,
+						type: "mailbox",
+						accessMode: "read_write",
+						sendingMode: "identity",
+						sendingName: null,
+						sendingAddress: E2E_SENDER_ADDRESS,
+						scopes: [{ type: "domain", domainId: E2E_DOMAIN_ID }],
+					}),
+				});
+				expect(mailbox.response.status).toBe(201);
+				type Summary = { id: string; folder: string; isJunk: boolean };
+				const folderIds = async (folder: string) => {
+					const list = await apiJson<{ messages: Summary[] }>(
+						`/mailboxes/${mailbox.data.data.id}/messages${queryString({ folder, search: token })}`,
+					);
+					expect(list.response.status).toBe(200);
+					return list.data.messages.map((message) => message.id);
+				};
+				expect(await folderIds("junk")).toEqual([emailId]);
+				expect(await folderIds("inbox")).toEqual([]);
+
+				const notJunk = await apiJson<Summary>(
+					`/mailboxes/${mailbox.data.data.id}/messages/${emailId}`,
+					{ method: "PATCH", body: JSON.stringify({ isJunk: false }) },
+				);
+				expect(notJunk.response.status).toBe(200);
+				expect(notJunk.data).toMatchObject({ folder: "inbox", isJunk: false });
+				expect(await folderIds("inbox")).toEqual([emailId]);
+				expect(await folderIds("junk")).toEqual([]);
+
+				const retried = await apiRequest(`/emails/${emailId}/retry`, {
+					method: "POST",
+					body: JSON.stringify({}),
+				});
+				await retried.arrayBuffer();
+				expect(
+					psql(
+						`select is_junk, junk_reason from structured_emails where id = '${emailId}';`,
+						E2E_DATABASE,
+					),
+				).toBe("f|user");
+
+				const marked = await apiJson<{ is_junk: boolean }>(`/emails/${emailId}`, {
+					method: "PATCH",
+					body: JSON.stringify({ is_junk: true }),
+				});
+				expect(marked.response.status).toBe(200);
+				expect(marked.data.is_junk).toBe(true);
+				expect(await folderIds("junk")).toEqual([emailId]);
+			} finally {
+				await apiRequest(`/guard/${rule.data.data.id}`, { method: "DELETE" });
+			}
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
 		"returns 429 responses when burst traffic exceeds rate limits",
 		async () => {
 			let sawRateLimit = false;
@@ -2933,5 +3111,6 @@ console.log("  - Multi-attachment parsing edge cases");
 console.log("  - Endpoint lifecycle update + cleanup behavior");
 console.log("  - S/MIME raw relay keeps signatures valid and strips Bcc");
 console.log("  - Scheduled sends via cron (pause/resume/cancel, stale recovery)");
+console.log("  - Junk filter settings, Guard junk rules and mailbox Junk folder");
 console.log("  - Rate-limit 429 behavior under burst traffic");
 console.log("=".repeat(60) + "\n");

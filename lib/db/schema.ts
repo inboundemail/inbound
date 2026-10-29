@@ -425,6 +425,9 @@ export const structuredEmails = pgTable(
 		guardAction: varchar("guard_action", { length: 50 }), // 'block', 'flag', 'label'
 		guardMetadata: text("guard_metadata"), // Additional Guard metadata as JSON
 		jevClassification: text("jev_classification"), // Jev inbound classification JSON (internal; not exposed in the API)
+		isJunk: boolean("is_junk"), // Junk verdict; null when never decided
+		junkReason: text("junk_reason"), // 'classifier' | 'ses_spam' | 'guard_rule' | 'user'
+		junkUpdatedAt: timestamp("junk_updated_at"),
 
 		// User and timestamps
 		userId: varchar("user_id", { length: 255 }).notNull(),
@@ -1066,6 +1069,16 @@ export const guardRules = pgTable(
 		priorityIdx: index("guard_rules_priority_idx").on(table.priority),
 	}),
 );
+
+// Account-wide spam filter level for inbound mail. A missing row means "standard".
+export const spamFilterSettings = pgTable("spam_filter_settings", {
+	userId: varchar("user_id", { length: 255 })
+		.primaryKey()
+		.references(() => user.id, { onDelete: "cascade" }),
+	level: varchar("level", { length: 20 }).notNull().default("standard"), // 'off' | 'lenient' | 'standard' | 'strict'
+	createdAt: timestamp("created_at").defaultNow().notNull(),
+	updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
 // Campaign links - per-recipient tokenized redirect links for email campaigns
 export const campaignLinks = pgTable(

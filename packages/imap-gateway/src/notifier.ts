@@ -7,12 +7,14 @@ import { sanitizeLogValue } from "./log.ts";
 interface SessionLike {
 	user?: AuthenticatedMailbox & { address?: string };
 	remoteAddress?: string;
+	selected?: { mailbox?: string } | false | null;
 }
 
 type ListenerCallback = (message?: unknown) => void;
 type Callback = (err: Error | null, ...rest: unknown[]) => void;
 
 const POLL_INTERVAL_MS = 60_000;
+const RECEIVED_VIEWS = ["INBOX", "Junk"] as const;
 
 export class PgNotifier {
 	private sql: postgres.Sql;
@@ -77,6 +79,17 @@ export class PgNotifier {
 		await this.sql.end({ timeout: 2 }).catch(() => undefined);
 	}
 
+	/** Wakes sessions that have one of these mailboxes selected, so they fetch EXPUNGE updates. */
+	wakeMailboxes(mailboxIds: string[]): void {
+		const ids = new Set(mailboxIds);
+		for (const [session, callback] of this.listeners) {
+			const selected = session.selected;
+			if (selected && selected.mailbox && ids.has(selected.mailbox)) {
+				callback();
+			}
+		}
+	}
+
 	sessions(): Iterable<[SessionLike, ListenerCallback]> {
 		return this.listeners.entries();
 	}
@@ -104,11 +117,13 @@ export class PgNotifier {
 		console.log(`[notifier] change delivered to ${callbacks.length} session(s)`);
 		for (const [session] of callbacks) {
 			if (!session.user) continue;
-			const inbox = await this.store.getMailboxByPath(session.user, "INBOX");
-			if (inbox) {
-				await this.store
-					.syncMailbox(inbox, session.user)
-					.catch(() => undefined);
+			for (const path of RECEIVED_VIEWS) {
+				const view = await this.store.getMailboxByPath(session.user, path);
+				if (view) {
+					await this.store
+						.syncMailbox(view, session.user)
+						.catch(() => undefined);
+				}
 			}
 			for (const scope of session.user.scopes) {
 				const scopeMatches =
@@ -137,11 +152,13 @@ export class PgNotifier {
 			for (const [session, callback] of [...this.listeners]) {
 				if (!session.user) continue;
 				try {
-					const inbox = await this.store.getMailboxByPath(
-						session.user,
-						"INBOX",
-					);
-					if (inbox) await this.store.syncMailbox(inbox, session.user);
+					for (const path of RECEIVED_VIEWS) {
+						const view = await this.store.getMailboxByPath(
+							session.user,
+							path,
+						);
+						if (view) await this.store.syncMailbox(view, session.user);
+					}
 					for (const scope of session.user.scopes) {
 						const mailbox = await this.store.getMailboxByPath(
 							session.user,

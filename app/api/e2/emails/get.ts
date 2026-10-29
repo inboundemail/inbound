@@ -40,6 +40,19 @@ const EmailDetailSchema = t.Object({
   has_attachments: t.Boolean(),
   attachments: t.Optional(t.Array(t.Any({ "x-stainless-any": true }))),
   is_read: t.Optional(t.Boolean()),
+  spam: t.Optional(
+    t.Object(
+      {
+        is_junk: t.Boolean({ description: "Whether the junk filter marked this received email as junk" }),
+        reason: t.Nullable(
+          t.String({
+            description: "classifier, ses_spam, guard_rule or user; null when no verdict was made",
+          })
+        ),
+      },
+      { description: "Junk filter verdict (received emails only)" }
+    )
+  ),
   thread_id: t.Optional(t.Nullable(t.String())),
   thread_position: t.Optional(t.Nullable(t.Number())),
   headers: t.Optional(t.Any({ "x-stainless-any": true })),
@@ -131,6 +144,7 @@ export const getEmail = new Elysia().get(
         has_attachments: attachments.length > 0,
         attachments,
         is_read: email.isRead || false,
+        spam: { is_junk: email.isJunk === true, reason: email.junkReason ?? null },
         thread_id: email.threadId,
         thread_position: email.threadPosition,
         headers: parseJsonField(email.headers, {}),

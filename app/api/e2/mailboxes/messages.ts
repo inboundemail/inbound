@@ -40,6 +40,7 @@ const MessageSummarySchema = t.Object({
 	folder: t.Union([
 		t.Literal("inbox"),
 		t.Literal("archive"),
+		t.Literal("junk"),
 		t.Literal("sent"),
 	]),
 	threadId: t.Nullable(t.String()),
@@ -49,6 +50,7 @@ const MessageSummarySchema = t.Object({
 	date: t.Nullable(t.String()),
 	preview: t.Nullable(t.String()),
 	isRead: t.Boolean(),
+	isJunk: t.Boolean(),
 	hasAttachments: t.Boolean(),
 });
 
@@ -72,7 +74,7 @@ const MessageDetailSchema = t.Object({
 	status: t.Optional(t.String()),
 });
 
-type Folder = "inbox" | "archive" | "sent";
+type Folder = "inbox" | "archive" | "junk" | "sent";
 
 function fail(
 	set: { status?: number | string },
@@ -156,7 +158,11 @@ function iso(value: Date | null | undefined): string | null {
 function receivedSummary(email: typeof structuredEmails.$inferSelect) {
 	return {
 		id: email.id,
-		folder: (email.isArchived ? "archive" : "inbox") as Folder,
+		folder: (email.isJunk
+			? "junk"
+			: email.isArchived
+				? "archive"
+				: "inbox") as Folder,
 		threadId: email.threadId,
 		subject: email.subject,
 		from: fromText(email.fromData),
@@ -164,6 +170,7 @@ function receivedSummary(email: typeof structuredEmails.$inferSelect) {
 		date: iso(email.date ?? email.createdAt),
 		preview: preview(email.textBody, email.htmlBody),
 		isRead: email.isRead ?? false,
+		isJunk: email.isJunk === true,
 		hasAttachments: attachmentInfo(email.attachments).length > 0,
 	};
 }
@@ -179,6 +186,7 @@ function sentSummary(email: typeof sentEmails.$inferSelect) {
 		date: iso(email.sentAt ?? email.createdAt),
 		preview: preview(email.textBody, email.htmlBody),
 		isRead: true,
+		isJunk: false,
 		hasAttachments: attachmentInfo(email.attachments).length > 0,
 	};
 }
@@ -252,6 +260,7 @@ async function unreadCount(access: MailboxAccess): Promise<number> {
 				receivedVisibleSql(access.credential),
 				sql`structured_emails.is_read IS NOT TRUE`,
 				sql`structured_emails.is_archived IS NOT TRUE`,
+				sql`structured_emails.is_junk IS NOT TRUE`,
 			),
 		);
 	return row?.count ?? 0;
@@ -345,10 +354,17 @@ export const listMailboxMessages = new Elysia().get(
 		const conditions: SQL[] = [
 			eq(structuredEmails.userId, access.userId),
 			receivedVisibleSql(access.credential),
-			folder === "archive"
-				? sql`structured_emails.is_archived IS TRUE`
-				: sql`structured_emails.is_archived IS NOT TRUE`,
+			folder === "junk"
+				? sql`structured_emails.is_junk IS TRUE`
+				: sql`structured_emails.is_junk IS NOT TRUE`,
 		];
+		if (folder !== "junk") {
+			conditions.push(
+				folder === "archive"
+					? sql`structured_emails.is_archived IS TRUE`
+					: sql`structured_emails.is_archived IS NOT TRUE`,
+			);
+		}
 		if (query.unread === "true") {
 			conditions.push(sql`structured_emails.is_read IS NOT TRUE`);
 		}
@@ -377,9 +393,18 @@ export const listMailboxMessages = new Elysia().get(
 		params: MailboxParams,
 		query: t.Object({
 			folder: t.Optional(
-				t.Union([t.Literal("inbox"), t.Literal("archive"), t.Literal("sent")], {
-					description: "inbox (default): received and not archived; archive; sent",
-				}),
+				t.Union(
+					[
+						t.Literal("inbox"),
+						t.Literal("archive"),
+						t.Literal("junk"),
+						t.Literal("sent"),
+					],
+					{
+						description:
+							"inbox (default): received, not archived and not junk; archive: archived and not junk; junk: marked as junk; sent",
+					},
+				),
 			),
 			unread: t.Optional(t.String({ description: "'true' for unread only" })),
 			search: t.Optional(
@@ -450,8 +475,12 @@ export const updateMailboxMessage = new Elysia().patch(
 		if (!canWrite(result.access.credential)) {
 			return fail(set, 403, "This mailbox is read-only");
 		}
-		if (body.isRead === undefined && body.isArchived === undefined) {
-			return fail(set, 400, "Provide isRead and/or isArchived");
+		if (
+			body.isRead === undefined &&
+			body.isArchived === undefined &&
+			body.isJunk === undefined
+		) {
+			return fail(set, 400, "Provide isRead, isArchived and/or isJunk");
 		}
 		const email = await findVisibleReceived(result.access, params.messageId);
 		if (!email) return fail(set, 404, "Received message not found in this mailbox");
@@ -467,6 +496,11 @@ export const updateMailboxMessage = new Elysia().patch(
 		if (body.isArchived !== undefined) {
 			changes.isArchived = body.isArchived;
 			changes.archivedAt = body.isArchived ? now : null;
+		}
+		if (body.isJunk !== undefined) {
+			changes.isJunk = body.isJunk;
+			changes.junkReason = "user";
+			changes.junkUpdatedAt = now;
 		}
 		const [updated] = await db
 			.update(structuredEmails)
@@ -485,6 +519,12 @@ export const updateMailboxMessage = new Elysia().patch(
 		body: t.Object({
 			isRead: t.Optional(t.Boolean()),
 			isArchived: t.Optional(t.Boolean()),
+			isJunk: t.Optional(
+				t.Boolean({
+					description:
+						"Move to Junk (true) or back to the inbox (false). Applies to the email account-wide, including IMAP Junk folders.",
+				}),
+			),
 		}),
 		response: {
 			200: MessageSummarySchema,
@@ -496,8 +536,9 @@ export const updateMailboxMessage = new Elysia().patch(
 		},
 		detail: {
 			tags: ["Mailboxes"],
-			summary: "Mark a mailbox message read or archived",
-			description: "Requires a read_write mailbox. Changes are shared with the dashboard.",
+			summary: "Mark a mailbox message read, archived or junk",
+			description:
+				"Requires a read_write mailbox. Changes are shared with the dashboard; junk changes also move the message between INBOX and Junk over IMAP.",
 		},
 	},
 );

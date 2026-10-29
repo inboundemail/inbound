@@ -75,6 +75,8 @@ import { updateMailbox } from "../mailboxes/update";
 import { checkOnboardingReply } from "../onboarding/check-reply";
 // Onboarding routes
 import { sendOnboardingDemo } from "../onboarding/demo";
+import { getSpamFilter } from "@/app/api/e2/spam-filter/get";
+import { updateSpamFilter } from "@/app/api/e2/spam-filter/update";
 
 // Webhook documentation content (rendered as a documentation page)
 const webhookStructureDoc = `
@@ -525,6 +527,8 @@ https://inbound.new/api/e2
 	.use(updateMailboxMessage)
 	.use(getMailboxThread)
 	.use(getMailboxAttachment)
+	.use(getSpamFilter)
+	.use(updateSpamFilter)
 	// Onboarding routes
 	.use(sendOnboardingDemo)
 	.use(checkOnboardingReply)

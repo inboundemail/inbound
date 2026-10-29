@@ -39,6 +39,10 @@ const payload: InboundWebhookPayload = {
     recipient: 'support@yourdomain.com',
     subject: 'Help with my order',
     receivedAt: '2024-01-15T10:30:00Z',
+    spam: {
+      isJunk: false,
+      reason: null
+    },
     parsedData: {
       messageId: '<unique@example.com>',
       date: new Date('2024-01-15T10:30:00Z'),
@@ -103,6 +107,15 @@ const payload: InboundWebhookPayload = {
   }
 }
 ```
+
+### Junk filter verdict
+
+`email.spam` reports the junk filter's verdict. Junk mail is still delivered to your endpoint, so you can decide what to do with it.
+
+| Field | Description |
+| --- | --- |
+| `isJunk` | `true` when the email was marked as junk |
+| `reason` | Why: `classifier` (spam or threat classification at your account's filter level), `ses_spam` (the receiving server's spam check failed), `guard_rule` (a Guard rule with the `junk` or `allow` action matched), `user` (marked by a person), or `null` when no verdict was made |
 
 ## Webhook Security
 

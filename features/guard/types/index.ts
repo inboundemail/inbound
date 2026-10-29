@@ -14,12 +14,13 @@ export type LogicOperator = 'OR' | 'AND';
 export type ExplicitRuleMode = 'simple' | 'advanced';
 
 // Rule actions
-export type RuleAction = 'allow' | 'block' | 'route';
+export type RuleAction = 'allow' | 'block' | 'junk' | 'route';
 
 // Rule action configuration with discriminated union for type safety
 export type RuleActionConfig =
   | { action: 'allow' }
   | { action: 'block' }
+  | { action: 'junk' }
   | { action: 'route'; endpointId: string };
 
 // Explicit rule configuration

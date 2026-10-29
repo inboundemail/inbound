@@ -117,6 +117,15 @@ export function assertMigratable(status: { skipped: Migration[]; unbaselined: bo
 	}
 }
 
+export const MIGRATION_LOCK_TIMEOUT = "5s";
+
+function isLockTimeout(error: unknown): boolean {
+	for (let current: unknown = error; current; current = (current as { cause?: unknown }).cause) {
+		if ((current as { code?: unknown }).code === "55P03") return true;
+	}
+	return false;
+}
+
 export async function applyMigrations(url: string, folder = MIGRATIONS_FOLDER) {
 	return withClient(url, async (client) => {
 		// drizzle's migrator opens its own transaction, so hold a session-level lock around it.
@@ -124,7 +133,23 @@ export async function applyMigrations(url: string, folder = MIGRATIONS_FOLDER) {
 		try {
 			const status = await migrationStatus(client, folder);
 			assertMigratable(status);
-			if (status.pending.length) await migrate(drizzle(client), { migrationsFolder: folder });
+			if (status.pending.length) {
+				// drizzle runs pending migrations in its own transaction, which inherits this
+				// session setting: a blocked ALTER fails fast instead of queueing inbound inserts.
+				await client.query(`select set_config('lock_timeout', $1, false)`, [MIGRATION_LOCK_TIMEOUT]);
+				try {
+					await migrate(drizzle(client), { migrationsFolder: folder });
+				} catch (error) {
+					if (isLockTimeout(error)) {
+						throw new Error(
+							`A migration waited more than ${MIGRATION_LOCK_TIMEOUT} for a table lock and was rolled back; nothing was applied. Another transaction holds the lock (often a long-running query). Retry the command in a moment.`,
+						);
+					}
+					throw error;
+				} finally {
+					await client.query("reset lock_timeout");
+				}
+			}
 			return status.pending.map((m) => m.tag);
 		} finally {
 			await client.query("select pg_advisory_unlock(hashtext($1))", [MIGRATION_LOCK_KEY]);

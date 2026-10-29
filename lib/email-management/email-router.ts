@@ -24,6 +24,13 @@ import {
 	webhookDeliveries,
 } from "@/lib/db/schema";
 import { getOrCreateVerificationToken } from "@/lib/webhooks/verification";
+import {
+	getSpamFilterLevel,
+	loadSesSpamVerdict,
+	settleJunkVerdict,
+	storeJunkVerdict,
+} from "@/lib/guard/junk";
+import { resolveJunkVerdict, spamInfo } from "@/lib/guard/junk-verdict";
 import { evaluateInboundEmail } from "@/lib/guard/rule-matcher";
 import { isDsn } from "@/lib/email-management/dsn-parser";
 import { envelopeRecipientsOf } from "@/lib/email-management/inbound-dedupe";
@@ -266,6 +273,7 @@ async function routeEmailWithResult(
 			recipients.push(candidate);
 		}
 		if (recipients.length === 0) {
+			await settleJunkVerdict(emailData.structuredId, emailData.userId);
 			return {
 				success: false,
 				message: "DMARC delivery is disabled by domain settings",
@@ -349,6 +357,7 @@ async function routeEmailWithResult(
 				console.log(
 					`✅ routeEmail - Updated email ${emailId} with Guard block information`,
 				);
+				await settleJunkVerdict(emailData.structuredId, emailData.userId);
 
 				// Email is stored but not routed - blocked by Guard
 				return {
@@ -443,6 +452,43 @@ async function routeEmailWithResult(
 			console.log(
 				"🛡️ routeEmail - Skipping Guard evaluation (feature inbound_guard disabled for user)",
 			);
+		}
+
+		// 🗑️ Junk filter: Guard junk/allow rules first, then the account's spam filter level.
+		// Junk mail is still delivered; the verdict is stored and included in the webhook.
+		try {
+			const level = await getSpamFilterLevel(emailData.userId);
+			const sesSpamVerdict = inbound.classification
+				? inbound.classification.facts.ses_spam
+				: level === "off"
+					? null
+					: await loadSesSpamVerdict(emailData.sesEventId);
+			const verdict = resolveJunkVerdict(
+				guardFeatureEnabled ? inbound.guard : null,
+				level,
+				inbound.classification?.summary,
+				sesSpamVerdict,
+			);
+			if (verdict) {
+				await storeJunkVerdict(
+					emailData.structuredId,
+					emailData.userId,
+					verdict,
+				);
+				if (verdict.isJunk) {
+					console.log(
+						`🗑️ routeEmail - Email ${emailId} marked as junk (${verdict.reason})`,
+					);
+				}
+			} else {
+				await settleJunkVerdict(emailData.structuredId, emailData.userId);
+			}
+		} catch (junkError) {
+			console.error(
+				"⚠️ routeEmail - Junk filter failed:",
+				junkError instanceof Error ? junkError.name : "unknown",
+			);
+			await settleJunkVerdict(emailData.structuredId, emailData.userId);
 		}
 
 		// 🧵 Thread Continuity: Check if this is a thread reply and route to original endpoint
@@ -626,6 +672,8 @@ async function getEmailWithStructuredData(emailId: string, userId?: string) {
 			parseError: structuredEmails.parseError,
 			guardBlocked: structuredEmails.guardBlocked,
 			jevClassification: structuredEmails.jevClassification,
+			isJunk: structuredEmails.isJunk,
+			junkReason: structuredEmails.junkReason,
 
 			// Threading fields
 			threadId: structuredEmails.threadId,
@@ -1209,6 +1257,9 @@ async function handleWebhookEndpoint(
 				// Threading information
 				threadId: emailData.threadId || null,
 				threadPosition: emailData.threadPosition || null,
+
+				// Junk filter verdict (junk mail is still delivered)
+				spam: spamInfo(emailData),
 
 				// Full ParsedEmailData structure with download URLs
 				parsedData: enhancedParsedData,

@@ -52,6 +52,7 @@ function revalidateSessions(force: boolean): void {
 	});
 }
 notifier.onReconnect = () => revalidateSessions(true);
+store.onExpunged = (mailboxIds) => notifier.wakeMailboxes(mailboxIds);
 await notifier.start();
 const sessionCheck = setInterval(
 	() => revalidateSessions(false),
