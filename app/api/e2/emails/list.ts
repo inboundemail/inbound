@@ -83,6 +83,12 @@ const ListEmailsQuerySchema = t.Object({
         "Filter by email address. Accepts address ID (e.g., 'addr_xxx') or raw email address (e.g., 'user@example.com').",
     })
   ),
+  is_junk: t.Optional(
+    t.Union([t.Literal("true"), t.Literal("false")], {
+      description:
+        "Filter received emails by junk filter verdict. 'true' returns only junk; 'false' excludes junk. Sent and scheduled emails are excluded when set.",
+    })
+  ),
   limit: t.Optional(
     t.String({
       description: "Maximum number of emails to return (1-100). Default is 50.",
@@ -189,6 +195,19 @@ const EmailItemSchema = t.Object({
       })
     )
   ),
+  spam: t.Optional(
+    t.Object(
+      {
+        is_junk: t.Boolean({ description: "Whether the junk filter marked this received email as junk" }),
+        reason: t.Nullable(
+          t.String({
+            description: "classifier, ses_spam, guard_rule or user; null when no verdict was made",
+          })
+        ),
+      },
+      { description: "Junk filter verdict (only for received emails)" }
+    )
+  ),
 });
 
 // Response schemas
@@ -217,6 +236,7 @@ const ListEmailsResponse = t.Object({
       search: t.Optional(t.String({ description: "Applied search query" })),
       domain: t.Optional(t.String({ description: "Applied domain filter" })),
       address: t.Optional(t.String({ description: "Applied address filter" })),
+      is_junk: t.Optional(t.String({ description: "Applied junk filter" })),
     },
     { description: "Applied filters for this query" }
   ),
@@ -301,6 +321,7 @@ export const listEmails = new Elysia().get(
     const offset = parseInt(query.offset || "0");
     const domainFilter = query.domain;
     const addressFilter = query.address;
+    const junkFilter = query.is_junk;
 
     console.log("📊 Query parameters:", {
       type,
@@ -375,9 +396,9 @@ export const listEmails = new Elysia().get(
     const sentConditions: (SQL | undefined)[] = [eq(sentEmails.userId, userId)];
     const scheduledConditions: (SQL | undefined)[] = [eq(scheduledEmails.userId, userId)];
     const includeReceived = type === "all" || type === "received";
-    const includeSent = (type === "all" || type === "sent") &&
+    const includeSent = (type === "all" || type === "sent") && !junkFilter &&
       !["unread", "read", "archived", "scheduled", "cancelled", "paused"].includes(status);
-    const includeScheduled = (type === "all" || type === "scheduled") &&
+    const includeScheduled = (type === "all" || type === "scheduled") && !junkFilter &&
       !["unread", "read", "archived", "delivered", "bounced"].includes(status);
 
     if (includeReceived) {
@@ -398,6 +419,12 @@ export const listEmails = new Elysia().get(
         receivedConditions.push(eq(structuredEmails.isRead, true));
       } else if (status === "archived") {
         receivedConditions.push(eq(structuredEmails.isArchived, true));
+      }
+
+      if (junkFilter === "true") {
+        receivedConditions.push(sql`${structuredEmails.isJunk} IS TRUE`);
+      } else if (junkFilter === "false") {
+        receivedConditions.push(sql`${structuredEmails.isJunk} IS NOT TRUE`);
       }
 
       // Domain filter
@@ -580,6 +607,8 @@ export const listEmails = new Elysia().get(
           readAt: structuredEmails.readAt,
           isArchived: structuredEmails.isArchived,
           threadId: structuredEmails.threadId,
+          isJunk: structuredEmails.isJunk,
+          junkReason: structuredEmails.junkReason,
         })
         .from(structuredEmails)
         .where(type === "all"
@@ -627,6 +656,7 @@ export const listEmails = new Elysia().get(
           read_at: email.readAt?.toISOString() || null,
           is_archived: email.isArchived || false,
           thread_id: email.threadId,
+          spam: { is_junk: email.isJunk === true, reason: email.junkReason ?? null },
         });
       }
 
@@ -788,6 +818,7 @@ export const listEmails = new Elysia().get(
         search: searchQuery || undefined,
         domain: resolvedDomain || undefined,
         address: resolvedAddress || undefined,
+        is_junk: junkFilter,
       },
     };
   },
