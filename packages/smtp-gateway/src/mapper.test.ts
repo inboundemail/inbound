@@ -475,6 +475,7 @@ describe("mapRawMessage", () => {
 		);
 		expect(empty.payload.text).toBe("");
 		expect(empty.payload.html).toBeUndefined();
+		expect(empty.payload.subject).toBe("");
 	});
 });
 
