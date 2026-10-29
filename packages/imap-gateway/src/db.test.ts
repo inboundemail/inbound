@@ -232,12 +232,14 @@ describe("MailStore function boundary", () => {
 			1024,
 			10,
 		]);
-		const quota = createStore(() => {
-			throw new Error("APPEND quota exceeded");
-		});
-		await expect(
-			quota.store.appendMessage(mailbox, principal, "raw", [], date),
-		).rejects.toBeInstanceOf(AppendQuotaError);
+		for (const message of ["APPEND quota exceeded", "APPEND mailbox quota exceeded"]) {
+			const quota = createStore(() => {
+				throw new Error(message);
+			});
+			await expect(
+				quota.store.appendMessage(mailbox, principal, "raw", [], date),
+			).rejects.toBeInstanceOf(AppendQuotaError);
+		}
 	});
 
 	it("persists folder mutations and subscription changes through the same function", async () => {
