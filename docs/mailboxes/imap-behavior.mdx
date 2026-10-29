@@ -3,7 +3,7 @@ title: "IMAP Behavior"
 description: "Folders, supported IMAP features, synchronization, limits, and known limitations"
 ---
 
-Inbound presents received email through a managed IMAP mailbox rather than a conventional standalone mail store. `INBOX` and scope folders are views of the mail Inbound has received, so some operations behave differently than on a traditional IMAP server.
+Inbound presents received email through a managed IMAP mailbox rather than a conventional standalone mail store. `INBOX`, `Junk` and scope folders are views of the mail Inbound has received, so some operations behave differently than on a traditional IMAP server.
 
 ## Default folders
 
@@ -11,11 +11,11 @@ Each mailbox credential includes these folders:
 
 | Folder | Special-use attribute | Behavior |
 | --- | --- | --- |
-| `INBOX` | None | Incoming mail from every configured scope |
+| `INBOX` | None | Incoming mail from every configured scope, except junk |
 | `Sent` | `\Sent` | For client-saved sent messages; not populated automatically |
 | `Drafts` | `\Drafts` | For client-saved drafts |
 | `Trash` | `\Trash` | For client-organized messages |
-| `Junk` | `\Junk` | For client-organized messages; incoming mail is not filtered into it |
+| `Junk` | `\Junk` | Incoming mail marked as junk, from every configured scope. See [Junk](#junk) |
 
 The personal namespace is `""` and the hierarchy separator is `/`. `INBOX` and the special-use folders cannot be deleted, and `INBOX` cannot be renamed. With a `read_write` credential you can create, rename, and delete other folders. Renaming a folder also renames its subfolders. Creating or renaming onto an existing name returns `NO [ALREADYEXISTS]`.
 
@@ -37,7 +37,7 @@ Scopes/support@another-example.com
 
 `Scopes` is a non-selectable container (`\Noselect`), and its name is reserved. A domain scope appears as `Scopes/*@example.com`; an address scope appears as `Scopes/support@example.com`.
 
-Scope folders are filtered views of the same messages as `INBOX`. They always open read-only, even for `read_write` credentials. You cannot append, move, or copy messages into a scope folder, change flags in it, or expunge from it. A `read_write` credential can copy messages from a scope folder into a writable folder.
+Scope folders are filtered views of the same messages as `INBOX` (junk mail appears only in `Junk`). They always open read-only, even for `read_write` credentials. You cannot append, move, or copy messages into a scope folder, change flags in it, or expunge from it. A `read_write` credential can copy messages from a scope folder into a writable folder.
 
 ## Capabilities
 
@@ -98,7 +98,7 @@ Only new messages are pushed to other open sessions. If one session expunges, mo
   `EXPUNGE` and `MOVE` do not delete the underlying received email. `INBOX` and scope folders are rebuilt from received mail, so a received message expunged or moved out of `INBOX` reappears there, with a new UID, the next time the folder is synchronized (for example, on the next `SELECT` or when new mail arrives). Don't use IMAP deletion as permanent deletion.
 </Warning>
 
-Moving a received message into a custom folder, `Trash`, or `Junk` does create a copy there that stays until you expunge it. Messages created with `APPEND`, such as sent copies and drafts, are stored separately and are permanently removed when their last copy is expunged.
+Moving a received message into a custom folder or `Trash` does create a copy there that stays until you expunge it. Moving it into `Junk` marks it as junk instead (see [Junk](#junk)). Messages created with `APPEND`, such as sent copies and drafts, are stored separately and are permanently removed when their last copy is expunged.
 
 ### Sent mail is not saved automatically
 
@@ -107,6 +107,14 @@ Sending through SMTP does not create a message in `Sent`. Many email clients sav
 <Warning>
   SMTP accepts messages up to 3 MiB, but `APPEND` accepts at most 1 MiB. A larger email can send successfully while saving its sent copy fails with `NO [TOOBIG]`. SMTP-only credentials cannot save a sent copy.
 </Warning>
+
+### Junk
+
+The [junk filter](/mailboxes/junk-filter) decides whether a received message belongs in `INBOX` or in `Junk`; it is never in both. Moving a received message from `INBOX` or a scope folder into `Junk` marks it as junk, and moving it from `Junk` back to `INBOX` marks it as not junk. The decision applies to the email account-wide, so the message also moves in every other credential and in the mailbox API. Copying a received message into `INBOX` or `Junk` has the same effect.
+
+If a message's verdict changes elsewhere (in the API, the dashboard or another credential), it moves between `INBOX` and `Junk` the next time the folders are synchronized. Like other changes made outside the session, the move is not reported with `EXPUNGE` until the folder is selected again. New mail can briefly appear in `INBOX` before the filter's verdict moves it to `Junk`.
+
+Expunging a received message from `Junk` removes it from the credential's folders; it doesn't return to `INBOX` if it is later marked as not junk. Messages appended to `Junk` are stored like other appended messages.
 
 ### Guard-filtered messages
 

@@ -51,7 +51,9 @@ const mailbox: MailboxRow = {
 
 const fragment = Symbol("fragment");
 
-function createStore(): { store: MailStore; requests: SqlRequest[] } {
+function createStore(
+	respond?: (statement: string) => unknown[] | undefined,
+): { store: MailStore; requests: SqlRequest[] } {
 	const requests: SqlRequest[] = [];
 	function execute<T extends readonly object[]>(
 		strings: TemplateStringsArray,
@@ -72,6 +74,8 @@ function createStore(): { store: MailStore; requests: SqlRequest[] } {
 		});
 		const result = () => {
 			requests.push({ statement, values });
+			const custom = respond?.(statement);
+			if (custom) return custom;
 			if (statement.includes("SELECT uid_next, modseq")) {
 				return [{ uid_next: 1, modseq: 0 }];
 			}
@@ -203,5 +207,184 @@ describe("MailStore tenant isolation", () => {
 		);
 		expect(lock?.statement).toContain("user_id = ?");
 		expect(lock?.statement).toContain("credential_id = ?");
+	});
+});
+
+describe("MailStore Junk view", () => {
+	const structuredRow = {
+		uid: 1,
+		structured_email_id: "email",
+		raw_source: "structured",
+		flags: "[]",
+		internal_date: new Date(0),
+		size: 10,
+	};
+	const junk: MailboxRow = { ...mailbox, id: "junk", path: "Junk" };
+
+	it("keeps junk out of INBOX and removes messages that became junk", async () => {
+		const { store, requests } = createStore();
+		await store.syncMailbox(mailbox, principal);
+		const sync = requests.find((request) =>
+			request.statement.includes("WITH new_msgs AS"),
+		);
+		expect(sync?.statement).toContain("se.is_junk IS NOT TRUE");
+		const reconcile = requests.find((request) =>
+			request.statement.includes("USING structured_emails se"),
+		);
+		expect(reconcile?.statement).toContain("se.is_junk IS TRUE");
+		expect(reconcile?.statement).toContain("mm.raw_source = 'structured'");
+		expect(reconcile?.values).toContain("inbox");
+	});
+
+	it("fills Junk with junk mail from every scope and removes mail marked not junk", async () => {
+		const { store, requests } = createStore();
+		await store.syncMailbox(junk, principal);
+		const sync = requests.find((request) =>
+			request.statement.includes("WITH new_msgs AS"),
+		);
+		expect(sync?.statement).toContain("se.is_junk IS TRUE");
+		expect(sync?.statement).toContain("se.guard_blocked IS NOT TRUE");
+		expect(sync?.statement).toContain("imap_mailbox_removals");
+		expect(sync?.values).toContainEqual(["user@example.com"]);
+		expect(sync?.values).toContainEqual(["example.com"]);
+		const reconcile = requests.find((request) =>
+			request.statement.includes("USING structured_emails se"),
+		);
+		expect(reconcile?.statement).toContain("se.is_junk IS FALSE");
+		expect(reconcile?.values).toContain("junk");
+	});
+
+	it("does not sync received mail into other folders", async () => {
+		const { store, requests } = createStore();
+		expect(
+			await store.syncMailbox({ ...mailbox, id: "trash", path: "Trash" }, principal),
+		).toBe(0);
+		expect(requests).toHaveLength(0);
+	});
+
+	it("marks received messages copied into Junk as junk for the account", async () => {
+		const { store, requests } = createStore((statement) =>
+			statement.includes("SELECT structured_email_id, raw_source, uid")
+				? [structuredRow]
+				: undefined,
+		);
+		const owner = { userId: "user", credentialId: "credential" };
+		await store.copyMessages(owner, "inbox", junk, [1]);
+		const update = requests.find((request) =>
+			request.statement.includes("UPDATE structured_emails"),
+		);
+		expect(update?.statement).toContain("junk_reason = 'user'");
+		expect(update?.statement).toContain("user_id = ?");
+		expect(update?.values).toContain(true);
+		expect(update?.values).toContain("user");
+		expect(update?.values).toContainEqual(["email"]);
+		expect(
+			requests.some((request) =>
+				request.statement.includes("DELETE FROM imap_mailbox_removals"),
+			),
+		).toBe(true);
+	});
+
+	it("marks received messages copied into INBOX as not junk", async () => {
+		const { store, requests } = createStore((statement) =>
+			statement.includes("SELECT structured_email_id, raw_source, uid")
+				? [structuredRow]
+				: undefined,
+		);
+		await store.copyMessages(
+			{ userId: "user", credentialId: "credential" },
+			"junk",
+			mailbox,
+			[1],
+		);
+		const update = requests.find((request) =>
+			request.statement.includes("UPDATE structured_emails"),
+		);
+		expect(update?.values).toContain(false);
+	});
+
+	it("leaves the verdict alone for appended messages and other folders", async () => {
+		const appended = createStore((statement) =>
+			statement.includes("SELECT structured_email_id, raw_source, uid")
+				? [{ ...structuredRow, raw_source: "appended" }]
+				: undefined,
+		);
+		await appended.store.copyMessages(
+			{ userId: "user", credentialId: "credential" },
+			"inbox",
+			junk,
+			[1],
+		);
+		const other = createStore((statement) =>
+			statement.includes("SELECT structured_email_id, raw_source, uid")
+				? [structuredRow]
+				: undefined,
+		);
+		await other.store.copyMessages(
+			{ userId: "user", credentialId: "credential" },
+			"inbox",
+			{ ...mailbox, id: "trash", path: "Trash" },
+			[1],
+		);
+		for (const { requests } of [appended, other]) {
+			expect(
+				requests.some((request) =>
+					request.statement.includes("UPDATE structured_emails"),
+				),
+			).toBe(false);
+		}
+	});
+
+	it("does not record a removal when a message moves from INBOX into Junk", async () => {
+		const { store, requests } = createStore((statement) => {
+			if (statement.includes("AS mirrored")) {
+				return [{ credential_id: "credential", mirrored: true, junk: false }];
+			}
+			if (statement.includes("RETURNING uid, structured_email_id, raw_source")) {
+				return [structuredRow];
+			}
+			return undefined;
+		});
+		await store.deleteMessages(
+			{ userId: "user", credentialId: "credential" },
+			"inbox",
+			[1],
+		);
+		const removal = requests.find((request) =>
+			request.statement.includes("INSERT INTO imap_mailbox_removals"),
+		);
+		expect(removal?.statement).toContain("NOT EXISTS");
+		expect(removal?.statement).toContain("mb.path = 'Junk'");
+	});
+
+	it("records a removal when a message is deleted from Junk, unless it moved to INBOX", async () => {
+		const { store, requests } = createStore((statement) => {
+			if (statement.includes("AS mirrored")) {
+				return [{ credential_id: "credential", mirrored: false, junk: true }];
+			}
+			if (statement.includes("RETURNING uid, structured_email_id, raw_source")) {
+				return [structuredRow];
+			}
+			return undefined;
+		});
+		await store.deleteMessages(
+			{ userId: "user", credentialId: "credential" },
+			"junk",
+			[1],
+		);
+		const removal = requests.find((request) =>
+			request.statement.includes("INSERT INTO imap_mailbox_removals"),
+		);
+		expect(removal?.statement).toContain(
+			"(mb.path = 'INBOX' OR mb.scope_id IS NOT NULL)",
+		);
+		expect(removal?.values).toContain("credential");
+		expect(
+			requests.some(
+				(request) =>
+					request.statement.includes("DELETE FROM imap_mailbox_messages mm") &&
+					request.statement.includes("USING imap_mailboxes mb"),
+			),
+		).toBe(false);
 	});
 });

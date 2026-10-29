@@ -118,6 +118,21 @@ function visibleToScopes(
 		), FALSE))`;
 }
 
+/**
+ * INBOX (with the scope folders) and Junk are the two views of received mail:
+ * a received message is in Junk when structured_emails.is_junk is true, and in
+ * INBOX otherwise. Copying a received message into one of them sets the
+ * verdict. Returns the verdict a folder implies, or null for other folders.
+ */
+export function receivedViewJunkVerdict(
+	mailbox: Pick<MailboxRow, "path" | "scopeId" | "credentialId">,
+): boolean | null {
+	if (!mailbox.credentialId || mailbox.scopeId) return null;
+	if (mailbox.path === "INBOX") return false;
+	if (mailbox.path === "Junk") return true;
+	return null;
+}
+
 interface RemovedRow {
 	structured_email_id: string;
 	raw_source: string;
@@ -132,11 +147,30 @@ async function removeFromMirroredMailboxes(
 		.filter((row) => row.raw_source === "structured")
 		.map((row) => row.structured_email_id);
 	if (ids.length === 0) return;
-	const rows = await sql<{ credential_id: string | null; mirrored: boolean }[]>`
-		SELECT credential_id, (path = 'INBOX' OR scope_id IS NOT NULL) AS mirrored
+	const rows = await sql<
+		{ credential_id: string | null; mirrored: boolean; junk: boolean }[]
+	>`
+		SELECT credential_id,
+		       (path = 'INBOX' OR scope_id IS NOT NULL) AS mirrored,
+		       (path = 'Junk' AND scope_id IS NULL) AS junk
 		FROM imap_mailboxes WHERE id = ${mailboxId}`;
 	const credentialId = rows[0]?.credential_id;
-	if (!credentialId || !rows[0]?.mirrored) return;
+	if (!credentialId) return;
+	if (rows[0]?.junk) {
+		await sql`
+			INSERT INTO imap_mailbox_removals (credential_id, structured_email_id)
+			SELECT ${credentialId}, removed.id FROM unnest(${ids}::text[]) AS removed(id)
+			WHERE NOT EXISTS (
+				SELECT 1 FROM imap_mailbox_messages mm
+				JOIN imap_mailboxes mb ON mb.id = mm.mailbox_id
+				WHERE mb.credential_id = ${credentialId}
+				  AND (mb.path = 'INBOX' OR mb.scope_id IS NOT NULL)
+				  AND mm.raw_source = 'structured'
+				  AND mm.structured_email_id = removed.id)
+			ON CONFLICT DO NOTHING`;
+		return;
+	}
+	if (!rows[0]?.mirrored) return;
 	await sql`
 		SELECT id FROM imap_mailboxes
 		WHERE credential_id = ${credentialId}
@@ -145,7 +179,14 @@ async function removeFromMirroredMailboxes(
 		FOR UPDATE`;
 	await sql`
 		INSERT INTO imap_mailbox_removals (credential_id, structured_email_id)
-		SELECT ${credentialId}, id FROM unnest(${ids}::text[]) AS removed(id)
+		SELECT ${credentialId}, removed.id FROM unnest(${ids}::text[]) AS removed(id)
+		WHERE NOT EXISTS (
+			SELECT 1 FROM imap_mailbox_messages mm
+			JOIN imap_mailboxes mb ON mb.id = mm.mailbox_id
+			WHERE mb.credential_id = ${credentialId}
+			  AND mb.path = 'Junk' AND mb.scope_id IS NULL
+			  AND mm.raw_source = 'structured'
+			  AND mm.structured_email_id = removed.id)
 		ON CONFLICT DO NOTHING`;
 	await sql`
 		DELETE FROM imap_mailbox_messages mm
@@ -500,15 +541,25 @@ export class MailStore {
 			const restored = source
 				.filter((row) => row.raw_source === "structured")
 				.map((row) => row.structured_email_id);
+			const junkVerdict = receivedViewJunkVerdict(destination);
 			if (
 				destination.credentialId &&
-				destination.path === "INBOX" &&
+				junkVerdict !== null &&
 				restored.length > 0
 			) {
 				await sql`
 					DELETE FROM imap_mailbox_removals
 					WHERE credential_id = ${destination.credentialId}
 					  AND structured_email_id = ANY(${restored})`;
+				await sql`
+					UPDATE structured_emails
+					SET is_junk = ${junkVerdict},
+					    junk_reason = 'user',
+					    junk_updated_at = now()
+					WHERE id = ANY(${restored})
+					  AND user_id = ${owner.userId}
+					  AND (is_junk IS DISTINCT FROM ${junkVerdict}
+					       OR junk_reason IS DISTINCT FROM 'user')`;
 			}
 			let nextUid = locked[0]?.uid_next ?? 1;
 			let nextModseq = locked[0]?.modseq ?? 0;
@@ -578,7 +629,8 @@ export class MailStore {
 		const scope = mailbox.scopeId
 			? principal.scopes.find((item) => item.id === mailbox.scopeId)
 			: null;
-		if (mailbox.path !== "INBOX" && !scope) return 0;
+		const junk = receivedViewJunkVerdict(mailbox) === true;
+		if (mailbox.path !== "INBOX" && !scope && !junk) return 0;
 
 		const scopes = scope ? [scope] : principal.scopes;
 		if (scopes.length === 0) return 0;
@@ -593,6 +645,13 @@ export class MailStore {
 			if (!locked[0]) return 0;
 			const uidNext = locked[0].uid_next;
 			const modseq = locked[0].modseq;
+			await sql`
+				DELETE FROM imap_mailbox_messages mm
+				USING structured_emails se
+				WHERE mm.mailbox_id = ${mailbox.id}
+				  AND mm.raw_source = 'structured'
+				  AND se.id = mm.structured_email_id
+				  AND ${junk ? sql`se.is_junk IS FALSE` : sql`se.is_junk IS TRUE`}`;
 			const inserted = await sql<{ uid: number }[]>`
 				WITH new_msgs AS (
 					SELECT se.id AS seid, se.created_at,
@@ -602,6 +661,7 @@ export class MailStore {
 					WHERE se.user_id = ${principal.userId}
 					  AND se.raw_content IS NOT NULL
 					  AND ${visibleToScopes(sql, scopes)}
+					  AND ${junk ? sql`se.is_junk IS TRUE` : sql`se.is_junk IS NOT TRUE`}
 					  AND NOT EXISTS (
 						SELECT 1 FROM imap_mailbox_messages mm
 						WHERE mm.mailbox_id = ${mailbox.id}

@@ -173,6 +173,53 @@ describe("IMAP backend authorization", () => {
 		);
 	});
 
+	it("moves INBOX messages into Junk by copying before deleting, so the copy keeps the message", async () => {
+		const { handlers, mailbox, session, store } = createHarness("read_write");
+		const junk: MailboxRow = { ...mailbox, id: "junk", path: "Junk" };
+		store.getMailboxByPath.mockImplementation(async () => junk);
+		const order: string[] = [];
+		store.copyMessages.mockImplementation(async () => {
+			order.push("copy");
+			return { uidValidity: 1, sourceUid: [1], destinationUid: [1] };
+		});
+		store.deleteMessages.mockImplementation(async () => {
+			order.push("delete");
+			return [1];
+		});
+		const [moved] = await callbackResult((callback) => {
+			handlers.onMove(
+				mailbox.id,
+				{ destination: "Junk", messages: [1] },
+				session,
+				callback,
+			);
+		});
+
+		expect(moved).toBe(true);
+		expect(order).toEqual(["copy", "delete"]);
+		expect(store.copyMessages).toHaveBeenCalledWith(
+			session.user,
+			mailbox.id,
+			junk,
+			[1],
+		);
+	});
+
+	it("refuses to move messages into Junk for read-only credentials", async () => {
+		const { handlers, mailbox, session, store } = createHarness("read");
+		const [result] = await callbackResult((callback) => {
+			handlers.onMove(
+				mailbox.id,
+				{ destination: "Junk", messages: [1] },
+				session,
+				callback,
+			);
+		});
+
+		expect(result).toBe("READ-ONLY");
+		expect(store.copyMessages).not.toHaveBeenCalled();
+	});
+
 	it("refuses MOVE from a scope folder into INBOX, which already holds the message", async () => {
 		const { handlers, mailbox, session, store } = createHarness(
 			"read_write",
