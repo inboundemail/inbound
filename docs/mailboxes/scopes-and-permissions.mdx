@@ -54,7 +54,7 @@ Scope folders are always read-only, including for credentials with `read_write` 
 
 ## SMTP sender policies
 
-The sender policy applies to SMTP and to HTTP sends authorized with the credential's password. Only `read_write` mailbox credentials and SMTP-only credentials can send. A disallowed SMTP sender is rejected with `553`; see [Send with SMTP](/mailboxes/connect-smtp#allowed-senders).
+The sender policy applies to SMTP and to HTTP sends authorized with the credential's password. Only `read_write` mailbox credentials and SMTP-only credentials can send. A disallowed sender is rejected with `553` over SMTP and `403` (`This credential cannot send from that address`) over HTTP; see [Send with SMTP](/mailboxes/connect-smtp#allowed-senders).
 
 ### Exact identity
 

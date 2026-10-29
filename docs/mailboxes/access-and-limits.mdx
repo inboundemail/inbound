@@ -33,7 +33,7 @@ Only the account (an account API key or the dashboard) can change these controls
 
 `allowedIps` is a list of up to 100 IPv4 and IPv6 addresses or CIDR ranges, such as `198.51.100.7`, `203.0.113.0/24` or `2001:db8::/32`. A bare address means that address only. When the list is set, the password only authenticates from a client address inside one of the ranges; IPv4-mapped IPv6 addresses match IPv4 ranges. `null` or `[]` allows any address, and responses show it as `[]`.
 
-Ranges are stored normalized, so `203.0.113.7/24` is saved as `203.0.113.0/24`.
+Entries are stored normalized: host bits are cleared, so `203.0.113.7/24` is saved as `203.0.113.0/24`; a bare address gets `/32` or `/128`; an IPv4-mapped IPv6 address such as `::ffff:192.0.2.1` is saved as `192.0.2.1/32`; and duplicates are removed. An invalid entry returns `400`.
 
 Inbound only checks a client address it can trust:
 
@@ -46,13 +46,13 @@ When no trusted address is available and `allowedIps` is set, authentication fai
   A disabled protocol or a disallowed IP address fails like a wrong password: IMAP returns `NO [AUTHENTICATIONFAILED]`, SMTP returns `535`, and HTTP returns `401`. The response doesn't say which check failed, so check these settings when a correct password is refused.
 </Note>
 
-Protocol and IP changes apply to each new login or request. Changing `protocols`, `allowedIps` or `selfService` immediately logs out the credential's active IMAP sessions. Clients must reconnect using the current settings. You can also [rotate the password](/mailboxes/manage-credentials#rotate-a-password) to revoke the previous password.
+Protocol and IP changes apply to each new login or request. An SMTP session that is already logged in gets `550` on its next message. Changing `protocols`, `allowedIps` or `selfService` immediately logs out the credential's active IMAP sessions. Clients must reconnect using the current settings. You can also [rotate the password](/mailboxes/manage-credentials#rotate-a-password) to revoke the previous password.
 
 ## Storage quota
 
 `storageQuotaBytes` caps, in bytes, the content this credential stores itself: messages appended over IMAP or HTTP, drafts and saved Sent copies. Received mail doesn't count. Each stored message counts once, even when it is in several folders of the credential. `null` means no per-credential cap; the minimum is `1`.
 
-The [account-wide appended storage limits](/mailboxes/imap-behavior#message-and-storage-limits) still apply. An append over either limit is rejected; IMAP returns `NO [OVERQUOTA]`.
+The [account-wide appended storage limits](/mailboxes/imap-behavior#message-and-storage-limits) still apply. An append over either limit is rejected: IMAP returns `NO [OVERQUOTA]` and HTTP returns `413` (`Mailbox storage quota exceeded`). An automatic Sent copy that doesn't fit is skipped; the send itself still goes out.
 
 ## Daily send limit
 
@@ -78,7 +78,7 @@ Over the limit, HTTP sends return `429` and SMTP returns a temporary `451`. Retr
 | `spam` | [Spam settings](/mailboxes/junk-filter#per-mailbox-spam-settings) at `/mailboxes/me/spam` |
 | `password` | `POST /mailboxes/me/rotate-password` |
 
-`filters` works for read-only mailboxes too: their password can list, create, update and delete filters. Applying filters to existing mail (the `apply` endpoints) still needs a Read & write mailbox.
+`filters` works for read-only mailboxes too: their password can list, create, update and delete filters. Applying filters to existing mail (the `apply` endpoints) still needs a **Read & write** mailbox. `password` also works for **SMTP only** credentials. Every `/mailboxes/me/...` request also needs `protocols.api` on and an allowed IP address.
 
 `null` turns all three off, and so does a key left out. On update, the keys you send are merged with the current values. Requests for a setting that isn't enabled return `403`. The account API key can always manage these settings through `/mailboxes/{id}/...`.
 

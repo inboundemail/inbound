@@ -19,7 +19,7 @@ Connect an email client or application to Inbound using a managed **Mailbox + SM
 Port `143` and IMAP `STARTTLS` are not offered. Keep certificate verification enabled. Ordinary account API keys and **SMTP only** credentials cannot authenticate to IMAP.
 
 <Note>
-  SMTP does not automatically save messages to IMAP `Sent`, and received messages removed from `INBOX` reappear. Review [IMAP behavior and limits](/mailboxes/imap-behavior) before configuring a traditional email client.
+  Mail you send with a **Read & write** credential, over SMTP or the HTTP API, is saved to its `Sent` folder automatically. Deleting a received message in IMAP removes it from this credential's folders only; it stays in your account and the dashboard. Review [IMAP behavior and limits](/mailboxes/imap-behavior) before configuring a traditional email client.
 </Note>
 
 ## Create a mailbox credential
@@ -61,6 +61,58 @@ Port `143` and IMAP `STARTTLS` are not offered. Keep certificate verification en
     </Warning>
   </Step>
 </Steps>
+
+## Set up an email client
+
+Every client needs the same values. Use the address you send from as the account's email address, and the credential's **Login email** as the user name for both servers. They can be different addresses.
+
+| Field | Incoming (IMAP) | Outgoing (SMTP) |
+| --- | --- | --- |
+| Server | `imap.inboundemail.com` | `smtp.inboundemail.com` |
+| Port | `993` | `465`, or `587` |
+| Security | SSL/TLS | SSL/TLS on `465`, STARTTLS on `587` |
+| Authentication | Normal password | Normal password |
+| User name | Login email | Login email |
+| Password | Generated password | Generated password |
+
+Automatic setup doesn't find these servers, so enter them manually. The client sees the `Sent`, `Drafts`, `Trash`, `Junk` and `Archive` folders through their special-use attributes and uses them automatically.
+
+<Tabs>
+  <Tab title="Apple Mail">
+    1. Open **Mail** and choose **Mail** > **Add Account**, select **Other Mail Account**, then **Continue**.
+    2. Enter your name, the address you send from and the generated password, then select **Sign In**.
+    3. When Mail says it can't verify the account, set **Account Type** to **IMAP**, **Incoming Mail Server** to `imap.inboundemail.com`, **Outgoing Mail Server** to `smtp.inboundemail.com`, and **User Name** to the login email. Select **Sign In**.
+    4. If Mail still can't connect, open **Mail** > **Settings** > **Accounts** > **Server Settings**. For both servers, clear **Automatically manage connection settings**, then set the port (`993` incoming, `465` or `587` outgoing), select **Use TLS/SSL**, and set **Authentication** to **Password**.
+  </Tab>
+  <Tab title="iPhone and iPad">
+    1. Open **Settings** > **Apps** > **Mail** > **Mail Accounts** > **Add Account** > **Other** > **Add Mail Account**. On iOS 17 and earlier, start from **Settings** > **Mail** > **Accounts**.
+    2. Enter your name, the address you send from and the generated password, then tap **Next**.
+    3. Select **IMAP**. Under **Incoming Mail Server** and **Outgoing Mail Server**, enter the host names above and the login email and password. The outgoing user name and password are marked optional, but they are required. Tap **Next**, then **Save**.
+    4. If the connection fails, open the account's **Advanced** settings and check that **Use SSL** is on with port `993`. Under **Outgoing Mail Server** > **SMTP**, select the server, turn on **Use SSL**, set **Authentication** to **Password** and **Server Port** to `465`.
+  </Tab>
+  <Tab title="Thunderbird">
+    1. Open **Account Settings** > **Account Actions** > **Add Mail Account**.
+    2. Enter your name, the address you send from and the generated password, then select **Configure manually**.
+    3. Under **Incoming Server**, set **Protocol** to **IMAP**, **Hostname** to `imap.inboundemail.com`, **Port** to `993`, **Connection security** to **SSL/TLS**, **Authentication method** to **Normal password**, and **Username** to the login email.
+    4. Under **Outgoing Server**, set **Hostname** to `smtp.inboundemail.com`, **Port** to `465` with **SSL/TLS** (or `587` with **STARTTLS**), **Authentication method** to **Normal password**, and **Username** to the login email.
+    5. Select **Re-test**, then **Done**.
+  </Tab>
+  <Tab title="Outlook">
+    **New Outlook for Windows and Outlook for Mac**
+
+    1. Open **Settings** > **Accounts** and choose to add an account. Enter the address you send from.
+    2. When Outlook asks for the provider, choose **IMAP** and open the advanced or manual settings.
+    3. Enter the login email as the IMAP and SMTP user name, the generated password, `imap.inboundemail.com` port `993` with **SSL/TLS**, and `smtp.inboundemail.com` port `465` with **SSL/TLS** or `587` with **STARTTLS**.
+
+    **Classic Outlook for Windows**
+
+    1. Select **File** > **Add Account**, enter the address you send from, open **Advanced options**, select **Let me set up my account manually**, then choose **IMAP**.
+    2. Set **Incoming mail** to `imap.inboundemail.com`, port `993`, encryption **SSL/TLS**, and **Outgoing mail** to `smtp.inboundemail.com`, port `587` with **STARTTLS** or `465` with **SSL/TLS**. Leave **Require logon using Secure Password Authentication (SPA)** cleared.
+    3. Enter the generated password. If Outlook signs in with the wrong user name, open the account's server settings and set the user name to the login email.
+  </Tab>
+</Tabs>
+
+Inbound saves a copy of each message you send to `Sent`. Clients that also save their own copy don't create a duplicate, because copies with the same `Message-ID` are merged. A client copy larger than 1 MiB is rejected by `APPEND`, but the automatic copy is still saved.
 
 ## Connect from your application
 
@@ -171,17 +223,41 @@ with imaplib.IMAP4_SSL(
 
 ### Authentication fails
 
-Use the managed **Login email** and generated `mail_` or legacy `imap_` password, not an ordinary account API key or your dashboard password. Confirm that the credential is enabled and that its password hasn't been rotated. **SMTP only** credentials cannot authenticate to IMAP.
+IMAP answers every refused login with the same `NO [AUTHENTICATIONFAILED]`, so check each of these:
 
-Authentication also fails when the login email's domain, or every scope domain, is no longer verified. After 10 failed attempts for the same login from the same IP address within 15 minutes, further attempts are rejected, even with the correct password, until the window ends. A `NO [TEMPFAIL]` response means the authentication service was unavailable; retry later.
+- **Wrong credential.** Use the **Login email** as the user name, even when you send from a different address, and the generated `mail_` (or legacy `imap_`) password, not an account API key or your dashboard password. A rotated password stops working at once.
+- **Credential type.** **SMTP only** credentials can't log in to IMAP.
+- **Disabled credential.** Re-enable it in the dashboard.
+- **Protocol turned off.** The credential's `protocols.imap` setting is off. See [Access and Limits](/mailboxes/access-and-limits#protocols).
+- **IP address not allowed.** The credential has an `allowedIps` list that doesn't include your client's public address. See [allowed IP addresses](/mailboxes/access-and-limits#allowed-ip-addresses).
+- **Domain no longer verified.** The login email's domain, or every scope domain, lost its verified status in [domain settings](https://inbound.new/emails).
+- **Too many failures.** After 10 failed logins for the same login email from the same IP address, or 50 from the same IP address, within 15 minutes, every attempt is refused until the window ends, even with the correct password.
+
+A `NO [TEMPFAIL]` response means the login couldn't be checked right now, because the authentication service was unavailable or rate limited. Retry later with backoff.
 
 ### The connection closes right away
 
-The server allows 20 simultaneous connections per client IP address and replies `* BYE Too many connections from this address` above that. Close unused sessions or lower your client's connection count. Connections that stay idle for 60 seconds before logging in are closed. See [connection limits and timeouts](/mailboxes/imap-behavior#connection-limits-and-timeouts).
+The server allows 20 simultaneous connections per client IP address and drops any connection above that without a reply. Close unused sessions or lower your client's connection count. A connection that hasn't logged in within 30 seconds receives `* BYE Authentication timeout, closing connection`. See [connection limits and timeouts](/mailboxes/imap-behavior#connection-limits-and-timeouts).
 
-### The inbox is empty
+### The connection closes after a settings change
 
-Check that the receiving domain is verified and its receiving MX records are configured and verified in [domain settings](https://inbound.new/emails). Confirm the message's recipient matches one of the credential's domain or address scopes. The login email alone does not grant access to messages outside those scopes.
+Changing the credential's password, scopes, access, sender policy, enabled state, `protocols`, `allowedIps` or `selfService` ends its open IMAP sessions with `* BYE Mailbox credentials or scopes changed`. Reconnect with the current settings.
+
+### The inbox is empty or a message is missing
+
+- Check that the receiving domain is verified and its receiving MX records are configured in [domain settings](https://inbound.new/emails).
+- Confirm the message's recipient matches one of the credential's domain or address scopes. The login email alone doesn't grant access to other mail.
+- Look in `Junk`. The [junk filter](/mailboxes/junk-filter) puts mail it marks as junk there instead of in `INBOX`. Move a message back to `INBOX` to mark it as not junk for this credential.
+- Check the credential's [filters](/mailboxes/filters), which can move new mail to other folders.
+- On a mailbox with a lot of existing mail, each sync adds at most 500 messages, newest first, so older mail appears over the next few refreshes.
+
+### Saving a message fails
+
+`APPEND` rejects messages over 1 MiB with `NO [TOOBIG]`, and returns `NO [OVERQUOTA]` when the account's appended storage (250 MiB or 5,000 messages) or the credential's [storage quota](/mailboxes/access-and-limits#storage-quota) is full. Delete drafts or saved copies you no longer need, or raise the quota. See [message and storage limits](/mailboxes/imap-behavior#message-and-storage-limits).
+
+### Sending fails
+
+Sending uses SMTP. A `451` reply that says the daily sending limit was reached means the credential's [daily send limit](/mailboxes/access-and-limits#daily-send-limit) is used up until 00:00 UTC. For other codes, see [Send with SMTP](/mailboxes/connect-smtp#reply-codes).
 
 ### TLS or certificate validation fails
 
@@ -200,4 +276,4 @@ After the handshake, type `a CAPABILITY` to see the advertised capabilities and 
 
 [Add and verify the domain](https://inbound.new/emails) before creating or editing a credential, and use an exact owned, verified domain for the login email. Select **Add** after configuring each scope.
 
-Learn more about [scopes and permissions](/mailboxes/scopes-and-permissions), [managing credentials](/mailboxes/manage-credentials), and [IMAP behavior](/mailboxes/imap-behavior). For sending problems, see [Send with SMTP](/mailboxes/connect-smtp#reply-codes).
+Learn more about [scopes and permissions](/mailboxes/scopes-and-permissions), [managing credentials](/mailboxes/manage-credentials), and [IMAP behavior](/mailboxes/imap-behavior).

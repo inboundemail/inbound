@@ -41,3 +41,4 @@ Postgres
 (?i)booleans?
 IPs
 Vercel
+(?i)resend(s|ing)?

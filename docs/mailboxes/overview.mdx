@@ -13,7 +13,7 @@ Inbound gives your email clients and applications direct access to email through
 | SMTP | `smtp.inboundemail.com` | `465` | TLS |
 | SMTP | `smtp.inboundemail.com` | `587` | STARTTLS |
 
-Use the credential's **Login email** and generated password. IMAP requires a **Mailbox + SMTP** credential; either credential type can send with SMTP. All connections require TLS 1.2 or later: IMAP uses implicit TLS only, and SMTP on port `587` must upgrade with STARTTLS before authentication. See [Connect with IMAP](/mailboxes/connect-imap) and [Send with SMTP](/mailboxes/connect-smtp) for client settings.
+Use the credential's **Login email** and generated password. IMAP requires a **Mailbox + SMTP** credential. SMTP sending works with **SMTP only** credentials and with **Mailbox + SMTP** credentials that have **Read & write** access. All connections require TLS 1.2 or later: IMAP uses implicit TLS only, and SMTP on port `587` must upgrade with STARTTLS before authentication. See [Connect with IMAP](/mailboxes/connect-imap) and [Send with SMTP](/mailboxes/connect-smtp) for client settings.
 
 ## How it works
 
@@ -23,7 +23,7 @@ A managed credential combines three things:
 2. **Access scopes** - One or more verified domains or exact email addresses the credential can access.
 3. **Permissions** - The available protocols, IMAP access level, and authorized SMTP sender addresses.
 
-For IMAP-enabled credentials, Inbound provides `INBOX`, `Sent`, `Drafts`, `Trash`, `Junk`, and `Archive`, plus read-only folders for individual scopes. The [HTTP mailbox API](/mailboxes/http-api) shares these folders, messages and flags with IMAP. The combined `INBOX` contains received mail covered by the credential's scopes. With **Read & write** access, SMTP uses the same login email and password and enforces the credential's sender policy.
+For **Mailbox + SMTP** credentials, Inbound provides `INBOX`, `Sent`, `Drafts`, `Trash`, `Junk`, and `Archive`, plus read-only folders for individual scopes. The [HTTP mailbox API](/mailboxes/http-api) shares these folders, messages and flags with IMAP. The combined `INBOX` contains received mail covered by the credential's scopes, and `Junk` holds mail the [junk filter](/mailboxes/junk-filter) marked. With **Read & write** access, SMTP uses the same login email and password, enforces the credential's sender policy, and saves each sent message to `Sent`.
 
 <Note>
   The login email must use an exact domain you own and have verified when you create or edit the credential. It is an authentication username and does not need to match the receiving or sending addresses, which are controlled separately by scopes and sender policy.
@@ -33,7 +33,7 @@ For IMAP-enabled credentials, Inbound provides `INBOX`, `Sent`, `Drafts`, `Trash
 
 | Credential type | IMAP | SMTP | Best for |
 | --- | --- | --- | --- |
-| **Mailbox + SMTP** | Read-only or read/write access | Send using the configured sender policy (**Read & write** only) | Email clients and applications that receive and send mail |
+| **Mailbox + SMTP** | **Read only** or **Read & write** access | Send using the configured sender policy (**Read & write** only) | Email clients and applications that receive and send mail |
 | **SMTP only** | Not available | Send using the configured sender policy | Applications and services that only send mail |
 
 For **Mailbox + SMTP**, select **Read & write** if your client needs to send mail, save messages in `Sent` or `Drafts`, or change message flags. **Read only** allows reading over IMAP and the mailbox HTTP API: the credential cannot send through SMTP or the API. Scope-specific folders remain read-only with either setting.
@@ -79,6 +79,12 @@ When you create or rotate a credential, its password is shown exactly once. Save
   </Card>
   <Card title="IMAP Behavior" icon="inbox" href="/mailboxes/imap-behavior">
     Folders, supported IMAP features, limits, and known limitations
+  </Card>
+  <Card title="HTTP Mailbox API" icon="code" href="/mailboxes/http-api">
+    Read and organize the same folders, messages and flags over HTTP
+  </Card>
+  <Card title="Junk Filter" icon="shield-halved" href="/mailboxes/junk-filter">
+    How spam lands in Junk, and per-mailbox spam settings
   </Card>
   <Card title="Mailbox Filters" icon="filter" href="/mailboxes/filters">
     Sort, flag, and junk received mail with ordered rules
