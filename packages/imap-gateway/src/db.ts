@@ -165,7 +165,11 @@ export class ExpungeJournal {
 		Array<{ uid: number; modseq: number; at: number }>
 	>();
 
-	constructor(private now: () => number = Date.now) {}
+	private now: () => number;
+
+	constructor(now: () => number = Date.now) {
+		this.now = now;
+	}
 
 	record(pending: PendingExpunge[]): void {
 		const at = this.now();
