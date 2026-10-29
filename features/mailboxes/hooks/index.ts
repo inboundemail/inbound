@@ -2,6 +2,7 @@ export {
 	mailboxKeys,
 	useCreateMailboxMutation,
 	useDeleteMailboxMutation,
+	useMailboxActivityQuery,
 	useMailboxesQuery,
 	useRotateMailboxPasswordMutation,
 	useUpdateMailboxMutation,

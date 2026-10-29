@@ -77,3 +77,38 @@ export interface CreateMailboxResponse extends MailboxPasswordResponse {
 export interface UpdateMailboxResponse {
 	data: Mailbox;
 }
+
+export type MailboxActivityEvent =
+	| "login_succeeded"
+	| "login_failed"
+	| "login_refused"
+	| "session_ended"
+	| "command_error"
+	| "quota_exceeded"
+	| "send_failed"
+	| "send_rate_limited"
+	| "events_dropped";
+
+export interface MailboxActivity {
+	id: string;
+	mailboxId: string;
+	occurredAt: string;
+	lastOccurredAt: string;
+	protocol: "imap" | "smtp" | "api";
+	event: MailboxActivityEvent;
+	reason: string | null;
+	clientIp: string | null;
+	client: string | null;
+	count: number;
+	detail: Record<string, string | number | boolean> | null;
+}
+
+export interface MailboxActivityResponse {
+	data: MailboxActivity[];
+	pagination: {
+		limit: number;
+		offset: number;
+		total: number;
+		hasMore: boolean;
+	};
+}
