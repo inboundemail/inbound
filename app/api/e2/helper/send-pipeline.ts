@@ -338,6 +338,18 @@ export async function deliverSentEmail(input: {
 		});
 		return sendError(400, "From address does not match the authorized sender");
 	}
+
+	let rawMessage: string | Uint8Array;
+	try {
+		rawMessage = input.buildRawMessage();
+	} catch (buildError) {
+		console.log("⚠️ Could not build the message:", buildError);
+		return sendError(
+			400,
+			buildError instanceof Error ? buildError.message : "Invalid message",
+		);
+	}
+
 	const emailId = nanoid();
 	console.log("💾 Creating sent email record:", emailId);
 
@@ -418,7 +430,6 @@ export async function deliverSentEmail(input: {
 			);
 		}
 
-		const rawMessage = input.buildRawMessage();
 		const { to, cc, bcc } = input.destination;
 
 		const rawCommand = new SendEmailCommand({

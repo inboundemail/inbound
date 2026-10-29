@@ -85,6 +85,7 @@ function generateBoundary(): string {
 }
 
 const MAX_HEADER_LINE_LENGTH = 998
+const MAX_MESSAGE_REFERENCE_LENGTH = MAX_HEADER_LINE_LENGTH - 'In-Reply-To: <>'.length
 const NON_ASCII = /[^\u0000-\u007f]/
 
 /**
@@ -109,13 +110,16 @@ export function encodeHeaderText(value: string): string {
 
 /**
  * Folds a header field at whitespace to 76-character lines (RFC 5322 2.2.3).
- * A value that would still exceed the 998-character line limit is sent as
- * encoded words, which can always be folded.
+ * A Subject that would still exceed the 998-character line limit is sent as
+ * encoded words, which can always be folded; any other header is rejected.
  */
 function foldHeader(name: string, value: string): string {
   const folded = mimeFuncs.foldLines(`${name}: ${value}`, 76)
   if (folded.split('\r\n').every((line) => line.length <= MAX_HEADER_LINE_LENGTH)) {
     return folded
+  }
+  if (name !== 'Subject') {
+    throw new Error(`${name} header has a part longer than ${MAX_HEADER_LINE_LENGTH} characters`)
   }
   return mimeFuncs.foldLines(`${name}: ${mimeFuncs.encodeWord(value, 'Q', 52)}`, 76)
 }
@@ -159,7 +163,11 @@ export function buildRawEmailMessage(params: EmailMessageParams): string {
   assertSafeHeaderText('from', from)
   assertSafeHeaderText('subject', subject)
   for (const value of [messageId, inReplyTo, ...(references ?? [])]) {
-    if (value) assertSafeHeaderText('Message reference', value)
+    if (!value) continue
+    assertSafeHeaderText('Message reference', value)
+    if (value.length > MAX_MESSAGE_REFERENCE_LENGTH) {
+      throw new Error(`Message reference must be at most ${MAX_MESSAGE_REFERENCE_LENGTH} characters`)
+    }
   }
 
   const safeCustomHeaders: Array<[string, string]> = []

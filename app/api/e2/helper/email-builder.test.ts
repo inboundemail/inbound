@@ -253,4 +253,27 @@ describe("buildRawEmailMessage encoding", () => {
 		);
 		expect(message).not.toContain("[No content]");
 	});
+
+	it("rejects structured headers that cannot fold under 998 characters", () => {
+		const base = {
+			from: "sender@example.com",
+			to: ["visible@example.com"],
+			subject: "Subject",
+			textBody: "Body",
+		};
+		const longReference = `<${"r".repeat(1000)}@example.com>`;
+		expect(() =>
+			buildRawEmailMessage({ ...base, references: [longReference] }),
+		).toThrow("Message reference must be at most");
+		expect(() =>
+			buildRawEmailMessage({ ...base, inReplyTo: longReference }),
+		).toThrow("Message reference must be at most");
+
+		expect(() =>
+			buildRawEmailMessage({
+				...base,
+				from: `${"x".repeat(1000)} <sender@example.com>`,
+			}),
+		).toThrow("From header has a part longer than 998 characters");
+	});
 });
