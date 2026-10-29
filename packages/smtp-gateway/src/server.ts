@@ -18,7 +18,7 @@ import {
 	SmtpRelayError,
 } from "./api-client.ts";
 import type { GatewayConfig } from "./config.ts";
-import { clientIp, logEvent } from "./log.ts";
+import { clientIp, logEvent, shortHash } from "./log.ts";
 import { idempotencyKeyFor, mapRawMessageInWorker } from "./mapper.ts";
 
 interface ConnectionInternals {
@@ -223,7 +223,7 @@ export class SmtpGateway {
 						logEvent("auth", {
 							result: "ok",
 							ip,
-							cred: user.identity.credentialId,
+							cred: shortHash(user.identity.credentialId),
 						});
 						callback(null, response);
 					})

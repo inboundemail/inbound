@@ -219,9 +219,10 @@ export class InboundApiClient {
 		timeoutMs: number,
 		failure: SmtpFailure,
 	): Promise<Response> {
-		const path = new URL(url).pathname;
+		let path = "-";
 		let response: Response;
 		try {
+			path = new URL(url).pathname;
 			response = await fetch(url, {
 				...options,
 				signal: AbortSignal.timeout(timeoutMs),

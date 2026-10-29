@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 // Whitespace and control characters would split a key=value pair or forge a log line.
 const UNSAFE = /[\s\u0000-\u001f\u007f-\u009f\u2028\u2029]/g;
 const MAX_VALUE = 128;
@@ -20,6 +22,11 @@ export function logEvent(event: string, fields: EventFields = {}): void {
 		line += ` ${key}=${String(value).replace(UNSAFE, "_").slice(0, MAX_VALUE)}`;
 	}
 	console.log(line);
+}
+
+/** First 12 hex characters of SHA-256: lets the health report count distinct values without logging them. */
+export function shortHash(value: string): string {
+	return createHash("sha256").update(value).digest("hex").slice(0, 12);
 }
 
 export function clientIp(address: string | undefined): string {
