@@ -269,7 +269,10 @@ export class MailStore {
 			if (!rows[0]) throw new Error("Mailbox not found");
 			return { uid: rows[0].uid, uidValidity: rows[0].uid_validity };
 		} catch (err) {
-			if (err instanceof Error && err.message === "APPEND quota exceeded") {
+			if (
+				err instanceof Error &&
+				/^APPEND(?: mailbox)? quota exceeded$/.test(err.message)
+			) {
 				throw new AppendQuotaError(err.message);
 			}
 			throw err;

@@ -4,6 +4,7 @@ import {
 	boolean,
 	index,
 	integer,
+	jsonb,
 	pgTable,
 	primaryKey,
 	text,
@@ -1166,6 +1167,24 @@ export const imapCredentials = pgTable(
 			.default("scoped_domains"),
 		sendingName: varchar("sending_name", { length: 255 }),
 		sendingAddress: varchar("sending_address", { length: 255 }),
+		protocols: jsonb("protocols").$type<{
+			imap: boolean;
+			smtp: boolean;
+			api: boolean;
+		}>(),
+		allowedIps: text("allowed_ips").array(),
+		storageQuotaBytes: bigint("storage_quota_bytes", { mode: "number" }),
+		dailySendLimit: integer("daily_send_limit"),
+		selfService: jsonb("self_service").$type<{
+			filters: boolean;
+			spam: boolean;
+			password: boolean;
+		}>(),
+		spamLevel: text("spam_level").$type<
+			"off" | "lenient" | "standard" | "strict"
+		>(),
+		spamAllow: text("spam_allow").array(),
+		spamBlock: text("spam_block").array(),
 		enabled: boolean("enabled").notNull().default(true),
 		lastUsedAt: timestamp("last_used_at"),
 		createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -1204,6 +1223,66 @@ export const imapCredentialScopes = pgTable(
 		domainIdIdx: index("imap_credential_scopes_domain_id_idx").on(
 			table.domainId,
 		),
+	}),
+);
+
+export const mailboxFilters = pgTable(
+	"mailbox_filters",
+	{
+		id: text("id").primaryKey(),
+		userId: varchar("user_id", { length: 255 })
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		credentialId: varchar("credential_id", { length: 255 })
+			.notNull()
+			.references(() => imapCredentials.id, { onDelete: "cascade" }),
+		name: text("name").notNull(),
+		position: integer("position").notNull().default(0),
+		enabled: boolean("enabled").notNull().default(true),
+		match: text("match").$type<"all" | "any">().notNull().default("all"),
+		conditions: jsonb("conditions")
+			.$type<
+				Array<{
+					field: string;
+					operator: string;
+					value?: string | number | boolean;
+					header?: string;
+					label?: string;
+				}>
+			>()
+			.notNull(),
+		actions: jsonb("actions")
+			.$type<
+				Array<{
+					type: string;
+					value?: string;
+				}>
+			>()
+			.notNull(),
+		stopProcessing: boolean("stop_processing").notNull().default(false),
+		createdAt: timestamp("created_at").notNull().defaultNow(),
+		updatedAt: timestamp("updated_at").notNull().defaultNow(),
+	},
+	(table) => ({
+		credentialPositionIdx: index("mailbox_filters_credential_position_idx").on(
+			table.credentialId,
+			table.position,
+			table.id,
+		),
+	}),
+);
+
+export const mailboxSendUsage = pgTable(
+	"mailbox_send_usage",
+	{
+		credentialId: varchar("credential_id", { length: 255 })
+			.notNull()
+			.references(() => imapCredentials.id, { onDelete: "cascade" }),
+		day: text("day").notNull(),
+		count: integer("count").notNull().default(0),
+	},
+	(table) => ({
+		pk: primaryKey({ columns: [table.credentialId, table.day] }),
 	}),
 );
 
@@ -1293,6 +1372,41 @@ export const imapMailboxMessages = pgTable(
 		mailboxModseqIdx: index("imap_mailbox_messages_mailbox_modseq_idx").on(
 			table.mailboxId,
 			table.modseq,
+		),
+	}),
+);
+
+export const mailboxMessageState = pgTable(
+	"mailbox_message_state",
+	{
+		credentialId: varchar("credential_id", { length: 255 })
+			.notNull()
+			.references(() => imapCredentials.id, { onDelete: "cascade" }),
+		structuredEmailId: varchar("structured_email_id", { length: 255 })
+			.notNull()
+			.references(() => structuredEmails.id, { onDelete: "cascade" }),
+		junkOverride: boolean("junk_override"),
+		filterVersions: jsonb("filter_versions")
+			.$type<Record<string, string>>()
+			.notNull()
+			.default({}),
+		filterMailboxId: varchar("filter_mailbox_id", { length: 255 }).references(
+			() => imapMailboxes.id,
+			{ onDelete: "set null" },
+		),
+		filterFlags: text("filter_flags")
+			.array()
+			.notNull()
+			.default(sql`'{}'::text[]`),
+		initialized: boolean("initialized").notNull().default(false),
+	},
+	(table) => ({
+		pk: primaryKey({ columns: [table.credentialId, table.structuredEmailId] }),
+		emailIdx: index("mailbox_message_state_email_idx").on(
+			table.structuredEmailId,
+		),
+		mailboxIdx: index("mailbox_message_state_mailbox_idx").on(
+			table.filterMailboxId,
 		),
 	}),
 );

@@ -57,6 +57,13 @@
       "when": 1793299412767,
       "tag": "0007_mailbox_state_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793305493902,
+      "tag": "0008_mailbox_controls",
+      "breakpoints": true
     }
   ]
 }
