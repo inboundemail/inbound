@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { format } from "node:util";
 
 const MAX_LOG_LINE = 2048;
@@ -42,4 +43,9 @@ export function logEvent(event: string, fields: EventFields = {}): void {
 		line += ` ${key}=${String(value).replace(UNSAFE_EVENT_VALUE, "_").slice(0, 128)}`;
 	}
 	console.log(line);
+}
+
+/** First 12 hex characters of SHA-256: lets the health report count distinct values without logging them. */
+export function shortHash(value: string): string {
+	return createHash("sha256").update(value).digest("hex").slice(0, 12);
 }

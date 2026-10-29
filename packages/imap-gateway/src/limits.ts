@@ -1,4 +1,4 @@
-import { logEvent } from "./log.ts";
+import { logEvent, shortHash } from "./log.ts";
 
 interface FailureRecord {
 	count: number;
@@ -104,17 +104,25 @@ export class ConnectionLimits {
 		return null;
 	}
 
+	// The auth events carry the client IP (imap-core logs a PTR hostname instead when it resolves).
 	recordAuthFailure(ip: string, username: string): void {
+		logEvent("auth", { result: "fail", ip: normalizeIp(ip) });
 		const now = Date.now();
 		this.incrementFailure(this.failures, this.authKey(ip, username), now);
 		this.incrementFailure(this.ipFailures, ip, now);
 	}
 
 	recordMalformedAuth(ip: string): void {
+		logEvent("auth", { result: "fail", ip: normalizeIp(ip), reason: "malformed" });
 		this.incrementFailure(this.ipFailures, ip, Date.now());
 	}
 
 	recordAuthSuccess(ip: string, username: string): void {
+		logEvent("auth", {
+			result: "ok",
+			ip: normalizeIp(ip),
+			cred: shortHash(username),
+		});
 		this.failures.delete(this.authKey(ip, username));
 	}
 
