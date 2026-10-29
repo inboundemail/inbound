@@ -14,7 +14,9 @@ The Inbound API returns standard HTTP status codes to indicate success or failur
 | `200` | Success | Request completed successfully |
 | `400` | Bad Request | Invalid request parameters or missing required fields |
 | `401` | Unauthorized | Invalid or missing API key |
+| `403` | Forbidden | The API key or account is not allowed to do this (for example, sending is paused) |
 | `404` | Not Found | Requested resource does not exist |
+| `422` | Unprocessable Entity | The email provider rejected the message; retrying the same message will not succeed |
 | `429` | Too Many Requests | Rate limit exceeded (100 requests/second per account across E2 endpoints) |
 | `500` | Internal Server Error | Server error occurred |
 
@@ -52,6 +54,13 @@ The Inbound API returns standard HTTP status codes to indicate success or failur
 - **`Invalid email ID provided`** - Email ID format is incorrect
 - **`Invalid webhook format`** - Unsupported webhook payload format
 
+### Sending Errors (403, 422)
+
+- **`Sending is paused for this account. Please contact support.`** (403) - Sending is paused or suspended for your account; retrying will not help until it is resumed
+- **`Email rejected by the email provider: [reason]`** (422) - The provider refused this message (for example, an invalid header or content it does not accept). Fix the message before sending it again
+- **`Email rejected by the email provider as invalid: [reason]`** (422) - The provider considered the request invalid
+- **`The custom MAIL FROM domain for this sender is not verified`** (422) - Verify the sending domain's MAIL FROM records
+
 ### Resource Errors (404)
 
 - **`Email not found`** - Email doesn't exist or user lacks access
@@ -63,14 +72,15 @@ The Inbound API returns standard HTTP status codes to indicate success or failur
 
 - **`Too Many Requests`** - Too many requests (limit: 100 per second per account across E2 endpoints)
 - **`Rate limit exceeded. Maximum 100 requests per second. Retry after 1 seconds.`** - Example rate limit message; the retry delay varies
+- **`Sending rate limit reached. Please try again later.`** - The email provider is throttling sends; retry with backoff
+- **`Email sending limit reached. Please upgrade your plan to send more emails.`** - Your plan's sending limit is used up
 
 ### Server Errors (500)
 
-- **`Failed to send email`** - Email sending operation failed
+- **`Failed to send email. Please try again later.`** - A temporary failure while sending; retry with backoff. Rejections of the message itself return 422 instead (see Sending Errors)
 - **`Failed to schedule email`** - Email scheduling failed  
 - **`Failed to cancel scheduled email`** - Cancellation operation failed
 - **`Failed to test endpoint`** - Endpoint testing failed
-- **`Email sending limit reached. Please upgrade your plan to send more emails.`** - Account limits
 
 ## Error Response Format
 
