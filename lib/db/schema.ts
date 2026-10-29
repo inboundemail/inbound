@@ -1179,6 +1179,7 @@ export const imapCredentials = pgTable(
 			filters: boolean;
 			spam: boolean;
 			password: boolean;
+			activity: boolean;
 		}>(),
 		spamLevel: text("spam_level").$type<
 			"off" | "lenient" | "standard" | "strict"
@@ -1283,6 +1284,43 @@ export const mailboxSendUsage = pgTable(
 	},
 	(table) => ({
 		pk: primaryKey({ columns: [table.credentialId, table.day] }),
+	}),
+);
+
+export const mailboxActivity = pgTable(
+	"mailbox_activity",
+	{
+		id: varchar("id", { length: 255 }).primaryKey(),
+		userId: varchar("user_id", { length: 255 })
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		credentialId: varchar("credential_id", { length: 255 })
+			.notNull()
+			.references(() => imapCredentials.id, { onDelete: "cascade" }),
+		occurredAt: timestamp("occurred_at").notNull().defaultNow(),
+		lastOccurredAt: timestamp("last_occurred_at").notNull().defaultNow(),
+		protocol: varchar("protocol", { length: 10 }).notNull(),
+		event: varchar("event", { length: 40 }).notNull(),
+		reason: varchar("reason", { length: 64 }),
+		clientIp: text("client_ip"),
+		client: varchar("client", { length: 100 }),
+		count: integer("count").notNull().default(1),
+		detail: jsonb("detail").$type<Record<string, string | number | boolean>>(),
+		dedupeKey: varchar("dedupe_key", { length: 255 }),
+	},
+	(table) => ({
+		userCredentialOccurredIdx: index(
+			"mailbox_activity_user_credential_occurred_idx",
+		).on(table.userId, table.credentialId, table.occurredAt.desc()),
+		userOccurredIdx: index("mailbox_activity_user_occurred_idx").on(
+			table.userId,
+			table.occurredAt.desc(),
+		),
+		occurredIdx: index("mailbox_activity_occurred_idx").on(table.occurredAt),
+		uniqueDedupe: unique("mailbox_activity_credential_dedupe_unique").on(
+			table.credentialId,
+			table.dedupeKey,
+		),
 	}),
 );
 

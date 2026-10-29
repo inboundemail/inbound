@@ -71,6 +71,13 @@
       "when": 1793305494195,
       "tag": "0009_mailbox_controls_functions",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793316527717,
+      "tag": "0010_mailbox_activity",
+      "breakpoints": true
     }
   ]
 }
