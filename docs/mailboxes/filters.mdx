@@ -30,7 +30,7 @@ Use an account API key with `/api/e2/mailboxes/{mailboxId}/filters`, or a mailbo
 | `POST` | `/filters/apply` | Run the enabled filters against mail already in a folder |
 | `POST` | `/filters/{filterId}/apply` | Run one filter against mail already in a folder |
 
-The list returns `data` and `pagination: { limit, offset, total, hasMore }`; `limit` defaults to 50 and cannot exceed 100. `PATCH` replaces `conditions` or `actions` as whole lists. `reorder` must list every filter of the mailbox exactly once; otherwise nothing changes and it returns `409`.
+The list returns `data` and `pagination: { limit, offset, total, hasMore }`; `limit` defaults to 50 and cannot exceed 100. `POST` returns `201` with the new filter, and a mailbox that already has 100 filters returns `409`. `PATCH` replaces `conditions` or `actions` as whole lists. `DELETE` returns `{"id":"FILTER_ID","deleted":true}`. `reorder` must list every filter of the mailbox exactly once; otherwise nothing changes and it returns `409`. It returns the filters in their new order as `data`.
 
 ```bash
 curl -X POST "https://inbound.new/api/e2/mailboxes/YOUR_MAILBOX_ID/filters" \
@@ -72,7 +72,7 @@ Each condition has a `field`, an `operator` and, for most operators, a `value`. 
 | `cc` | Addresses in that header | Text operators, `domain_is`, `exists` | String; optional boolean for `exists` |
 | `recipient` | Any recipient Inbound received the message for | Text operators, `domain_is` | String |
 | `subject` | The subject line | Text operators | String |
-| `header` | The header named in `header`, such as `List-Id` | Text operators, `exists` | String; optional boolean for `exists` |
+| `header` | The header named in `header`, such as `List-Id` (stored in lowercase) | Text operators, `exists` | String; optional boolean for `exists` |
 | `body` | The plain-text body, or the HTML body when there is no plain text | `contains`, `not_contains` | String |
 | `has_attachment` | Whether the message has attachments | `equals` | `true` or `false` |
 | `size` | Raw message size in bytes | `greater_than`, `less_than` | Number |
@@ -93,11 +93,11 @@ The subject and body are checked up to their first 64 KiB. If a message's header
 
 | Action | Effect |
 | --- | --- |
-| `move_to` | Move into the folder in `value`. The folder must exist and can't be under `Scopes`. Moving to `Junk` or `INBOX` works like `mark_junk` or `mark_not_junk`. |
+| `move_to` | Move into the folder in `value`. The folder must exist when the filter is saved (otherwise `400`) and can't be under `Scopes`. Moving to `Junk` or `INBOX` works like `mark_junk` or `mark_not_junk`. |
 | `move_to_trash` | Move into `Trash` |
 | `mark_read` | Add `\Seen` |
 | `flag` | Add `\Flagged` |
-| `add_keyword` | Add the custom keyword in `value`. System flags such as `\Seen` aren't allowed. |
+| `add_keyword` | Add the custom keyword in `value`, up to 255 characters. System flags such as `\Seen` aren't allowed. |
 | `mark_junk` | Mark as junk for this mailbox, so it lands in `Junk` |
 | `mark_not_junk` | Mark as not junk for this mailbox, so it lands in `INBOX` |
 | `stop` | Skip this filter's remaining actions and all later filters |
@@ -120,7 +120,7 @@ Sieve scripts and ManageSieve are not supported.
 
 ## Apply filters to existing mail
 
-`POST /mailboxes/{id}/filters/apply` runs the enabled filters against received messages already in a folder, in UID order. `POST /mailboxes/{id}/filters/{filterId}/apply` runs only one filter. Both need a **Read & write** mailbox and can't run on `Scopes/*` folders.
+`POST /mailboxes/{id}/filters/apply` runs the enabled filters against received messages already in a folder, in UID order. `POST /mailboxes/{id}/filters/{filterId}/apply` runs only one filter, which must be enabled (otherwise `409`). Both need a **Read & write** mailbox and can't run on `Scopes/*` folders; either returns `403`.
 
 ```json
 {"folder":"INBOX","afterUid":0,"limit":500}

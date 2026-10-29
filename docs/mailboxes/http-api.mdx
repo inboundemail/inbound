@@ -14,7 +14,9 @@ curl 'https://inbound.new/api/e2/mailboxes/me/folders' \
   -H "Authorization: Bearer $MAILBOX_PASSWORD"
 ```
 
-All writes require a **Read & write** mailbox, even when authenticated with the account key. Read-only credentials can list and fetch. Scope folders remain read-only with either access mode.
+All writes require a **Read & write** mailbox, even when authenticated with the account key; otherwise they return `403`. Read-only credentials can list and fetch. Scope folders remain read-only with either access mode. A mailbox password used with another mailbox's ID returns `403`, and `me` with an account API key returns `400`.
+
+`GET /mailboxes/{id}` (or `/mailboxes/me`) returns the mailbox's identity, scopes, controls and unread count. See [Get one mailbox](/mailboxes/manage-credentials#get-one-mailbox).
 
 A mailbox password only works over HTTP when the credential's `protocols.api` is enabled and the request comes from an address in its `allowedIps`; otherwise the request fails like a wrong password. With the password, `/mailboxes/me/filters`, `/mailboxes/me/spam` and `/mailboxes/me/rotate-password` are available only when the matching `selfService` setting is on. See [Access and Limits](/mailboxes/access-and-limits).
 
@@ -29,15 +31,50 @@ A mailbox password only works over HTTP when the credential's `protocols.api` is
 
 Default folders are `INBOX`, `Sent`, `Drafts`, `Trash`, `Junk` and `Archive`. `Archive` has the IMAP `\Archive` special-use attribute. Folder names are case-sensitive except `INBOX`. URL-encode the entire folder path when it contains `/`, for example `Projects%2FInvoices`.
 
-`INBOX` and special-use folders are protected from deletion. `Scopes` is a reserved, non-selectable container; its children are managed from the credential's scopes, not through folder CRUD. Renaming a custom folder also renames its descendants.
+`INBOX` and special-use folders can't be renamed or deleted (`400`). `Scopes` is a reserved, non-selectable container; its children are managed from the credential's scopes, not through folder CRUD. Renaming a custom folder also renames its descendants. Deleting a folder removes its messages from this mailbox (received mail stays in the account) and keeps its subfolders.
 
-Create with `{"path":"Projects/Invoices"}`. Rename with `{"path":"Projects/Receipts"}` or change subscriptions with `{"subscribed":false}` on the folder's `PATCH` endpoint.
+Create with `{"path":"Projects/Invoices"}` (returns `201` with the folder); an existing path returns `409`. Rename with `{"path":"Projects/Receipts"}` or change subscriptions with `{"subscribed":false}` on the folder's `PATCH` endpoint. Each folder in a response has `path`, `name`, `specialUse`, `scopeId`, `subscribed`, `uidValidity`, `uidNext`, `highestModseq`, `total` and `unread`. `DELETE` returns `{"path":"Projects/Receipts","deleted":true}`.
 
 ## Messages and incremental sync
 
-`GET /mailboxes/{id}/folders/{folder}/messages` returns `data` and `pagination: { limit, offset, total, hasMore }`. Messages are identified by their **UID within that folder**, not by an account-level email ID. Keep the folder's `uidValidity` alongside cached UIDs; discard the cache if it changes.
+`GET /mailboxes/{id}/folders/{folder}/messages` lists messages newest UID first. `limit` defaults to `25` and can be at most `100`. The response looks like this:
 
-Use `sinceUid` to find newly assigned UIDs, or `sinceModseq` for both additions and flag changes. `sinceUid` alone cannot detect deletions or flag changes. The incremental response includes expunged UIDs and the folder's highest modseq. If the server returns `409` because the checkpoint is too old, list the folder again and rebuild the cache. Expunge history is retained for approximately seven days.
+```json
+{
+  "folder": "INBOX",
+  "uidValidity": 1793316337,
+  "uidNext": 3,
+  "highestModseq": 6,
+  "expunged": [],
+  "data": [
+    {
+      "uid": 2,
+      "folder": "INBOX",
+      "source": "received",
+      "structuredEmailId": "inbnd_0786cab42a40a8f5",
+      "flags": [],
+      "isRead": false,
+      "isFlagged": false,
+      "modseq": 6,
+      "internalDate": "2026-10-29T23:26:00.407Z",
+      "size": 3970,
+      "messageId": "message-id@example.net",
+      "threadId": "qFL7EZ3c1IrenzbFdU_7G",
+      "subject": "Hello",
+      "from": "Sender <sender@example.net>",
+      "to": ["support@example.com"],
+      "date": "2026-10-29T23:25:58.000Z",
+      "preview": "Hello from the sender",
+      "hasAttachments": false
+    }
+  ],
+  "pagination": { "limit": 25, "offset": 0, "total": 1, "hasMore": false }
+}
+```
+
+`source` is `received` for mail delivered to the account and `appended` for messages stored by a client, such as drafts and sent copies. Messages are identified by their **UID within that folder**, not by an account-level email ID. Keep the folder's `uidValidity` alongside cached UIDs; discard the cache if it changes.
+
+Use `sinceUid` to find newly assigned UIDs, or `sinceModseq` for both additions and flag changes. Incremental results are ordered by UID ascending. `sinceUid` alone cannot detect deletions or flag changes. The incremental response includes expunged UIDs and the folder's highest modseq. If the server returns `409` because the checkpoint is too old, list the folder again and rebuild the cache. Expunge history is retained for approximately seven days.
 
 For a complete incremental pass:
 
@@ -51,22 +88,24 @@ The list supports `unread`, `flagged` and `search` filters. Search covers subjec
 
 ## Flags, moves and deletion
 
-Patch a folder message's flags to add, remove or replace `\Seen`, `\Flagged`, `\Answered`, `\Draft`, `\Deleted` and custom keywords. `\Recent` is server-managed and is not stored. Flags in `INBOX` are mirrored into its scope views; copies in other folders have independent flags.
+Patch a folder message's flags to add, remove or replace `\Seen`, `\Flagged`, `\Answered`, `\Draft`, `\Deleted` and custom keywords, up to 50 per request. The response contains the message's new flags. `\Recent` is server-managed and is not stored. Flags in `INBOX` are mirrored into its scope views; copies in other folders have independent flags.
 
 ```json
 {"action":"add","flags":["\\Seen","\\Flagged","customer-review"]}
 ```
 
-Use `action: "remove"` to clear selected flags or `action: "set"` to replace the entire set. Move and copy accept `{"destination":"Archive"}` with the plain, unencoded folder path. Explicit expunge accepts an optional `{"uids":[1,2]}` selection, still limited to messages carrying `\Deleted`.
+Use `action: "remove"` to clear selected flags or `action: "set"` to replace the entire set. Move and copy accept `{"destination":"Archive"}` with the plain, unencoded folder path and return `source`, `sourceUid`, `destination`, `destinationUid` and the destination's `uidValidity`. Move returns `200` and copy `201`; moving a message into the folder it's already in returns `400`. Explicit expunge accepts an optional `{"uids":[1,2]}` selection, still limited to messages carrying `\Deleted`, and returns the expunged UIDs.
 
 | Method | Path after `/mailboxes/{id}/folders/{folder}` | Purpose |
 | --- | --- | --- |
 | `PATCH` | `/messages/{uid}` | Change flags |
 | `POST` | `/messages/{uid}/move` | Move into a destination folder; returns its new UID |
 | `POST` | `/messages/{uid}/copy` | Copy into a destination folder; returns its new UID |
-| `DELETE` | `/messages/{uid}` | Move to `Trash` |
+| `DELETE` | `/messages/{uid}` | Move to `Trash`, or expunge it when it's already in `Trash` |
 | `DELETE` | `/messages/{uid}?permanent=true` | Expunge this folder entry |
 | `POST` | `/expunge` | Remove entries carrying `\Deleted` |
+
+`DELETE` returns `{"uid":4,"permanent":false,"trashUid":2}`, with `trashUid` set to `null` when the entry was expunged.
 
 Moving a received message into `Junk` marks it as junk; moving it back to `INBOX` marks it as not junk. That decision belongs to this credential, like its other folder state and flags; it doesn't change the account verdict or other credentials. See [Correcting a verdict](/mailboxes/junk-filter#correcting-a-verdict).
 
@@ -82,9 +121,9 @@ Moving a received message into `Junk` marks it as junk; moving it back to `INBOX
 {"from":"support@example.com","to":["customer@example.net"],"subject":"Draft reply","text":"Thanks for getting in touch."}
 ```
 
-Raw append uses `{"raw":"BASE64_RFC822","flags":["\\Draft"]}`. Both forms accept an optional ISO `date`. JSON drafts in `Drafts` default to `\Seen` and `\Draft`; raw append defaults to no flags. Use raw MIME for attachments. List them at `/messages/{uid}/attachments`, then download `/messages/{uid}/attachments/{index}` using the returned zero-based index.
+Raw append uses `{"raw":"BASE64_RFC822","flags":["\\Draft"]}`. Both forms accept an optional ISO `date` and `flags`. Without `flags`, JSON messages get `\Seen` (plus `\Draft` in `Drafts`) and raw messages get none. A JSON message's `from` defaults to the credential's sending address, or its login email. The response is `201` with `folder`, `uid` and `uidValidity`. Use raw MIME for attachments. List them at `/messages/{uid}/attachments`, then download `/messages/{uid}/attachments/{index}` using the returned zero-based index.
 
-HTTP append has the same 1 MiB message limit as IMAP `APPEND`. Appended storage is limited to 250 MiB and 5,000 messages per account, shared by all credentials and folders. A credential can also have its own [`storageQuotaBytes`](/mailboxes/access-and-limits#storage-quota). Quota checks are atomic across HTTP and IMAP.
+HTTP append has the same 1 MiB message limit as IMAP `APPEND`. Appended storage is limited to 250 MiB and 5,000 messages per account, shared by all credentials and folders. A credential can also have its own [`storageQuotaBytes`](/mailboxes/access-and-limits#storage-quota). Quota checks are atomic across HTTP and IMAP. A message over 1 MiB returns `413` (`Message is larger than 1048576 bytes`), and a full quota returns `413` (`Mailbox storage quota exceeded`). Appending to a scope folder returns `403`.
 
 Raw messages must be valid UTF-8 without NUL bytes (ASCII MIME is also valid). Encode non-UTF-8 text and binary attachments with MIME base64 or quoted-printable before submitting. HTTP and IMAP append reject invalid UTF-8 rather than silently changing message bytes.
 
@@ -106,12 +145,12 @@ Each credential can sort new mail with [filters](/mailboxes/filters) at `/mailbo
 
 ## Existing mailbox endpoints
 
-`GET /mailboxes/{id}/messages?folder=inbox|archive|sent|junk` remains available and reads the corresponding IMAP folder. Its received-message `PATCH` fields map to mailbox operations: `isRead` changes `\Seen`, `isArchived` moves into or out of `Archive`, and `isJunk` moves into `Junk` or `INBOX`.
+`GET /mailboxes/{id}/messages?folder=inbox|archive|sent|junk` remains available and reads `INBOX`, `Archive`, `Sent` or `Junk`. It returns `messages` (not `data`) and `pagination: { limit, offset, hasMore }`, and identifies messages by account email ID rather than UID. `GET` and `PATCH /mailboxes/{id}/messages/{messageId}` read and update one message, and `GET /mailboxes/{id}/threads/{threadId}` returns a conversation. The `PATCH` fields map to mailbox operations on received mail: `isRead` changes `\Seen`, `isArchived` moves into or out of `Archive`, and `isJunk` moves into `Junk` or back to `INBOX`, for this credential only.
 
 There is no fallback to account-level `sent_emails` when `Sent` is empty. Use the account `/emails?type=sent` API for historical delivery records. This keeps HTTP and IMAP folder contents consistent. Dashboard `structured_emails.is_read` and account-level archive state remain separate from mailbox state.
 
-The legacy summary's `folder` enum remains `inbox`, `archive`, `sent` or `junk`; `folderPath` supplies the exact path for new folders without breaking strict SDK enums.
+Each message's `folder` is a group: `inbox` (`INBOX` and scope folders), `junk`, `sent` (`Sent`, `Drafts` and other messages stored by clients) or `archive` (`Archive` and other folders holding received mail). `folderPath` has the exact folder path, so new folders don't break strict SDK enums.
 
-## Import existing read and archive state
+## Read and archive state from before shared folders
 
-During rollout, Inbound imports existing HTTP and MCP read/archive markers once before shared state is enabled. Received messages already marked read gain `\Seen` in their mailbox INBOX/scope views, and archived messages move into Archive. Other flags and existing Archive copies are preserved, including for read-only mailbox credentials; account-level markers are unchanged. This is a one-time import, not continuous synchronization with the dashboard.
+Read and archive markers set through the HTTP API or MCP before shared folders existed are imported once by a one-off migration: messages marked read gain `\Seen` in `INBOX` and the scope folders, and archived messages move to `Archive`. Account-level markers don't change. This is not ongoing synchronization with the dashboard.

@@ -7,13 +7,19 @@ Inbound checks every received email for spam, phishing, fraud, malware and imper
 
 - **Webhooks** still receive it, with `email.spam.isJunk: true`. See [Webhook Structure](/api-reference/webhook#junk-filter-verdict).
 - **IMAP** shows it in the `Junk` folder instead of `INBOX` and the scope folders. See [IMAP Behavior](/mailboxes/imap-behavior#junk).
-- **The mailbox API** lists it under `folder=junk`, and the email API returns `spam.is_junk`.
+- **The [mailbox API](/mailboxes/http-api)** lists it in the `Junk` folder (`folder=junk` on the older `/messages` endpoint), and the email API returns `spam.is_junk`.
 
 The account level below is the default. Each mailbox credential can also have [its own spam settings](#per-mailbox-spam-settings), which decide what lands in that credential's `Junk` without changing the account's verdict.
 
 ## Filter levels
 
-Set the level in the [Mailboxes & SMTP dashboard](https://inbound.new/mailboxes) or with `PUT /api/e2/spam-filter`. It applies to the whole account and to emails received after the change.
+Set the level in the [Mailboxes & SMTP dashboard](https://inbound.new/mailboxes) or with `PUT /api/e2/spam-filter`. It applies to the whole account and to emails received after the change; earlier verdicts aren't recalculated. `GET /api/e2/spam-filter` returns the current level:
+
+```json
+{ "level": "standard", "isDefault": true, "updatedAt": null }
+```
+
+`isDefault` is `true` while the level has never been set. `PUT` returns the same shape.
 
 Each email gets a level from 0 (none) to 4 (clear) for spam, phishing, fraud, malware and impersonation. An email is junk when any one of these categories meets the account's level.
 
@@ -50,7 +56,7 @@ curl -X PUT https://inbound.new/api/e2/spam-filter \
 
 ## Guard rules
 
-Guard rules take precedence over the filter level:
+Guard rules take precedence over the filter level, including `off`:
 
 - The `junk` action marks matching emails as junk without blocking them.
 - The `allow` action marks matching emails as not junk, even if the filter would flag them.
@@ -82,9 +88,9 @@ curl -X PUT "https://inbound.new/api/e2/mailboxes/YOUR_MAILBOX_ID/spam" \
   }'
 ```
 
-- `PUT` requires `level`, `allow` and `block`. Responses also include `effectiveLevel`, the level in use after falling back to the account's.
+- `PUT` requires `level`, `allow` and `block`. Every endpoint returns the full settings: `level`, `effectiveLevel`, `allow` and `block`, where `effectiveLevel` is the level in use after falling back to the account's.
 - `level` is `off`, `lenient`, `standard`, `strict` or `null`. `null` uses the account level.
-- `allow` and `block` hold up to 1,000 patterns each. A pattern is an exact email address, such as `boss@example.net`, or a whole domain written as `@partner.example`. Patterns are stored in lowercase and compared with the message's first `From` address; a domain pattern doesn't include subdomains. A pattern can't be on both lists, and removing one that isn't on the list returns `404`.
+- `allow` and `block` hold up to 1,000 patterns each. A pattern is an exact email address, such as `boss@example.net`, or a whole domain written as `@partner.example`. Patterns are stored in lowercase and compared with the message's first `From` address; a domain pattern doesn't include subdomains. A pattern can't be on both lists (`PUT` returns `400`), adding to a full list returns `409`, and removing a pattern that isn't on the list returns `404`.
 - Allowed senders stay in `INBOX`; blocked senders go to `Junk`. Blocking doesn't reject or drop mail.
 - Settings apply to new mail as it arrives. Changing the level or lists also re-sorts mail already in this mailbox's `INBOX` and `Junk` under the new settings, in batches of at most 500 messages per sync, newest first. Later mailbox reads and syncs continue the catch-up; a settings update does not reclassify the whole mailbox before returning. Until a message is processed, its previous verdict remains in use. Messages with a decision of their own (step 1 below) and messages a filter moved to another folder stay where they are.
 
