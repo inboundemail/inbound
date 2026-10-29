@@ -23,10 +23,15 @@ export class ApiAuth {
 		this.config = config;
 	}
 
+	/**
+	 * `client` (the IMAP ID name/version) is shown in the mailbox activity log;
+	 * `revalidate` marks a re-check of an open session, which is not logged as a sign-in.
+	 */
 	async authenticate(
 		address: string,
 		password: string,
 		clientIp: string,
+		options: { client?: string | null; revalidate?: boolean } = {},
 	): Promise<AuthenticatedMailbox | null> {
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
@@ -34,6 +39,8 @@ export class ApiAuth {
 		if (this.config.gatewayAuthSecret) {
 			headers["x-inbound-gateway-secret"] = this.config.gatewayAuthSecret;
 			headers["x-inbound-client-ip"] = clientIp;
+			if (options.client) headers["x-inbound-client-name"] = options.client;
+			if (options.revalidate) headers["x-inbound-auth-purpose"] = "revalidate";
 		}
 		const response = await fetch(
 			`${this.config.apiBaseUrl}/mailboxes/authenticate`,

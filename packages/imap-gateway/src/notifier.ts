@@ -11,6 +11,7 @@ import { sanitizeLogValue } from "./log.ts";
 interface SessionLike {
 	user?: AuthenticatedMailbox & { address?: string };
 	remoteAddress?: string;
+	endReason?: "revalidation" | "max_age";
 	selected?: { mailbox?: string; modifyIndex?: number } | false | null;
 }
 
@@ -54,6 +55,7 @@ export class PgNotifier {
 			(credentialId) => {
 				for (const [session, callback] of this.listeners) {
 					if (session.user?.credentialId === credentialId) {
+						session.endReason = "revalidation";
 						callback({
 							command: "LOGOUT",
 							reason: "Mailbox credentials or scopes changed",

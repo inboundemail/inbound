@@ -1,8 +1,14 @@
 import { describe, expect, it, mock } from "bun:test";
 import { EventEmitter } from "node:events";
+import { type ActivityEvent, ActivityReporter } from "./activity.ts";
 import type { ApiAuth, AuthenticatedMailbox } from "./auth.ts";
-import type { MailboxRow, MailStore } from "./db.ts";
-import { buildHandlers, toImapError } from "./handlers.ts";
+import { AppendQuotaError, type MailboxRow, type MailStore } from "./db.ts";
+import {
+	buildHandlers,
+	clientName,
+	sessionEndReason,
+	toImapError,
+} from "./handlers.ts";
 import { ConnectionLimits, ContentBudget } from "./limits.ts";
 
 type Handlers = ReturnType<typeof buildHandlers>;
@@ -1013,5 +1019,195 @@ describe("LOGIN accounting", () => {
 		);
 		expect(result).toMatchObject({ user: { userId: "user" } });
 		expect(remembered).toEqual([session]);
+	});
+});
+
+function recordingReporter() {
+	const recorded: ActivityEvent[] = [];
+	const reporter = new ActivityReporter({
+		apiBaseUrl: "http://api.invalid",
+		gatewayAuthSecret: "secret",
+		timeoutMs: 1000,
+		fetch: async (_url, init) => {
+			recorded.push(...JSON.parse(String(init.body)).events);
+			return new Response(JSON.stringify({ accepted: 1, rejected: 0 }));
+		},
+	});
+	return { recorded, reporter };
+}
+
+describe("mailbox activity reporting", () => {
+	it("reports session ends with reason, duration, command count and IMAP ID", async () => {
+		const { recorded, reporter } = recordingReporter();
+		const socket = new EventEmitter();
+		const handlers = buildHandlers(
+			{
+				authenticate: async (
+					_address: string,
+					_password: string,
+					_ip: string,
+					options: { client?: string | null },
+				) => {
+					expect(options.client).toBe("Thunderbird/128.0");
+					return {
+						userId: "user",
+						credentialId: "credential",
+						loginAddress: "user@example.com",
+						accessMode: "read" as const,
+						scopes: [],
+					};
+				},
+			} as unknown as ApiAuth,
+			{} as MailStore,
+			new ConnectionLimits(5, 10, 60_000, 10),
+			{ activity: reporter },
+		);
+		const session = {
+			id: "conn1",
+			remoteAddress: "192.0.2.9",
+			clientId: { name: "Thunderbird", version: "128.0" },
+			commandCounters: { LOGIN: 1, SELECT: 2, LOGOUT: 1 },
+			socket,
+		} as unknown as Session;
+		await callbackResult((callback) =>
+			handlers.onAuth(
+				{ username: "user@example.com", password: "secret" },
+				session,
+				callback,
+			),
+		);
+		Object.assign(session, {
+			user: { userId: "user", credentialId: "credential" },
+		});
+		await new Promise<void>((resolve) => handlers.onClose(session, resolve));
+		await reporter.flush();
+		expect(recorded).toEqual([
+			expect.objectContaining({
+				credentialId: "credential",
+				userId: "user",
+				protocol: "imap",
+				event: "session_ended",
+				reason: "client_logout",
+				clientIp: "192.0.2.9",
+				client: "Thunderbird/128.0",
+				session: "conn1",
+				detail: expect.objectContaining({ commands: 4 }),
+			}),
+		]);
+	});
+
+	it("tells idle timeouts, revalidation, max age and errors apart", () => {
+		const now = 1_000_000;
+		expect(
+			sessionEndReason(
+				{ activity: { authenticatedAt: 0, lastTimeoutAt: now - 100 } },
+				now,
+			),
+		).toBe("idle_timeout");
+		expect(
+			sessionEndReason(
+				{ endReason: "revalidation", commandCounters: { LOGOUT: 1 } },
+				now,
+			),
+		).toBe("revalidation");
+		expect(sessionEndReason({ endReason: "max_age" }, now)).toBe("max_age");
+		expect(
+			sessionEndReason(
+				{ activity: { authenticatedAt: 0, errored: true } },
+				now,
+			),
+		).toBe("error");
+		expect(sessionEndReason({ activity: { authenticatedAt: 0 } }, now)).toBe(
+			"disconnected",
+		);
+		expect(clientName({})).toBeNull();
+		expect(clientName({ clientId: { name: "Mail\r\nX" } })).toBe("Mail  X");
+	});
+
+	it("aggregates backend command errors per session and reports APPEND quota refusals", async () => {
+		const { recorded, reporter } = recordingReporter();
+		const { session, store, mailbox } = createHarness("read_write");
+		const handlers = buildHandlers(
+			{} as ApiAuth,
+			store as unknown as MailStore,
+			{} as ConnectionLimits,
+			{ activity: reporter },
+		);
+		Object.assign(session, { id: "conn2", remoteAddress: "192.0.2.10" });
+		store.listMailboxes.mockImplementation(async () => {
+			throw Object.assign(new Error("canceling statement"), { code: "57014" });
+		});
+		store.ensureAllMailboxes.mockImplementation(async () => {
+			throw Object.assign(new Error("canceling statement"), { code: "57014" });
+		});
+		for (let attempt = 0; attempt < 3; attempt++) {
+			const error = await callbackResult((callback) =>
+				handlers.onList("", session, callback),
+			).catch((err: unknown) => err);
+			expect(error).toMatchObject({ code: "TEMPFAIL" });
+		}
+		store.appendMessage.mockImplementation(async () => {
+			throw new AppendQuotaError("APPEND mailbox quota exceeded");
+		});
+		const [quota] = await callbackResult((callback) =>
+			handlers.onAppend(
+				mailbox.path,
+				[],
+				undefined,
+				Buffer.from("Subject: hi\r\n\r\nbody"),
+				session,
+				callback,
+			),
+		);
+		expect(quota).toBe("OVERQUOTA");
+		await reporter.flush();
+		expect(recorded).toEqual([
+			expect.objectContaining({
+				event: "command_error",
+				reason: "57014",
+				count: 3,
+				session: "conn2",
+				detail: { code: "TEMPFAIL" },
+			}),
+			expect.objectContaining({
+				event: "quota_exceeded",
+				reason: "storage_quota",
+			}),
+		]);
+	});
+
+	it("drops the oldest events when full and never throws on ingest failures", async () => {
+		const sent: number[] = [];
+		let fail = true;
+		const reporter = new ActivityReporter({
+			apiBaseUrl: "http://api.invalid",
+			gatewayAuthSecret: null,
+			timeoutMs: 1000,
+			maxQueue: 3,
+			batchSize: 100,
+			fetch: async (_url, init) => {
+				if (fail) throw new Error("connection refused");
+				sent.push(
+					...JSON.parse(String(init.body)).events.map(
+						(e: ActivityEvent) => e.count,
+					),
+				);
+				return new Response("{}", { status: 200 });
+			},
+		});
+		const event = (count: number): ActivityEvent => ({
+			credentialId: "credential",
+			protocol: "imap",
+			event: "session_ended",
+			count,
+		});
+		reporter.record(event(1));
+		await reporter.flush();
+		expect(reporter.size).toBe(0);
+		fail = false;
+		for (const count of [1, 2, 3, 4, 5]) reporter.record(event(count));
+		expect(reporter.size).toBe(3);
+		await reporter.flush();
+		expect(sent).toEqual([3, 4, 5]);
 	});
 });

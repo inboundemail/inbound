@@ -11,6 +11,7 @@ import {
 	type SMTPServerOptions,
 	type SMTPServerSession,
 } from "smtp-server";
+import { type ActivityEvent, ActivityReporter } from "./activity.ts";
 import type { SmtpIdentity } from "./api-client.ts";
 import { type GatewayConfig, loadConfig } from "./config.ts";
 import { SmtpGateway } from "./server.ts";
@@ -1915,5 +1916,68 @@ describe("SmtpGateway DATA concurrency", () => {
 			),
 		).rejects.toMatchObject({ responseCode: 451 });
 		expect(inspect.activeData).toBe(0);
+	});
+});
+
+describe("SmtpGateway mailbox activity", () => {
+	it("reports sends the gateway refused but leaves API refusals to the API", async () => {
+		const recorded: ActivityEvent[] = [];
+		const config = {
+			...loadConfig(),
+			apiBaseUrl: "https://example.com/api/e2",
+			tlsKeyPath: null,
+			tlsCertPath: null,
+		};
+		const reporter = new ActivityReporter({
+			apiBaseUrl: config.apiBaseUrl,
+			gatewayAuthSecret: "secret",
+			timeoutMs: 1000,
+			fetch: async (_url, init) => {
+				recorded.push(...JSON.parse(String(init.body)).events);
+				return Response.json({ accepted: 1, rejected: 0 });
+			},
+		});
+		const inspect = new SmtpGateway(
+			config,
+			reporter,
+		) as unknown as GatewayInspection;
+		const options = inspect.baseOptions(null);
+		const send = (content: string) =>
+			new Promise<Error | null | undefined>((resolve) => {
+				options.onData?.(
+					dataStream(content),
+					session({
+						id: "smtp-session",
+						user: { apiKey: "secret", identity },
+						recipients: ["recipient@example.com"],
+					}),
+					resolve,
+				);
+			});
+
+		await expect(
+			send("From: intruder@example.com\r\nTo: recipient@example.com\r\n\r\nHi"),
+		).resolves.toMatchObject({ responseCode: 553 });
+		spyOn(globalThis, "fetch").mockResolvedValue(
+			Response.json({ error: "Invalid message" }, { status: 422 }),
+		);
+		await expect(
+			send("From: sender@example.com\r\nTo: recipient@example.com\r\n\r\nHi"),
+		).resolves.toMatchObject({ responseCode: 550 });
+		await reporter.flush();
+
+		expect(recorded).toEqual([
+			expect.objectContaining({
+				credentialId: "credential-id",
+				userId: "user-id",
+				protocol: "smtp",
+				event: "send_failed",
+				reason: "rejected",
+				clientIp: "192.0.2.1",
+				session: "smtp-session",
+				detail: expect.objectContaining({ status: 553 }),
+			}),
+		]);
+		expect(JSON.stringify(recorded)).not.toContain("intruder@example.com");
 	});
 });

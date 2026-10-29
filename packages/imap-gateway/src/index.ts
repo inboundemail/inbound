@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { ActivityReporter } from "./activity.ts";
 import { ApiAuth } from "./auth.ts";
 import { loadConfig } from "./config.ts";
 import { MailStore } from "./db.ts";
@@ -18,6 +19,12 @@ const store = new MailStore(config.databaseUrl, {
 	appendMaxMessagesPerUser: config.appendMaxMessagesPerUser,
 });
 const auth = new ApiAuth(config);
+const activity = new ActivityReporter({
+	apiBaseUrl: config.apiBaseUrl,
+	gatewayAuthSecret: config.gatewayAuthSecret,
+	timeoutMs: config.apiTimeoutMs,
+});
+activity.start();
 const limits = new ConnectionLimits(
 	config.maxConnectionsPerIp,
 	config.authFailureLimit,
@@ -34,7 +41,7 @@ const notifier = new PgNotifier(
 );
 const sessions = new SessionRevalidator({
 	authenticate: (address, password, ip) =>
-		auth.authenticate(address, password, ip),
+		auth.authenticate(address, password, ip, { revalidate: true }),
 	sessions: () => notifier.sessions(),
 	intervalMs: config.sessionRevalidateMs,
 	maxAgeMs: config.sessionMaxAgeMs,
@@ -42,6 +49,7 @@ const sessions = new SessionRevalidator({
 const handlers = buildHandlers(auth, store, limits, {
 	contentBudget,
 	sessions,
+	activity,
 });
 function revalidateSessions(force: boolean): void {
 	sessions.run(force).catch((err: Error) => {
@@ -100,7 +108,10 @@ function startServer(secure: boolean, port: number) {
 	server.onClose = (session: object, callback: () => void) => {
 		limits.releaseSocket((session as { socket?: object }).socket);
 		sessions.forget(session);
-		callback();
+		handlers.onClose(
+			session as Parameters<typeof handlers.onClose>[0],
+			callback,
+		);
 	};
 	server.onAuth = handlers.onAuth;
 	server.onList = handlers.onList;
@@ -174,6 +185,7 @@ function shutdown(): void {
 		),
 		notifier.stop(),
 	])
+		.then(() => activity.stop())
 		.then(() => store.end())
 		.then(() => {
 			clearTimeout(shutdownTimeout);

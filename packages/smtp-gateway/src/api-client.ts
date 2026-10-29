@@ -98,10 +98,13 @@ export function smtpFailureForApiStatus(
 
 export class SmtpRelayError extends Error {
 	responseCode: number;
+	/** HTTP status when the send API refused the message (the API logs those itself). */
+	upstreamStatus?: number;
 
-	constructor(failure: SmtpFailure) {
+	constructor(failure: SmtpFailure, upstreamStatus?: number) {
 		super(failure.message);
 		this.responseCode = failure.responseCode;
+		this.upstreamStatus = upstreamStatus;
 	}
 }
 
@@ -187,6 +190,7 @@ export class InboundApiClient {
 			const apiMessage = await readErrorMessage(response);
 			throw new SmtpRelayError(
 				smtpFailureForApiStatus(response.status, apiMessage),
+				response.status,
 			);
 		}
 		return (await response.json()) as SendEmailResult;
@@ -218,6 +222,7 @@ export class InboundApiClient {
 			const apiMessage = await readErrorMessage(response);
 			throw new SmtpRelayError(
 				smtpFailureForApiStatus(response.status, apiMessage),
+				response.status,
 			);
 		}
 		return (await response.json()) as SendEmailResult;
