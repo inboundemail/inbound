@@ -4016,8 +4016,14 @@ describe("E2 API - Email E2E", () => {
 				appendMaxMessagesPerUser: 5000,
 			});
 			const notifier = new PgNotifier(gatewayUrl, store);
+			const previousDatabaseUrl = process.env.DATABASE_URL;
+			process.env.DATABASE_URL = gatewayUrl;
+			const gatewayConfig = loadConfig();
+			if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+			else process.env.DATABASE_URL = previousDatabaseUrl;
 			const auth = new ApiAuth({
-				...loadConfig(),
+				...gatewayConfig,
+				databaseUrl: gatewayUrl,
 				apiBaseUrl: API_URL,
 				gatewayAuthSecret: E2E_GATEWAY_SECRET,
 			});
