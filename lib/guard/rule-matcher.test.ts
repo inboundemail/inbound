@@ -18,6 +18,9 @@ const { buildJevEmailState, STATE_CHAR_LIMIT } = await import(
 const { CLASSIFICATION_DIMENSIONS, summarizeClassification } = await import(
 	"@/lib/guard/classification"
 );
+const { classifierJunkVerdict, resolveJunkVerdict } = await import(
+	"@/lib/guard/junk-verdict"
+);
 const { db } = await import("@/lib/db");
 
 function buildStructuredEmail(
@@ -57,6 +60,9 @@ function buildStructuredEmail(
 		guardAction: null,
 		guardMetadata: null,
 		jevClassification: null,
+		isJunk: null,
+		junkReason: null,
+		junkUpdatedAt: null,
 		userId: "user_1",
 		createdAt: null,
 		updatedAt: null,
@@ -1065,5 +1071,79 @@ describe("Jev classification summary", () => {
 			phishing: { level: 2 },
 			impersonation: { level: 4 },
 		});
+	});
+});
+
+describe("junk verdict", () => {
+	type Summary = Parameters<typeof classifierJunkVerdict>[1];
+	function summaryWith(levels: Partial<Record<string, number>>): Summary {
+		const dimension = (level = 0) => ({ level, confidence: 0.9 });
+		return {
+			spam: dimension(levels.spam),
+			phishing: dimension(levels.phishing),
+			fraud: dimension(levels.fraud),
+			impersonation: dimension(levels.impersonation),
+			malware: dimension(levels.malware),
+			prompt_injection: dimension(levels.prompt_injection),
+			risk: 0,
+		};
+	}
+
+	it.each([
+		["strict", 1, false],
+		["strict", 2, true],
+		["standard", 2, false],
+		["standard", 3, true],
+		["lenient", 3, false],
+		["lenient", 4, true],
+		["off", 4, false],
+	] as const)("at %s, level %d is junk: %s", (level, value, junk) => {
+		for (const dimension of ["spam", "phishing", "fraud", "malware", "impersonation"]) {
+			expect(
+				classifierJunkVerdict(level, summaryWith({ [dimension]: value }), "PASS")
+					?.isJunk,
+			).toBe(junk);
+		}
+	});
+
+	it("ignores prompt injection, which is not junk by itself", () => {
+		expect(
+			classifierJunkVerdict("strict", summaryWith({ prompt_injection: 4 }), null),
+		).toEqual({ isJunk: false, reason: "classifier" });
+	});
+
+	it("treats an SES spam failure as junk unless the filter is off", () => {
+		for (const level of ["lenient", "standard", "strict"] as const) {
+			expect(classifierJunkVerdict(level, null, "fail")).toEqual({
+				isJunk: true,
+				reason: "ses_spam",
+			});
+		}
+		expect(classifierJunkVerdict("off", null, "FAIL")).toEqual({
+			isJunk: false,
+			reason: null,
+		});
+	});
+
+	it("makes no verdict without a classification or an SES spam failure", () => {
+		expect(classifierJunkVerdict("standard", null, "PASS")).toBeNull();
+		expect(classifierJunkVerdict("standard", undefined, null)).toBeNull();
+	});
+
+	it("lets matching Guard junk and allow rules override the classifier", () => {
+		const rule = { id: "rule_1" } as GuardRule;
+		const spammy = summaryWith({ spam: 4 });
+		expect(
+			resolveJunkVerdict({ action: "junk", matchedRule: rule }, "off", null, null),
+		).toEqual({ isJunk: true, reason: "guard_rule" });
+		expect(
+			resolveJunkVerdict({ action: "allow", matchedRule: rule }, "strict", spammy, "FAIL"),
+		).toEqual({ isJunk: false, reason: "guard_rule" });
+		expect(
+			resolveJunkVerdict({ action: "allow" }, "standard", spammy, null),
+		).toEqual({ isJunk: true, reason: "classifier" });
+		expect(
+			resolveJunkVerdict({ action: "route", matchedRule: rule }, "standard", spammy, null),
+		).toEqual({ isJunk: true, reason: "classifier" });
 	});
 });

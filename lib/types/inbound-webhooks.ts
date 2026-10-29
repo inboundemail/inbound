@@ -66,6 +66,11 @@ export interface InboundCleanedContent {
 	headers: InboundEmailHeaders;
 }
 
+export interface InboundSpamVerdict {
+	isJunk: boolean;
+	reason: "classifier" | "ses_spam" | "guard_rule" | "user" | null;
+}
+
 export interface InboundWebhookPayload {
 	event: "email.received" | string;
 	timestamp: string;
@@ -79,6 +84,7 @@ export interface InboundWebhookPayload {
 		receivedAt: string;
 		threadId?: string | null;
 		threadPosition?: number | null;
+		spam?: InboundSpamVerdict;
 		parsedData: InboundParsedEmailData;
 		cleanedContent: InboundCleanedContent;
 	};

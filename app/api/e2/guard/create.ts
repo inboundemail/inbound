@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { guardRules } from "@/lib/db/schema";
+import { GuardRuleActionSchema } from "@/app/api/e2/guard/action-schema";
 import { validateAndRateLimit } from "../lib/auth";
 
 const GuardTextCriterionOpenApiSchema = {
@@ -79,33 +80,6 @@ const AiPromptRuleConfigOpenApiSchema = {
 	},
 } as const;
 
-const GuardActionOpenApiSchemas = [
-	{
-		title: "Allow",
-		type: "object",
-		required: ["action"],
-		properties: { action: { const: "allow" } },
-	},
-	{
-		title: "Block",
-		type: "object",
-		required: ["action"],
-		properties: { action: { const: "block" } },
-	},
-	{
-		title: "Route",
-		type: "object",
-		required: ["action", "endpointId"],
-		properties: {
-			action: { const: "route" },
-			endpointId: {
-				type: "string",
-				description: "ID of an active endpoint owned by the account.",
-			},
-		},
-	},
-] as const;
-
 const CreateGuardRuleBody = t.Object(
 	{
 		name: t.String({
@@ -136,13 +110,7 @@ const CreateGuardRuleBody = t.Object(
 				default: 0,
 			}),
 		),
-		action: t.Optional(
-			t.Any({
-				description:
-					"Action to take when the rule matches: allow, block, or route to an owned endpoint. Defaults to allow when omitted.",
-				oneOf: GuardActionOpenApiSchemas,
-			}),
-		),
+		action: t.Optional(GuardRuleActionSchema),
 	},
 	{
 		examples: [
@@ -261,11 +229,7 @@ export const createGuardRule = new Elysia().post(
 		// Serialize config to JSON string
 		const configJson =
 			typeof config === "string" ? config : JSON.stringify(config);
-		const actionsJson = action
-			? typeof action === "string"
-				? action
-				: JSON.stringify(action)
-			: null;
+		const actionsJson = action ? JSON.stringify(action) : null;
 
 		try {
 			const ruleId = nanoid();
@@ -338,7 +302,7 @@ For an \`explicit\` rule, configure one or more of \`subject\`, \`from\`, \`to\`
 
 Address criteria support exact, case-insensitive addresses and whole-domain patterns such as \`*@example.com\`. The \`to\` criterion matches the actual delivered recipient, which makes it suitable for limiting a rule to one inbox. Subject and body criteria use case-insensitive substring matching.
 
-Rules are evaluated from highest priority to lowest, and the first matching rule wins. A matching rule can \`allow\`, \`block\`, or \`route\` the email to an active endpoint owned by the account. If action is omitted, it defaults to \`allow\`.
+Rules are evaluated from highest priority to lowest, and the first matching rule wins. A matching rule can \`allow\`, \`block\`, mark as \`junk\`, or \`route\` the email to an active endpoint owned by the account. If action is omitted, it defaults to \`allow\`. \`junk\` marks the email as junk without blocking it: it is still delivered to endpoints (with \`spam.isJunk: true\` in the webhook) and appears in mailbox Junk folders. \`allow\` also marks the email as not junk, overriding the spam filter.
 
 For an \`ai_prompt\` rule, provide a non-empty natural-language \`prompt\` describing when the rule should match.`,
 		},

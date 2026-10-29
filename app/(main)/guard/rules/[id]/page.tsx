@@ -69,7 +69,7 @@ export default function GuardRuleDetailPage() {
   const [actionConfig, setActionConfig] = useState<RuleActionConfig | null>(
     null
   );
-   const [actionType, setActionType] = useState<'allow' | 'block' | 'route'>(
+   const [actionType, setActionType] = useState<'allow' | 'block' | 'junk' | 'route'>(
      'allow'
    );
    const [routeEndpointId, setRouteEndpointId] = useState<string>("");
@@ -454,7 +454,7 @@ export default function GuardRuleDetailPage() {
                 type="single"
                 value={actionType}
                 onValueChange={(v) => {
-                  if (v === 'allow' || v === 'block' || v === 'route') {
+                  if (v === 'allow' || v === 'block' || v === 'junk' || v === 'route') {
                     setActionType(v);
                     if (v !== 'route') {
                       setRouteEndpointId("");
@@ -472,6 +472,7 @@ export default function GuardRuleDetailPage() {
               >
                 <ToggleGroupItem value="allow" className="h-8 rounded-full px-4 border data-[state=on]:bg-primary data-[state=on]:text-white">Allow</ToggleGroupItem>
                 <ToggleGroupItem value="block" className="h-8 rounded-full px-4 border data-[state=on]:bg-primary data-[state=on]:text-white">Block</ToggleGroupItem>
+                <ToggleGroupItem value="junk" className="h-8 rounded-full px-4 border data-[state=on]:bg-primary data-[state=on]:text-white">Junk</ToggleGroupItem>
                 <ToggleGroupItem value="route" className="h-8 rounded-full px-4 border data-[state=on]:bg-primary data-[state=on]:text-white">Route</ToggleGroupItem>
               </ToggleGroup>
             </div>
