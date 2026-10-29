@@ -34,6 +34,11 @@ import {
 	type EmailEvaluationData,
 	evaluateSending,
 } from "@/lib/email-management/email-evaluation";
+import {
+	ensureMessageIdHeader,
+	type SentCopyCredential,
+	saveSentCopies,
+} from "@/lib/email-management/mailbox-sent-copy";
 import { enforceOutboundSendGuard } from "@/lib/email-management/outbound-send-guard";
 import { checkSendingSpike } from "@/lib/email-management/sending-spike-detector";
 
@@ -323,6 +328,7 @@ export async function deliverSentEmail(input: {
 	record: SentEmailContent;
 	buildRawMessage: () => string | Uint8Array;
 	evaluation: EmailEvaluationData;
+	credential?: SentCopyCredential | null;
 }): Promise<SendResponse> {
 	const { userId, idempotencyKey, sender } = input;
 	if (
@@ -351,6 +357,10 @@ export async function deliverSentEmail(input: {
 	}
 
 	const emailId = nanoid();
+	rawMessage = ensureMessageIdHeader(
+		rawMessage,
+		`${emailId}@${sender.fromDomain}`,
+	);
 	console.log("💾 Creating sent email record:", emailId);
 
 	const inserted = await db
@@ -475,6 +485,16 @@ export async function deliverSentEmail(input: {
 				updatedAt: new Date(),
 			})
 			.where(eq(sentEmails.id, emailId));
+
+		waitUntil(
+			saveSentCopies({
+				userId,
+				credential: input.credential,
+				fromAddress: sender.fromAddress,
+				raw: rawMessage,
+				sentEmailId: emailId,
+			}),
+		);
 
 		if (!input.unlimited) {
 			console.log("📊 Tracking email usage with Autumn");

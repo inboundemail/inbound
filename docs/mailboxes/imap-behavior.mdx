@@ -12,12 +12,13 @@ Each mailbox credential includes these folders:
 | Folder | Special-use attribute | Behavior |
 | --- | --- | --- |
 | `INBOX` | None | Incoming mail from every configured scope, except junk |
-| `Sent` | `\Sent` | For client-saved sent messages; not populated automatically |
+| `Sent` | `\Sent` | Automatically saved mailbox sends and client-saved sent messages, deduplicated by Message-ID |
 | `Drafts` | `\Drafts` | For client-saved drafts |
 | `Trash` | `\Trash` | For client-organized messages |
 | `Junk` | `\Junk` | Incoming mail marked as junk, from every configured scope. See [Junk](#junk) |
+| `Archive` | `\Archive` | Archived messages, shared with the mailbox HTTP API |
 
-The personal namespace is `""` and the hierarchy separator is `/`. `INBOX` and the special-use folders cannot be deleted, and `INBOX` cannot be renamed. With a `read_write` credential you can create, rename, and delete other folders. Renaming a folder also renames its subfolders. Creating or renaming onto an existing name returns `NO [ALREADYEXISTS]`.
+The personal namespace is `""` and the hierarchy separator is `/`. `INBOX` and the special-use folders cannot be deleted or renamed. With a `read_write` credential you can create, rename, and delete other folders. Renaming a folder also renames its subfolders. Creating or renaming onto an existing name returns `NO [ALREADYEXISTS]`.
 
 Folders, flags, and appended messages belong to one credential. Other credentials on the same account don't see them.
 
@@ -31,6 +32,7 @@ Sent
 Drafts
 Trash
 Junk
+Archive
 Scopes/*@example.com
 Scopes/support@another-example.com
 ```
@@ -56,7 +58,7 @@ Supported commands:
 
 `COPY` and `APPEND` return `COPYUID` and `APPENDUID`. `MOVE` returns `COPYUID` followed by an untagged `EXPUNGE` for every moved message, and moving a message into the folder it's already in returns `NO`. `EXPUNGE` and `UID EXPUNGE` send an untagged `EXPUNGE` for each removed message.
 
-`SUBSCRIBE` and `UNSUBSCRIBE` succeed but aren't stored; `LSUB` returns every folder.
+`SUBSCRIBE` and `UNSUBSCRIBE` persist per credential; `LSUB` returns subscribed folders.
 
 Extensions that aren't advertised are not supported, including `STARTTLS` (use implicit TLS on port `993`), `CONDSTORE`, `QRESYNC`, `QUOTA`, `COMPRESS=DEFLATE`, `SORT`, `THREAD`, `ACL`, OAuth (`XOAUTH2` or `OAUTHBEARER`), and the Gmail-only `XLIST`. Requests that would enable `CONDSTORE`, such as `SELECT (CONDSTORE)` or `SEARCH MODSEQ`, are rejected.
 
@@ -72,7 +74,7 @@ Extensions that aren't advertised are not supported, including `STARTTLS` (use i
 
 ## New-message notifications
 
-During `IDLE`, the server sends `EXISTS` as soon as new mail is synchronized into the selected folder. Outside `IDLE`, new messages are reported on the next command, such as `NOOP`. Active sessions are also refreshed about every 60 seconds, which catches messages that don't trigger an immediate notification, such as mail where the scoped address was a secondary envelope recipient.
+During `IDLE`, the server sends `EXISTS` as soon as new mail is synchronized into the selected folder, including mail addressed to a secondary envelope recipient. Outside `IDLE`, new messages are reported on the next command, such as `NOOP`. Active sessions are also refreshed about every 60 seconds as a fallback.
 
 An `IDLE` command ends after 30 minutes: the server sends `* BYE IDLE terminated` and closes the connection. Reissue `IDLE` before then (most clients restart it every 29 minutes) or reconnect automatically.
 
@@ -83,14 +85,14 @@ Writable credentials can set standard flags (`\Seen`, `\Answered`, `\Flagged`, `
 Flags set on a received message in `INBOX` also apply to the same message in the credential's scope folders. Flags on copies in other folders, such as a custom folder, are independent.
 
 <Note>
-  IMAP flags are separate from the dashboard's read state. Marking a message read in an email client does not mark it read in the dashboard, and the reverse is also true.
+  IMAP flags and the [mailbox HTTP API](/mailboxes/http-api) share the same state. They are separate from the dashboard's read state: marking a message read in a mailbox does not mark it read in the dashboard, and the reverse is also true.
 </Note>
 
 ## Known limitations
 
-### Other sessions don't see flag changes immediately
+### Cross-session updates and retained history
 
-New messages, expunges and moves are pushed to other open sessions on the same folder as `EXISTS` and `EXPUNGE`. Flag changes are not: other sessions see them only after they select the folder again, so clients with several connections, or several devices using the same credential, can briefly show stale flags. A session that stays selected for a long time without processing updates may also need to reselect the folder to catch up on older removals.
+New messages, expunges and moves are pushed to other open sessions on the same folder as `EXISTS` and `EXPUNGE`. Flag changes arrive as `FETCH FLAGS`, including changes made through HTTP. The update journal is stored in Postgres rather than in a gateway process, so it survives restarts. Expunge history is retained for approximately seven days; a session behind the retained history is disconnected and must reconnect and resynchronize rather than silently miss removals.
 
 ### Received-message deletion and moves
 
@@ -100,12 +102,12 @@ New messages, expunges and moves are pushed to other open sessions on the same f
 
 Moving a received message into a custom folder or `Trash` does create a copy there that stays until you expunge it. Moving it into `Junk` marks it as junk instead (see [Junk](#junk)). Messages created with `APPEND`, such as sent copies and drafts, are stored separately and are permanently removed when their last copy is expunged.
 
-### Sent mail is not saved automatically
+### Sent mail
 
-Sending through SMTP does not create a message in `Sent`. Many email clients save their own copy with `APPEND`, which needs a `read_write` mailbox credential.
+Immediate sending through SMTP or the HTTP API with a `read_write` mailbox password saves a message in that credential's `Sent` in the background. Clients may still save their own copy with `APPEND`: a matching `Message-ID` already in `Sent` is deduplicated, in either order. Account-key sends also save to enabled read/write mailboxes with an exact sending-identity match; domain scopes alone do not select a mailbox. SMTP-only credentials and scheduled sends do not populate a mailbox. Historical sent email records are not backfilled.
 
 <Warning>
-  SMTP accepts messages up to 3 MiB, but `APPEND` accepts at most 1 MiB. A larger email can send successfully while saving its sent copy fails with `NO [TOOBIG]`. SMTP-only credentials cannot save a sent copy.
+  SMTP accepts messages up to 3 MiB, but client `APPEND` accepts at most 1 MiB. Automatic sent copies count toward the account's appended-storage quota. A sent-copy failure does not undo an accepted delivery or cause it to be retried.
 </Warning>
 
 ### Junk
@@ -160,9 +162,9 @@ Connections over the per-IP limit receive `* BYE Too many connections from this 
 | Authentication fails | Wrong login, rotated password, disabled credential, SMTP-only credential, unverified domain, or login throttling | Confirm the login email, current password, credential type, enabled state, and verified domains. Wait 15 minutes after repeated failures. |
 | An expected message is missing | Recipient is outside the scopes, the message is Guard-blocked, or the folder hasn't been refreshed | Check the recipient, scope domains, and Guard status, then reselect the folder |
 | A scope folder rejects changes | `Scopes/*` folders are always read-only | Change the message in `INBOX` or copy it to a writable folder |
-| A deleted received message is still in the dashboard or API | IMAP deletion only removes it from the credential's folders | Archive it through the API or dashboard instead |
-| No sent copy appears | SMTP doesn't populate `Sent`, or the client's `APPEND` exceeded 1 MiB or the storage limit | Enable sent-copy saving in the client, use a `read_write` credential, and check message size |
-| Another device shows stale flags | Flag changes reach other sessions only after they reselect the folder | Reselect the folder or restart the client's sync |
+| A deleted received message is still in the dashboard or account API | Mailbox deletion only removes it from the credential's folders | Manage its account-level state through the dashboard or account email API |
+| No sent copy appears | The copy is still pending, the send had no matching mailbox identity, or persistence failed | Use a `read_write` mailbox credential or exact sending identity and check available storage |
+| Another device shows stale flags | The connection is offline or waiting for its next command | Reconnect or issue `NOOP`; active IDLE sessions receive flag updates automatically |
 | The connection closes after a credential edit | Credential changes end active sessions | Reconnect with the current password and permissions |
 
 <CardGroup cols={2}>

@@ -1,5 +1,6 @@
-import { and, desc, eq, ilike, or, type SQL, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, type SQL, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
+import type { AddressObject, ParsedMail } from "mailparser";
 import { attachmentResponse } from "@/app/api/e2/attachments/get";
 import {
 	authorizeMailboxAccess,
@@ -9,9 +10,32 @@ import {
 	receivedVisibleTo,
 	sentVisibleSql,
 } from "@/app/api/e2/mailboxes/access";
+import { handleStateError, ownerOf } from "@/app/api/e2/mailboxes/folders";
+import {
+	APPENDED_HEADER_SEARCH_CHARS,
+	appendedHeadersMatch,
+	findFolder,
+	type MailboxOwnerRef,
+	parseFlags,
+	syncFolder,
+	transferMessages,
+	updateFlags,
+} from "@/app/api/e2/mailboxes/state";
 import { db } from "@/lib/db";
-import { sentEmails, structuredEmails } from "@/lib/db/schema";
+import type { ImapMailbox } from "@/lib/db/schema";
+import {
+	imapAppendedMessages,
+	imapMailboxes,
+	imapMailboxMessages,
+	sentEmails,
+	structuredEmails,
+} from "@/lib/db/schema";
+import { formatMailbox } from "@/lib/email-management/agent-email-helper";
 import { resolveStructuredEmailId } from "@/lib/email-management/email-aliases";
+import {
+	MailParseLimitError,
+	parseMailSafely,
+} from "@/lib/email-management/safe-mail-parser";
 import { loadStoredAttachments } from "@/lib/email-management/stored-attachments";
 
 const ErrorSchema = t.Object({ error: t.String() });
@@ -37,12 +61,24 @@ const MailboxProfileSchema = t.Object({
 
 const MessageSummarySchema = t.Object({
 	id: t.String(),
-	folder: t.Union([
-		t.Literal("inbox"),
-		t.Literal("archive"),
-		t.Literal("junk"),
-		t.Literal("sent"),
-	]),
+	folder: t.Union(
+		[
+			t.Literal("inbox"),
+			t.Literal("archive"),
+			t.Literal("junk"),
+			t.Literal("sent"),
+		],
+		{
+			description:
+				"The message's folder group: inbox (INBOX and scope folders), junk, sent (Sent, Drafts and messages stored by clients) or archive (Archive and other folders holding received mail). folderPath has the exact folder.",
+		},
+	),
+	folderPath: t.Nullable(
+		t.String({
+			description:
+				"The exact mailbox folder path (for example `Trash` or `Projects/2026`), shared with IMAP and /mailboxes/{id}/folders; null when the message isn't in a folder of this mailbox",
+		}),
+	),
 	threadId: t.Nullable(t.String()),
 	subject: t.Nullable(t.String()),
 	from: t.String(),
@@ -75,6 +111,90 @@ const MessageDetailSchema = t.Object({
 });
 
 type Folder = "inbox" | "archive" | "junk" | "sent";
+type ListFolder = Folder;
+
+const LIST_FOLDER_PATHS: Record<ListFolder, string> = {
+	inbox: "INBOX",
+	archive: "Archive",
+	junk: "Junk",
+	sent: "Sent",
+};
+
+function legacyFolder(
+	folder: Pick<ImapMailbox, "path" | "scopeId">,
+	appended: boolean,
+): Folder {
+	if (folder.scopeId || folder.path === "INBOX") return "inbox";
+	switch (folder.path) {
+		case "Archive":
+			return "archive";
+		case "Junk":
+			return "junk";
+		case "Sent":
+		case "Drafts":
+			return "sent";
+		default:
+			return appended ? "sent" : "archive";
+	}
+}
+
+type Location = { folder: ImapMailbox; uid: number; flags: string[] };
+
+const LOCATION_RANK = ["INBOX", "Junk", "Archive", "Sent", "Drafts", "Trash"];
+
+function locationRank(folder: ImapMailbox): number {
+	if (folder.scopeId) return LOCATION_RANK.length + 1;
+	const rank = LOCATION_RANK.indexOf(folder.path);
+	return rank < 0 ? LOCATION_RANK.length : rank;
+}
+
+/**
+ * Finds where messages are in the mailbox's folders, preferring INBOX, Junk,
+ * Archive, Sent, Drafts and Trash, then user folders, then read-only scope
+ * folders.
+ */
+async function locateMany(
+	owner: MailboxOwnerRef,
+	ids: string[],
+	rawSource: "structured" | "appended",
+): Promise<Map<string, Location>> {
+	const located = new Map<string, Location>();
+	if (ids.length === 0) return located;
+	const rows = await db
+		.select({ message: imapMailboxMessages, folder: imapMailboxes })
+		.from(imapMailboxMessages)
+		.innerJoin(
+			imapMailboxes,
+			eq(imapMailboxes.id, imapMailboxMessages.mailboxId),
+		)
+		.where(
+			and(
+				eq(imapMailboxes.userId, owner.userId),
+				eq(imapMailboxes.credentialId, owner.credentialId),
+				eq(imapMailboxMessages.rawSource, rawSource),
+				inArray(imapMailboxMessages.structuredEmailId, ids),
+			),
+		);
+	for (const row of rows) {
+		const current = located.get(row.message.structuredEmailId);
+		if (current && locationRank(current.folder) <= locationRank(row.folder)) {
+			continue;
+		}
+		located.set(row.message.structuredEmailId, {
+			folder: row.folder,
+			uid: row.message.uid,
+			flags: parseFlags(row.message.flags),
+		});
+	}
+	return located;
+}
+
+async function syncReceivedViews(owner: MailboxOwnerRef) {
+	for (const path of ["INBOX", "Junk"]) {
+		const folder = await findFolder(owner, path);
+		if (folder) await syncFolder(owner, folder);
+	}
+}
 
 function fail(
 	set: { status?: number | string },
@@ -103,15 +223,19 @@ function formatAddress(name: string | null | undefined, address: string) {
 	return name ? `${name} <${address}>` : address;
 }
 
-function addressList(field: string | null): string[] {
+export function addressList(field: string | null): string[] {
 	const parsed = parseJson<ParsedAddressField | null>(field, null);
 	return (parsed?.addresses ?? [])
 		.filter((entry) => entry.address)
 		.map((entry) => formatAddress(entry.name, entry.address as string));
 }
 
-function fromText(field: string | null): string {
-	return addressList(field)[0] ?? parseJson<ParsedAddressField | null>(field, null)?.text ?? "unknown";
+export function fromText(field: string | null): string {
+	return (
+		addressList(field)[0] ??
+		parseJson<ParsedAddressField | null>(field, null)?.text ??
+		"unknown"
+	);
 }
 
 function jsonStringArray(value: string | null): string[] {
@@ -121,18 +245,19 @@ function jsonStringArray(value: string | null): string[] {
 		: [];
 }
 
-function preview(text: string | null, html: string | null): string | null {
+export function preview(
+	text: string | null,
+	html: string | null,
+): string | null {
 	const source =
 		text ||
-		html
-			?.replace(/<style[\s\S]*?<\/style>/gi, " ")
-			.replace(/<[^>]+>/g, " ") ||
+		html?.replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ") ||
 		"";
 	const compact = source.replace(/\s+/g, " ").trim();
 	return compact ? compact.slice(0, 200) : null;
 }
 
-function attachmentInfo(value: string | null) {
+export function attachmentInfo(value: string | null) {
 	const parsed = parseJson<unknown>(value, []);
 	if (!Array.isArray(parsed)) return [];
 	return parsed.map((entry, index) => {
@@ -151,26 +276,46 @@ function attachmentInfo(value: string | null) {
 	});
 }
 
-function iso(value: Date | null | undefined): string | null {
+export function iso(value: Date | null | undefined): string | null {
 	return value ? value.toISOString() : null;
 }
 
-function receivedSummary(email: typeof structuredEmails.$inferSelect) {
+type ReceivedFields = Pick<
+	typeof structuredEmails.$inferSelect,
+	| "id"
+	| "threadId"
+	| "subject"
+	| "fromData"
+	| "toData"
+	| "date"
+	| "createdAt"
+	| "textBody"
+	| "htmlBody"
+	| "attachments"
+	| "isJunk"
+>;
+
+function receivedSummary(
+	email: ReceivedFields,
+	location: Location | undefined,
+) {
+	const folder: Folder = location
+		? legacyFolder(location.folder, false)
+		: email.isJunk
+			? "junk"
+			: "inbox";
 	return {
 		id: email.id,
-		folder: (email.isJunk
-			? "junk"
-			: email.isArchived
-				? "archive"
-				: "inbox") as Folder,
+		folder,
+		folderPath: location?.folder.path ?? null,
 		threadId: email.threadId,
 		subject: email.subject,
 		from: fromText(email.fromData),
 		to: addressList(email.toData),
 		date: iso(email.date ?? email.createdAt),
 		preview: preview(email.textBody, email.htmlBody),
-		isRead: email.isRead ?? false,
-		isJunk: email.isJunk === true,
+		isRead: location?.flags.includes("\\Seen") ?? false,
+		isJunk: folder === "junk",
 		hasAttachments: attachmentInfo(email.attachments).length > 0,
 	};
 }
@@ -179,6 +324,7 @@ function sentSummary(email: typeof sentEmails.$inferSelect) {
 	return {
 		id: email.id,
 		folder: "sent" as Folder,
+		folderPath: null,
 		threadId: email.threadId,
 		subject: email.subject,
 		from: email.from,
@@ -191,14 +337,18 @@ function sentSummary(email: typeof sentEmails.$inferSelect) {
 	};
 }
 
-function receivedDetail(email: typeof structuredEmails.$inferSelect) {
+function receivedDetail(
+	email: typeof structuredEmails.$inferSelect,
+	location: Location | undefined,
+) {
 	return {
-		...receivedSummary(email),
+		...receivedSummary(email, location),
 		messageId: email.messageId,
 		inReplyTo: email.inReplyTo,
 		cc: addressList(email.ccData),
 		replyTo: addressList(email.replyToData),
-		envelopeRecipients: email.envelopeRecipients ?? (email.recipient ? [email.recipient] : []),
+		envelopeRecipients:
+			email.envelopeRecipients ?? (email.recipient ? [email.recipient] : []),
 		text: email.textBody,
 		html: email.htmlBody,
 		attachments: attachmentInfo(email.attachments),
@@ -251,19 +401,118 @@ async function findVisibleSent(access: MailboxAccess, id: string) {
 }
 
 async function unreadCount(access: MailboxAccess): Promise<number> {
+	const owner = ownerOf(access);
+	const inbox = await findFolder(owner, "INBOX");
+	if (!inbox) return 0;
+	await syncFolder(owner, inbox);
 	const [row] = await db
 		.select({ count: sql<number>`count(*)::int` })
-		.from(structuredEmails)
+		.from(imapMailboxMessages)
 		.where(
 			and(
-				eq(structuredEmails.userId, access.userId),
-				receivedVisibleSql(access.credential),
-				sql`structured_emails.is_read IS NOT TRUE`,
-				sql`structured_emails.is_archived IS NOT TRUE`,
-				sql`structured_emails.is_junk IS NOT TRUE`,
+				eq(imapMailboxMessages.mailboxId, inbox.id),
+				sql`NOT jsonb_exists(${imapMailboxMessages.flags}::jsonb, ${"\\Seen"})`,
 			),
 		);
-	return row?.count ?? 0;
+	return Number(row?.count ?? 0);
+}
+
+export function addressesOf(
+	field: AddressObject | AddressObject[] | undefined,
+): string[] {
+	const list = Array.isArray(field) ? field : field ? [field] : [];
+	return list.flatMap((entry) =>
+		entry.value
+			.filter((address) => address.address)
+			.map((address) =>
+				formatMailbox({
+					name: address.name || null,
+					address: address.address as string,
+				}),
+			),
+	);
+}
+
+function appendedSummary(
+	id: string,
+	parsed: ParsedMail | null,
+	location: Location | undefined,
+	bodies = false,
+) {
+	const folder: Folder = location ? legacyFolder(location.folder, true) : "sent";
+	const html = typeof parsed?.html === "string" ? parsed.html : null;
+	return {
+		id,
+		folder,
+		folderPath: location?.folder.path ?? null,
+		threadId: null,
+		subject: parsed?.subject ?? null,
+		from: addressesOf(parsed?.from)[0] ?? parsed?.from?.text ?? "unknown",
+		to: addressesOf(parsed?.to),
+		date: iso(parsed?.date),
+		preview: bodies ? preview(parsed?.text || null, html) : null,
+		isRead: location?.flags.includes("\\Seen") ?? false,
+		isJunk: folder === "junk",
+		hasAttachments: bodies ? (parsed?.attachments?.length ?? 0) > 0 : false,
+	};
+}
+
+function appendedDetail(
+	id: string,
+	parsed: ParsedMail,
+	location: Location | undefined,
+) {
+	return {
+		...appendedSummary(id, parsed, location, true),
+		messageId: parsed.messageId ?? null,
+		inReplyTo: parsed.inReplyTo ?? null,
+		cc: addressesOf(parsed.cc),
+		replyTo: addressesOf(parsed.replyTo),
+		envelopeRecipients: [],
+		text: parsed.text ?? null,
+		html: typeof parsed.html === "string" ? parsed.html : null,
+		attachments: (parsed.attachments ?? []).map((attachment, index) => ({
+			index,
+			filename: attachment.filename || null,
+			contentType: attachment.contentType || null,
+			size: attachment.size ?? attachment.content?.length ?? null,
+		})),
+	};
+}
+
+async function parseHeaderBlock(
+	raw: string | null,
+): Promise<ParsedMail | null> {
+	if (!raw) return null;
+	const crlf = raw.indexOf("\r\n\r\n");
+	const lf = raw.indexOf("\n\n");
+	const end =
+		crlf >= 0 && (lf < 0 || crlf < lf) ? crlf : lf >= 0 ? lf : raw.length;
+	try {
+		return await parseMailSafely(`${raw.slice(0, end)}\r\n\r\n`);
+	} catch {
+		return null;
+	}
+}
+
+async function findAppended(access: MailboxAccess, id: string) {
+	const owner = ownerOf(access);
+	const location = (await locateMany(owner, [id], "appended")).get(id);
+	if (!location) return null;
+	const [appended] = await db
+		.select({
+			id: imapAppendedMessages.id,
+			rawContent: imapAppendedMessages.rawContent,
+		})
+		.from(imapAppendedMessages)
+		.where(
+			and(
+				eq(imapAppendedMessages.id, id),
+				eq(imapAppendedMessages.userId, access.userId),
+			),
+		)
+		.limit(1);
+	return appended ? { ...appended, location } : null;
 }
 
 const MailboxParams = t.Object({ id: t.String() });
@@ -317,75 +566,115 @@ export const listMailboxMessages = new Elysia().get(
 		const result = await authorizeMailboxAccess(request, set, params.id);
 		if (!result.ok) return fail(set, result.status, result.error);
 		const access = result.access;
+		const owner = ownerOf(access);
 
-		const folder = (query.folder ?? "inbox") as Folder;
+		const folderName = (query.folder ?? "inbox") as ListFolder;
 		const limit = Math.min(Math.max(Number(query.limit ?? 25) || 25, 1), 100);
 		const offset = Math.max(Number(query.offset ?? 0) || 0, 0);
 		const search = query.search?.trim();
 		const pattern = search ? `%${search.replace(/[\\%_]/g, "\\$&")}%` : null;
 
-		if (folder === "sent") {
-			const conditions: SQL[] = [
-				eq(sentEmails.userId, access.userId),
-				sentVisibleSql(access.credential),
-			];
-			if (pattern) {
-				conditions.push(
-					or(
-						ilike(sentEmails.subject, pattern),
-						ilike(sentEmails.to, pattern),
-					) as SQL,
-				);
-			}
-			const rows = await db
-				.select()
-				.from(sentEmails)
-				.where(and(...conditions))
-				.orderBy(desc(sentEmails.createdAt))
-				.limit(limit + 1)
-				.offset(offset);
-			return {
-				folder,
-				messages: rows.slice(0, limit).map(sentSummary),
-				pagination: { limit, offset, hasMore: rows.length > limit },
-			};
+		let folder: ImapMailbox | null;
+		try {
+			folder = await findFolder(owner, LIST_FOLDER_PATHS[folderName]);
+			if (folder) folder = await syncFolder(owner, folder);
+		} catch (error) {
+			return handleStateError(set, error);
 		}
+		if (!folder) return fail(set, 404, "Folder not found");
 
-		const conditions: SQL[] = [
-			eq(structuredEmails.userId, access.userId),
-			receivedVisibleSql(access.credential),
-			folder === "junk"
-				? sql`structured_emails.is_junk IS TRUE`
-				: sql`structured_emails.is_junk IS NOT TRUE`,
-		];
-		if (folder !== "junk") {
-			conditions.push(
-				folder === "archive"
-					? sql`structured_emails.is_archived IS TRUE`
-					: sql`structured_emails.is_archived IS NOT TRUE`,
-			);
-		}
+		const conditions: SQL[] = [eq(imapMailboxMessages.mailboxId, folder.id)];
 		if (query.unread === "true") {
-			conditions.push(sql`structured_emails.is_read IS NOT TRUE`);
+			conditions.push(
+				sql`NOT jsonb_exists(${imapMailboxMessages.flags}::jsonb, ${"\\Seen"})`,
+			);
 		}
 		if (pattern) {
 			conditions.push(
 				or(
 					ilike(structuredEmails.subject, pattern),
 					ilike(structuredEmails.fromData, pattern),
+					ilike(structuredEmails.toData, pattern),
+					appendedHeadersMatch(pattern),
 				) as SQL,
 			);
 		}
 		const rows = await db
-			.select()
-			.from(structuredEmails)
+			.select({
+				message: imapMailboxMessages,
+				id: structuredEmails.id,
+				threadId: structuredEmails.threadId,
+				subject: structuredEmails.subject,
+				fromData: structuredEmails.fromData,
+				toData: structuredEmails.toData,
+				date: structuredEmails.date,
+				createdAt: structuredEmails.createdAt,
+				textBody: sql<string | null>`left(${structuredEmails.textBody}, 2000)`,
+				htmlBody: sql<string | null>`left(${structuredEmails.htmlBody}, 8000)`,
+				attachments: structuredEmails.attachments,
+				isJunk: structuredEmails.isJunk,
+				appendedHead: sql<
+					string | null
+				>`left(${imapAppendedMessages.rawContent}, ${APPENDED_HEADER_SEARCH_CHARS}::integer)`,
+			})
+			.from(imapMailboxMessages)
+			.leftJoin(
+				structuredEmails,
+				and(
+					eq(imapMailboxMessages.rawSource, "structured"),
+					eq(structuredEmails.id, imapMailboxMessages.structuredEmailId),
+					eq(structuredEmails.userId, access.userId),
+				),
+			)
+			.leftJoin(
+				imapAppendedMessages,
+				and(
+					eq(imapMailboxMessages.rawSource, "appended"),
+					eq(imapAppendedMessages.id, imapMailboxMessages.structuredEmailId),
+					eq(imapAppendedMessages.userId, access.userId),
+				),
+			)
 			.where(and(...conditions))
-			.orderBy(desc(structuredEmails.createdAt))
+			.orderBy(desc(imapMailboxMessages.uid))
 			.limit(limit + 1)
 			.offset(offset);
+
+		const current = folder;
+		const messages = await Promise.all(
+			rows.slice(0, limit).map(async (row) => {
+				const location: Location = {
+					folder: current,
+					uid: row.message.uid,
+					flags: parseFlags(row.message.flags),
+				};
+				if (row.message.rawSource === "appended" || !row.id) {
+					return appendedSummary(
+						row.message.structuredEmailId,
+						await parseHeaderBlock(row.appendedHead),
+						location,
+					);
+				}
+				return receivedSummary(
+					{
+						id: row.id,
+						threadId: row.threadId,
+						subject: row.subject,
+						fromData: row.fromData,
+						toData: row.toData,
+						date: row.date,
+						createdAt: row.createdAt,
+						textBody: row.textBody,
+						htmlBody: row.htmlBody,
+						attachments: row.attachments,
+						isJunk: row.isJunk,
+					},
+					location,
+				);
+			}),
+		);
 		return {
-			folder,
-			messages: rows.slice(0, limit).map(receivedSummary),
+			folder: folderName,
+			messages,
 			pagination: { limit, offset, hasMore: rows.length > limit },
 		};
 	},
@@ -402,13 +691,16 @@ export const listMailboxMessages = new Elysia().get(
 					],
 					{
 						description:
-							"inbox (default): received, not archived and not junk; archive: archived and not junk; junk: marked as junk; sent",
+							"The mailbox folder, shared with IMAP: inbox (default) is INBOX, archive is Archive, junk is Junk and sent is Sent (copies of mail sent with the mailbox password, plus messages clients saved there). Use /mailboxes/{id}/folders for every folder.",
 					},
 				),
 			),
 			unread: t.Optional(t.String({ description: "'true' for unread only" })),
 			search: t.Optional(
-				t.String({ description: "Match subject or sender (received) / recipients (sent)" }),
+				t.String({
+					description:
+						"Match subject, sender or recipients (received mail) or the raw header block (sent and other stored mail; bodies are not searched)",
+				}),
 			),
 			limit: t.Optional(t.String({ description: "1-100, default 25" })),
 			offset: t.Optional(t.String({ description: "Default 0" })),
@@ -433,7 +725,7 @@ export const listMailboxMessages = new Elysia().get(
 			tags: ["Mailboxes"],
 			summary: "List mailbox messages",
 			description:
-				"List messages in a mailbox folder, newest first. Only mail within the mailbox's scopes is visible.",
+				"List messages in a mailbox folder, newest first. Folder membership and read state are the mailbox's own (shared with IMAP), separate from the dashboard's read state.",
 		},
 	},
 );
@@ -443,8 +735,30 @@ export const getMailboxMessage = new Elysia().get(
 	async ({ request, params, set }) => {
 		const result = await authorizeMailboxAccess(request, set, params.id);
 		if (!result.ok) return fail(set, result.status, result.error);
+		const owner = ownerOf(result.access);
 		const received = await findVisibleReceived(result.access, params.messageId);
-		if (received) return receivedDetail(received);
+		if (received) {
+			const location = (
+				await locateMany(owner, [received.id], "structured")
+			).get(received.id);
+			return receivedDetail(received, location);
+		}
+		const appended = await findAppended(result.access, params.messageId);
+		if (appended) {
+			try {
+				const parsed = await parseMailSafely(appended.rawContent);
+				return appendedDetail(appended.id, parsed, appended.location);
+			} catch (error) {
+				if (error instanceof MailParseLimitError) {
+					return fail(
+						set,
+						422,
+						`Message could not be parsed: ${error.message}`,
+					);
+				}
+				throw error;
+			}
+		}
 		const sent = await findVisibleSent(result.access, params.messageId);
 		if (sent) return sentDetail(sent);
 		return fail(set, 404, "Message not found in this mailbox");
@@ -458,11 +772,13 @@ export const getMailboxMessage = new Elysia().get(
 			403: ErrorSchema,
 			404: ErrorSchema,
 			409: ErrorSchema,
+			422: ErrorSchema,
 		},
 		detail: {
 			tags: ["Mailboxes"],
 			summary: "Get a mailbox message",
-			description: "Get a received or sent message with its full text and HTML body.",
+			description:
+				"Get a received message, or a message stored in one of the mailbox's folders (such as a sent copy), with its full text and HTML body.",
 		},
 	},
 );
@@ -482,43 +798,80 @@ export const updateMailboxMessage = new Elysia().patch(
 		) {
 			return fail(set, 400, "Provide isRead, isArchived and/or isJunk");
 		}
+		if (body.isArchived === true && body.isJunk === true) {
+			return fail(set, 400, "A message can't be archived and junk at once");
+		}
 		const email = await findVisibleReceived(result.access, params.messageId);
-		if (!email) return fail(set, 404, "Received message not found in this mailbox");
+		if (!email)
+			return fail(set, 404, "Received message not found in this mailbox");
+		const owner = ownerOf(result.access);
 
-		const now = new Date();
-		const changes: Partial<typeof structuredEmails.$inferInsert> = {
-			updatedAt: now,
-		};
-		if (body.isRead !== undefined) {
-			changes.isRead = body.isRead;
-			changes.readAt = body.isRead ? now : null;
+		try {
+			await syncReceivedViews(owner);
+			const locate = async () =>
+				(await locateMany(owner, [email.id], "structured")).get(email.id);
+			let location = await locate();
+			if (!location) {
+				return fail(
+					set,
+					409,
+					"This message is not in any folder of the mailbox yet",
+				);
+			}
+			const moveTo = async (path: string) => {
+				const current = location as Location;
+				if (current.folder.path === path && !current.folder.scopeId) return;
+				const destination = await findFolder(owner, path);
+				if (!destination) throw new Error(`${path} folder not found`);
+				await transferMessages(
+					owner,
+					current.folder.id,
+					destination.id,
+					[current.uid],
+					!current.folder.scopeId,
+				);
+				location = await locate();
+				if (!location) throw new Error("Message disappeared during move");
+			};
+			if (body.isJunk === true) await moveTo("Junk");
+			if (body.isJunk === false && location.folder.path === "Junk") {
+				await moveTo(body.isArchived === true ? "Archive" : "INBOX");
+			}
+			if (body.isArchived === true) await moveTo("Archive");
+			if (body.isArchived === false && location.folder.path === "Archive") {
+				await moveTo("INBOX");
+			}
+			if (body.isRead !== undefined) {
+				const current = location as Location;
+				const updated = await updateFlags(
+					owner,
+					current.folder.id,
+					[current.uid],
+					body.isRead ? "add" : "remove",
+					["\\Seen"],
+				);
+				if (updated[0]) location = { ...current, flags: updated[0].flags };
+			}
+			return receivedSummary(email, location);
+		} catch (error) {
+			return handleStateError(set, error);
 		}
-		if (body.isArchived !== undefined) {
-			changes.isArchived = body.isArchived;
-			changes.archivedAt = body.isArchived ? now : null;
-		}
-		if (body.isJunk !== undefined) {
-			changes.isJunk = body.isJunk;
-			changes.junkReason = "user";
-			changes.junkUpdatedAt = now;
-		}
-		const [updated] = await db
-			.update(structuredEmails)
-			.set(changes)
-			.where(
-				and(
-					eq(structuredEmails.id, email.id),
-					eq(structuredEmails.userId, result.access.userId),
-				),
-			)
-			.returning();
-		return receivedSummary(updated ?? { ...email, ...changes });
 	},
 	{
 		params: MessageParams,
 		body: t.Object({
-			isRead: t.Optional(t.Boolean()),
-			isArchived: t.Optional(t.Boolean()),
+			isRead: t.Optional(
+				t.Boolean({
+					description:
+						"Sets or clears \\Seen in the mailbox (shared with IMAP). The dashboard's read state is separate.",
+				}),
+			),
+			isArchived: t.Optional(
+				t.Boolean({
+					description:
+						"Move to the Archive folder (true) or from Archive back to INBOX (false)",
+				}),
+			),
 			isJunk: t.Optional(
 				t.Boolean({
 					description:
@@ -538,7 +891,7 @@ export const updateMailboxMessage = new Elysia().patch(
 			tags: ["Mailboxes"],
 			summary: "Mark a mailbox message read, archived or junk",
 			description:
-				"Requires a read_write mailbox. Changes are shared with the dashboard; junk changes also move the message between INBOX and Junk over IMAP.",
+				"Requires a read_write mailbox. Updates the mailbox's own state, shared with IMAP: isRead sets \\Seen, isArchived moves between INBOX and Archive, and isJunk moves between INBOX and Junk (the junk verdict also applies to the email account-wide). The dashboard's read and archived state are separate.",
 		},
 	},
 );
@@ -573,8 +926,15 @@ export const getMailboxThread = new Elysia().get(
 				)
 				.limit(200),
 		]);
+		const locations = await locateMany(
+			ownerOf(access),
+			received.map((email) => email.id),
+			"structured",
+		);
 		const messages = [
-			...received.map(receivedDetail),
+			...received.map((email) =>
+				receivedDetail(email, locations.get(email.id)),
+			),
 			...sent.map(sentDetail),
 		].sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
 		if (messages.length === 0) {
@@ -598,7 +958,8 @@ export const getMailboxThread = new Elysia().get(
 		detail: {
 			tags: ["Mailboxes"],
 			summary: "Get a mailbox thread",
-			description: "Get every message of a conversation that is visible to the mailbox, oldest first.",
+			description:
+				"Get every message of a conversation that is visible to the mailbox, oldest first.",
 		},
 	},
 );
@@ -613,7 +974,8 @@ export const getMailboxAttachment = new Elysia().get(
 			return fail(set, 400, "Attachment index must be a non-negative integer");
 		}
 		const email = await findVisibleReceived(result.access, params.messageId);
-		if (!email) return fail(set, 404, "Received message not found in this mailbox");
+		if (!email)
+			return fail(set, 404, "Received message not found in this mailbox");
 		const loaded = await loadStoredAttachments(email.id, result.access.userId);
 		if (!loaded.ok) return fail(set, loaded.status, loaded.error);
 		const attachment = loaded.attachments[index];
@@ -621,7 +983,11 @@ export const getMailboxAttachment = new Elysia().get(
 		return attachmentResponse(attachment, `attachment-${index + 1}`);
 	},
 	{
-		params: t.Object({ id: t.String(), messageId: t.String(), index: t.String() }),
+		params: t.Object({
+			id: t.String(),
+			messageId: t.String(),
+			index: t.String(),
+		}),
 		response: {
 			400: ErrorSchema,
 			401: ErrorSchema,
@@ -633,7 +999,8 @@ export const getMailboxAttachment = new Elysia().get(
 		detail: {
 			tags: ["Mailboxes"],
 			summary: "Download a mailbox attachment",
-			description: "Download an attachment of a received message by its position (0-based).",
+			description:
+				"Download an attachment of a received message by its position (0-based).",
 		},
 	},
 );

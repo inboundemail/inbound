@@ -161,6 +161,7 @@ export const sendRawEmail = new Elysia().post(
 				textBody: message.text,
 				htmlBody: message.html,
 			},
+			credential,
 		});
 		if (delivery.status) set.status = delivery.status;
 		return delivery.body;

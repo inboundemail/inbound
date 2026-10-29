@@ -600,6 +600,7 @@ function e2eServerEnv() {
 			INBOUND_E2E_TEST_MODE: "true",
 			E2_LOCAL_RATE_LIMIT_PER_SECOND: String(E2E_RATE_LIMIT_PER_SECOND),
 			MAILBOX_GATEWAY_AUTH_SECRET: E2E_GATEWAY_SECRET,
+			AWS_ACCOUNT_ID: "000000000000",
 		},
 	});
 }
@@ -616,7 +617,7 @@ async function startLocalServer(): Promise<void> {
 		"bunx",
 		["next", "dev", "--port", String(LOCAL_PORT), "--hostname", "127.0.0.1"],
 		{
-			env: e2eServerEnv(),
+			env: { ...e2eServerEnv(), NODE_ENV: "development" },
 			stdio: SHOW_LOCAL_SERVER_LOGS ? "inherit" : "ignore",
 		},
 	);
@@ -2370,7 +2371,7 @@ describe("E2 API - Email E2E", () => {
 			]);
 
 			const list = await apiJson<
-				DomainListResponse & { data: Array<{ includeSubdomains: boolean }> }
+				Omit<DomainListResponse, "data"> & { data: Array<DomainListItem & { includeSubdomains: boolean }> }
 			>(`/domains${queryString({ limit: 100, offset: 0 })}`);
 			const listed = list.data.data.find(
 				(item) => item.domain === "wild-e2e.com",
@@ -2881,6 +2882,574 @@ describe("E2 API - Email E2E", () => {
 			expect((await runCron()).status).toBe(200);
 			expect(await statusOf(backoffId)).toBe("sent");
 			expect(stubCount(backoffSubject)).toBe(1);
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"shares mailbox folders, flags, appends, moves, deletion and sent copies over HTTP",
+		async () => {
+			type Folder = {
+				path: string;
+				subscribed: boolean;
+				specialUse: string | null;
+				highestModseq: number;
+				total: number;
+			};
+			type Message = {
+				uid: number;
+				flags: string[];
+				subject?: string;
+				structuredEmailId?: string | null;
+			};
+			type MessageList = {
+				data: Message[];
+				pagination: {
+					limit: number;
+					offset: number;
+					total: number;
+					hasMore: boolean;
+				};
+				highestModseq?: number;
+				expunged?: unknown[];
+			};
+			const token = makeToken("state");
+			const create = (accessMode: "read" | "read_write") =>
+				apiJson<{ data: { id: string }; password: string }>("/mailboxes", {
+					method: "POST",
+					body: JSON.stringify({
+						name: `${accessMode} ${token}`,
+						loginAddress: `${accessMode}-${token}@${E2E_DOMAIN}`,
+						type: "mailbox",
+						accessMode,
+						sendingMode: "scoped_domains",
+						sendingName: null,
+						sendingAddress: null,
+						scopes: [{ type: "domain", domainId: E2E_DOMAIN_ID }],
+					}),
+				});
+			const created = await create("read_write");
+			expect(created.response.status).toBe(201);
+			const id = created.data.data.id;
+			const base = `/mailboxes/${id}/folders`;
+			const mailboxHeaders = {
+				Authorization: `Bearer ${created.data.password}`,
+			};
+			const folders = () => apiJson<{ data: Folder[] }>(base);
+			const list = (folder: string, query = "") =>
+				apiJson<MessageList>(
+					`${base}/${encodeURIComponent(folder)}/messages${query}`,
+				);
+			const mutate = (path: string, method: string, body?: object) =>
+				apiRequest(path, {
+					method,
+					...(body ? { body: JSON.stringify(body) } : {}),
+				});
+			const sentCount = (count: number) =>
+				pollFor(`${count} Sent copies`, POLL_CONFIG.inboundTimeoutMs, async () => {
+					const sent = await list("Sent");
+					return sent.data.data.length === count ? sent.data.data : null;
+				});
+			const initial = await folders();
+			expect(initial.response.status).toBe(200);
+			expect(initial.data.data.map((folder) => folder.path)).toEqual(
+				expect.arrayContaining([
+					"INBOX",
+					"Sent",
+					"Drafts",
+					"Trash",
+					"Junk",
+					"Archive",
+				]),
+			);
+			expect(
+				initial.data.data.find((folder) => folder.path === "Archive")
+					?.specialUse,
+			).toBe("\\Archive");
+			expect(
+				(await apiRequest("/mailboxes/me/folders", { headers: mailboxHeaders }))
+					.status,
+			).toBe(200);
+			expect((await apiRequestWithKey(base, ALT_API_KEY)).status).toBe(404);
+			expect((await mutate(`${base}/INBOX`, "DELETE")).status).toBe(400);
+			expect((await mutate(base, "POST", { path: "Projects" })).status).toBe(
+				201,
+			);
+			expect(
+				(await mutate(base, "POST", { path: "Projects/Invoices" })).status,
+			).toBe(201);
+			expect(
+				(await mutate(`${base}/Projects`, "PATCH", { path: "Work" })).status,
+			).toBe(200);
+			expect(
+				(await folders()).data.data.map((folder) => folder.path),
+			).toContain("Work/Invoices");
+			expect(
+				(await mutate(`${base}/Work`, "PATCH", { subscribed: false })).status,
+			).toBe(200);
+			expect(
+				(await folders()).data.data.find((folder) => folder.path === "Work")
+					?.subscribed,
+			).toBe(false);
+			const raw = buildRawEmailContent({
+				from: E2E_SENDER_ADDRESS,
+				to: E2E_RECIPIENT_ADDRESS,
+				subject: `Mailbox ${token}`,
+				messageId: `${token}@example.test`,
+				text: `Stored body ${token}`,
+			});
+			const append = (folder: string, content = raw) =>
+				mutate(`${base}/${encodeURIComponent(folder)}/messages`, "POST", {
+					raw: Buffer.from(content).toString("base64"),
+				});
+			expect(
+				(
+					await mutate(`${base}/Drafts/messages`, "POST", {
+						raw: "not-base64!",
+					})
+				).status,
+			).toBe(400);
+			expect((await append("Drafts", "x".repeat(1024 * 1024 + 1))).status).toBe(
+				413,
+			);
+			expect((await append("Work/Invoices")).status).toBe(201);
+			let messages = await list("Work/Invoices", "?limit=1&offset=0");
+			expect(messages.response.status).toBe(200);
+			expect(messages.data.pagination).toEqual({
+				limit: 1,
+				offset: 0,
+				total: 1,
+				hasMore: false,
+			});
+			const uid = messages.data.data[0].uid;
+			const messagePath = `${base}/Work%2FInvoices/messages/${uid}`;
+			const detail = await apiRequest(messagePath, { headers: mailboxHeaders });
+			expect(detail.status).toBe(200);
+			expect(await detail.text()).toContain(`Stored body ${token}`);
+			const fetchedRaw = await apiRequest(`${messagePath}/raw`);
+			expect(fetchedRaw.status).toBe(200);
+			expect(fetchedRaw.headers.get("content-type")).toContain(
+				"message/rfc822",
+			);
+			expect(await fetchedRaw.text()).toBe(raw);
+			expect((await apiRequestWithKey(messagePath, ALT_API_KEY)).status).toBe(
+				404,
+			);
+			const since = (await folders()).data.data.find(
+				(folder) => folder.path === "Work/Invoices",
+			)!.highestModseq;
+			expect(
+				(
+					await mutate(messagePath, "PATCH", {
+						action: "add",
+						flags: ["\\Seen", "\\Flagged", "customer-tag"],
+					})
+				).status,
+			).toBe(200);
+			messages = await list("Work/Invoices", `?sinceModseq=${since}`);
+			expect(messages.data.data).toHaveLength(1);
+			expect(messages.data.data[0].flags).toEqual(
+				expect.arrayContaining(["\\Seen", "\\Flagged", "customer-tag"]),
+			);
+			expect(
+				(await list("Work/Invoices", `?sinceUid=${uid}`)).data.data,
+			).toHaveLength(0);
+			expect(
+				(await list("Work/Invoices", "?unread=true")).data.data,
+			).toHaveLength(0);
+			expect(
+				(await list("Work/Invoices", "?flagged=true")).data.data,
+			).toHaveLength(1);
+			expect(
+				(await list("Work/Invoices", `?search=${token}`)).data.data,
+			).toHaveLength(1);
+			expect(
+				(await list("Work/Invoices", `?search=${encodeURIComponent("Stored body")}`))
+					.data.data,
+			).toHaveLength(0);
+			const unauthenticated = await fetch(
+				`${API_URL}${base}/Work%2FInvoices/messages/not-a-uid`,
+				{ method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add", flags: ["bad flag"] }) },
+			);
+			expect(unauthenticated.status).toBe(401);
+			expect((await apiRequestWithKey(`${base}/INBOX/messages/not-a-uid`, ALT_API_KEY)).status).toBe(404);
+			expect(
+				(
+					await apiRequestWithKey(messagePath, ALT_API_KEY, {
+						method: "PATCH",
+						body: JSON.stringify({ action: "add", flags: ["bad flag"] }),
+					})
+				).status,
+			).toBe(404);
+			expect((await apiRequestWithKey(`${messagePath}/attachments/x`, ALT_API_KEY)).status).toBe(404);
+			expect((await apiRequest(`${base}/INBOX/messages/not-a-uid`)).status).toBe(400);
+			expect(
+				(
+					await mutate(`${base}/Drafts/messages`, "POST", {
+						raw: Buffer.concat([
+							Buffer.from(`From: ${E2E_SENDER_ADDRESS}\r\nSubject: latin1 ${token}\r\n\r\n`),
+							Buffer.from([0xe9, 0xff]),
+						]).toString("base64"),
+					})
+				).status,
+			).toBe(400);
+			expect(
+				(await apiRequestWithKey(`${base}/Drafts/messages`, ALT_API_KEY, {
+					method: "POST",
+					body: JSON.stringify({ raw: "not-base64!" }),
+				})).status,
+			).toBe(404);
+			expect(
+				(
+					await mutate(messagePath, "PATCH", {
+						action: "remove",
+						flags: ["\\Seen"],
+					})
+				).status,
+			).toBe(200);
+			expect(
+				(await list("Work/Invoices", "?unread=true")).data.data,
+			).toHaveLength(1);
+			expect((await mutate(messagePath, "POST", {})).status).toBe(404);
+			expect(
+				(await mutate(`${messagePath}/copy`, "POST", { destination: "Drafts" }))
+					.status,
+			).toBe(201);
+			expect((await list("Work/Invoices")).data.data).toHaveLength(1);
+			expect((await list("Drafts")).data.data).toHaveLength(1);
+			expect(
+				(
+					await mutate(`${messagePath}/move`, "POST", {
+						destination: "Archive",
+					})
+				).status,
+			).toBe(200);
+			expect((await list("Work/Invoices")).data.data).toHaveLength(0);
+			const archived = (await list("Archive")).data.data[0];
+			expect(archived.flags).toContain("customer-tag");
+			expect(
+				(await mutate(`${base}/Archive/messages/${archived.uid}`, "DELETE"))
+					.status,
+			).toBe(200);
+			expect((await list("Archive")).data.data).toHaveLength(0);
+			const trashed = (await list("Trash")).data.data[0];
+			expect(
+				(
+					await mutate(
+						`${base}/Trash/messages/${trashed.uid}?permanent=true`,
+						"DELETE",
+					)
+				).status,
+			).toBe(200);
+			expect((await list("Trash")).data.data).toHaveLength(0);
+			const draft = (await list("Drafts")).data.data[0];
+			const draftSince = (await folders()).data.data.find(
+				(folder) => folder.path === "Drafts",
+			)!.highestModseq;
+			expect(
+				(
+					await mutate(`${base}/Drafts/messages/${draft.uid}`, "PATCH", {
+						action: "set",
+						flags: ["\\Deleted"],
+					})
+				).status,
+			).toBe(200);
+			expect((await mutate(`${base}/Drafts/expunge`, "POST", {})).status).toBe(
+				200,
+			);
+			const removed = await list("Drafts", `?sinceModseq=${draftSince}`);
+			expect(removed.data.data).toHaveLength(0);
+			expect(removed.data.expunged).toHaveLength(1);
+			psql(
+				`update imap_mailbox_expunges set created_at = now() - interval '8 days' where mailbox_id in (select id from imap_mailboxes where credential_id = '${id}' and path = 'Drafts');`,
+				E2E_DATABASE,
+			);
+			expect((await list("Drafts", `?sinceModseq=${draftSince}`)).response.status).toBe(409);
+			expect((await mutate(`${base}/Drafts/messages`, "POST", { from: E2E_SENDER_ADDRESS, to: [E2E_RECIPIENT_ADDRESS], subject: `JSON draft ${token}`, text: "Editable draft" })).status).toBe(201);
+			const jsonDraft = (await list("Drafts")).data.data[0];
+			expect(jsonDraft.flags).toEqual(expect.arrayContaining(["\\Seen", "\\Draft"]));
+			const attachmentRaw = [
+				`From: ${E2E_SENDER_ADDRESS}`, `To: ${E2E_RECIPIENT_ADDRESS}`,
+				`Subject: Attachment ${token}`, "MIME-Version: 1.0",
+				'Content-Type: multipart/mixed; boundary="mailbox-test"', "",
+				"--mailbox-test", "Content-Type: text/plain", "", "Body",
+				"--mailbox-test", 'Content-Type: text/plain; name="note.txt"',
+				'Content-Disposition: attachment; filename="note.txt"',
+				"Content-Transfer-Encoding: base64", "", Buffer.from(token).toString("base64"),
+				"--mailbox-test--", "",
+			].join("\r\n");
+			expect((await append("Drafts", attachmentRaw)).status).toBe(201);
+			const attached = (await list("Drafts")).data.data[0];
+			const attachmentsPath = `${base}/Drafts/messages/${attached.uid}/attachments`;
+			const attachments = await apiJson<{ data: Array<{ index: number; filename: string }> }>(attachmentsPath);
+			expect(attachments.data.data).toMatchObject([{ index: 0, filename: "note.txt" }]);
+			const attachment = await apiRequest(`${attachmentsPath}/0`);
+			expect(attachment.status).toBe(200);
+			expect(await attachment.text()).toBe(token);
+			expect((await mutate(`${base}/Work%2FInvoices`, "DELETE")).status).toBe(
+				200,
+			);
+			expect((await mutate(`${base}/Work`, "DELETE")).status).toBe(200);
+			const readOnly = await create("read");
+			expect(readOnly.response.status).toBe(201);
+			const readOnlyBase = `/mailboxes/${readOnly.data.data.id}/folders`;
+			expect((await apiRequest(readOnlyBase)).status).toBe(200);
+			expect(
+				(await mutate(readOnlyBase, "POST", { path: "Forbidden" })).status,
+			).toBe(403);
+			expect(
+				(
+					await apiRequest("/mailboxes/me/folders", {
+						method: "POST",
+						headers: { Authorization: `Bearer ${readOnly.data.password}` },
+						body: JSON.stringify({ path: "Forbidden" }),
+					})
+				).status,
+			).toBe(403);
+			expect(
+				(
+					await mutate(`${readOnlyBase}/Drafts/messages`, "POST", {
+						raw: Buffer.from(raw).toString("base64"),
+					})
+				).status,
+			).toBe(403);
+			for (const appendFirst of [true, false]) {
+				const messageId = `${token}-${appendFirst}@example.test`;
+				const sentRaw = raw.replace(
+					`<${token}@example.test>`,
+					`<${messageId}>`,
+				);
+				if (appendFirst)
+					expect((await append("Sent", sentRaw)).status).toBe(201);
+				const sent = await apiRequest("/emails", {
+					method: "POST",
+					headers: mailboxHeaders,
+					body: JSON.stringify({
+						from: E2E_SENDER_ADDRESS,
+						to: E2E_RECIPIENT_ADDRESS,
+						subject: `Sent ${token} ${appendFirst}`,
+						text: "Sent copy",
+						message_id: `<${messageId}>`,
+					}),
+				});
+				expect(sent.status).toBe(200);
+				if (!appendFirst)
+					expect((await append("Sent", sentRaw)).status).toBe(201);
+			}
+			expect(await sentCount(2)).not.toBeNull();
+			const signed = signSmimeMessage([
+				`From: ${E2E_SENDER_ADDRESS}`, `To: ${E2E_RECIPIENT_ADDRESS}`,
+				`Subject: Signed mailbox ${token}`, `Message-ID: <signed-${token}@example.test>`,
+			], "Content-Type: text/plain\r\n\r\nSigned mailbox body\r\n");
+			const rawSend = await apiRequest("/emails/raw", {
+				method: "POST",
+				headers: { ...mailboxHeaders, "x-inbound-gateway-secret": E2E_GATEWAY_SECRET },
+				body: JSON.stringify({ raw: Buffer.from(signed.raw).toString("base64"), recipients: [E2E_RECIPIENT_ADDRESS] }),
+			});
+			expect(rawSend.status).toBe(200);
+			expect((await append("Sent", signed.raw)).status).toBe(201);
+			expect(await sentCount(3)).not.toBeNull();
+			const roundTrip = await ensureRoundTrip();
+			expect(roundTrip).not.toBeNull();
+			const structured = (await list("INBOX", `?search=${encodeURIComponent(roundTrip!.subject)}`)).data.data.find((message) => message.structuredEmailId === roundTrip!.receivedEmailId);
+			expect(structured).toBeDefined();
+			const structuredAttachment = await apiRequest(`${base}/INBOX/messages/${structured!.uid}/attachments/0`);
+			expect(structuredAttachment.status).toBe(200);
+			expect(await structuredAttachment.text()).toBe(roundTrip!.attachmentContent);
+			const receivedSubject = `Mailbox received ${token}`;
+			await postSyntheticInboundRecord({
+				subject: receivedSubject,
+				messageId: `received-${token}@example.test`,
+				recipient: E2E_RECIPIENT_ADDRESS,
+				text: "Mailbox legacy state",
+			});
+			const received = await waitForExactSubjectEmailCount(
+				"received",
+				receivedSubject,
+				1,
+			);
+			expect(received).not.toBeNull();
+			const receivedId = received![0].id;
+			const receivedPath = `/mailboxes/${id}/messages/${receivedId}`;
+			const dashboardRead = psql(
+				`select is_read from structured_emails where id = '${receivedId}';`,
+				E2E_DATABASE,
+			);
+			expect(
+				(await mutate(receivedPath, "PATCH", { isRead: true })).status,
+			).toBe(200);
+			const receivedRows = (await list("INBOX", `?search=${token}`)).data.data;
+			expect(
+				receivedRows.find((message) => message.structuredEmailId === receivedId)
+					?.flags,
+			).toContain("\\Seen");
+			expect(
+				psql(
+					`select is_read from structured_emails where id = '${receivedId}';`,
+					E2E_DATABASE,
+				),
+			).toBe(dashboardRead);
+			expect(
+				(await mutate(receivedPath, "PATCH", { isArchived: true })).status,
+			).toBe(200);
+			expect(
+				(await list("Archive", `?search=${token}`)).data.data.map(
+					(message) => message.structuredEmailId,
+				),
+			).toContain(receivedId);
+			expect(
+				(await list("INBOX", `?search=${token}`)).data.data.map(
+					(message) => message.structuredEmailId,
+				),
+			).not.toContain(receivedId);
+			expect(
+				(await mutate(receivedPath, "PATCH", { isArchived: false })).status,
+			).toBe(200);
+			expect(
+				(await list("INBOX", `?search=${token}`)).data.data.map(
+					(message) => message.structuredEmailId,
+				),
+			).toContain(receivedId);
+			const legacy = (path: string) =>
+				apiJson<{ folder: string; folderPath: string | null; isRead: boolean }>(path);
+			expect(
+				(await mutate(base, "POST", { path: "Clients" })).status,
+			).toBe(201);
+			const inboxCopy = (await list("INBOX", `?search=${token}`)).data.data.find(
+				(message) => message.structuredEmailId === receivedId,
+			);
+			expect(inboxCopy).toBeDefined();
+			expect(
+				(
+					await mutate(`${base}/INBOX/messages/${inboxCopy!.uid}/move`, "POST", {
+						destination: "Clients",
+					})
+				).status,
+			).toBe(200);
+			const inClients = await legacy(receivedPath);
+			expect(inClients.response.status).toBe(200);
+			expect(inClients.data).toMatchObject({ folder: "archive", folderPath: "Clients" });
+			const unread = await apiJson<{ folder: string; folderPath: string | null; isRead: boolean }>(
+				receivedPath,
+				{ method: "PATCH", body: JSON.stringify({ isRead: false }) },
+			);
+			expect(unread.response.status).toBe(200);
+			expect(unread.data).toMatchObject({ folder: "archive", folderPath: "Clients", isRead: false });
+			expect(
+				(await mutate(receivedPath, "PATCH", { isArchived: true })).status,
+			).toBe(200);
+			expect((await legacy(receivedPath)).data.folderPath).toBe("Archive");
+			expect(
+				(await mutate(receivedPath, "PATCH", { isArchived: false })).status,
+			).toBe(200);
+			expect((await legacy(receivedPath)).data).toMatchObject({ folder: "inbox", folderPath: "INBOX" });
+			const legacySent = await apiJson<{ folder: string; messages: Array<{ folder: string; folderPath: string | null }> }>(
+				`/mailboxes/${id}/messages?folder=sent`,
+			);
+			expect(legacySent.response.status).toBe(200);
+			expect(legacySent.data.messages.length).toBeGreaterThan(0);
+			for (const message of legacySent.data.messages)
+				expect(message).toMatchObject({ folder: "sent", folderPath: "Sent" });
+			const replied = await apiRequest(`/emails/${receivedId}/reply`, {
+				method: "POST", headers: mailboxHeaders,
+				body: JSON.stringify({ from: E2E_SENDER_ADDRESS, text: "Mailbox reply" }),
+			});
+			expect(replied.status, await replied.clone().text()).toBe(200);
+			expect(await sentCount(4)).not.toBeNull();
+			const appendedIds = psql(`select string_agg(distinct mm.structured_email_id, ',') from imap_mailbox_messages mm join imap_mailboxes mb on mb.id = mm.mailbox_id where mb.credential_id = '${id}' and mm.raw_source = 'appended';`, E2E_DATABASE).split(",");
+			expect((await mutate(`/mailboxes/${id}`, "DELETE")).status).toBe(200);
+			expect(psql(`select count(*) from imap_appended_messages where id in (${appendedIds.map((value) => `'${value}'`).join(",")});`, E2E_DATABASE)).toBe("0");
+		},
+		TEST_TIMEOUT_MS * 3,
+	);
+
+	it(
+		"copies account-key sends only into read_write mailboxes whose sending identity matches From",
+		async () => {
+			const token = makeToken("sent-copy");
+			const createMailbox = async (
+				label: string,
+				accessMode: "read" | "read_write",
+				sendingAddress: string | null,
+			) => {
+				const created = await apiJson<{ data: { id: string } }>("/mailboxes", {
+					method: "POST",
+					body: JSON.stringify({
+						name: `${label} ${token}`,
+						loginAddress: `${label}-${token}@${E2E_DOMAIN}`,
+						type: "mailbox",
+						accessMode,
+						sendingMode: sendingAddress ? "identity" : "scoped_domains",
+						sendingName: null,
+						sendingAddress,
+						scopes: [{ type: "domain", domainId: E2E_DOMAIN_ID }],
+					}),
+				});
+				expect(created.response.status).toBe(201);
+				return created.data.data.id;
+			};
+			const matching = await createMailbox("match", "read_write", E2E_SENDER_ADDRESS);
+			const loginOnly = await createMailbox("login", "read_write", null);
+			const readOnly = await createMailbox("readonly", "read", E2E_SENDER_ADDRESS);
+			const sentSubjects = async (mailboxId: string) => {
+				const sent = await apiJson<{ data: Array<{ subject: string | null; source: string }> }>(
+					`/mailboxes/${mailboxId}/folders/Sent/messages?search=${token}`,
+				);
+				expect(sent.response.status).toBe(200);
+				return sent.data.data.map((message) => message.subject ?? "");
+			};
+			const waitForSubjects = (mailboxId: string, count: number) =>
+				pollFor(`${count} account Sent copies`, POLL_CONFIG.inboundTimeoutMs, async () => {
+					const subjects = await sentSubjects(mailboxId);
+					return subjects.length >= count ? subjects : null;
+				});
+			const send = async (from: string, subject: string) => {
+				const response = await apiRequest("/emails", {
+					method: "POST",
+					body: JSON.stringify({
+						from,
+						to: E2E_RECIPIENT_ADDRESS,
+						subject,
+						text: `Account copy body ${token}`,
+					}),
+				});
+				expect(response.status, await response.clone().text()).toBe(200);
+			};
+			await send(`other-${token}@${E2E_DOMAIN}`, `Unmatched ${token}`);
+			await send(`"E2E Sender" <${E2E_SENDER_ADDRESS.toUpperCase()}>`, `Identity ${token}`);
+			await send(`login-${token}@${E2E_DOMAIN}`, `Login ${token}`);
+			const receivedSubject = `Account reply source ${token}`;
+			await postSyntheticInboundRecord({
+				subject: receivedSubject,
+				messageId: `account-reply-${token}@example.test`,
+				recipient: E2E_RECIPIENT_ADDRESS,
+				text: "Account reply source",
+			});
+			const received = await waitForExactSubjectEmailCount("received", receivedSubject, 1);
+			expect(received).not.toBeNull();
+			const replied = await apiRequest(`/emails/${received![0].id}/reply`, {
+				method: "POST",
+				body: JSON.stringify({ from: E2E_SENDER_ADDRESS, text: "Account reply" }),
+			});
+			expect(replied.status, await replied.clone().text()).toBe(200);
+			const matchingSubjects = await waitForSubjects(matching, 2);
+			expect(matchingSubjects).not.toBeNull();
+			expect(matchingSubjects).toEqual(
+				expect.arrayContaining([`Identity ${token}`, expect.stringContaining(receivedSubject)]),
+			);
+			const loginSubjects = await waitForSubjects(loginOnly, 1);
+			expect(loginSubjects).toEqual([`Login ${token}`]);
+			expect(await sentSubjects(matching)).toHaveLength(2);
+			expect(await sentSubjects(loginOnly)).toHaveLength(1);
+			expect(await sentSubjects(readOnly)).toHaveLength(0);
+			const legacy = await apiJson<{ messages: Array<{ subject: string | null; folder: string; folderPath: string | null }> }>(
+				`/mailboxes/${matching}/messages?folder=sent&search=${encodeURIComponent(`Identity ${token}`)}`,
+			);
+			expect(legacy.response.status).toBe(200);
+			expect(legacy.data.messages).toHaveLength(1);
+			expect(legacy.data.messages[0]).toMatchObject({ folder: "sent", folderPath: "Sent" });
+			for (const mailboxId of [matching, loginOnly, readOnly])
+				expect((await apiRequest(`/mailboxes/${mailboxId}`, { method: "DELETE" })).status).toBe(200);
 		},
 		TEST_TIMEOUT_MS,
 	);

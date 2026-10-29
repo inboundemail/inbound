@@ -80,6 +80,10 @@ The same mailbox password works over [IMAP](/mailboxes/connect-imap) and [SMTP](
 | `send_email` | Send a new email as the mailbox |
 | `download_attachment` | Fetch an attachment |
 
+Mailbox read/unread and archive actions now update the same folders and flags used by IMAP and the [HTTP mailbox API](/mailboxes/http-api), not the dashboard's separate account-level markers. Existing clients keep the same `folder` enum; `folderPath` identifies the exact folder when needed. Inbound imports existing read/archive markers once before shared state is enabled.
+
+Immediate mailbox sends and replies save a Sent copy in the background. Account-key sends and replies also save to enabled read/write mailboxes with an exact sending-address match (or login-address match when no sending address is configured); a matching domain scope is not enough. The copy may appear shortly after the send returns. Scheduled sends and historical account sent records are not copied. Failed copy persistence does not resend the email. See [Sent copies](/mailboxes/http-api#sent-copies).
+
 ## Account tools
 
 Connected with OAuth or an API key, the server exposes 50 tools:

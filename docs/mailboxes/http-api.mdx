@@ -1,0 +1,111 @@
+---
+title: "HTTP Mailbox API"
+description: "Manage the same folders, messages, flags and sync state over HTTP and IMAP"
+---
+
+The mailbox API and IMAP share one per-credential store. A flag change, move, append or expunge through either interface is visible through the other. Open IMAP sessions receive `FETCH FLAGS`, `EXISTS` and `EXPUNGE` updates, including while idle.
+
+## Authentication
+
+Use an account API key with `/api/e2/mailboxes/{mailboxId}/...` to operate a mailbox you own. An end user can use their generated `mail_…` password as a Bearer token with `/api/e2/mailboxes/me/...`. Legacy `imap_…` passwords also work. The password only grants access to its own credential; it cannot manage the account.
+
+```bash
+curl 'https://inbound.new/api/e2/mailboxes/me/folders' \
+  -H "Authorization: Bearer $MAILBOX_PASSWORD"
+```
+
+All writes require a **Read & write** mailbox, even when authenticated with the account key. Read-only credentials can list and fetch. Scope folders remain read-only with either access mode.
+
+## Folders
+
+| Method | Path after `/mailboxes/{id}` | Purpose |
+| --- | --- | --- |
+| `GET` | `/folders` | List paths, special-use attributes, total/unread counts, UID validity, next UID, highest modseq and subscription state |
+| `POST` | `/folders` | Create a custom folder |
+| `PATCH` | `/folders/{folder}` | Rename a custom folder or change its subscription |
+| `DELETE` | `/folders/{folder}` | Delete a custom folder |
+
+Default folders are `INBOX`, `Sent`, `Drafts`, `Trash`, `Junk` and `Archive`. `Archive` has the IMAP `\Archive` special-use attribute. Folder names are case-sensitive except `INBOX`. URL-encode the entire folder path when it contains `/`, for example `Projects%2FInvoices`.
+
+`INBOX` and special-use folders are protected from deletion. `Scopes` is a reserved, non-selectable container; its children are managed from the credential's scopes, not through folder CRUD. Renaming a custom folder also renames its descendants.
+
+Create with `{"path":"Projects/Invoices"}`. Rename with `{"path":"Projects/Receipts"}` or change subscriptions with `{"subscribed":false}` on the folder's `PATCH` endpoint.
+
+## Messages and incremental sync
+
+`GET /mailboxes/{id}/folders/{folder}/messages` returns `data` and `pagination: { limit, offset, total, hasMore }`. Messages are identified by their **UID within that folder**, not by an account-level email ID. Keep the folder's `uidValidity` alongside cached UIDs; discard the cache if it changes.
+
+Use `sinceUid` to find newly assigned UIDs, or `sinceModseq` for both additions and flag changes. `sinceUid` alone cannot detect deletions or flag changes. The incremental response includes expunged UIDs and the folder's highest modseq. If the server returns `409` because the checkpoint is too old, list the folder again and rebuild the cache. Expunge history is retained for approximately seven days.
+
+For a complete incremental pass:
+
+1. Request `?sinceModseq=X&limit=100` and save this **first page's** `highestModseq` as the next checkpoint.
+2. Process the messages and expunged UIDs. If another page is needed, keep the same `sinceModseq=X` and add `sinceUid=Y`, where `Y` is the last UID processed. Repeat until no messages remain.
+3. Advance to the saved first-page checkpoint, not a newer value returned by a later page. Changes during paging are delivered again in the next pass.
+
+Nonzero `offset` is rejected for incremental requests: deletions between pages would otherwise shift offsets and skip messages. Normal full-folder listings still support offset pagination.
+
+The list supports `unread`, `flagged` and `search` filters. Search covers subject and address fields for received messages, and the header block within the first 32,768 characters for appended messages; it does not scan message bodies. Fetch `/messages/{uid}` under the folder for parsed content, flags and the source `structuredEmailId` when applicable. `/messages/{uid}/raw` returns the RFC 822 message with `Content-Type: message/rfc822`. Attachment endpoints work for both received and appended messages.
+
+## Flags, moves and deletion
+
+Patch a folder message's flags to add, remove or replace `\Seen`, `\Flagged`, `\Answered`, `\Draft`, `\Deleted` and custom keywords. `\Recent` is server-managed and is not stored. Flags in `INBOX` are mirrored into its scope views; copies in other folders have independent flags.
+
+```json
+{"action":"add","flags":["\\Seen","\\Flagged","customer-review"]}
+```
+
+Use `action: "remove"` to clear selected flags or `action: "set"` to replace the entire set. Move and copy accept `{"destination":"Archive"}` with the plain, unencoded folder path. Explicit expunge accepts an optional `{"uids":[1,2]}` selection, still limited to messages carrying `\Deleted`.
+
+| Method | Path after `/mailboxes/{id}/folders/{folder}` | Purpose |
+| --- | --- | --- |
+| `PATCH` | `/messages/{uid}` | Change flags |
+| `POST` | `/messages/{uid}/move` | Move into a destination folder; returns its new UID |
+| `POST` | `/messages/{uid}/copy` | Copy into a destination folder; returns its new UID |
+| `DELETE` | `/messages/{uid}` | Move to `Trash` |
+| `DELETE` | `/messages/{uid}?permanent=true` | Expunge this folder entry |
+| `POST` | `/expunge` | Remove entries carrying `\Deleted` |
+
+Moving a received message into `Junk` marks it as junk; moving it back to `INBOX` marks it as not junk. That verdict is account-wide. Other folder state and flags belong to the credential.
+
+<Warning>
+  Permanent mailbox deletion removes the folder entry, not the underlying received email from the account. The email remains available in the dashboard and account email API, and may be visible to other credentials. Appended content is reclaimed when no folder references it.
+</Warning>
+
+## Append drafts and other messages
+
+`POST /mailboxes/{id}/folders/{folder}/messages` appends a message and returns its UID and UID validity. Supply base64-encoded raw RFC 822 content, or JSON draft fields to build a MIME message. Appending does not send email. Send with `/emails` or SMTP instead.
+
+```json
+{"from":"support@example.com","to":["customer@example.net"],"subject":"Draft reply","text":"Thanks for getting in touch."}
+```
+
+Raw append uses `{"raw":"BASE64_RFC822","flags":["\\Draft"]}`. Both forms accept an optional ISO `date`. JSON drafts in `Drafts` default to `\Seen` and `\Draft`; raw append defaults to no flags. Use raw MIME for attachments. List them at `/messages/{uid}/attachments`, then download `/messages/{uid}/attachments/{index}` using the returned zero-based index.
+
+HTTP append has the same 1 MiB message limit as IMAP `APPEND`. Appended storage is limited to 250 MiB and 5,000 messages per account, shared by all credentials and folders. Quota checks are atomic across HTTP and IMAP.
+
+Raw messages must be valid UTF-8 without NUL bytes (ASCII MIME is also valid). Encode non-UTF-8 text and binary attachments with MIME base64 or quoted-printable before submitting. HTTP and IMAP append reject invalid UTF-8 rather than silently changing message bytes.
+
+## Sent copies
+
+Successful immediate sends and replies authenticated with a **Read & write mailbox password**, including SMTP sends, save a copy to that credential's `Sent`. Account-key sends and replies also save copies to enabled read/write mailbox credentials whose sending address matches the authorized `from` address exactly, ignoring case. If no sending address is configured, the credential's login address is its identity for this match. A domain scope alone never selects a mailbox; matching credentials must belong to the sending account. SMTP-only credentials do not save copies or select other mailboxes.
+
+Copies with the same `Message-ID` in `Sent` are deduplicated whether the client appends its own copy before or after sending. The SMTP Sent copy preserves a valid client Message-ID. For HTTP sends, use the optional `message_id` field on `/emails`; otherwise one is generated. `Message-ID` remains forbidden in custom `headers`. SES assigns its own delivered Message-ID; the sending response still returns that delivery ID.
+
+Scheduled sends currently do not retain the originating mailbox credential and do not save a mailbox Sent copy. `message_id` cannot be combined with `scheduled_at`.
+
+Sent persistence runs in the background after delivery is accepted, so a successful response can precede the copy appearing. A failed, timed-out or interrupted copy is logged but is not retried, and never causes an accepted message to be resent. Each matching mailbox receives its own copy, counted against the account's shared storage quota. Check available mailbox storage if a successful send has no copy. Raw Sent copies also require valid UTF-8 MIME without NUL bytes. Existing historical account-level sent emails are not backfilled into `Sent`.
+
+Automatic sent copies can exceed the client APPEND limit of 1 MiB, up to the send endpoint's message-size limit. They still count toward the same 250 MiB / 5,000-message account quota and are visible over both HTTP and IMAP.
+
+## Existing mailbox endpoints
+
+`GET /mailboxes/{id}/messages?folder=inbox|archive|sent|junk` remains available and reads the corresponding IMAP folder. Its received-message `PATCH` fields map to mailbox operations: `isRead` changes `\Seen`, `isArchived` moves into or out of `Archive`, and `isJunk` moves into `Junk` or `INBOX`.
+
+There is no fallback to account-level `sent_emails` when `Sent` is empty. Use the account `/emails?type=sent` API for historical delivery records. This keeps HTTP and IMAP folder contents consistent. Dashboard `structured_emails.is_read` and account-level archive state remain separate from mailbox state.
+
+The legacy summary's `folder` enum remains `inbox`, `archive`, `sent` or `junk`; `folderPath` supplies the exact path for new folders without breaking strict SDK enums.
+
+## Import existing read and archive state
+
+During rollout, Inbound imports existing HTTP and MCP read/archive markers once before shared state is enabled. Received messages already marked read gain `\Seen` in their mailbox INBOX/scope views, and archived messages move into Archive. Other flags and existing Archive copies are preserved, including for read-only mailbox credentials; account-level markers are unchanged. This is a one-time import, not continuous synchronization with the dashboard.
