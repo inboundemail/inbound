@@ -16,6 +16,7 @@ import {
   isClassificationEnabled,
   parseStoredClassification,
   type StoredClassification,
+  withCurrentSummary,
 } from '@/lib/guard/classification';
 import {
   buildJevEmailState,
@@ -604,7 +605,9 @@ export async function evaluateInboundEmail(
       return failOpen;
     }
 
-    const stored = classify ? parseStoredClassification(email.jevClassification) : null;
+    const parsed = classify ? parseStoredClassification(email.jevClassification) : null;
+    // Summaries stored before the current junk-filter fields are recomputed from their answers and facts
+    const stored = parsed ? withCurrentSummary(parsed) : null;
     const askClassification = classify && !stored;
     const { questions: ruleQuestions, ruleIds } = aiRuleQuestions(validAiPrompts(activeRules));
     const questions: Record<string, JevQuestion> = {

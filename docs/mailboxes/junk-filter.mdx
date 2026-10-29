@@ -13,14 +13,21 @@ Inbound checks every received email for spam, phishing, fraud, malware and imper
 
 Set the level in the [Mailboxes & SMTP dashboard](https://inbound.new/mailboxes) or with `PUT /api/e2/spam-filter`. It applies to the whole account and to emails received after the change.
 
-| Level | Marks as junk |
+Each email gets a level from 0 (none) to 4 (clear) for spam, phishing, fraud, malware and impersonation. Failed authentication (for example a DMARC failure) can raise a level, but `standard` and `lenient` only act when the classifier itself backs the level:
+
+- For spam, phishing and fraud, the classifier gives a probability for each level. "Likely" means at least a 70% chance of that level or higher.
+- For malware and impersonation, the classifier says how likely the label is. "Likely" means at least an 80% chance.
+
+| Level | Marks as junk when any of them is |
 | --- | --- |
-| `strict` | Possible spam or threats (level 2 of 4 or higher) |
-| `standard` (default) | Likely spam or threats (level 3 or higher) |
-| `lenient` | Only clear spam or threats (level 4) |
+| `strict` | Level 3 or higher, likely level 2 or higher, or (for spam, phishing and fraud) at least a 50% chance of level 3 or higher |
+| `standard` (default) | Likely level 3 or higher |
+| `lenient` | Likely level 4 |
 | `off` | Nothing automatically |
 
-Unless the level is `off`, an email that fails the receiving server's spam check is also marked as junk.
+Prompt injection (text aimed at an AI reading the email) is checked too, but never marks an email as junk by itself.
+
+Unless the level is `off`, an email that fails the receiving server's spam check or virus scan is also marked as junk. A failed virus scan counts as clear malware.
 
 ```bash
 curl -X PUT https://inbound.new/api/e2/spam-filter \

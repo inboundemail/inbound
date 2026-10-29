@@ -115,8 +115,27 @@ export const CLASSIFICATION_DIMENSIONS = Object.keys(
 export interface DimensionSummary {
 	/** 0 (none) to 4 (clear). */
 	level: number;
-	/** 0 to 1, from Jev's answer. */
+	/**
+	 * 0 to 1: how sure Jev is of its own answer, before the facts adjust the
+	 * level. For scores it is Jev's confidence in the score; for nouls it is
+	 * |2p - 1|, which is high for a confident "no" as well as a confident "yes".
+	 */
 	confidence: number;
+	/**
+	 * 0 to 4: the level from Jev's answer alone, before the authentication and
+	 * reply-to rules raise it. Pairs with `confidence` to tell whether Jev itself
+	 * leaned towards the label. Missing in summaries stored before it existed.
+	 */
+	base_level?: number;
+	/**
+	 * Score labels only, when Jev returned probabilities: Jev's probability
+	 * that the level is at least 2, at least 3, and exactly 4. Score confidence
+	 * measures how peaked the distribution is, so an answer split between 3 and
+	 * 4 has low confidence while being clearly at least 3; these capture that.
+	 */
+	p_ge2?: number;
+	p_ge3?: number;
+	p_eq4?: number;
 }
 
 export type ClassificationSummary = Record<
@@ -149,16 +168,43 @@ function noulLevel(probability: number): number {
 	return 0;
 }
 
+/** P(level >= 2), P(level >= 3) and P(level = 4) from a score answer's probabilities. */
+function levelMass(
+	probabilities: Record<string, number>,
+): Pick<DimensionSummary, "p_ge2" | "p_ge3" | "p_eq4"> {
+	let total = 0;
+	let ge2 = 0;
+	let ge3 = 0;
+	let eq4 = 0;
+	for (const [key, p] of Object.entries(probabilities)) {
+		const level = Number(key);
+		if (!Number.isFinite(level)) continue;
+		total += p;
+		if (level >= 2) ge2 += p;
+		if (level >= 3) ge3 += p;
+		if (level >= MAX_LEVEL) eq4 += p;
+	}
+	if (total <= 0) return {};
+	return { p_ge2: ge2 / total, p_ge3: ge3 / total, p_eq4: eq4 / total };
+}
+
 function dimension(answer: JevAnswer | undefined): DimensionSummary {
 	const score = scoreOf(answer);
 	if (score) {
-		return { level: clampLevel(score.score), confidence: score.confidence };
+		const level = clampLevel(score.score);
+		return {
+			level,
+			confidence: score.confidence,
+			base_level: level,
+			...levelMass(score.probabilities ?? {}),
+		};
 	}
 	const noul = noulOf(answer);
 	if (noul !== undefined) {
-		return { level: noulLevel(noul), confidence: Math.abs(2 * noul - 1) };
+		const level = noulLevel(noul);
+		return { level, confidence: Math.abs(2 * noul - 1), base_level: level };
 	}
-	return { level: 0, confidence: 0 };
+	return { level: 0, confidence: 0, base_level: 0 };
 }
 
 /**
@@ -171,7 +217,9 @@ function dimension(answer: JevAnswer | undefined): DimensionSummary {
  *   ("Jane (jane@corp.com) via Service" is a legitimate pattern when authentication passes).
  * - Failed auth with impersonation at 2+: impersonation +1.
  * - Reply-To on another domain with fraud at 2+: fraud +1 (payment-redirect pattern).
- * - SES virus verdict FAIL: malware 4. SES spam verdict FAIL: spam at least 3.
+ * - SES virus verdict FAIL: malware 4 with base level 4 and confidence 1 (the scanner's verdict is definitive).
+ * - SES spam verdict FAIL: spam at least 3.
+ * - These rules raise `level` only; `confidence`, `base_level` and the `p_*` masses stay Jev's own.
  * - risk = max of phishing, fraud, impersonation, malware, prompt_injection, and spam capped at 2.
  */
 export function summarizeClassification(
@@ -195,7 +243,11 @@ export function summarizeClassification(
 	}
 	if (authFailed && impersonation.level >= 2) impersonation.level += 1;
 	if (facts.reply_to_differs_from_sender && fraud.level >= 2) fraud.level += 1;
-	if (facts.ses_virus === "FAIL") malware.level = MAX_LEVEL;
+	if (facts.ses_virus === "FAIL") {
+		malware.level = MAX_LEVEL;
+		malware.base_level = MAX_LEVEL;
+		malware.confidence = 1;
+	}
 	if (facts.ses_spam === "FAIL") spam.level = Math.max(spam.level, 3);
 
 	for (const item of [
@@ -225,6 +277,35 @@ export function summarizeClassification(
 			Math.min(spam.level, 2),
 		),
 	};
+}
+
+/**
+ * Whether a stored summary has every field the junk filter reads. Summaries
+ * stored before `base_level` and the `p_*` masses existed are recomputed from
+ * the stored answers and facts instead.
+ */
+export function hasCurrentSummary(stored: StoredClassification): boolean {
+	return CLASSIFICATION_DIMENSIONS.every((id) => {
+		const summary = stored.summary?.[id];
+		if (!summary || summary.base_level === undefined) return false;
+		const score = scoreOf(stored.answers[id]);
+		const hasMass = score
+			? Object.keys(levelMass(score.probabilities ?? {})).length > 0
+			: false;
+		return !hasMass || summary.p_ge3 !== undefined;
+	});
+}
+
+/** The stored classification with its summary recomputed when it is out of date. */
+export function withCurrentSummary(
+	stored: StoredClassification,
+): StoredClassification {
+	return hasCurrentSummary(stored)
+		? stored
+		: {
+				...stored,
+				summary: summarizeClassification(stored.answers, stored.facts),
+			};
 }
 
 export function buildStoredClassification(

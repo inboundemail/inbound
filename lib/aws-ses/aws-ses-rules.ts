@@ -99,6 +99,7 @@ export class AWSSESReceiptRuleManager {
       const rule: ReceiptRule = {
         Name: ruleName,
         Enabled: true,
+        ScanEnabled: true, // SES spam and virus verdicts (spamVerdict/virusVerdict); delivery is unaffected
         Recipients: recipients,
         Actions: [
           // Store email in S3
@@ -207,6 +208,7 @@ export class AWSSESReceiptRuleManager {
       const rule: ReceiptRule = {
         Name: config.ruleName,
         Enabled: true,
+        ScanEnabled: true,
         Recipients: finalRecipients,
         Actions: [
           // Store email in S3 (using batch-catchall prefix since multiple domains in one rule)
@@ -318,6 +320,7 @@ export class AWSSESReceiptRuleManager {
       // An enabled rule with no recipients matches every verified domain, so disable it instead
       const updatedRule: ReceiptRule = {
         ...existingRule,
+        ScanEnabled: true,
         Recipients: updatedRecipients,
         Enabled: updatedRecipients.length > 0 ? existingRule.Enabled : false
       }
@@ -451,6 +454,7 @@ export class AWSSESReceiptRuleManager {
       const rule: ReceiptRule = {
         Name: ruleName,
         Enabled: true,
+        ScanEnabled: true,
         Recipients: [config.domain], // Just the domain name catches all emails to this domain
         Actions: [
           // Store email in S3
@@ -660,6 +664,7 @@ export class AWSSESReceiptRuleManager {
       const rule: ReceiptRule = {
         Name: ruleName,
         Enabled: true,
+        ScanEnabled: true,
         Recipients: emailAddresses,
         Actions: [
           // Store email in S3
