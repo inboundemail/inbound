@@ -10,7 +10,8 @@
 		"noEmit": true,
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true,
-		"verbatimModuleSyntax": true
+		"verbatimModuleSyntax": true,
+		"erasableSyntaxOnly": true
 	},
 	"include": ["src/**/*.ts"]
 }
