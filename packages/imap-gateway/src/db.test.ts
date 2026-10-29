@@ -228,7 +228,7 @@ describe("MailStore function boundary", () => {
 			"inbox",
 			"raw",
 			["\\Seen"],
-			date,
+			date.toISOString(),
 			1024,
 			10,
 		]);

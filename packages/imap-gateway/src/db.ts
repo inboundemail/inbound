@@ -264,8 +264,8 @@ export class MailStore {
 		try {
 			const rows = await this.sql<{ uid: number; uid_validity: number }[]>`
 				SELECT * FROM imap_append(${owner.userId}, ${owner.credentialId}, ${mailbox.id},
-					${raw}, ${normalizeFlags(flags)}::text[], ${internalDate},
-					${this.options.appendMaxBytesPerUser}::bigint, ${this.options.appendMaxMessagesPerUser})`;
+					${raw}, ${normalizeFlags(flags)}::text[], ${internalDate.toISOString()}::timestamp,
+					${this.options.appendMaxBytesPerUser}::bigint, ${this.options.appendMaxMessagesPerUser}::integer)`;
 			if (!rows[0]) throw new Error("Mailbox not found");
 			return { uid: rows[0].uid, uidValidity: rows[0].uid_validity };
 		} catch (err) {
