@@ -2,6 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { t } from "elysia";
 import { nanoid } from "nanoid";
 import {
+	deferActivity,
 	type MailboxLoginRefusal,
 	recordLoginFailed,
 	recordLoginRefused,
@@ -617,8 +618,9 @@ export async function verifyManagedMailCredential(
 	if (outcome.status === "authenticated" && options.use) {
 		outcome.credential.use = options.use;
 	}
-	if (options.use && options.use.record !== false) {
-		await recordLoginOutcome(outcome, options.loginAddress, options.use);
+	const use = options.use;
+	if (use && use.record !== false) {
+		deferActivity(() => recordLoginOutcome(outcome, options.loginAddress, use));
 	}
 	return outcome;
 }

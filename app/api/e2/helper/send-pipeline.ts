@@ -20,6 +20,7 @@ import {
 } from "@/app/api/e2/helper/ses-send-errors";
 import {
 	type ActivityCredential,
+	deferActivity,
 	recordSendFailure,
 } from "@/app/api/e2/mailboxes/activity-log";
 import {
@@ -350,7 +351,7 @@ export async function deliverSentEmail(input: {
 		error: string,
 		activity: { sentEmailId?: string; dailyLimit?: number | null } = {},
 	) => {
-		waitUntil(
+		deferActivity(() =>
 			recordSendFailure(input.credential, {
 				status,
 				message: error,

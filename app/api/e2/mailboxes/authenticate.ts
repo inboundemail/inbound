@@ -7,7 +7,10 @@ import {
 	isGatewayRevalidation,
 	isMailboxGatewayRequest,
 } from "@/app/api/e2/lib/auth";
-import { recordLoginRateLimited } from "@/app/api/e2/mailboxes/activity-log";
+import {
+	deferActivity,
+	recordLoginRateLimited,
+} from "@/app/api/e2/mailboxes/activity-log";
 import {
 	authenticateManagedMailCredential,
 	type MailboxPasswordUse,
@@ -76,7 +79,7 @@ export async function enforceGatewayLoginRateLimit(
 			use.record &&
 			isMailboxGatewayRequest(request)
 		) {
-			await recordLoginRateLimited(loginAddress, use);
+			deferActivity(() => recordLoginRateLimited(loginAddress, use));
 		}
 		throw error;
 	}

@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { waitUntil } from "@vercel/functions";
 import { and, count, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
@@ -291,6 +292,24 @@ export async function recordMailboxActivity(
 				);
 			}),
 		),
+	);
+}
+
+/**
+ * Runs activity recording after the current request without delaying it:
+ * the caller's response never waits on (or learns anything from) the
+ * lookups and writes, and errors are logged, never surfaced.
+ */
+export function deferActivity(work: () => Promise<void>): void {
+	waitUntil(
+		new Promise<void>((resolve) => setImmediate(resolve))
+			.then(work)
+			.catch((error: unknown) => {
+				console.error(
+					"Failed to record mailbox activity:",
+					error instanceof Error ? error.message : error,
+				);
+			}),
 	);
 }
 

@@ -19,10 +19,14 @@ import {
 } from "@/app/api/e2/helper/send-pipeline";
 import { enforceMailboxGatewayAuthorization } from "@/app/api/e2/lib/auth";
 import { authenticateEmailSend } from "@/app/api/e2/lib/send-auth";
-import { recordSendFailure } from "@/app/api/e2/mailboxes/activity-log";
+import {
+	deferActivity,
+	recordSendFailure,
+} from "@/app/api/e2/mailboxes/activity-log";
 
 const MAX_RAW_BASE64_LENGTH = Math.ceil(MAX_TOTAL_EMAIL_SIZE / 3) * 4;
-const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const BASE64 =
+	/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 const SendRawEmailBodySchema = t.Object({
 	raw: t.String({
@@ -101,11 +105,13 @@ export const sendRawEmail = new Elysia().post(
 		});
 		if ("response" in sender) {
 			if (sender.response.status) set.status = sender.response.status;
-			await recordSendFailure(credential, {
-				status: sender.response.status ?? 400,
-				message:
-					"error" in sender.response.body ? sender.response.body.error : null,
-			});
+			const { status, body } = sender.response;
+			deferActivity(() =>
+				recordSendFailure(credential, {
+					status: status ?? 400,
+					message: "error" in body ? body.error : null,
+				}),
+			);
 			return sender.response.body;
 		}
 

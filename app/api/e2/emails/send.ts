@@ -18,7 +18,10 @@ import {
 	resolveSendIdempotency,
 } from "@/app/api/e2/helper/send-pipeline";
 import { authenticateEmailSend } from "@/app/api/e2/lib/send-auth";
-import { recordSendFailure } from "@/app/api/e2/mailboxes/activity-log";
+import {
+	deferActivity,
+	recordSendFailure,
+} from "@/app/api/e2/mailboxes/activity-log";
 import { db } from "@/lib/db";
 import { SCHEDULED_EMAIL_STATUS, scheduledEmails } from "@/lib/db/schema";
 import { parseMailbox } from "@/lib/email-management/agent-email-helper";
@@ -224,11 +227,13 @@ export const sendEmail = new Elysia().post(
 		});
 		if ("response" in sender) {
 			if (sender.response.status) set.status = sender.response.status;
-			await recordSendFailure(credential, {
-				status: sender.response.status ?? 400,
-				message:
-					"error" in sender.response.body ? sender.response.body.error : null,
-			});
+			const { status, body } = sender.response;
+			deferActivity(() =>
+				recordSendFailure(credential, {
+					status: status ?? 400,
+					message: "error" in body ? body.error : null,
+				}),
+			);
 			return sender.response.body;
 		}
 		const { fromAddress, fromDomain, formattedFrom, recipients } = sender;

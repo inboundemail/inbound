@@ -4695,8 +4695,18 @@ describe("E2 API - Email E2E", () => {
 				expect(response.status).toBe(200);
 				return data;
 			};
-			const find = async (predicate: (row: Activity) => boolean) =>
-				(await activity()).data.filter(predicate);
+			const find = async (
+				predicate: (row: Activity) => boolean,
+				ready: (rows: Activity[]) => boolean = (rows) => rows.length > 0,
+			) => {
+				const deadline = Date.now() + 10_000;
+				let rows = (await activity()).data.filter(predicate);
+				while (!ready(rows) && Date.now() < deadline) {
+					await sleep(200);
+					rows = (await activity()).data.filter(predicate);
+				}
+				return rows;
+			};
 
 			expect(
 				(
@@ -4725,7 +4735,17 @@ describe("E2 API - Email E2E", () => {
 					})
 				).status,
 			).toBe(401);
-			const succeeded = await find((row) => row.event === "login_succeeded");
+			const failed = await find((row) => row.event === "login_failed");
+			expect(failed).toHaveLength(1);
+			expect(failed[0]).toMatchObject({
+				protocol: "imap",
+				clientIp: "203.0.113.11",
+				reason: "invalid_password",
+			});
+			const succeeded = await find(
+				(row) => row.event === "login_succeeded",
+				(rows) => rows.length > 0 && rows[0].count >= 2,
+			);
 			expect(succeeded).toHaveLength(1);
 			expect(succeeded[0]).toMatchObject({
 				protocol: "imap",
@@ -4734,16 +4754,6 @@ describe("E2 API - Email E2E", () => {
 				count: 2,
 				mailboxId,
 			});
-			const failed = await find((row) => row.event === "login_failed");
-			expect(failed).toHaveLength(1);
-			expect(failed[0]).toMatchObject({
-				protocol: "imap",
-				clientIp: "203.0.113.11",
-				reason: "invalid_password",
-			});
-			expect(
-				(await find((row) => row.clientIp === "203.0.113.12")).length,
-			).toBe(0);
 
 			expect((await patch({ allowedIps: ["203.0.113.0/24"] })).status).toBe(
 				200,
@@ -4758,7 +4768,10 @@ describe("E2 API - Email E2E", () => {
 			);
 			expect((await gateway("imap", "203.0.113.14")).status).toBe(401);
 			expect((await patch({ enabled: true })).status).toBe(200);
-			const refusals = await find((row) => row.event === "login_refused");
+			const refusals = await find(
+				(row) => row.event === "login_refused",
+				(rows) => rows.length >= 3,
+			);
 			expect(
 				refusals
 					.map((row) => `${row.protocol}:${row.reason}:${row.clientIp}`)
@@ -4768,6 +4781,9 @@ describe("E2 API - Email E2E", () => {
 				"imap:ip_not_allowed:198.51.100.7",
 				"smtp:protocol_disabled:203.0.113.13",
 			]);
+			expect(
+				(await activity()).data.filter((row) => row.clientIp === "203.0.113.12"),
+			).toHaveLength(0);
 
 			const limited = await Promise.all(
 				Array.from({ length: 65 }, async () => {
@@ -4787,6 +4803,7 @@ describe("E2 API - Email E2E", () => {
 			expect(rateLimited[0].count).toBeGreaterThanOrEqual(1);
 			const hammered = await find(
 				(row) => row.event === "login_failed" && row.clientIp === "203.0.113.15",
+				(rows) => rows.length > 0 && rows[0].count > 1,
 			);
 			expect(hammered).toHaveLength(1);
 			expect(hammered[0].count).toBeGreaterThan(1);
@@ -4848,7 +4865,10 @@ describe("E2 API - Email E2E", () => {
 			);
 			expect(ingested.status).toBe(200);
 			expect(await ingested.json()).toEqual({ accepted: 2, rejected: 2 });
-			const commandErrors = await find((row) => row.event === "command_error");
+			const commandErrors = await find(
+				(row) => row.event === "command_error",
+				(rows) => rows.length > 0 && rows[0].count >= 2,
+			);
 			expect(commandErrors).toHaveLength(1);
 			expect(commandErrors[0]).toMatchObject({
 				count: 2,
@@ -5118,18 +5138,20 @@ describe("E2 API - Email E2E", () => {
 				(await gateway("imap", "203.0.113.18", { password: "mail_wrong" }))
 					.status,
 			).toBe(401);
+			const dropped = await pollFor("events_dropped", 10_000, async () => {
+				const value = psql(
+					`select reason || ':' || count from mailbox_activity where credential_id = ${literal(mailboxId)} and event = 'events_dropped';`,
+					E2E_DATABASE,
+				);
+				return value === "hourly_cap:2" ? value : null;
+			});
+			expect(dropped).toBe("hourly_cap:2");
 			expect(
 				psql(
 					`select count(*) from mailbox_activity where credential_id = ${literal(mailboxId)} and client_ip in ('203.0.113.17', '203.0.113.18');`,
 					E2E_DATABASE,
 				),
 			).toBe("0");
-			expect(
-				psql(
-					`select reason || ':' || count from mailbox_activity where credential_id = ${literal(mailboxId)} and event = 'events_dropped';`,
-					E2E_DATABASE,
-				),
-			).toBe("hourly_cap:2");
 
 			psql(
 				`delete from mailbox_activity where id like ${literal(`${token}-cap-%`)};
