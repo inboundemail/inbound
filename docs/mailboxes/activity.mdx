@@ -24,7 +24,7 @@ Inbound records events for 30 days. Read them with your account API key, per mai
 Each event has:
 
 - `clientIp`: the client's IP address, from a source Inbound trusts (see [allowed IP addresses](/mailboxes/access-and-limits#allowed-ip-addresses)). `null` when Inbound has no trusted address.
-- `client`: the client's name and version from the IMAP `ID` command (for example `Thunderbird/128.0`), or the first part of the HTTP `User-Agent`. At most 100 characters.
+- `client`: the client's name and version from the IMAP `ID` command (for example `Thunderbird/128.0`), or the first part of the HTTP `User-Agent`. At most 100 characters. A sign-in event only has it when the client sends `ID` before `LOGIN`; some clients, such as Apple Mail, send it afterwards, and then the session's later events (such as `session_ended`) carry it.
 - `count` and `lastOccurredAt`: how many times the event repeated, and when it last did (see [repeats and caps](#repeats-and-caps)).
 - `detail`: a few small fields when they help, such as the HTTP or SMTP `status`, a short error `message`, a session's `durationMs` and `commands`, the `sentEmailId` of a failed send, or the `limit` that was reached.
 
@@ -53,7 +53,7 @@ Each event has:
 - Inbound stores at most 600 events per credential per hour. Further events in that hour are counted in a single `events_dropped` event, so a client retrying a wrong password many times can't flood the log.
 - Inbound re-checks open IMAP sessions every few minutes; those checks aren't recorded as sign-ins.
 
-Events older than 30 days are deleted automatically.
+Events older than 30 days are deleted automatically. Deleting a credential deletes its activity log too.
 
 ## Read the activity log
 
