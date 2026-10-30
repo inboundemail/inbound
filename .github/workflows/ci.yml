@@ -32,7 +32,7 @@ jobs:
   e2e:
     name: API end-to-end (local services)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
