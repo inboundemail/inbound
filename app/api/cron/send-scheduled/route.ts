@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { purgeMailboxActivity } from "@/app/api/e2/mailboxes/activity-log";
 import {
 	claimDueScheduledEmails,
 	expireMissedScheduledEmails,
@@ -19,8 +20,18 @@ const MAX_EMAILS_PER_RUN = 150;
 // picked up on the next tick.
 const CLAIM_DEADLINE_MS = 35_000;
 
+async function purgeExpiredMailboxActivity(): Promise<number | null> {
+	try {
+		return await purgeMailboxActivity();
+	} catch (error) {
+		console.error("❌ [send-scheduled] Mailbox activity purge failed:", error);
+		return null;
+	}
+}
+
 /**
- * Sends scheduled emails that are due. Runs every minute (see vercel.json).
+ * Sends scheduled emails that are due, then deletes mailbox activity past its
+ * 30-day retention in bounded batches. Runs every minute (see vercel.json).
  * Rows are claimed atomically, so overlapping invocations never send the same
  * email twice; rows a crashed run left in processing are recovered after
  * 15 minutes.
@@ -73,6 +84,7 @@ export async function GET(request: Request) {
 			if (batch.length < CLAIM_BATCH_SIZE) break;
 		}
 
+		const activityPurged = await purgeExpiredMailboxActivity();
 		const durationMs = Date.now() - startedAt;
 		if (claimed > 0) {
 			console.log("📬 [send-scheduled] Run complete:", {
@@ -88,6 +100,7 @@ export async function GET(request: Request) {
 			...counts,
 			recovered,
 			expired,
+			activityPurged,
 			durationMs,
 		});
 	} catch (error) {

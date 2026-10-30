@@ -63,6 +63,7 @@ const MailboxProfileSchema = t.Object({
 		filters: t.Boolean(),
 		spam: t.Boolean(),
 		password: t.Boolean(),
+		activity: t.Boolean(),
 	}),
 	unreadCount: t.Number(),
 	authenticatedAs: t.Union([t.Literal("account"), t.Literal("mailbox")]),

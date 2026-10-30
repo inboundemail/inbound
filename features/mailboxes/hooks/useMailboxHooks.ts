@@ -1,8 +1,14 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+	useMutation,
+	useQuery,
+	useQueryClient,
+	useSuspenseQuery,
+} from "@tanstack/react-query";
 
 import type {
 	CreateMailboxInput,
 	CreateMailboxResponse,
+	MailboxActivityResponse,
 	MailboxesResponse,
 	MailboxPasswordResponse,
 	UpdateMailboxInput,
@@ -118,5 +124,31 @@ export function useRotateMailboxPasswordMutation() {
 			),
 		onSuccess: () =>
 			queryClient.invalidateQueries({ queryKey: mailboxKeys.all }),
+	});
+}
+
+export function useMailboxActivityQuery(id: string) {
+	return useSuspenseQuery({
+		queryKey: [...mailboxKeys.all, id, "activity"],
+		queryFn: async (): Promise<
+			| { data: MailboxActivityResponse; error: null }
+			| { data: null; error: string }
+		> => {
+			try {
+				const data = await mailboxRequest<MailboxActivityResponse>(
+					`/${encodeURIComponent(id)}/activity?limit=50`,
+					undefined,
+					"Failed to load activity",
+				);
+				return { data, error: null };
+			} catch (error) {
+				return {
+					data: null,
+					error:
+						error instanceof Error ? error.message : "Failed to load activity",
+				};
+			}
+		},
+		staleTime: 15 * 1000,
 	});
 }

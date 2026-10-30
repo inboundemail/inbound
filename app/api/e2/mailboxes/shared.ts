@@ -2,6 +2,13 @@ import { and, eq, inArray } from "drizzle-orm";
 import { t } from "elysia";
 import { nanoid } from "nanoid";
 import {
+	deferActivity,
+	type MailboxLoginRefusal,
+	recordLoginFailed,
+	recordLoginRefused,
+	recordLoginSucceeded,
+} from "@/app/api/e2/mailboxes/activity-log";
+import {
 	ipAllowed,
 	normalizeAllowedIps,
 } from "@/app/api/e2/mailboxes/ip-allowlist";
@@ -36,6 +43,7 @@ const MailboxSelfServiceInputSchema = t.Object(
 		filters: t.Optional(t.Boolean()),
 		spam: t.Optional(t.Boolean()),
 		password: t.Optional(t.Boolean()),
+		activity: t.Optional(t.Boolean()),
 	},
 	{ additionalProperties: false },
 );
@@ -121,6 +129,7 @@ export const MailboxSchema = t.Object({
 		filters: t.Boolean(),
 		spam: t.Boolean(),
 		password: t.Boolean(),
+		activity: t.Boolean(),
 	}),
 	createdAt: t.String({ format: "date-time" }),
 	updatedAt: t.String({ format: "date-time" }),
@@ -176,6 +185,7 @@ export interface MailboxSelfService {
 	filters: boolean;
 	spam: boolean;
 	password: boolean;
+	activity: boolean;
 }
 
 export type MailboxProtocol = keyof MailboxProtocols;
@@ -215,6 +225,7 @@ export function resolveSelfService(
 		filters: stored?.filters === true,
 		spam: stored?.spam === true,
 		password: stored?.password === true,
+		activity: stored?.activity === true,
 	};
 }
 
@@ -511,6 +522,8 @@ export interface ManagedMailCredential {
 	spamLevel: string | null;
 	spamAllow: string[] | null;
 	spamBlock: string[] | null;
+	/** How the password was used when it authenticated this request, for the activity log. */
+	use?: MailboxPasswordUse;
 }
 
 /**
@@ -522,6 +535,10 @@ export interface ManagedMailCredential {
 export interface MailboxPasswordUse {
 	protocol: MailboxProtocol;
 	clientIp: string | null;
+	/** Client name for the activity log (IMAP ID or HTTP user agent product). */
+	client?: string | null;
+	/** Set false to keep this check out of the activity log (gateway session revalidation). */
+	record?: boolean;
 }
 
 export function credentialAllowsUse(
@@ -531,8 +548,22 @@ export function credentialAllowsUse(
 	},
 	use: MailboxPasswordUse,
 ): boolean {
-	if (!resolveProtocols(credential.protocols)[use.protocol]) return false;
-	return ipAllowed(credential.allowedIps, use.clientIp);
+	return credentialUseRefusal(credential, use) === null;
+}
+
+function credentialUseRefusal(
+	credential: {
+		protocols: Partial<MailboxProtocols> | null;
+		allowedIps: string[] | null;
+	},
+	use: MailboxPasswordUse,
+): "protocol_disabled" | "ip_not_allowed" | null {
+	if (!resolveProtocols(credential.protocols)[use.protocol]) {
+		return "protocol_disabled";
+	}
+	return ipAllowed(credential.allowedIps, use.clientIp)
+		? null
+		: "ip_not_allowed";
 }
 
 /**
@@ -543,8 +574,18 @@ export function credentialAllowsUse(
  */
 export type ManagedMailAuthOutcome =
 	| { status: "authenticated"; credential: ManagedMailCredential }
-	| { status: "invalid" }
-	| { status: "refused" };
+	| { status: "invalid"; refusal?: CredentialRefusal }
+	| { status: "refused"; refusal?: CredentialRefusal };
+
+/**
+ * Why a correct password for a known credential was not accepted, for the
+ * activity log only (never returned to the client).
+ */
+export interface CredentialRefusal {
+	reason: MailboxLoginRefusal;
+	userId: string;
+	credentialId: string;
+}
 
 const INVALID_MAIL_AUTH: ManagedMailAuthOutcome = { status: "invalid" };
 
@@ -572,6 +613,44 @@ export async function verifyManagedMailCredential(
 		requireType?: "mailbox";
 		use?: MailboxPasswordUse;
 	} = {},
+): Promise<ManagedMailAuthOutcome> {
+	const outcome = await verifyManagedMailPassword(password, options);
+	if (outcome.status === "authenticated" && options.use) {
+		outcome.credential.use = options.use;
+	}
+	const use = options.use;
+	if (use && use.record !== false) {
+		deferActivity(() => recordLoginOutcome(outcome, options.loginAddress, use));
+	}
+	return outcome;
+}
+
+async function recordLoginOutcome(
+	outcome: ManagedMailAuthOutcome,
+	loginAddress: string | undefined,
+	use: MailboxPasswordUse,
+): Promise<void> {
+	const context = {
+		protocol: use.protocol,
+		clientIp: use.clientIp,
+		client: use.client,
+	};
+	if (outcome.status === "authenticated") {
+		await recordLoginSucceeded(outcome.credential, context);
+	} else if (outcome.refusal) {
+		await recordLoginRefused(outcome.refusal, outcome.refusal.reason, context);
+	} else if (loginAddress) {
+		await recordLoginFailed(loginAddress, context);
+	}
+}
+
+async function verifyManagedMailPassword(
+	password: string,
+	options: {
+		loginAddress?: string;
+		requireType?: "mailbox";
+		use?: MailboxPasswordUse;
+	},
 ): Promise<ManagedMailAuthOutcome> {
 	let verification: Awaited<ReturnType<typeof auth.api.verifyApiKey>> | null =
 		null;
@@ -683,14 +762,23 @@ async function resolveManagedMailCredentialOutcome(
 		.innerJoin(user, eq(imapCredentials.userId, user.id))
 		.where(and(...conditions))
 		.limit(1);
-	if (!credential?.enabled) return INVALID_MAIL_AUTH;
+	if (!credential) return INVALID_MAIL_AUTH;
+	const refuse = (
+		reason: MailboxLoginRefusal,
+		status: "invalid" | "refused" = "invalid",
+	): ManagedMailAuthOutcome => ({
+		status,
+		refusal: { reason, userId: credential.userId, credentialId: credential.id },
+	});
+	if (!credential.enabled) return refuse("disabled");
 	if (credential.type !== "mailbox" && credential.type !== "smtp")
 		return INVALID_MAIL_AUTH;
 	if (options.requireType && credential.type !== options.requireType)
-		return INVALID_MAIL_AUTH;
-	if (options.use && !credentialAllowsUse(credential, options.use)) {
-		return { status: "refused" };
-	}
+		return refuse("protocol_disabled");
+	const useRefusal = options.use
+		? credentialUseRefusal(credential, options.use)
+		: null;
+	if (useRefusal) return refuse(useRefusal, "refused");
 	if (
 		credential.type === "mailbox" &&
 		credential.accessMode !== "read" &&
@@ -712,7 +800,7 @@ async function resolveManagedMailCredentialOutcome(
 		credential.banned &&
 		(!banExpires || banExpires.getTime() >= Date.now())
 	) {
-		return INVALID_MAIL_AUTH;
+		return refuse("banned");
 	}
 
 	const normalizedLogin = normalizeEmailAddress(credential.loginAddress);
@@ -731,12 +819,12 @@ async function resolveManagedMailCredentialOutcome(
 			),
 		)
 		.limit(1);
-	if (!verifiedLoginDomain) return INVALID_MAIL_AUTH;
+	if (!verifiedLoginDomain) return refuse("domain_unverified");
 
 	const verifiedScopes = (
 		await loadCredentialScopes(credential.userId, [credential.id], true)
 	).filter((scope) => scope.credentialId === credential.id);
-	if (verifiedScopes.length === 0) return INVALID_MAIL_AUTH;
+	if (verifiedScopes.length === 0) return refuse("domain_unverified");
 
 	let sendingAddress: string | null = null;
 	let allowedDomains: string[] = [];
@@ -744,7 +832,7 @@ async function resolveManagedMailCredentialOutcome(
 		sendingAddress = credential.sendingAddress
 			? normalizeEmailAddress(credential.sendingAddress)
 			: null;
-		if (!sendingAddress) return INVALID_MAIL_AUTH;
+		if (!sendingAddress) return refuse("domain_unverified");
 		const sendingDomain = sendingAddress.slice(
 			sendingAddress.lastIndexOf("@") + 1,
 		);
@@ -755,7 +843,7 @@ async function resolveManagedMailCredentialOutcome(
 					(scope.type === "address" && scope.address === sendingAddress),
 			)
 		) {
-			return INVALID_MAIL_AUTH;
+			return refuse("domain_unverified");
 		}
 	} else {
 		allowedDomains = [

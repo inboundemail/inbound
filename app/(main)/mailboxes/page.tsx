@@ -6,6 +6,7 @@ import { parseAsString, useQueryStates } from "nuqs";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import CirclePlus from "@/components/icons/circle-plus";
+import Clock2 from "@/components/icons/clock-2";
 import DotsVertical from "@/components/icons/dots-vertical";
 import EnvelopeOpen from "@/components/icons/envelope-open";
 import Filter2 from "@/components/icons/filter-2";
@@ -13,6 +14,7 @@ import Gear2 from "@/components/icons/gear-2";
 import Magnifier2 from "@/components/icons/magnifier-2";
 import Refresh2 from "@/components/icons/refresh-2";
 import Trash2 from "@/components/icons/trash-2";
+import { MailboxActivityDialog } from "@/components/mailboxes/MailboxActivityDialog";
 import { MailboxDialog } from "@/components/mailboxes/MailboxDialog";
 import { MailboxPasswordDialog } from "@/components/mailboxes/MailboxPasswordDialog";
 import { SpamFilterSettings } from "@/components/mailboxes/SpamFilterSettings";
@@ -77,6 +79,7 @@ export default function MailboxesPage() {
 	const [deleteMailbox, setDeleteMailbox] = useState<Mailbox | null>(null);
 	const [disableMailbox, setDisableMailbox] = useState<Mailbox | null>(null);
 	const [rotateMailbox, setRotateMailbox] = useState<Mailbox | null>(null);
+	const [activityMailbox, setActivityMailbox] = useState<Mailbox | null>(null);
 	const [passwordState, setPasswordState] = useState<PasswordState | null>(
 		null,
 	);
@@ -537,6 +540,12 @@ export default function MailboxesPage() {
 													Edit
 												</DropdownMenuItem>
 												<DropdownMenuItem
+													onSelect={() => setActivityMailbox(mailbox)}
+												>
+													<Clock2 width="16" height="16" />
+													Activity
+												</DropdownMenuItem>
+												<DropdownMenuItem
 													onSelect={() => setRotateMailbox(mailbox)}
 												>
 													<Refresh2 width="16" height="16" />
@@ -581,6 +590,11 @@ export default function MailboxesPage() {
 				onPasswordCreated={(password, loginAddress, type) =>
 					setPasswordState({ password, loginAddress, type, wasRotated: false })
 				}
+			/>
+
+			<MailboxActivityDialog
+				mailbox={activityMailbox}
+				onOpenChange={(open) => !open && setActivityMailbox(null)}
 			/>
 
 			<MailboxPasswordDialog

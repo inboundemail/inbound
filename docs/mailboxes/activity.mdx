@@ -1,0 +1,128 @@
+---
+title: "Activity Log"
+description: "See what each mailbox's users run into: sign-ins, refused sign-ins, IMAP sessions, command errors and send failures"
+---
+
+Every managed credential has an activity log. Use it to answer support questions such as "why can't my mail app sign in?" or "why did my message not send?" without asking the user for their password or their mail.
+
+Inbound records events for 30 days. Read them with your account API key, per mailbox or for all mailboxes at once, or in the dashboard: on **Mailboxes & SMTP**, open a credential's menu and choose **Activity**.
+
+## What is recorded
+
+| Event | Protocols | When | `reason` |
+| --- | --- | --- | --- |
+| `login_succeeded` | `imap`, `smtp`, `api` | The password signed in | |
+| `login_failed` | `imap`, `smtp` | A wrong password was used with this credential's login address | `invalid_password` |
+| `login_refused` | `imap`, `smtp`, `api` | The password was correct, but the sign-in wasn't allowed | `ip_not_allowed`, `protocol_disabled`, `disabled`, `domain_unverified`, `banned`, `rate_limited` |
+| `session_ended` | `imap` | An IMAP session closed | `client_logout`, `idle_timeout`, `revalidation`, `max_age`, `error`, `disconnected` |
+| `command_error` | `imap` | An IMAP command failed on the server side | The internal error code |
+| `quota_exceeded` | `imap`, `api` | An append was refused by the storage quota or the append limits | `storage_quota`, `append_limit` |
+| `send_failed` | `smtp`, `api` | A send was refused or failed | `not_allowed`, `rejected`, `rate_limited`, `conflict`, `upstream_error`, `temporary_failure` |
+| `send_rate_limited` | `smtp`, `api` | The credential reached its [daily send limit](/mailboxes/access-and-limits#daily-send-limit) | `daily_limit` |
+| `events_dropped` | any | Events past the hourly cap weren't stored individually | `hourly_cap` |
+
+Each event has:
+
+- `clientIp`: the client's IP address, from a source Inbound trusts (see [allowed IP addresses](/mailboxes/access-and-limits#allowed-ip-addresses)). `null` when Inbound has no trusted address.
+- `client`: the client's name and version from the IMAP `ID` command (for example `Thunderbird/128.0`), or the first part of the HTTP `User-Agent`. At most 100 characters. A sign-in event only has it when the client sends `ID` before `LOGIN`; some clients, such as Apple Mail, send it afterwards, and then the session's later events (such as `session_ended`) carry it.
+- `count` and `lastOccurredAt`: how many times the event repeated, and when it last did (see [repeats and caps](#repeats-and-caps)).
+- `detail`: a few small fields when they help, such as the HTTP or SMTP `status`, a short error `message`, a session's `durationMs` and `commands`, the `sentEmailId` of a failed send, or the `limit` that was reached.
+
+`session_ended` reasons mean:
+
+| Reason | Meaning |
+| --- | --- |
+| `client_logout` | The client sent `LOGOUT` |
+| `idle_timeout` | The client was idle too long |
+| `revalidation` | The password was rotated or the credential's settings changed, so Inbound logged the session out |
+| `max_age` | The session reached its maximum age and must sign in again |
+| `error` | The connection failed |
+| `disconnected` | The client closed the connection without logging out |
+
+## What is never recorded
+
+- Message content, subjects, headers or attachments
+- Passwords or API keys
+- Recipient or sender addresses. Error messages are shortened, and anything that looks like an email address is replaced with `[address]`
+- Sign-in attempts for an address no credential uses: they don't belong to any mailbox
+
+## Repeats and caps
+
+- A successful sign-in from the same IP address and protocol within 10 minutes adds to the existing event's `count` instead of creating a new event. HTTP requests authenticated with the mailbox password are recorded at most once per IP address per 10 minutes, without counting each request.
+- Wrong passwords and refused sign-ins from the same IP address are grouped per minute, and IMAP command errors per session per minute.
+- Inbound stores at most 600 events per credential per hour. Further events in that hour are counted in a single `events_dropped` event, so a client retrying a wrong password many times can't flood the log.
+- Inbound re-checks open IMAP sessions every few minutes; those checks aren't recorded as sign-ins.
+
+Events older than 30 days are deleted automatically. Deleting a credential deletes its activity log too.
+
+## Read the activity log
+
+`GET /mailboxes/{id}/activity` lists one mailbox's events, newest first. `GET /mailboxes/activity` lists events for every mailbox in the account; add `mailboxId` to narrow it to one.
+
+| Query parameter | Description |
+| --- | --- |
+| `event` | Only this event type |
+| `protocol` | `imap`, `smtp` or `api` |
+| `since`, `until` | ISO 8601 times; only events at or after `since` and at or before `until` |
+| `ip` | Only events from this IPv4 or IPv6 address |
+| `limit`, `offset` | Pagination: `limit` from 1 to 100 (default 50) |
+
+```bash
+curl "https://inbound.new/api/e2/mailboxes/$MAILBOX_ID/activity?event=login_refused&limit=20" \
+  -H "Authorization: Bearer $INBOUND_API_KEY"
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "Jx2kq8VnR4pL0aB7cD9eF",
+      "mailboxId": "mbx_123",
+      "occurredAt": "2026-10-29T14:02:11.000Z",
+      "lastOccurredAt": "2026-10-29T14:02:40.000Z",
+      "protocol": "imap",
+      "event": "login_refused",
+      "reason": "ip_not_allowed",
+      "clientIp": "198.51.100.7",
+      "client": "Thunderbird/128.0",
+      "count": 3,
+      "detail": null
+    }
+  ],
+  "pagination": { "limit": 20, "offset": 0, "total": 1, "hasMore": false }
+}
+```
+
+Find every failed send across the account in the last day:
+
+```bash
+curl "https://inbound.new/api/e2/mailboxes/activity?event=send_failed&since=2026-10-28T00:00:00Z" \
+  -H "Authorization: Bearer $INBOUND_API_KEY"
+```
+
+## Let mailbox users read their own activity
+
+By default only the account can read the activity log. Set `selfService.activity` to `true` to let the mailbox's own password read its log at `/mailboxes/me/activity` (with the same filters):
+
+```bash
+curl -X PUT "https://inbound.new/api/e2/mailboxes/$MAILBOX_ID" \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "selfService": { "activity": true } }'
+```
+
+```bash
+curl "https://inbound.new/api/e2/mailboxes/me/activity" \
+  -H "Authorization: Bearer $MAILBOX_PASSWORD"
+```
+
+Without the setting, the mailbox password gets `403`. A mailbox password can never read `GET /mailboxes/activity` or another mailbox's log.
+
+<CardGroup cols={2}>
+  <Card title="Access and Limits" icon="shield" href="/mailboxes/access-and-limits">
+    Protocol toggles, allowed IP addresses, quotas and self-service.
+  </Card>
+  <Card title="Manage Credentials" icon="key" href="/mailboxes/manage-credentials">
+    Create, update, disable and rotate credentials.
+  </Card>
+</CardGroup>

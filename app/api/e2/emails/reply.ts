@@ -48,6 +48,10 @@ import {
 } from "../helper/attachment-processor";
 import { receivedVisibleTo } from "../mailboxes/access";
 import {
+	deferActivity,
+	recordSendFailure,
+} from "@/app/api/e2/mailboxes/activity-log";
+import {
 	authenticateEmailSend,
 	senderPolicyAllowsAddress,
 } from "../lib/send-auth";
@@ -338,6 +342,12 @@ export const replyToEmail = new Elysia().post(
 
 		if (senderPolicy && !senderPolicyAllowsAddress(senderPolicy, fromAddress)) {
 			set.status = 403;
+			deferActivity(() =>
+				recordSendFailure(credential, {
+					status: 403,
+					message: "This credential cannot send from that address",
+				}),
+			);
 			return { error: "This credential cannot send from that address" };
 		}
 
@@ -623,6 +633,13 @@ export const replyToEmail = new Elysia().post(
 		}
 		if (reservation === "exceeded") {
 			await db.delete(sentEmails).where(eq(sentEmails.id, replyEmailId));
+			deferActivity(() =>
+				recordSendFailure(credential, {
+					status: 429,
+					message: MAILBOX_DAILY_LIMIT_ERROR,
+					dailyLimit: credential?.dailySendLimit ?? null,
+				}),
+			);
 			set.status = 429;
 			return { error: MAILBOX_DAILY_LIMIT_ERROR };
 		}
@@ -928,6 +945,13 @@ export const replyToEmail = new Elysia().post(
 				})
 				.where(eq(sentEmails.id, replyEmailId));
 
+			deferActivity(() =>
+				recordSendFailure(credential, {
+					status: 500,
+					message: sesError instanceof Error ? sesError.message : null,
+					sentEmailId: replyEmailId,
+				}),
+			);
 			set.status = 500;
 			return { error: "Failed to send reply. Please try again later." };
 		}

@@ -18,6 +18,7 @@ import {
 	SmtpRelayError,
 } from "./api-client.ts";
 import type { GatewayConfig } from "./config.ts";
+import { ActivityReporter } from "./activity.ts";
 import { clientIp, logEvent, shortHash } from "./log.ts";
 import { idempotencyKeyFor, mapRawMessageInWorker } from "./mapper.ts";
 
@@ -130,10 +131,18 @@ export class SmtpGateway {
 	private dataQueue: DataQueueEntry[] = [];
 	private activeParses = 0;
 	private parseQueue: Array<() => void> = [];
+	private activity: ActivityReporter;
 
-	constructor(config: GatewayConfig) {
+	constructor(config: GatewayConfig, activity?: ActivityReporter) {
 		this.config = config;
 		this.client = new InboundApiClient(config);
+		this.activity =
+			activity ??
+			new ActivityReporter({
+				apiBaseUrl: config.apiBaseUrl,
+				gatewayAuthSecret: config.gatewayAuthSecret,
+				timeoutMs: config.authRequestTimeoutMs,
+			});
 	}
 
 	start(): void {
@@ -151,6 +160,7 @@ export class SmtpGateway {
 				"SMTP_TLS_KEY_PATH and SMTP_TLS_CERT_PATH are required for the implicit TLS listener (set SMTP_IMPLICIT_TLS_PORT=0 to disable)",
 			);
 		}
+		this.activity.start();
 		if (this.config.starttlsPort > 0) {
 			const smtp = new SMTPServer({ ...this.baseOptions(tls), secure: false });
 			smtp.server.on("connection", destroyAfterEnd);
@@ -174,6 +184,7 @@ export class SmtpGateway {
 					}),
 			),
 		);
+		await this.activity.stop();
 	}
 
 	private tlsOptions(): TlsOptions | null {
@@ -305,6 +316,7 @@ export class SmtpGateway {
 							code: smtpError.responseCode,
 							ms: Date.now() - startedAt,
 						});
+						this.reportSendFailure(session, error, smtpError);
 						callback(smtpError);
 					})
 					.finally(() => {
@@ -682,6 +694,31 @@ export class SmtpGateway {
 		} finally {
 			release();
 		}
+	}
+
+	// Sends the API refused are logged by the API; this covers failures it never saw
+	// (size, parsing, sender checks, timeouts, an unreachable API).
+	private reportSendFailure(
+		session: SMTPServerSession,
+		error: unknown,
+		smtpError: Error & { responseCode?: number },
+	): void {
+		const user = session.user as AuthenticatedUser | undefined;
+		if (!user?.identity) return;
+		if (error instanceof SmtpRelayError && error.upstreamStatus !== undefined) {
+			return;
+		}
+		const status = smtpError.responseCode ?? 451;
+		this.activity.record({
+			credentialId: user.identity.credentialId,
+			userId: user.identity.userId,
+			protocol: "smtp",
+			event: "send_failed",
+			reason: status >= 500 ? "rejected" : "temporary_failure",
+			clientIp: clientIp(session.remoteAddress),
+			session: session.id,
+			detail: { status, message: smtpError.message.slice(0, 100) },
+		});
 	}
 
 	private claimSenderData(credentialId: string, ip: string): () => void {

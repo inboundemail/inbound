@@ -4615,6 +4615,577 @@ describe("E2 API - Email E2E", () => {
 	);
 
 	it(
+		"records mailbox activity for sign-ins, gateway sessions and sends, and serves it over the API",
+		async () => {
+			type Activity = {
+				id: string;
+				mailboxId: string;
+				occurredAt: string;
+				protocol: string;
+				event: string;
+				reason: string | null;
+				clientIp: string | null;
+				client: string | null;
+				count: number;
+				detail: Record<string, string | number | boolean> | null;
+			};
+			type ActivityList = {
+				data: Activity[];
+				pagination: {
+					limit: number;
+					offset: number;
+					total: number;
+					hasMore: boolean;
+				};
+			};
+			const token = makeToken("activity");
+			const loginAddress = `${token}@${E2E_DOMAIN}`;
+			const created = await apiJson<{
+				data: { id: string; selfService: Record<string, boolean> };
+				password: string;
+			}>("/mailboxes", {
+				method: "POST",
+				body: JSON.stringify({
+					name: token,
+					loginAddress,
+					type: "mailbox",
+					accessMode: "read_write",
+					sendingMode: "identity",
+					sendingName: null,
+					sendingAddress: E2E_SENDER_ADDRESS,
+					scopes: [{ type: "domain", domainId: E2E_DOMAIN_ID }],
+				}),
+			});
+			expect(created.response.status).toBe(201);
+			expect(created.data.data.selfService.activity).toBe(false);
+			const mailboxId = created.data.data.id;
+			const { password } = created.data;
+			const base = `/mailboxes/${mailboxId}`;
+			const patch = (body: object) =>
+				apiRequest(base, { method: "PUT", body: JSON.stringify(body) });
+			const gateway = (
+				protocol: "imap" | "smtp",
+				ip: string,
+				options: {
+					password?: string;
+					login?: string;
+					headers?: Record<string, string>;
+				} = {},
+			) =>
+				fetch(
+					`${API_URL}/mailboxes/${protocol === "imap" ? "authenticate" : "authenticate-smtp"}`,
+					{
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							"x-inbound-gateway-secret": E2E_GATEWAY_SECRET,
+							"x-inbound-client-ip": ip,
+							...options.headers,
+						},
+						body: JSON.stringify({
+							loginAddress: options.login ?? loginAddress,
+							password: options.password ?? password,
+						}),
+					},
+				);
+			const activity = async (query: Record<string, string | number> = {}) => {
+				const { response, data } = await apiJson<ActivityList>(
+					`${base}/activity${queryString({ limit: 100, ...query })}`,
+				);
+				expect(response.status).toBe(200);
+				return data;
+			};
+			const find = async (
+				predicate: (row: Activity) => boolean,
+				ready: (rows: Activity[]) => boolean = (rows) => rows.length > 0,
+			) => {
+				const deadline = Date.now() + 10_000;
+				let rows = (await activity()).data.filter(predicate);
+				while (!ready(rows) && Date.now() < deadline) {
+					await sleep(200);
+					rows = (await activity()).data.filter(predicate);
+				}
+				return rows;
+			};
+
+			expect(
+				(
+					await gateway("imap", "203.0.113.10", {
+						headers: { "x-inbound-client-name": "TestMail/1.0" },
+					})
+				).status,
+			).toBe(200);
+			expect((await gateway("imap", "203.0.113.10")).status).toBe(200);
+			expect(
+				(
+					await gateway("imap", "203.0.113.10", {
+						headers: { "x-inbound-auth-purpose": "revalidate" },
+					})
+				).status,
+			).toBe(200);
+			expect(
+				(await gateway("imap", "203.0.113.11", { password: "mail_wrong" }))
+					.status,
+			).toBe(401);
+			expect(
+				(
+					await gateway("imap", "203.0.113.12", {
+						login: `nobody-${token}@${E2E_DOMAIN}`,
+						password: "mail_wrong",
+					})
+				).status,
+			).toBe(401);
+			const failed = await find((row) => row.event === "login_failed");
+			expect(failed).toHaveLength(1);
+			expect(failed[0]).toMatchObject({
+				protocol: "imap",
+				clientIp: "203.0.113.11",
+				reason: "invalid_password",
+			});
+			const succeeded = await find(
+				(row) => row.event === "login_succeeded",
+				(rows) => rows.length > 0 && rows[0].count >= 2,
+			);
+			expect(succeeded).toHaveLength(1);
+			expect(succeeded[0]).toMatchObject({
+				protocol: "imap",
+				clientIp: "203.0.113.10",
+				client: "TestMail/1.0",
+				count: 2,
+				mailboxId,
+			});
+
+			expect((await patch({ allowedIps: ["203.0.113.0/24"] })).status).toBe(
+				200,
+			);
+			expect((await gateway("imap", "198.51.100.7")).status).toBe(401);
+			expect(
+				(await patch({ allowedIps: null, protocols: { smtp: false } })).status,
+			).toBe(200);
+			expect((await gateway("smtp", "203.0.113.13")).status).toBe(401);
+			expect((await patch({ protocols: null, enabled: false })).status).toBe(
+				200,
+			);
+			expect((await gateway("imap", "203.0.113.14")).status).toBe(401);
+			expect((await patch({ enabled: true })).status).toBe(200);
+			const refusals = await find(
+				(row) => row.event === "login_refused",
+				(rows) => rows.length >= 3,
+			);
+			expect(
+				refusals
+					.map((row) => `${row.protocol}:${row.reason}:${row.clientIp}`)
+					.sort(),
+			).toEqual([
+				"imap:disabled:203.0.113.14",
+				"imap:ip_not_allowed:198.51.100.7",
+				"smtp:protocol_disabled:203.0.113.13",
+			]);
+			expect(
+				(await activity()).data.filter((row) => row.clientIp === "203.0.113.12"),
+			).toHaveLength(0);
+
+			const limited = await Promise.all(
+				Array.from({ length: 65 }, async () => {
+					const response = await gateway("imap", "203.0.113.15", {
+						password: "mail_wrong",
+					});
+					await response.arrayBuffer();
+					return response.status;
+				}),
+			);
+			expect(limited).toContain(429);
+			const rateLimited = await find(
+				(row) => row.event === "login_refused" && row.reason === "rate_limited",
+			);
+			expect(rateLimited).toHaveLength(1);
+			expect(rateLimited[0].clientIp).toBe("203.0.113.15");
+			expect(rateLimited[0].count).toBeGreaterThanOrEqual(1);
+			const hammered = await find(
+				(row) => row.event === "login_failed" && row.clientIp === "203.0.113.15",
+				(rows) => rows.length > 0 && rows[0].count > 1,
+			);
+			expect(hammered).toHaveLength(1);
+			expect(hammered[0].count).toBeGreaterThan(1);
+
+			for (let attempt = 0; attempt < 2; attempt++) {
+				expect(
+					(
+						await apiRequestWithKey("/mailboxes/me/folders", password, {
+							headers: { "User-Agent": "ActivityProbe/3.1 (e2e)" },
+						})
+					).status,
+				).toBe(200);
+			}
+			const apiLogins = await find(
+				(row) => row.event === "login_succeeded" && row.protocol === "api",
+			);
+			expect(apiLogins).toHaveLength(1);
+			expect(apiLogins[0]).toMatchObject({
+				client: "ActivityProbe/3.1",
+				clientIp: null,
+				count: 1,
+			});
+
+			const ingest = (body: object, headers: Record<string, string> = {}) =>
+				fetch(`${API_URL}/mailboxes/activity/ingest`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json", ...headers },
+					body: JSON.stringify(body),
+				});
+			const gatewayEvent = {
+				credentialId: mailboxId,
+				userId: PRIMARY_USER_ID,
+				protocol: "imap",
+				event: "command_error",
+				reason: "57014",
+				clientIp: "203.0.113.16",
+				session: "ingest-session",
+				detail: { code: "TEMPFAIL", password, subject: "secret subject" },
+			};
+			expect((await ingest({ events: [gatewayEvent] })).status).toBe(403);
+			expect(
+				(
+					await ingest(
+						{ events: [gatewayEvent] },
+						{ "x-inbound-gateway-secret": "wrong" },
+					)
+				).status,
+			).toBe(403);
+			const ingested = await ingest(
+				{
+					events: [
+						gatewayEvent,
+						gatewayEvent,
+						{ ...gatewayEvent, userId: "someone-else" },
+						{ ...gatewayEvent, credentialId: `missing-${token}` },
+					],
+				},
+				{ "x-inbound-gateway-secret": E2E_GATEWAY_SECRET },
+			);
+			expect(ingested.status).toBe(200);
+			expect(await ingested.json()).toEqual({ accepted: 2, rejected: 2 });
+			const commandErrors = await find(
+				(row) => row.event === "command_error",
+				(rows) => rows.length > 0 && rows[0].count >= 2,
+			);
+			expect(commandErrors).toHaveLength(1);
+			expect(commandErrors[0]).toMatchObject({
+				count: 2,
+				reason: "57014",
+				clientIp: "203.0.113.16",
+				detail: { code: "TEMPFAIL", session: "ingest-session" },
+			});
+			expect(
+				(
+					await ingest(
+						{ events: [{ ...gatewayEvent, event: "login_succeeded" }] },
+						{ "x-inbound-gateway-secret": E2E_GATEWAY_SECRET },
+					)
+				).status,
+			).toBe(400);
+
+			const gatewaySource = `${import.meta.dir}/../../../packages/imap-gateway/src`;
+			const { ActivityReporter } = await import(`${gatewaySource}/activity.ts`);
+			const { ApiAuth } = await import(`${gatewaySource}/auth.ts`);
+			const { loadConfig } = await import(`${gatewaySource}/config.ts`);
+			const { MailStore } = await import(`${gatewaySource}/db.ts`);
+			const { buildHandlers } = await import(`${gatewaySource}/handlers.ts`);
+			const { ConnectionLimits } = await import(`${gatewaySource}/limits.ts`);
+			const { PgNotifier } = await import(`${gatewaySource}/notifier.ts`);
+			const gatewayUrl = `postgres://imap_gateway:local-e2e-gateway@127.0.0.1:54329/${E2E_DATABASE}`;
+			const store = new MailStore(gatewayUrl, {
+				appendMaxBytesPerUser: 250 * 1024 * 1024,
+				appendMaxMessagesPerUser: 5000,
+			});
+			const notifier = new PgNotifier(gatewayUrl, store);
+			const previousDatabaseUrl = process.env.DATABASE_URL;
+			process.env.DATABASE_URL = gatewayUrl;
+			const gatewayConfig = loadConfig();
+			if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+			else process.env.DATABASE_URL = previousDatabaseUrl;
+			const reporter = new ActivityReporter({
+				apiBaseUrl: API_URL,
+				gatewayAuthSecret: E2E_GATEWAY_SECRET,
+				timeoutMs: 10000,
+			});
+			const handlers = buildHandlers(
+				new ApiAuth({
+					...gatewayConfig,
+					databaseUrl: gatewayUrl,
+					apiBaseUrl: API_URL,
+					gatewayAuthSecret: E2E_GATEWAY_SECRET,
+				}),
+				store,
+				new ConnectionLimits(10, 10, 60000),
+				{ activity: reporter },
+			);
+			const require = createRequire(import.meta.url);
+			const {
+				IMAPServer,
+			} = require("../../../packages/imap-gateway/vendor/imap-core/index.js");
+			const server = new IMAPServer({
+				name: "localhost",
+				secure: false,
+				disableSTARTTLS: true,
+				ignoreSTARTTLS: true,
+			});
+			Object.assign(server, handlers, { notifier });
+			await notifier.start();
+			await new Promise<void>((resolve) =>
+				server.listen(0, "127.0.0.1", resolve),
+			);
+			const port = (server.server.address() as net.AddressInfo).port;
+			const socket = net.connect(port, "127.0.0.1");
+			let sequence = 0;
+			const command = (value: string) =>
+				new Promise<string>((resolve, reject) => {
+					const tag = `A${++sequence}`;
+					let output = "";
+					const timer = setTimeout(() => {
+						socket.off("data", receive);
+						reject(new Error(`IMAP timeout: ${value}: ${output}`));
+					}, 15000);
+					const receive = (chunk: Buffer) => {
+						output += chunk.toString();
+						if (!new RegExp(`(?:^|\\r\\n)${tag} (?:OK|NO|BAD) `).test(output))
+							return;
+						clearTimeout(timer);
+						socket.off("data", receive);
+						if (!output.includes(`${tag} OK `)) reject(new Error(output));
+						else resolve(output);
+					};
+					socket.on("data", receive);
+					socket.write(`${tag} ${value}\r\n`);
+				});
+			try {
+				await new Promise<void>((resolve, reject) => {
+					socket.once("data", () => resolve());
+					socket.once("error", reject);
+				});
+				await command('ID ("name" "LiveMail" "version" "2.0")');
+				await command(`LOGIN "${loginAddress}" "${password}"`);
+				await command("NOOP");
+				const closed = new Promise<void>((resolve) =>
+					socket.once("close", () => resolve()),
+				);
+				await command("LOGOUT");
+				await closed;
+				const ended = await pollFor("session_ended activity", 15000, async () => {
+					await reporter.flush();
+					const rows = await find((row) => row.event === "session_ended");
+					return rows.length > 0 ? rows : null;
+				});
+				expect(ended).toHaveLength(1);
+				expect(ended![0]).toMatchObject({
+					protocol: "imap",
+					reason: "client_logout",
+					clientIp: "127.0.0.1",
+					client: "LiveMail/2.0",
+				});
+				expect(Number(ended![0].detail?.commands)).toBeGreaterThanOrEqual(3);
+				expect(typeof ended![0].detail?.durationMs).toBe("number");
+				const liveLogin = await find(
+					(row) =>
+						row.event === "login_succeeded" && row.clientIp === "127.0.0.1",
+				);
+				expect(liveLogin[0]?.client).toBe("LiveMail/2.0");
+			} finally {
+				socket.destroy();
+				await new Promise<void>((resolve) => server.close(resolve));
+				await reporter.stop();
+				await notifier.stop();
+				await store.end();
+			}
+
+			const sendAs = (from: string, extra: object = {}) =>
+				apiRequestWithKey("/emails", password, {
+					method: "POST",
+					headers: { "Idempotency-Key": `${token}-${from}-${sequence++}` },
+					body: JSON.stringify({
+						from,
+						to: E2E_RECIPIENT_ADDRESS,
+						subject: `Activity ${token}`,
+						text: "activity",
+						...extra,
+					}),
+				});
+			expect((await sendAs(`intruder@${E2E_DOMAIN}`)).status).toBe(403);
+			expect((await patch({ dailySendLimit: 0 })).status).toBe(200);
+			expect((await sendAs(E2E_SENDER_ADDRESS)).status).toBe(429);
+			const sendRows = await pollFor("send activity", 15000, async () => {
+				const rows = await find(
+					(row) =>
+						row.event === "send_failed" || row.event === "send_rate_limited",
+				);
+				return rows.length >= 2 ? rows : null;
+			});
+			expect(sendRows).not.toBeNull();
+			expect(
+				sendRows!.find((row) => row.event === "send_failed"),
+			).toMatchObject({
+				protocol: "api",
+				reason: "not_allowed",
+				detail: { status: 403 },
+			});
+			expect(
+				sendRows!.find((row) => row.event === "send_rate_limited"),
+			).toMatchObject({ reason: "daily_limit", detail: { status: 429, limit: 0 } });
+			expect((await patch({ dailySendLimit: null })).status).toBe(200);
+
+			const all = await activity();
+			const serialized = JSON.stringify(all);
+			expect(serialized).not.toContain(password);
+			expect(serialized).not.toContain("secret subject");
+			expect(serialized).not.toContain(`intruder@${E2E_DOMAIN}`);
+			expect(serialized).not.toContain(E2E_RECIPIENT_ADDRESS);
+			const times = all.data.map((row) => Date.parse(row.occurredAt));
+			expect(times).toEqual([...times].sort((a, b) => b - a));
+
+			expect(
+				(await activity({ event: "login_refused", protocol: "smtp" })).data.map(
+					(row) => row.reason,
+				),
+			).toEqual(["protocol_disabled"]);
+			expect(
+				(await activity({ ip: "198.51.100.7" })).data.map((row) => row.reason),
+			).toEqual(["ip_not_allowed"]);
+			expect(
+				(await activity({ since: new Date(Date.now() + 60_000).toISOString() }))
+					.pagination.total,
+			).toBe(0);
+			expect(
+				(await activity({ until: "2020-01-01T00:00:00Z" })).pagination.total,
+			).toBe(0);
+			const page = await activity({ limit: 2, offset: 1 });
+			expect(page.data).toHaveLength(2);
+			expect(page.data[0].id).toBe(all.data[1].id);
+			expect(page.pagination).toMatchObject({
+				limit: 2,
+				offset: 1,
+				total: all.pagination.total,
+				hasMore: true,
+			});
+			expect(
+				(await apiRequest(`${base}/activity?since=yesterday-ish`)).status,
+			).toBe(400);
+			expect((await apiRequest(`${base}/activity?ip=not-an-ip`)).status).toBe(
+				400,
+			);
+			const accountWide = await apiJson<ActivityList>(
+				`/mailboxes/activity${queryString({ mailboxId, event: "login_failed", limit: 100 })}`,
+			);
+			expect(accountWide.response.status).toBe(200);
+			expect(accountWide.data.data.every((row) => row.mailboxId === mailboxId)).toBe(true);
+			expect(accountWide.data.data.map((row) => row.clientIp).sort()).toEqual([
+				"203.0.113.11",
+				"203.0.113.15",
+			]);
+			expect(
+				(await apiRequestWithKey(`${base}/activity`, ALT_API_KEY)).status,
+			).toBe(404);
+			expect(
+				(
+					await apiRequestWithKey(
+						`/mailboxes/activity?mailboxId=${mailboxId}`,
+						ALT_API_KEY,
+					)
+				).status,
+			).toBe(404);
+			const altAll = await apiJsonWithKey<ActivityList>(
+				"/mailboxes/activity",
+				ALT_API_KEY,
+			);
+			expect(altAll.data.data.some((row) => row.mailboxId === mailboxId)).toBe(
+				false,
+			);
+
+			expect(
+				(await apiRequestWithKey("/mailboxes/me/activity", password)).status,
+			).toBe(403);
+			expect(
+				(await apiRequestWithKey("/mailboxes/activity", password)).status,
+			).toBe(403);
+			const enabled = await apiJson<{
+				data: { selfService: Record<string, boolean> };
+			}>(base, {
+				method: "PUT",
+				body: JSON.stringify({ selfService: { activity: true } }),
+			});
+			expect(enabled.data.data.selfService).toMatchObject({
+				activity: true,
+				filters: false,
+			});
+			const selfActivity = await apiJsonWithKey<ActivityList>(
+				"/mailboxes/me/activity?event=login_refused",
+				password,
+			);
+			expect(selfActivity.response.status).toBe(200);
+			expect(selfActivity.data.data.length).toBeGreaterThanOrEqual(3);
+
+			const literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
+			psql(
+				`insert into mailbox_activity (id, user_id, credential_id, protocol, event, occurred_at, last_occurred_at)
+				 select ${literal(token)} || '-cap-' || n, ${literal(PRIMARY_USER_ID)}, ${literal(mailboxId)}, 'imap', 'session_ended', now(), now()
+				 from generate_series(1, 600) as n;`,
+				E2E_DATABASE,
+			);
+			expect(
+				(await gateway("imap", "203.0.113.17", { password: "mail_wrong" }))
+					.status,
+			).toBe(401);
+			expect(
+				(await gateway("imap", "203.0.113.18", { password: "mail_wrong" }))
+					.status,
+			).toBe(401);
+			const dropped = await pollFor("events_dropped", 10_000, async () => {
+				const value = psql(
+					`select reason || ':' || count from mailbox_activity where credential_id = ${literal(mailboxId)} and event = 'events_dropped';`,
+					E2E_DATABASE,
+				);
+				return value === "hourly_cap:2" ? value : null;
+			});
+			expect(dropped).toBe("hourly_cap:2");
+			expect(
+				psql(
+					`select count(*) from mailbox_activity where credential_id = ${literal(mailboxId)} and client_ip in ('203.0.113.17', '203.0.113.18');`,
+					E2E_DATABASE,
+				),
+			).toBe("0");
+
+			psql(
+				`delete from mailbox_activity where id like ${literal(`${token}-cap-%`)};
+				 insert into mailbox_activity (id, user_id, credential_id, protocol, event, occurred_at, last_occurred_at) values
+				 (${literal(`${token}-expired`)}, ${literal(PRIMARY_USER_ID)}, ${literal(mailboxId)}, 'imap', 'session_ended', now() - interval '31 days', now() - interval '31 days'),
+				 (${literal(`${token}-kept`)}, ${literal(PRIMARY_USER_ID)}, ${literal(mailboxId)}, 'imap', 'session_ended', now() - interval '29 days', now() - interval '29 days');`,
+				E2E_DATABASE,
+			);
+			const cron = await fetch(`${LOCAL_BASE_URL}/api/cron/send-scheduled`, {
+				headers: { Authorization: `Bearer ${LOCAL_CRON_SECRET}` },
+			});
+			expect(cron.status).toBe(200);
+			expect(
+				((await cron.json()) as { activityPurged: number }).activityPurged,
+			).toBeGreaterThanOrEqual(1);
+			expect(
+				psql(
+					`select string_agg(id, ',' order by id) from mailbox_activity where id in (${literal(`${token}-expired`)}, ${literal(`${token}-kept`)});`,
+					E2E_DATABASE,
+				),
+			).toBe(`${token}-kept`);
+
+			expect((await apiRequest(base, { method: "DELETE" })).status).toBe(200);
+			expect(
+				psql(
+					`select count(*) from mailbox_activity where credential_id = ${literal(mailboxId)};`,
+					E2E_DATABASE,
+				),
+			).toBe("0");
+		},
+		TEST_TIMEOUT_MS,
+	);
+
+	it(
 		"returns 429 responses when burst traffic exceeds rate limits",
 		async () => {
 			let sawRateLimit = false;
@@ -4663,5 +5234,6 @@ console.log("  - Endpoint lifecycle update + cleanup behavior");
 console.log("  - S/MIME raw relay keeps signatures valid and strips Bcc");
 console.log("  - Scheduled sends via cron (pause/resume/cancel, stale recovery)");
 console.log("  - Junk filter settings, Guard junk rules and mailbox Junk folder");
+console.log("  - Mailbox activity log (sign-ins, gateway sessions, sends, caps, retention)");
 console.log("  - Rate-limit 429 behavior under burst traffic");
 console.log("=".repeat(60) + "\n");

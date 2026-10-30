@@ -5,6 +5,8 @@ import { logEvent, sanitizeLogValue } from "./log.ts";
 export interface RevalidatedSession {
 	user?: AuthenticatedMailbox & { address?: string };
 	remoteAddress?: string;
+	/** Why the gateway ended the session, for the mailbox activity log. */
+	endReason?: "revalidation" | "max_age";
 }
 
 export type SessionCallback = (message?: unknown) => void;
@@ -126,6 +128,7 @@ export class SessionRevalidator {
 			const state = this.states.get(session);
 			if (!state) {
 				logEvent("session_dropped", { reason: "unverifiable" });
+				session.endReason = "revalidation";
 				callback({
 					command: "LOGOUT",
 					reason: "Session can no longer be verified, please log in again",
@@ -135,6 +138,7 @@ export class SessionRevalidator {
 			if (now - state.authenticatedAt >= this.options.maxAgeMs) {
 				this.forget(session);
 				logEvent("session_dropped", { reason: "expired" });
+				session.endReason = "max_age";
 				callback({
 					command: "LOGOUT",
 					reason: "Session expired, please log in again",
@@ -182,6 +186,7 @@ export class SessionRevalidator {
 					logEvent("session_dropped", {
 						reason: fresh ? "changed" : "invalid",
 					});
+					session.endReason = "revalidation";
 					callback({
 						command: "LOGOUT",
 						reason: fresh

@@ -19,6 +19,11 @@ import {
 	sesSendErrorResponse,
 } from "@/app/api/e2/helper/ses-send-errors";
 import {
+	type ActivityCredential,
+	deferActivity,
+	recordSendFailure,
+} from "@/app/api/e2/mailboxes/activity-log";
+import {
 	type ManagedSenderPolicy,
 	senderPolicyAllowsAddress,
 } from "@/app/api/e2/lib/send-auth";
@@ -334,9 +339,27 @@ export async function deliverSentEmail(input: {
 	record: SentEmailContent;
 	buildRawMessage: () => string | Uint8Array;
 	evaluation: EmailEvaluationData;
-	credential?: (SentCopyCredential & MailboxSendLimitCredential) | null;
+	credential?:
+		| (SentCopyCredential &
+				MailboxSendLimitCredential &
+				Pick<ActivityCredential, "use">)
+		| null;
 }): Promise<SendResponse> {
 	const { userId, idempotencyKey, sender } = input;
+	const fail = (
+		status: number,
+		error: string,
+		activity: { sentEmailId?: string; dailyLimit?: number | null } = {},
+	) => {
+		deferActivity(() =>
+			recordSendFailure(input.credential, {
+				status,
+				message: error,
+				...activity,
+			}),
+		);
+		return sendError(status, error);
+	};
 	if (
 		!fromAddressMatchesSender(input.fromEmailAddress, {
 			address: sender.fromAddress,
@@ -348,7 +371,7 @@ export async function deliverSentEmail(input: {
 			userId,
 			fromDomain: sender.fromDomain,
 		});
-		return sendError(400, "From address does not match the authorized sender");
+		return fail(400, "From address does not match the authorized sender");
 	}
 
 	let rawMessage: string | Uint8Array;
@@ -356,7 +379,7 @@ export async function deliverSentEmail(input: {
 		rawMessage = input.buildRawMessage();
 	} catch (buildError) {
 		console.log("⚠️ Could not build the message:", buildError);
-		return sendError(
+		return fail(
 			400,
 			buildError instanceof Error ? buildError.message : "Invalid message",
 		);
@@ -410,7 +433,9 @@ export async function deliverSentEmail(input: {
 	}
 	if (reservation === "exceeded") {
 		await db.delete(sentEmails).where(eq(sentEmails.id, emailId));
-		return sendError(429, MAILBOX_DAILY_LIMIT_ERROR);
+		return fail(429, MAILBOX_DAILY_LIMIT_ERROR, {
+			dailyLimit: input.credential?.dailySendLimit ?? null,
+		});
 	}
 
 	if (!sesClient) {
@@ -426,7 +451,9 @@ export async function deliverSentEmail(input: {
 			})
 			.where(eq(sentEmails.id, emailId));
 
-		return sendError(500, "Email service not configured. Please contact support.");
+		return fail(500, "Email service not configured. Please contact support.", {
+			sentEmailId: emailId,
+		});
 	}
 
 	let providerAccepted = false;
@@ -562,6 +589,6 @@ export async function deliverSentEmail(input: {
 				? await tenantSendingActive(userId, sender.isAgentEmail)
 				: true,
 		});
-		return sendError(failure.status, failure.error);
+		return fail(failure.status, failure.error, { sentEmailId: emailId });
 	}
 }

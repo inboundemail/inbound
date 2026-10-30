@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { isUtf8 } from "node:buffer";
+import type { ActivityEvent, ActivityReporter } from "./activity.ts";
 import type { ApiAuth, AuthenticatedMailbox } from "./auth.ts";
 import type { FlagAction, MailStore } from "./db.ts";
 import { AppendQuotaError } from "./db.ts";
@@ -48,17 +49,38 @@ function needsContent(query: unknown): boolean {
 
 type Callback = (err: Error | null, ...rest: unknown[]) => void;
 
+interface SessionActivity {
+	authenticatedAt: number;
+	lastTimeoutAt?: number;
+	errored?: boolean;
+}
+
+export type SessionEndReason =
+	| "client_logout"
+	| "idle_timeout"
+	| "revalidation"
+	| "max_age"
+	| "error"
+	| "disconnected";
+
 interface ImapSession {
+	id?: string;
 	user?: AuthenticatedMailbox & {
 		id: string;
 		username: string;
 		address: string;
 	};
 	remoteAddress?: string;
+	/** Fields the client sent with the IMAP ID command (RFC 2971). */
+	clientId?: Record<string, string>;
+	commandCounters?: Record<string, number>;
+	activity?: SessionActivity;
+	/** Set by whoever closes the session (revalidation, max age) for the activity log. */
+	endReason?: "revalidation" | "max_age";
 	socket?: {
 		writableNeedDrain?: boolean;
 		destroyed?: boolean;
-		on(event: "drain", listener: () => void): unknown;
+		on(event: "drain" | "timeout" | "error", listener: () => void): unknown;
 		once(event: "drain" | "close", listener: () => void): unknown;
 		removeListener(event: "drain" | "close", listener: () => void): unknown;
 		destroy(): void;
@@ -239,9 +261,37 @@ function writeResponse(
 	});
 }
 
+/** The client's IMAP ID as `name/version`, when it sent one. */
+export function clientName(session: {
+	clientId?: Record<string, string>;
+}): string | null {
+	const name = session.clientId?.name?.trim();
+	if (!name) return null;
+	const version = session.clientId?.version?.trim();
+	return sanitizeLogValue(version ? `${name}/${version}` : name).slice(0, 100);
+}
+
+const TIMEOUT_CLOSE_WINDOW_MS = 5_000;
+
+export function sessionEndReason(
+	session: Pick<ImapSession, "endReason" | "commandCounters" | "activity">,
+	now: number,
+): SessionEndReason {
+	if (session.endReason) return session.endReason;
+	if (session.commandCounters?.LOGOUT) return "client_logout";
+	const timeoutAt = session.activity?.lastTimeoutAt;
+	if (timeoutAt !== undefined && now - timeoutAt <= TIMEOUT_CLOSE_WINDOW_MS) {
+		return "idle_timeout";
+	}
+	if (session.activity?.errored) return "error";
+	return "disconnected";
+}
+
 export interface HandlerOptions {
 	contentBudget?: ContentBudget;
 	sessions?: SessionRevalidator;
+	/** Reports session ends, command errors and quota refusals to the mailbox activity log. */
+	activity?: ActivityReporter;
 	/** How long a FETCH response may make no progress before the client is disconnected. */
 	stallTimeoutMs?: number;
 }
@@ -255,7 +305,51 @@ export function buildHandlers(
 	const contentBudget =
 		options.contentBudget ?? new ContentBudget(256 * 1024 * 1024, 10_000);
 	const sessions = options.sessions;
+	const activity = options.activity;
 	const stallTimeoutMs = options.stallTimeoutMs ?? DRAIN_TIMEOUT_MS;
+
+	function reportActivity(
+		session: ImapSession,
+		event: Omit<ActivityEvent, "credentialId" | "userId" | "protocol">,
+		coalesceKey?: string,
+	): void {
+		const user = session.user;
+		if (!activity || !user) return;
+		const client = clientName(session);
+		activity.record(
+			{
+				credentialId: user.credentialId,
+				userId: user.userId,
+				protocol: "imap",
+				clientIp: session.remoteAddress,
+				...(client ? { client } : {}),
+				...(session.id ? { session: session.id } : {}),
+				...event,
+			},
+			coalesceKey,
+		);
+	}
+
+	function commandError(
+		session: ImapSession,
+		err: unknown,
+		map: (err: Error) => Error = toImapError,
+	): Error {
+		const safe = map(err as Error) as Error & { code?: string };
+		if (safe.code === "TEMPFAIL" || safe.code === "SERVERBUG") {
+			const original = err as { code?: unknown } | null;
+			const reason =
+				typeof original?.code === "string" && original.code
+					? original.code.slice(0, 32)
+					: "unknown";
+			reportActivity(
+				session,
+				{ event: "command_error", reason, detail: { code: safe.code } },
+				`command_error:${session.id ?? "-"}:${reason}`,
+			);
+		}
+		return safe;
+	}
 
 	async function openMailbox(session: ImapSession, path: string) {
 		const user = session.user;
@@ -297,6 +391,31 @@ export function buildHandlers(
 	return {
 		logger,
 
+		/** imap-core close hook: reports how an authenticated session ended. */
+		onClose(session: ImapSession, callback: () => void) {
+			try {
+				const state = session.activity;
+				if (state && session.user) {
+					const now = Date.now();
+					const commands = Object.values(session.commandCounters ?? {}).reduce(
+						(total, value) => total + (Number(value) || 0),
+						0,
+					);
+					reportActivity(session, {
+						event: "session_ended",
+						reason: sessionEndReason(session, now),
+						detail: {
+							durationMs: Math.max(0, now - state.authenticatedAt),
+							commands,
+						},
+					});
+				}
+			} catch {
+				// Reporting must never affect closing the session.
+			}
+			callback();
+		},
+
 		onAuth(authData: AuthData, _session: ImapSession, callback: Callback) {
 			const ip = _session.remoteAddress ?? "unknown";
 			const address = authData.username.trim().toLowerCase();
@@ -312,7 +431,9 @@ export function buildHandlers(
 				return callback(null);
 			}
 			auth
-				.authenticate(address, authData.password, ip)
+				.authenticate(address, authData.password, ip, {
+					client: clientName(_session),
+				})
 				.then((result) => {
 					if (!result) {
 						limits.recordAuthFailure(ip, address);
@@ -320,6 +441,16 @@ export function buildHandlers(
 					}
 					limits.recordAuthSuccess(ip, address);
 					sessions?.remember(_session, authData.password);
+					if (activity) {
+						const state: SessionActivity = { authenticatedAt: Date.now() };
+						_session.activity = state;
+						_session.socket?.on("timeout", () => {
+							state.lastTimeoutAt = Date.now();
+						});
+						_session.socket?.on("error", () => {
+							state.errored = true;
+						});
+					}
 					callback(null, {
 						user: {
 							...result,
@@ -355,7 +486,7 @@ export function buildHandlers(
 				return folders;
 			})()
 				.then((folders) => callback(null, folders))
-				.catch((err: Error) => callback(toImapError(err)));
+				.catch((err: Error) => callback(commandError(session, err)));
 		},
 
 		onLsub(_query: string, session: ImapSession, callback: Callback) {
@@ -374,7 +505,7 @@ export function buildHandlers(
 				return folders;
 			})()
 				.then((folders) => callback(null, folders))
-				.catch((err: Error) => callback(toImapError(err)));
+				.catch((err: Error) => callback(commandError(session, err)));
 		},
 
 		onSubscribe(path: string, session: ImapSession, callback: Callback) {
@@ -383,7 +514,7 @@ export function buildHandlers(
 			Promise.resolve()
 				.then(() => store.subscribeMailbox(requireUser(session), path, true))
 				.then((ok) => callback(null, ok ? true : "NONEXISTENT"))
-				.catch((err: Error) => callback(toImapError(err)));
+				.catch((err: Error) => callback(commandError(session, err)));
 		},
 
 		onUnsubscribe(path: string, session: ImapSession, callback: Callback) {
@@ -392,7 +523,7 @@ export function buildHandlers(
 			Promise.resolve()
 				.then(() => store.subscribeMailbox(requireUser(session), path, false))
 				.then((ok) => callback(null, ok ? true : "NONEXISTENT"))
-				.catch((err: Error) => callback(toImapError(err)));
+				.catch((err: Error) => callback(commandError(session, err)));
 		},
 
 		onOpen(path: string, session: ImapSession, callback: Callback) {
@@ -419,7 +550,7 @@ export function buildHandlers(
 							isScopeMailboxPath(mailbox.path),
 					});
 				})
-				.catch((err: Error) => callback(toImapError(err)));
+				.catch((err: Error) => callback(commandError(session, err)));
 		},
 
 		onStatus(path: string, session: ImapSession, callback: Callback) {
@@ -438,7 +569,7 @@ export function buildHandlers(
 						unseen,
 					});
 				})
-				.catch((err: Error) => callback(toImapError(err)));
+				.catch((err: Error) => callback(commandError(session, err)));
 		},
 
 		onCreate(path: string, session: ImapSession, callback: Callback) {
@@ -451,7 +582,9 @@ export function buildHandlers(
 				return (await store.createMailbox(user, path)) ? true : "ALREADYEXISTS";
 			})()
 				.then((ok) => callback(null, ok))
-				.catch((err: Error) => callback(toFolderError(err)));
+				.catch((err: Error) =>
+					callback(commandError(session, err, toFolderError)),
+				);
 		},
 
 		onRename(
@@ -477,7 +610,9 @@ export function buildHandlers(
 				return ok ? true : "NONEXISTENT";
 			})()
 				.then((result) => callback(null, result))
-				.catch((err: Error) => callback(toFolderError(err)));
+				.catch((err: Error) =>
+					callback(commandError(session, err, toFolderError)),
+				);
 		},
 
 		onDelete(path: string, session: ImapSession, callback: Callback) {
@@ -490,7 +625,7 @@ export function buildHandlers(
 				return ok ? true : "NONEXISTENT";
 			})()
 				.then((result) => callback(null, result))
-				.catch((err: Error) => callback(toImapError(err)));
+				.catch((err: Error) => callback(commandError(session, err)));
 		},
 
 		onAppend(
@@ -537,9 +672,17 @@ export function buildHandlers(
 				.then(({ success, info }) => callback(null, success, info))
 				.catch((err: Error) => {
 					if (err instanceof AppendQuotaError) {
+						const reason = /mailbox/i.test(err.message)
+							? "storage_quota"
+							: "append_limit";
+						reportActivity(
+							session,
+							{ event: "quota_exceeded", reason },
+							`quota_exceeded:${session.id ?? "-"}:${reason}`,
+						);
 						return callback(null, "OVERQUOTA", null);
 					}
-					callback(toImapError(err));
+					callback(commandError(session, err));
 				});
 		},
 
@@ -574,7 +717,7 @@ export function buildHandlers(
 				return { success: true as const, info };
 			})()
 				.then(({ success, info }) => callback(null, success, info))
-				.catch((err: Error) => callback(toImapError(err)));
+				.catch((err: Error) => callback(commandError(session, err)));
 		},
 
 		onMove(
@@ -616,7 +759,7 @@ export function buildHandlers(
 				return { success: true as const, info };
 			})()
 				.then(({ success, info }) => callback(null, success, info))
-				.catch((err: Error) => callback(toImapError(err)));
+				.catch((err: Error) => callback(commandError(session, err)));
 		},
 
 		onFetch(
@@ -698,7 +841,7 @@ export function buildHandlers(
 				}
 
 				callback(null, true, { rowCount });
-			})().catch((err: Error) => callback(toImapError(err)));
+			})().catch((err: Error) => callback(commandError(session, err)));
 		},
 
 		onSearch(
@@ -718,7 +861,7 @@ export function buildHandlers(
 				.then((uidList) => {
 					callback(null, { uidList });
 				})
-				.catch((err: Error) => callback(toImapError(err)));
+				.catch((err: Error) => callback(commandError(_session, err)));
 		},
 
 		onStore(
@@ -753,7 +896,7 @@ export function buildHandlers(
 					}
 					callback(null, true, []);
 				})
-				.catch((err: Error) => callback(toImapError(err)));
+				.catch((err: Error) => callback(commandError(_session, err)));
 		},
 
 		onExpunge(
@@ -799,7 +942,7 @@ export function buildHandlers(
 				return true;
 			})()
 				.then((result) => callback(null, result))
-				.catch((err: Error) => callback(toImapError(err)));
+				.catch((err: Error) => callback(commandError(_session, err)));
 		},
 	};
 }

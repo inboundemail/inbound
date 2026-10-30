@@ -77,10 +77,11 @@ Over the limit, HTTP sends return `429` and SMTP returns a temporary `451`. Retr
 | `filters` | [Filters](/mailboxes/filters) at `/mailboxes/me/filters` |
 | `spam` | [Spam settings](/mailboxes/junk-filter#per-mailbox-spam-settings) at `/mailboxes/me/spam` |
 | `password` | `POST /mailboxes/me/rotate-password` |
+| `activity` | Their own [activity log](/mailboxes/activity) at `/mailboxes/me/activity` |
 
 `filters` works for read-only mailboxes too: their password can list, create, update and delete filters. Applying filters to existing mail (the `apply` endpoints) still needs a **Read & write** mailbox. `password` also works for **SMTP only** credentials. Every `/mailboxes/me/...` request also needs `protocols.api` on and an allowed IP address.
 
-`null` turns all three off, and so does a key left out. On update, the keys you send are merged with the current values. Requests for a setting that isn't enabled return `403`. The account API key can always manage these settings through `/mailboxes/{id}/...`.
+`null` turns them all off, and so does a key left out. On update, the keys you send are merged with the current values. Requests for a setting that isn't enabled return `403`. The account API key can always manage these settings through `/mailboxes/{id}/...`.
 
 ```bash
 curl -X POST "https://inbound.new/api/e2/mailboxes/me/rotate-password" \

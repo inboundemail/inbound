@@ -48,6 +48,7 @@
               "mailboxes/scopes-and-permissions",
               "mailboxes/manage-credentials",
               "mailboxes/access-and-limits",
+              "mailboxes/activity",
               "mailboxes/http-api",
               "mailboxes/imap-behavior",
               "mailboxes/filters",
