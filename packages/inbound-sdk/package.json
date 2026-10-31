@@ -1,0 +1,27 @@
+{
+  "name": "inboundemail",
+  "version": "0.21.0",
+  "description": "Official TypeScript SDK for the Inbound API",
+  "license": "Apache-2.0",
+  "repository": { "type": "git", "url": "https://github.com/inboundemail/inbound.git", "directory": "packages/inbound-sdk" },
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "files": ["dist", "README.md", "LICENSE"],
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/esm/generated/index.js",
+  "types": "./dist/esm/generated/index.d.ts",
+  "exports": {
+    ".": {
+      "import": { "types": "./dist/esm/generated/index.d.ts", "default": "./dist/esm/generated/index.js" },
+      "require": { "types": "./dist/cjs/generated/index.d.ts", "default": "./dist/cjs/index.cjs" }
+    },
+    "./resources/*": { "import": "./dist/esm/generated/*.js", "require": "./dist/cjs/generated/*.js" },
+    "./lib/webhooks": { "import": "./dist/esm/webhooks.js", "require": "./dist/cjs/webhooks.js" },
+    "./lib/render": { "import": "./dist/esm/helpers.js", "require": "./dist/cjs/helpers.js" },
+    "./client": { "import": "./dist/esm/generated/index.js", "require": "./dist/cjs/generated/index.js" },
+    "./package.json": "./package.json"
+  },
+  "scripts": { "build": "bun ./build.ts", "prepack": "bun ./build.ts", "test": "bun test" },
+  "peerDependencies": { "@react-email/render": "^2.0.0" },
+  "peerDependenciesMeta": { "@react-email/render": { "optional": true } }
+}

@@ -24,6 +24,7 @@ jobs:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       - run: bun run db:check
+      - run: bun run sdk:check
       - run: bun run test:unit
         env:
           DATABASE_URL: postgres://ci:ci@db.localtest.me:5432/unused
