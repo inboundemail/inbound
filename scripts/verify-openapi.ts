@@ -3,7 +3,7 @@
  *
  * This script:
  * 1. Reads the local public/openapi.json
- * 2. Fetches the production spec from inbound.new/api/e2/openapi.json
+ * 2. Fetches the production spec from inbound.new/openapi.json
  * 3. Compares them and reports any differences
  *
  * Usage: bun run scripts/verify-openapi.ts
@@ -13,7 +13,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 
 const LOCAL_SPEC_PATH = "./public/openapi.json";
-const PRODUCTION_URL = "https://inbound.new/api/e2/openapi.json";
+const PRODUCTION_URL = "https://inbound.new/openapi.json";
 
 interface OpenAPISpec {
 	openapi: string;

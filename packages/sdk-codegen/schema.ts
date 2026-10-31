@@ -1,5 +1,12 @@
+export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
+
 export interface Schema {
 	title?: string;
+	description?: string;
+	examples?: Json[];
+	example?: Json;
+	default?: Json;
+	minimum?: number;
 	type?: string | string[];
 	nullable?: boolean;
 	const?: string | number | boolean | null;

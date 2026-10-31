@@ -12,6 +12,7 @@
 
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
+import { addCodeSamples, type SampleSpec } from "../packages/sdk-codegen/samples";
 
 // Set required env vars with dummy values for spec generation
 // (The spec generation doesn't actually hit the DB or external services - it just introspects routes)
@@ -21,10 +22,9 @@ process.env.INBOUND_API_KEY ??= "dummy_key_for_openapi_generation";
 // Import the Elysia app after env vars are set
 const { app } = await import("../app/api/e2/[[...slugs]]/route");
 
-interface OpenAPISpec {
+interface OpenAPISpec extends SampleSpec {
 	openapi: string;
 	info: { title: string; version: string };
-	paths: Record<string, unknown>;
 	components?: Record<string, unknown>;
 	tags?: Array<{ name: string; description?: string }>;
 }
@@ -126,6 +126,7 @@ async function generateOpenAPISpec() {
 	if (!validation.valid) {
 		throw new Error("OpenAPI specification validation failed");
 	}
+	addCodeSamples(spec);
 
 	// Ensure output directory exists
 	const outputDir = "./public";
