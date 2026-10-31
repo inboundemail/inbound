@@ -16,6 +16,7 @@
     "prebuild": "bun run generate:openapi",
     "build": "next build",
     "test-api": "bun run app/api/v2/api.test.ts",
+    "sdk:release": "bun --no-env-file scripts/release-sdk.ts",
     "test-sdk": "bun run app/api/v2/sdk.test.ts",
     "test:e2": "bun test app/api/e2/**/*.test.ts",
     "test:e2:domains": "bun test app/api/e2/domains/domains.test.ts",
