@@ -137,9 +137,21 @@ function samples(route: Route, server: string): CodeSample[] {
 		curl.push(`-H ${quote(`${p.name}: ${value}`)}`);
 	}
 	if (body) curl.push("-H 'Content-Type: application/json'", `-d ${quote(JSON.stringify(body, null, 2))}`);
-	if (body || Object.keys(options).length) args.push(sdkNumbers(options, route.options));
+	const pathArgs = args.map(tsLiteral);
+	const callArgs = [...pathArgs];
+	if (body || Object.keys(options).length) callArgs.push(tsLiteral(sdkNumbers(options, route.options)));
+	const sdk = [
+		'import Inbound from "inboundemail";', "", "const inbound = new Inbound();",
+		...(override?.note ? [override.note] : []),
+		`const result = await inbound.${route.operationId}(${callArgs.join(", ")});`,
+	];
+	if (route.binary) sdk.push("const bytes = await result.arrayBuffer();");
+	if (route.more) {
+		const iteratorArgs = route.options.required?.length ? callArgs : pathArgs;
+		sdk.push("", "// Or iterate through all pages:", `for await (const item of inbound.${route.operationId}All(${iteratorArgs.join(", ")})) {`, "  // Process this item.", "}");
+	}
 	return [
-		{ lang: "typescript", label: "TypeScript", source: `import Inbound from "inboundemail";\n\nconst inbound = new Inbound();\n${override?.note ? `${override.note}\n` : ""}const result = await inbound.${route.operationId}(${args.map(tsLiteral).join(", ")});` },
+		{ lang: "typescript", label: "TypeScript", source: sdk.join("\n") },
 		{ lang: "curl", label: "cURL", source: curl.join(" \\\n  ") },
 	];
 }

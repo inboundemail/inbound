@@ -10,6 +10,11 @@ const result = await inbound.mailboxes.list({
   limit: 50,
   offset: 0
 });
+
+// Or iterate through all pages:
+for await (const item of inbound.mailboxes.listAll()) {
+  // Process this item.
+}
 ```
 
 ```bash cURL
