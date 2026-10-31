@@ -1,4 +1,5 @@
 import { expect, it } from "bun:test";
+import { createReadStream } from "node:fs";
 import Inbound, { APIConnectionTimeoutError, APIUserAbortError, APIPromise, type ClientOptions, Inbound as NamedInbound, InboundError, NotFoundError, RateLimitError, toFile, verifyWebhookFromHeaders } from "../src/generated/index.js";
 
 const make = (fetch: NonNullable<ClientOptions["fetch"]>, options?: ClientOptions) => new Inbound({ apiKey: "test", baseURL: "https://mock.invalid/", fetch, ...options });
@@ -67,7 +68,9 @@ it("passes a send key only in HTTP headers, preserving email headers and safely 
 it("does not replay an unkeyed send after a server failure", async () => {
 	let calls = 0;
 	const client = make(async () => { calls++; return new Response("unavailable", { status: 503 }); });
-	await expect(client.emails.send({ from: "a", to: "b", subject: "x" })).rejects.toBeInstanceOf(Inbound.InternalServerError);
+	const err = await client.emails.send({ from: "a", to: "b", subject: "x" }).catch(e => e);
+	expect(err).toBeInstanceOf(Inbound.InternalServerError);
+	expect(err).toMatchObject({ name: "Error", status: 503, error: undefined, body: "unavailable", message: "503 unavailable" });
 	expect(calls).toBe(1);
 });
 
@@ -77,24 +80,38 @@ it("exposes status, API code, raw error body and old error classes", async () =>
 	const caught: unknown = await client.mailboxes.retrieve("missing").catch(e => e);
 	expect(caught).toBeInstanceOf(NotFoundError);
 	expect(caught).toBeInstanceOf(InboundError);
-	expect(caught).toMatchObject({ status: 404, code: "mailbox_missing", body, error: body, message: "404 No such mailbox" });
+	expect(caught).toMatchObject({ name: "Error", status: 404, code: "mailbox_missing", body, error: body, message: `404 ${JSON.stringify(body)}` });
 });
 
-it("retries 429 up to the configured bound, not before a future Retry-After", async () => {
+it("matches the published APIError factory, names and fallback messages", () => {
+	const headers = new Headers();
+	for (const [status, cls] of [[400, Inbound.BadRequestError], [401, Inbound.AuthenticationError], [403, Inbound.PermissionDeniedError], [409, Inbound.ConflictError], [422, Inbound.UnprocessableEntityError], [429, Inbound.RateLimitError], [500, Inbound.InternalServerError]] as const) {
+		const e = Inbound.APIError.generate(status, undefined, undefined, headers);
+		expect(e).toBeInstanceOf(cls);
+		expect(e.headers).toBe(headers);
+		expect(e.message).toBe(`${status} status code (no body)`);
+		expect(e.name).toBe("Error");
+	}
+	expect(Inbound.APIError.generate(404, { message: "not here" }, undefined, headers).message).toBe("404 not here");
+	expect(Inbound.APIError.generate(undefined, undefined, undefined, undefined)).toBeInstanceOf(Inbound.APIConnectionError);
+	expect(new InboundError().name).toBe("Error");
+});
+
+it("retries 429 up to the configured bound and honors x-should-retry false", async () => {
 	let count = 0;
-	let after = "0";
-	const client = make(async () => { count++; return new Response("busy", { status: 429, headers: { "Retry-After": after } }); }, { maxRetries: 1 });
-	await expect(client.spamFilter.retrieve()).rejects.toBeInstanceOf(RateLimitError);
+	let hint = "true";
+	const client = make(async () => { count++; return new Response("busy", { status: 429, headers: { "Retry-After": "0", "x-should-retry": hint } }); }, { maxRetries: 1 });
+	await expect(Promise.resolve(client.spamFilter.retrieve())).rejects.toBeInstanceOf(RateLimitError);
 	expect(count).toBe(2);
-	after = new Date(Date.now() + 600_000).toUTCString();
-	await expect(client.spamFilter.retrieve()).rejects.toBeInstanceOf(RateLimitError);
+	hint = "false";
+	await expect(Promise.resolve(client.spamFilter.retrieve())).rejects.toBeInstanceOf(RateLimitError);
 	expect(count).toBe(3);
 });
 
 it("times out an in-flight request and distinguishes caller abort", async () => {
-	const client = make(async (_, init) => new Promise((_resolve, reject) => init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason))), { timeout: 10 });
-	await expect(client.mailboxes.list()).rejects.toBeInstanceOf(APIConnectionTimeoutError);
-	await expect(client.mailboxes.list({}, { signal: AbortSignal.abort() })).rejects.toBeInstanceOf(APIUserAbortError);
+	const client = make(async (_, init) => new Promise((_resolve, reject) => init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason))), { timeout: 10, maxRetries: 0 });
+	await expect(Promise.resolve(client.mailboxes.list())).rejects.toBeInstanceOf(APIConnectionTimeoutError);
+	await expect(Promise.resolve(client.mailboxes.list({}, { signal: AbortSignal.abort() }))).rejects.toBeInstanceOf(APIUserAbortError);
 });
 
 it("iterates lazily, preserving filters and respecting the server's offset and limit", async () => {
@@ -176,7 +193,7 @@ it("lets asResponse callers read non-JSON wire data", async () => {
 	expect(await (await c.domains.list().asResponse()).text()).toBe("unparsed");
 });
 
-it("renders the optional React field without mutating caller input", async () => {
+it("renders the React field without mutating caller input", async () => {
 	let sent: Record<string, unknown> = {};
 	const c = make(async (_, init) => { sent = JSON.parse(String(init!.body)); return Response.json({ id: "test" }); });
 	const params = { from: "a", to: "b", subject: "fixture", react: "Rendered fixture" };
@@ -184,4 +201,95 @@ it("renders the optional React field without mutating caller input", async () =>
 	expect(sent.html).toContain("Rendered fixture");
 	expect(sent).not.toHaveProperty("react");
 	expect(params).not.toHaveProperty("html");
+});
+
+it("merges default, modeled and request options in order without mutating the original client", async () => {
+	const logs: string[] = [];
+	const calls: Request[] = [];
+	const base = make(async (u, init) => { calls.push(new Request(u, init)); return Response.json({}); }, {
+		defaultHeaders: { Authorization: "override", "x-remove": "yes", "x-many": "old" }, defaultQuery: { limit: "6", drop: "yes" }, fetchOptions: { redirect: "error" },
+		logger: { ...console, debug: line => logs.push(line) },
+	});
+	const c = base.withOptions({ logLevel: "debug" });
+	await c.domains.list({ limit: 3 }, { query: { limit: 2, drop: undefined }, headers: { "X-Remove": null, "X-Many": ["a", "b"] }, fetchOptions: { redirect: "manual" } });
+	await base.domains.list();
+	expect(calls[0].headers.get("authorization")).toBe("override");
+	expect(calls[0].headers.has("x-remove")).toBe(false);
+	expect(calls[0].headers.get("x-many")).toBe("a, b");
+	expect(new URL(calls[0].url).search).toBe("?limit=2");
+	expect(calls[0].redirect).toBe("manual");
+	expect(calls[1].redirect).toBe("error");
+	expect(calls[1].headers.get("x-remove")).toBe("yes");
+	expect(logs).toHaveLength(2);
+	expect(logs.join(" ")).not.toContain("override");
+});
+
+it("passes idempotencyKey from request options for send and reply", async () => {
+	const keys: (string | null)[] = [];
+	const client = make(async (_, init) => { keys.push(new Headers(init?.headers).get("idempotency-key")); return Response.json({}); });
+	await client.emails.send({ from: "a", to: "b", subject: "s" }, { idempotencyKey: "send" });
+	await client.emails.reply("id", { from: "a" }, { idempotencyKey: "reply" });
+	expect(keys).toEqual(["send", "reply"]);
+});
+
+it("supports primitive HTTP methods, promised options, text, +json and 204 null", async () => {
+	const methods: string[] = [];
+	const c = make(async (_, init) => {
+		methods.push(init!.method!);
+		if (init!.method === "DELETE") return new Response(null, { status: 204 });
+		if (init!.method === "GET") return new Response('{"ok":true}', { headers: { "content-type": "application/vnd.test+json; charset=utf-8" } });
+		return new Response(init?.body ? String(init.body) : "ok");
+	});
+	expect(await c.post<string>("/raw", Promise.resolve({ body: { a: 1 } }))).toBe('{"a":1}');
+	expect(await c.patch<string>("/raw")).toBe("ok");
+	expect(await c.put<string>("/raw")).toBe("ok");
+	expect(await c.request<{ ok: boolean }>(Promise.resolve({ path: "/raw", method: "get" }))).toEqual({ ok: true });
+	expect(await c.delete("/raw")).toBeNull();
+	expect(methods).toEqual(["POST", "PATCH", "PUT", "GET", "DELETE"]);
+});
+
+it("retries network failures and uses a new per-attempt timeout", async () => {
+	const signals: AbortSignal[] = [];
+	const c = make(async (_, init) => {
+		const signal = init!.signal!; signals.push(signal);
+		if (signals.length === 1) throw new TypeError("network down");
+		if (signals.length === 2) return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+		return new Response("ok");
+	}, { timeout: 15 });
+	expect(await c.get<string>("/x")).toBe("ok");
+	expect(new Set(signals).size).toBe(3);
+	expect(signals[1].aborted).toBe(true);
+	expect(signals[2].aborted).toBe(false);
+});
+
+it("honors 408, 409, retry-after-ms and explicit retry hints on safe requests", async () => {
+	for (const [method, status] of [["head", 408], ["options", 409], ["put", 400], ["delete", 503], ["post", 503]] as const) {
+		let n = 0;
+		const c = make(async () => ++n > 1 ? new Response("ok") : new Response(null, { status, headers: { "retry-after-ms": "15", "retry-after": "50", ...(status === 400 && { "x-should-retry": "true" }) } }));
+		const start = performance.now();
+		expect(await c.request<string>({ method, path: "/raw", idempotencyKey: "key" })).toBe("ok");
+		expect(performance.now() - start).toBeGreaterThanOrEqual(13);
+	}
+});
+
+it("preserves stream basenames, BunFile and structural blob and response inputs; sends nested multipart", async () => {
+	const file = Bun.file(import.meta.path);
+	expect((await toFile(createReadStream(import.meta.path))).name).toBe("client.test.ts");
+	expect((await toFile(file)).name).toBe("client.test.ts");
+	const blob = { name: "x.pdf", type: "application/pdf", size: 2, text: async () => "hi", arrayBuffer: async () => Uint8Array.of(0, 255).buffer, slice: () => new Blob() };
+	const response = { url: "https://example.org/receipt.pdf", blob: async () => blob };
+	expect((await toFile(response)).name).toBe("receipt.pdf");
+	let form: FormData | undefined;
+	const c = make(async (u, init) => { form = await new Request(u, init).formData(); return Response.json({}); });
+	await c.emails.send({ from: "a", to: "b", subject: "x", headers: { payload: [blob] } });
+	const uploaded = form!.get("headers[payload][]") as File;
+	expect(uploaded.name).toBe("x.pdf");
+	expect(new Uint8Array(await uploaded.arrayBuffer())).toEqual(Uint8Array.of(0, 255));
+	expect(form!.get("subject")).toBe("x");
+});
+
+it("rejects incremental folder options on listAll before issuing a request", () => {
+	const c = make(async () => { throw new Error("unexpected fetch"); });
+	// @ts-expect-error JavaScript callers also receive a clear diagnostic.
+	expect(() => c.folderMessages.listAll("box", "Inbox", { sinceUid: 3 })).toThrow("incremental folder sync");
 });

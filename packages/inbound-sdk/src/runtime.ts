@@ -1,8 +1,25 @@
 import * as Errors from "./errors.js";
-import { render, toFile } from "./helpers.js";
+import { multipart, render, toFile } from "./helpers.js";
+import { APIPromise, decode } from "./api-promise.js";
+export { APIPromise } from "./api-promise.js";
+
+type FetchInit = NonNullable<Parameters<typeof fetch>[1]>;
+type FetchOptions = Omit<FetchInit, "method" | "headers" | "body" | "signal"> & { dispatcher?: unknown; agent?: unknown };
+type HeaderValue = string | null | undefined;
+type HeaderInput = Headers | readonly (readonly HeaderValue[])[] | Record<string, HeaderValue | readonly HeaderValue[]> | null;
+type Method = "get" | "head" | "options" | "post" | "patch" | "put" | "delete";
+export type Logger = Pick<Console, "debug" | "info" | "warn" | "error">;
+export type LogLevel = "off" | "error" | "warn" | "info" | "debug";
 
 export interface RequestOptions {
-	headers?: HeadersInit;
+	headers?: HeaderInput;
+	query?: object | null;
+	body?: unknown;
+	fetchOptions?: FetchOptions;
+	idempotencyKey?: string;
+	__binaryResponse?: boolean;
+	stream?: boolean;
+	defaultBaseURL?: string;
 	signal?: AbortSignal | null;
 	timeout?: number;
 	maxRetries?: number;
@@ -10,27 +27,36 @@ export interface RequestOptions {
 export interface ClientOptions {
 	apiKey?: string;
 	baseURL?: string | null;
-	fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+	fetch?: (input: Parameters<typeof fetch>[0], init?: FetchInit) => Promise<Response>;
 	timeout?: number;
 	maxRetries?: number;
-	defaultHeaders?: HeadersInit;
+	defaultHeaders?: HeaderInput;
+	defaultQuery?: Record<string, string | undefined>;
+	fetchOptions?: FetchOptions;
+	logLevel?: LogLevel;
+	logger?: Logger;
 }
 
-export class APIPromise<T> extends Promise<T> {
-	private keepRaw = false;
-	static get [Symbol.species]() { return Promise; }
-	constructor(private readonly raw: Promise<Response>, parse: (r: Response) => Promise<T>, binary = false) {
-		super((resolve, reject) => {
-			raw.then(r => parse(this.keepRaw && !binary ? r.clone() : r)).then(resolve, reject);
-		});
+export type RawRequest = RequestOptions & { method: Method; path: string };
+type MaybePromise<T> = T | Promise<T>;
+
+function mergeHeaders(...layers: (HeaderInput | undefined)[]) {
+	const headers = new Headers();
+	for (const layer of layers) {
+		if (!layer) continue;
+		const seen = new Set<string>();
+		const rows = layer instanceof Headers ? layer.entries() : Array.isArray(layer) ? layer : Object.entries(layer);
+		for (const [name, entry] of rows) {
+			for (const value of Array.isArray(entry) ? entry : [entry]) {
+				if (value === undefined) continue;
+				const key = name.toLowerCase();
+				if (!seen.has(key) || value === null) headers.delete(key);
+				seen.add(key);
+				if (value !== null) headers.append(key, value);
+			}
+		}
 	}
-	asResponse() {
-		this.keepRaw = true;
-		// A caller requesting only the wire response need not handle a JSON parse failure.
-		this.catch(() => undefined);
-		return this.raw;
-	}
-	async withResponse(): Promise<{ data: T; response: Response }> { return { data: await this, response: await this.raw }; }
+	return headers;
 }
 
 export function segment(value: string | number): string {
@@ -58,37 +84,20 @@ interface Layout {
 	binary?: boolean;
 	reactEmail?: boolean;
 }
-function retryDelay(value: string | null, attempt: number) {
-	if (value !== null) {
-		const ms = /^\d+(\.\d+)?$/.test(value) ? Number(value) * 1000 : Date.parse(value) - Date.now();
-		if (!Number.isNaN(ms)) return Math.max(0, ms);
-	}
-	return Math.min(250 * 2 ** attempt, 8000);
+function retryDelay(headers: Headers | undefined, attempt: number) {
+	const ms = headers?.get("retry-after-ms");
+	const after = headers?.get("retry-after");
+	const delay = ms != null && Number.isFinite(Number(ms)) ? Number(ms) : after ? (/^\d+(\.\d+)?$/.test(after) ? Number(after) * 1000 : Date.parse(after) - Date.now()) : NaN;
+	return delay >= 0 && delay < 60_000 ? delay : Math.min(500 * 2 ** attempt, 5000) * (1 - Math.random() / 4);
 }
 
-function wait(ms: number, signal: AbortSignal) {
+function wait(ms: number, signal?: AbortSignal | null) {
 	return new Promise<void>((resolve, reject) => {
-		signal.throwIfAborted();
-		const abort = () => { clearTimeout(timer); reject(signal.reason); };
-		const timer = setTimeout(() => { signal.removeEventListener("abort", abort); resolve(); }, ms);
-		signal.addEventListener("abort", abort, { once: true });
+		if (signal?.aborted) throw new Errors.APIUserAbortError();
+		const abort = () => { clearTimeout(timer); reject(new Errors.APIUserAbortError()); };
+		const timer = setTimeout(() => { signal?.removeEventListener("abort", abort); resolve(); }, ms);
+		signal?.addEventListener("abort", abort, { once: true });
 	});
-}
-
-function requestSignal(timeout: number, caller?: AbortSignal | null) {
-	const deadline = AbortSignal.timeout(timeout);
-	if (!caller) return deadline;
-	if (caller.aborted) return caller;
-	if (typeof AbortSignal.any === "function") return AbortSignal.any([caller, deadline]);
-	const controller = new AbortController();
-	const abort = () => {
-		controller.abort(caller.aborted ? caller.reason : deadline.reason);
-		caller.removeEventListener("abort", abort);
-		deadline.removeEventListener("abort", abort);
-	};
-	caller.addEventListener("abort", abort, { once: true });
-	deadline.addEventListener("abort", abort, { once: true });
-	return controller.signal;
 }
 
 export class Transport {
@@ -107,79 +116,124 @@ export class Transport {
 	static readonly RateLimitError = Errors.RateLimitError;
 	static readonly InternalServerError = Errors.InternalServerError;
 	static readonly toFile = toFile;
-	readonly apiKey: string;
-	readonly baseURL: string;
-	readonly timeout: number;
-	readonly maxRetries: number;
+	apiKey: string;
+	baseURL: string;
+	timeout: number;
+	maxRetries: number;
+	logger: Logger;
+	logLevel: LogLevel;
+	fetchOptions?: FetchOptions;
 	private readonly fetcher: NonNullable<ClientOptions["fetch"]>;
-	private readonly defaultHeaders: Headers;
 
-	constructor(options: ClientOptions) {
+	constructor(private readonly options: ClientOptions) {
 		if (typeof window !== "undefined" && typeof window.document !== "undefined") throw new Errors.InboundError("Use Inbound on the server, not in a browser exposing a secret API key");
 		const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
 		const apiKey = options.apiKey ?? env?.INBOUND_API_KEY;
 		if (!apiKey) throw new Errors.InboundError("Set apiKey or INBOUND_API_KEY");
 		this.apiKey = apiKey;
-		this.baseURL = (options.baseURL ?? env?.INBOUND_BASE_URL ?? "https://inbound.new").replace(/\/+$/, "");
+		this.baseURL = ((options.baseURL ?? env?.INBOUND_BASE_URL) || "https://inbound.new").replace(/\/+$/, "");
 		this.timeout = options.timeout ?? Transport.DEFAULT_TIMEOUT;
 		this.maxRetries = options.maxRetries ?? 2;
 		this.fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
-		this.defaultHeaders = new Headers(options.defaultHeaders);
+		this.fetchOptions = options.fetchOptions;
+		this.logger = options.logger ?? console;
+		const log = env?.INBOUND_LOG;
+		this.logLevel = options.logLevel ?? (["off", "error", "warn", "info", "debug"].includes(log ?? "") ? log as LogLevel : "warn");
 	}
 
-	request<T>(method: string, path: string, params: Record<string, unknown>, layout: Layout, options: RequestOptions = {}): APIPromise<T> {
+	withOptions(options: Partial<ClientOptions>): this {
+		const Client = this.constructor as new (opts: ClientOptions) => this;
+		return new Client({ ...this.options, apiKey: this.apiKey, baseURL: this.baseURL, timeout: this.timeout, maxRetries: this.maxRetries, fetchOptions: this.fetchOptions, logger: this.logger, logLevel: this.logLevel, ...options });
+	}
+	get<T>(path: string, opts?: MaybePromise<RequestOptions>) { return this.method<T>("get", path, opts); }
+	post<T>(path: string, opts?: MaybePromise<RequestOptions>) { return this.method<T>("post", path, opts); }
+	put<T>(path: string, opts?: MaybePromise<RequestOptions>) { return this.method<T>("put", path, opts); }
+	patch<T>(path: string, opts?: MaybePromise<RequestOptions>) { return this.method<T>("patch", path, opts); }
+	delete<T>(path: string, opts?: MaybePromise<RequestOptions>) { return this.method<T>("delete", path, opts); }
+	private method<T>(method: Method, path: string, opts?: MaybePromise<RequestOptions>) {
+		return this.request<T>(Promise.resolve(opts).then(options => ({ ...options, method, path })));
+	}
+	request<T>(input: MaybePromise<RawRequest>, remainingRetries?: number | null): APIPromise<T> {
+		const options = Promise.resolve(input);
+		return new APIPromise(options.then(o => this.send(o, remainingRetries)), async response => decode<T>(response, (await options).__binaryResponse));
+	}
+	resourceRequest<T>(method: string, path: string, params: Record<string, unknown>, layout: Layout, options: RequestOptions = {}): APIPromise<T> {
+		const body = { ...params };
+		const query: Record<string, unknown> = {};
+		for (const key of layout.query ?? []) {
+			if (Object.hasOwn(params, key)) query[key] = params[key];
+			delete body[key];
+		}
+		const headers: Record<string, string> = {};
+		for (const [key, wire] of Object.entries(layout.headers ?? {})) {
+			if (params[key] != null) headers[wire] = String(params[key]);
+			delete body[key];
+		}
+		const prepare = async () => {
+			if (layout.reactEmail && body.react != null) body.html = await render(body.react);
+			if (layout.reactEmail) delete body.react;
+			return { ...options, path, method: method.toLowerCase() as Method, query: { ...query, ...options.query },
+				modeledHeaders: headers, body: layout.body ? body : undefined, __binaryResponse: layout.binary };
+		};
+		return this.request<T>(prepare());
+	}
+	private async send(options: RawRequest & { modeledHeaders?: HeaderInput }, remaining?: number | null) {
+		const method = options.method.toUpperCase();
 		const timeout = options.timeout ?? this.timeout;
-		const retries = options.maxRetries ?? this.maxRetries;
+		const retries = remaining ?? options.maxRetries ?? this.maxRetries;
 		if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 2_147_483_647) throw new RangeError("Invalid timeout");
 		if (!Number.isSafeInteger(retries) || retries < 0) throw new RangeError("Invalid maxRetries");
-		const signal = requestSignal(timeout, options.signal);
-		const expires = Date.now() + timeout;
-		const url = new URL(this.baseURL + path);
-		const headers = new Headers(this.defaultHeaders);
-		headers.set("Authorization", `Bearer ${this.apiKey}`);
-		new Headers(options.headers).forEach((v, k) => headers.set(k, v));
-		const body = { ...params };
-		for (const key of layout.query ?? []) {
-			const value = params[key];
-			delete body[key];
-			if (value == null) continue;
-			for (const item of Array.isArray(value) ? value : [value]) url.searchParams.append(key, String(item));
+		const baseURL = this.baseURL === "https://inbound.new" ? options.defaultBaseURL ?? this.baseURL : this.baseURL;
+		const url = new URL(/^https?:\/\//i.test(options.path) ? options.path : baseURL.replace(/\/+$/, "") + "/" + options.path.replace(/^\/+/, ""));
+		for (const [k, v] of Object.entries({ ...this.options.defaultQuery, ...options.query })) {
+			url.searchParams.delete(k);
+			if (v != null) for (const item of Array.isArray(v) ? v : [v]) url.searchParams.append(k, String(item));
 		}
-		for (const [key, wire] of Object.entries(layout.headers ?? {})) {
-			if (params[key] != null) headers.set(wire, String(params[key]));
-			delete body[key];
-		}
-		const aborted = () => options.signal?.aborted ? new Errors.APIUserAbortError() : new Errors.APIConnectionTimeoutError();
-		const send = async (): Promise<Response> => {
-			if (layout.reactEmail && body.react !== undefined) {
-				if (body.react != null) body.html = await render(body.react);
-				delete body.react;
+		if (method === "GET" && /\/folders\/[^/]+\/messages$/.test(url.pathname) && Number(url.searchParams.get("offset")) && (url.searchParams.has("sinceUid") || url.searchParams.has("sinceModseq"))) throw new TypeError("Incremental folder listings cannot use a nonzero offset");
+		const body = options.body;
+		let payload: FetchInit["body"];
+		let contentType: string | undefined;
+		const streaming = body !== null && typeof body === "object" && !(body instanceof Blob) && (body instanceof ReadableStream || Symbol.asyncIterator in body);
+		if (body != null) {
+			if (streaming || body instanceof FormData || body instanceof Blob || body instanceof URLSearchParams || body instanceof ArrayBuffer || ArrayBuffer.isView(body)) payload = body as FetchInit["body"];
+			else if (typeof body === "string" && mergeHeaders(options.headers).has("Content-Type")) payload = body;
+			else {
+				payload = typeof body === "object" ? await multipart(body) : undefined;
+				if (!payload) { payload = JSON.stringify(body); contentType = "application/json"; }
 			}
-			if (layout.body) headers.set("Content-Type", "application/json");
-			const payload = layout.body ? JSON.stringify(body) : undefined;
-			const replayable = ["GET", "HEAD", "PUT", "DELETE"].includes(method) || (layout.reactEmail && !!headers.get("Idempotency-Key"));
+		}
+		const headers = mergeHeaders({ Authorization: `Bearer ${this.apiKey}` }, this.options.defaultHeaders, { "Content-Type": contentType }, options.modeledHeaders, { "Idempotency-Key": options.idempotencyKey }, options.headers);
+		const safe = !streaming && (["GET", "HEAD", "OPTIONS", "PUT", "DELETE"].includes(method) || (method === "POST" && !!headers.get("Idempotency-Key")));
+		for (let i = 0; ; i++) {
+			if (options.signal?.aborted) throw new Errors.APIUserAbortError();
+			const controller = new AbortController();
+			const abort = () => controller.abort();
+			const signal = options.signal && typeof AbortSignal.any === "function" ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
+			if (signal === controller.signal) options.signal?.addEventListener("abort", abort, { once: true });
+			const timer = setTimeout(abort, timeout);
+			let res: Response | undefined;
 			try {
-				for (let i = 0; ; i++) {
-					signal.throwIfAborted();
-					const res = await this.fetcher(url, { method, headers, body: payload, signal });
-					if (res.ok) return res;
-					const retry = res.status === 429 || (res.status >= 500 && res.status <= 599);
-					const delay = retryDelay(res.headers.get("Retry-After"), i);
-					if (!replayable || !retry || i >= retries || delay >= expires - Date.now()) throw await Errors.httpError(res);
-					await res.body?.cancel();
-					await wait(delay, signal);
-				}
+				if (this.logLevel === "debug") this.logger.debug(`Inbound request ${method} ${url.pathname} (attempt ${i + 1})`);
+				res = await this.fetcher.call(undefined, url, { ...this.fetchOptions, ...options.fetchOptions, ...(streaming && { duplex: "half" }), method, headers, body: payload, signal });
 			} catch (cause) {
-				if (signal.aborted) throw aborted();
-				if (cause instanceof Errors.InboundError) throw cause;
-				throw new Errors.APIConnectionError({ cause });
+				if (options.signal?.aborted) throw new Errors.APIUserAbortError();
+				if (!safe || i >= retries) {
+					const timeout = controller.signal.aborted || (cause instanceof Error && (cause.name === "AbortError" || /timed? ?out/i.test(`${cause} ${cause.cause}`)));
+					throw timeout ? new Errors.APIConnectionTimeoutError() : new Errors.APIConnectionError({ cause });
+				}
+			} finally {
+				clearTimeout(timer);
+				if (!res?.ok) options.signal?.removeEventListener("abort", abort);
 			}
-		};
-		return new APIPromise(send(), async response => {
-			if (layout.binary) return response as T;
-			if (response.status === 204 || response.status === 205) return undefined as T;
-			try { return await response.json() as T; }
-			catch (error) { if (signal.aborted) throw aborted(); throw error; }
-		}, layout.binary);
+			if (res) {
+				if (this.logLevel === "debug") this.logger.debug(`Inbound response ${method} ${url.pathname}: ${res.status}`);
+				if (res.ok) return res;
+				const hint = res.headers.get("x-should-retry");
+				const retry = hint === "true" || (hint !== "false" && ([408, 409, 429].includes(res.status) || res.status >= 500));
+				if (!safe || !retry || i >= retries) throw await Errors.httpError(res);
+				await res.body?.cancel();
+			}
+			await wait(retryDelay(res?.headers, i), options.signal);
+		}
 	}
 }

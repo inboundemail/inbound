@@ -40,7 +40,12 @@ export function operations(spec: Spec, mapping: Mapping) {
 		const operationId = `${target.resource}.${target.method}`;
 		if (ids.has(operationId)) throw new Error(`Duplicate SDK operationId: ${operationId}`);
 		ids.add(operationId);
-		const parameters = [...new Map([...shared, ...target.parameters ?? [], ...op.parameters ?? []].map(p => [`${p.in}:${p.name}`, p])).values()];
+		const paramKey = (p: Parameter) => `${p.in}:${p.in === "header" ? p.name.toLowerCase() : p.name}`;
+		const actual = new Map([...shared, ...op.parameters ?? []].map(p => [paramKey(p), p]));
+		for (const fallback of target.parameters ?? []) {
+			actual.set(paramKey(fallback), { ...fallback, ...actual.get(paramKey(fallback)), option: fallback.option });
+		}
+		const parameters = [...actual.values()];
 		const args = [...path.matchAll(/\{([^}]+)\}/g)].map(([, name]) => {
 			const param = parameters.find(p => p.in === "path" && p.name === name);
 			if (!param || !/^[A-Za-z_$][\w$]*$/.test(name)) throw new Error(`${key}: unsupported path parameter ${name}`);
@@ -62,7 +67,13 @@ export function operations(spec: Spec, mapping: Mapping) {
 			props[name] = p.in === "query" && ["limit", "offset"].includes(name) && p.schema.type === "string" ? { anyOf: [p.schema, { type: "integer" }] } : p.schema;
 			if (p.required) options.required!.push(name);
 		}
-		if (target.reactEmail) props.react = {};
+		if (target.reactEmail) { props.react = {}; props.headers = {}; }
+		if (target.resource === "endpoints" && body && props.config) {
+			props.config = structuredClone(props.config);
+			for (const variant of props.config.anyOf ?? []) {
+				if (variant.properties?.headers) variant.properties.headers = {};
+			}
+		}
 		const successes = Object.entries(op.responses).filter(([code]) => /^2(?:\d\d|XX)$/.test(code));
 		const binary = target.binary || successes.some(([, r]) => Object.values(r.content ?? {}).some(x => x.schema?.format === "binary"));
 		if (!successes.length && !binary) throw new Error(`${key}: missing success response`);

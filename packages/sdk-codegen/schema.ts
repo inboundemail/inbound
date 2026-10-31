@@ -1,4 +1,5 @@
 export interface Schema {
+	title?: string;
 	type?: string | string[];
 	nullable?: boolean;
 	const?: string | number | boolean | null;

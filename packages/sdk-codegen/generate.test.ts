@@ -23,6 +23,16 @@ const fixture: Spec = { paths: { [path]: {
 const mapping = { [`GET ${path}`]: { resource: "folders", method: "list" }, [`POST ${path}`]: { resource: "folders", method: "create" } };
 
 describe("operation mapping", () => {
+	it("merges the SDK name with official header metadata case-insensitively", () => {
+		const spec = structuredClone(fixture);
+		spec.paths[path].post!.parameters!.push({ name: "idempotency-key", in: "header", required: true, schema: { enum: ["test"] } });
+		const target = { ...mapping, [`POST ${path}`]: { ...mapping[`POST ${path}`], parameters: [{ name: "Idempotency-Key", in: "header", option: "idempotencyKey", schema: str }] } };
+		const op = operations(spec, target).find(r => r.verb === "POST")!;
+		expect(op.headers.idempotencyKey).toBe("idempotency-key");
+		expect(op.options.properties?.idempotencyKey).toEqual({ enum: ["test"] });
+		expect(op.options.required).toContain("idempotencyKey");
+		expect(op.options.properties).not.toHaveProperty("idempotency-key");
+	});
 	it("owns stable names, orders path arguments by the template, and keeps query, header and body together", () => {
 		const routes = operations(fixture, mapping);
 		const create = routes.find(r => r.operationId === "folders.create")!;

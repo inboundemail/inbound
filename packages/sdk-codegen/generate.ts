@@ -17,7 +17,10 @@ function nestedTypes(parent: string, schema: Schema, depth = 0): string {
 	for (const [key, prop] of Object.entries(schema.properties ?? {})) {
 		const variants = (prop.anyOf ?? prop.oneOf)?.filter(x => x.type !== "null");
 		if (variants && variants.length > 1 && key === "config" && parent.startsWith("Endpoint")) {
-			variants.forEach((s, i) => lines.push(`${pad}export type UnionMember${i} = ${typeOf(s, depth + 1)};`));
+			variants.forEach(s => {
+				if (!s.title || !/^[A-Za-z_$][\w$]*$/.test(s.title)) throw new Error(`Missing config type name in ${parent}`);
+				lines.push(`${pad}export type ${s.title} = ${typeOf(s, depth + 1)};`);
+			});
 		}
 		const field = variants?.length === 1 ? variants[0] : prop;
 		const obj = field.type === "array" ? field.items : field;
@@ -63,9 +66,12 @@ function method(r: Route) {
 	${r.method}(filename: string, params: ${name}Params, request?: RequestOptions): ${result};
 	${r.method}(first: string, second: string | ${name}Params, request?: RequestOptions): ${result} {
 		const [id, filename] = typeof second === "string" ? [first, second] : [second.id, first];`;
-	const lines = [signature, `\t\treturn this.transport.request(${JSON.stringify(r.verb)}, \`${path}\`, ${options ? "params ?? {}" : "{}"}, ${JSON.stringify(layout)}, request);`, "\t}"];
+	const lines = [signature, `\t\treturn this._client.resourceRequest(${JSON.stringify(r.verb)}, \`${path}\`, ${options ? "params ?? {}" : "{}"}, ${JSON.stringify(layout)}, request);`, "\t}"];
 	if (r.more) {
-		lines.push("", `\t${r.method}All(${args.join(", ")}): AsyncIterableIterator<${name}Response["data"][number]> {`,
+		const cursors = r.query.filter(k => k === "sinceUid" || k === "sinceModseq");
+		const iterArgs = args.map(arg => arg.replace(`params: ${name}Params`, `params: ${name}Params${cursors.length ? ` & { ${cursors.map(k => `${k}?: never`).join("; ")} }` : ""}`));
+		lines.push("", `\t${r.method}All(${iterArgs.join(", ")}): AsyncIterableIterator<${name}Response["data"][number]> {`,
+			...(cursors.length ? [`\t\tif (${cursors.map(k => `params?.${k} != null || (request?.query && "${k}" in request.query)`).join(" || ")}) throw new TypeError("Use list() for incremental folder sync; listAll() uses offsets");`] : []),
 			`\t\treturn paginate(Number(params?.offset ?? 0), offset => this.${r.method}(${[...r.args.map(p => p.name), "{ ...params, offset }", "request"].join(", ")}), ${JSON.stringify(r.more)});`, "\t}");
 	}
 	return lines.join("\n");
@@ -86,11 +92,9 @@ export function generate(spec: Spec, mapping: Mapping): Record<string, string> {
 		if (routes.some(r => r.args.length)) imports.push("segment");
 		if (routes.some(r => r.more)) imports.push("paginate");
 		const blocks = [
-			'import type { APIPromise, RequestOptions, Transport } from "../runtime.js";' + (imports.length ? `\nimport { ${imports.join(", ")} } from "../runtime.js";` : ""),
+			'import { APIResource } from "../resource.js";\nimport type { APIPromise, RequestOptions } from "../runtime.js";' + (imports.length ? `\nimport { ${imports.join(", ")} } from "../runtime.js";` : ""),
 			...routes.map(types),
-			`export class ${cap(resource)} {
-	constructor(private readonly transport: Transport) {}
-
+			`export class ${cap(resource)} extends APIResource {
 ${routes.map(method).join("\n\n")}
 }`,
 		];
@@ -101,16 +105,16 @@ ${routes.map(method).join("\n\n")}
 	}
 	const module = (n: string) => JSON.stringify(`./${file(n)}.js`);
 	const typesFor = (n: string) => groups.get(n)!.flatMap(typeNames);
-	const imports = names.map(n => `import { ${cap(n)},\n${typesFor(n).map(t => `\ttype ${t},`).join("\n")}\n} from ${module(n)};`);
-	const properties = names.map(n => `\treadonly ${n} = new ${cap(n)}(this);`);
+	const imports = names.map(n => `import { ${cap(n)} as ${cap(n)}Resource,\n${typesFor(n).map(t => `\ttype ${t},`).join("\n")}\n} from ${module(n)};`);
+	const properties = names.map(n => `\treadonly ${n} = new ${cap(n)}Resource(this);`);
 	if (groups.has("mail")) properties.push("\treadonly threads = this.mail;");
-	const aliases = names.map(n => `\texport type { ${[cap(n), ...typesFor(n)].join(", ")} };`);
+	const aliases = names.map(n => `\texport { ${[`${cap(n)}Resource as ${cap(n)}`, ...typesFor(n).map(t => `type ${t}`)].join(", ")} };`);
 	files["index.ts"] = header + `import { type ClientOptions, Transport } from "../runtime.js";
 ${imports.join("\n")}
 
-export { APIPromise, type ClientOptions, type RequestOptions } from "../runtime.js";
+export { APIPromise, type ClientOptions, type RequestOptions, type Logger, type LogLevel } from "../runtime.js";
 export * from "../errors.js";
-export * from "../helpers.js";
+export { render, toFile, type ToFileInput, type Uploadable } from "../helpers.js";
 export * from "../webhooks.js";
 ${names.map(n => `export * from ${module(n)};`).join("\n")}
 
@@ -128,6 +132,8 @@ export declare namespace Inbound {
 	export type RequestOptions = import("../runtime.js").RequestOptions;
 ${aliases.join("\n")}
 }
+
+${names.map(n => `Inbound.${cap(n)} = ${cap(n)}Resource;`).join("\n")}
 
 export default Inbound;
 `;
