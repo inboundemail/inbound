@@ -89,6 +89,18 @@ test(`all ${samples.length} committed guide snippets match the served samples`, 
 	}
 });
 
+test("public samples use intentional update bodies and leave DNS verification opt-in", () => {
+	const sample = (id: string) => samples[routes.findIndex(route => route.operationId === id)];
+	const body = (id: string) => JSON.parse(unquote(sample(id).curl.split("-d ")[1]));
+	expect(body("spamFilter.update")).toEqual({ level: "standard" });
+	expect(body("spam.update")).toEqual({ level: "strict", allow: ["@partner.example.com"], block: [] });
+	expect(sample("spam.update").typescript).toContain("replace the existing lists");
+	expect(body("emails.reply")).toEqual({ from: expect.any(String), text: expect.any(String) });
+	expect(body("mailboxes.update")).toEqual({ dailySendLimit: 500 });
+	expect(sample("domains.retrieve").curl).not.toContain("?");
+	expect(sample("domains.retrieve").typescript).not.toContain("check:");
+});
+
 test("prefer schema examples over defaults and escape shell quotes without changing JSON", () => {
 	const copy = structuredClone(spec);
 	const op = copy.paths["/api/e2/domains"].post!;

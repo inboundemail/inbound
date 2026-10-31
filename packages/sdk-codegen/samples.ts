@@ -20,6 +20,18 @@ const strings: Record<string, string> = {
 };
 
 const commonFields = ["text", "subject", "to", "name", "isActive", "isRead", "is_read", "enabled", "value", "limit", "includeSubdomains", "webhookFormat"];
+
+const overrides: Record<string, { body?: Record<string, Json>; query?: string[]; note?: string }> = {
+	"spamFilter.update": { body: { level: "standard" } },
+	"spam.update": {
+		body: { level: "strict", allow: ["@partner.example.com"], block: [] },
+		note: "// allow and block replace the existing lists; block: [] clears the block list.\n// To add a single entry, use inbound.spam.addAllow() or inbound.spam.addBlock() instead.",
+	},
+	"emails.reply": { body: { from: strings.from, text: "Thanks for reaching out." } },
+	"mailboxes.update": { body: { dailySendLimit: 500 } },
+	"folderMessages.delete": { query: ["permanent"] },
+};
+
 function objectExample(schema: Schema, parent: string): Record<string, Json> {
 	const props = schema.properties ?? {};
 	const preset = specified(schema);
@@ -94,6 +106,7 @@ function sdkNumbers(value: Json, schema: Schema): Json {
 }
 
 function samples(route: Route, server: string): CodeSample[] {
+	const override = overrides[route.operationId];
 	const args: Json[] = [];
 	let path = route.path;
 	for (const { name, schema } of route.args) {
@@ -105,12 +118,13 @@ function samples(route: Route, server: string): CodeSample[] {
 		path = path.replace(token, String(value));
 	}
 	const schema = route.operation.requestBody?.content?.["application/json"]?.schema;
-	const body = schema ? objectExample(schema, "body") : undefined;
+	const body = override?.body ?? (schema ? objectExample(schema, "body") : undefined);
 	const options: Record<string, Json> = { ...body };
 	const query = new URLSearchParams();
-	const params = route.parameters.filter(p => p.in === "query");
-	const paging = params.filter(p => p.name === "limit" || p.name === "offset");
-	for (const p of new Set([...params.filter(p => p.required), ...(paging.length ? paging : params.slice(0, 1))])) {
+	const list = route.verb === "GET" && route.method.startsWith("list");
+	for (const p of route.parameters) {
+		if (p.in !== "query") continue;
+		if (!p.required && !override?.query?.includes(p.name) && !(list && ["limit", "offset"].includes(p.name))) continue;
 		const value = example(p.schema, p.name);
 		options[p.option ?? p.name] = value;
 		query.set(p.name, String(value));
@@ -125,7 +139,7 @@ function samples(route: Route, server: string): CodeSample[] {
 	if (body) curl.push("-H 'Content-Type: application/json'", `-d ${quote(JSON.stringify(body, null, 2))}`);
 	if (body || Object.keys(options).length) args.push(sdkNumbers(options, route.options));
 	return [
-		{ lang: "typescript", label: "TypeScript", source: `import Inbound from "inboundemail";\n\nconst inbound = new Inbound();\nconst result = await inbound.${route.operationId}(${args.map(tsLiteral).join(", ")});` },
+		{ lang: "typescript", label: "TypeScript", source: `import Inbound from "inboundemail";\n\nconst inbound = new Inbound();\n${override?.note ? `${override.note}\n` : ""}const result = await inbound.${route.operationId}(${args.map(tsLiteral).join(", ")});` },
 		{ lang: "curl", label: "cURL", source: curl.join(" \\\n  ") },
 	];
 }

@@ -7,7 +7,7 @@ import Inbound from "inboundemail";
 
 const inbound = new Inbound();
 const result = await inbound.spamFilter.update({
-  level: "off"
+  level: "standard"
 });
 ```
 
@@ -16,7 +16,7 @@ curl -X PUT 'https://inbound.new/api/e2/spam-filter' \
   -H "Authorization: Bearer $INBOUND_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{
-  "level": "off"
+  "level": "standard"
 }'
 ```
 

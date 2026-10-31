@@ -8,9 +8,7 @@ import Inbound from "inboundemail";
 const inbound = new Inbound();
 const result = await inbound.emails.reply("<emailId>", {
   from: "agent@example.com",
-  text: "How can we help?",
-  subject: "Your support request",
-  to: "alex@example.com"
+  text: "Thanks for reaching out."
 });
 ```
 
@@ -20,9 +18,7 @@ curl -X POST 'https://inbound.new/api/e2/emails/<emailId>/reply' \
   -H 'Content-Type: application/json' \
   -d '{
   "from": "agent@example.com",
-  "text": "How can we help?",
-  "subject": "Your support request",
-  "to": "alex@example.com"
+  "text": "Thanks for reaching out."
 }'
 ```
 

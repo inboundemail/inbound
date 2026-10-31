@@ -6,14 +6,14 @@
 import Inbound from "inboundemail";
 
 const inbound = new Inbound();
+// allow and block replace the existing lists; block: [] clears the block list.
+// To add a single entry, use inbound.spam.addAllow() or inbound.spam.addBlock() instead.
 const result = await inbound.spam.update("<mailboxId>", {
-  level: "off",
+  level: "strict",
   allow: [
-    "agent@example.com"
+    "@partner.example.com"
   ],
-  block: [
-    "spam@example.org"
-  ]
+  block: []
 });
 ```
 
@@ -22,13 +22,11 @@ curl -X PUT 'https://inbound.new/api/e2/mailboxes/<mailboxId>/spam' \
   -H "Authorization: Bearer $INBOUND_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{
-  "level": "off",
+  "level": "strict",
   "allow": [
-    "agent@example.com"
+    "@partner.example.com"
   ],
-  "block": [
-    "spam@example.org"
-  ]
+  "block": []
 }'
 ```
 

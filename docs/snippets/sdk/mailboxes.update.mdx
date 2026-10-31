@@ -7,8 +7,7 @@ import Inbound from "inboundemail";
 
 const inbound = new Inbound();
 const result = await inbound.mailboxes.update("<mailboxId>", {
-  name: "Support",
-  enabled: true
+  dailySendLimit: 500
 });
 ```
 
@@ -17,8 +16,7 @@ curl -X PUT 'https://inbound.new/api/e2/mailboxes/<mailboxId>' \
   -H "Authorization: Bearer $INBOUND_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{
-  "name": "Support",
-  "enabled": true
+  "dailySendLimit": 500
 }'
 ```
 
