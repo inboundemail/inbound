@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { resources } from "./resources";
 import type { Json, Schema } from "./schema";
 import { type CodeSample, operations, type Route, type Spec } from "./spec";
@@ -68,6 +69,30 @@ const idNames: Record<string, string> = {
 const quote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
 const tsLiteral = (v: Json) => JSON.stringify(v, null, 2).replace(/^(\s*)"([a-zA-Z_$][\w$]*)":/gm, "$1$2:");
 
+function sdkNumbers(value: Json, schema: Schema): Json {
+	const variants = schema.anyOf ?? schema.oneOf;
+	if (variants) {
+		for (const variant of variants) {
+			const converted = sdkNumbers(value, variant);
+			if (!isDeepStrictEqual(converted, value)) return converted;
+		}
+	} else if (typeof value === "string" && /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value)) {
+		const n = Number(value);
+		const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+		const accepts = schema.const !== undefined ? schema.const === n : schema.enum ? schema.enum.includes(n) :
+			types.includes("number") || (types.includes("integer") && Number.isInteger(n));
+		if (accepts && Number.isFinite(n) && (!Number.isInteger(n) || Number.isSafeInteger(n))) return n;
+	} else if (Array.isArray(value) && schema.items) {
+		return value.map(item => sdkNumbers(item, schema.items!));
+	} else if (value && typeof value === "object" && !Array.isArray(value) && schema.properties) {
+		const props = schema.properties;
+		if (Object.keys(value).every(k => Object.hasOwn(props, k))) {
+			return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, sdkNumbers(v, props[k])]));
+		}
+	}
+	return value;
+}
+
 function samples(route: Route, server: string): CodeSample[] {
 	const args: Json[] = [];
 	let path = route.path;
@@ -98,7 +123,7 @@ function samples(route: Route, server: string): CodeSample[] {
 		curl.push(`-H ${quote(`${p.name}: ${value}`)}`);
 	}
 	if (body) curl.push("-H 'Content-Type: application/json'", `-d ${quote(JSON.stringify(body, null, 2))}`);
-	if (body || Object.keys(options).length) args.push(options);
+	if (body || Object.keys(options).length) args.push(sdkNumbers(options, route.options));
 	return [
 		{ lang: "typescript", label: "TypeScript", source: `import Inbound from "inboundemail";\n\nconst inbound = new Inbound();\nconst result = await inbound.${route.operationId}(${args.map(tsLiteral).join(", ")});` },
 		{ lang: "curl", label: "cURL", source: curl.join(" \\\n  ") },

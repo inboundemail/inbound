@@ -99,3 +99,20 @@ test("prefer schema examples over defaults and escape shell quotes without chang
 	expect(sdk.source).toContain('domain: "reader\'s example"');
 	expect(JSON.parse(unquote(curl.source.split("-d ")[1]))).toEqual({ domain: "reader's example" });
 });
+
+test("use SDK numeric inputs without changing string-only fields or curl bodies", () => {
+	const copy = structuredClone(spec);
+	const op = copy.paths["/api/e2/mailboxes/{id}/filters/apply"].post!;
+	const body = { folder: "42", afterUid: "7", limit: "25" };
+	op.requestBody!.content!["application/json"].schema!.examples = [body];
+	const expunge = copy.paths["/api/e2/mailboxes/{id}/folders/{folder}/expunge"].post!;
+	expunge.requestBody!.content!["application/json"].schema!.examples = [{ uids: ["42"] }];
+	addCodeSamples(copy);
+	const [sdk, curl] = op["x-codeSamples"]!;
+	expect(sdk.source).toContain('folder: "42"');
+	expect(sdk.source).toContain("afterUid: 7");
+	expect(sdk.source).toContain("limit: 25");
+	expect(JSON.parse(unquote(curl.source.split("-d ")[1]))).toEqual(body);
+	expect(expunge["x-codeSamples"]![0].source).toMatch(/uids: \[\s*42\s*\]/);
+	expect(copy.paths["/api/e2/mail/threads"].get!["x-codeSamples"]![0].source).toContain("limit: 25");
+});
