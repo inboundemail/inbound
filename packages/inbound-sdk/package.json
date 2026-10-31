@@ -1,0 +1,28 @@
+{
+  "name": "inboundemail",
+  "version": "0.21.0",
+  "description": "Official TypeScript SDK for the Inbound API",
+  "license": "Apache-2.0",
+  "repository": { "type": "git", "url": "https://github.com/inboundemail/inbound.git", "directory": "packages/inbound-sdk" },
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "files": ["dist", "README.md", "LICENSE"],
+  "main": "./dist/cjs/public/index.js",
+  "module": "./dist/esm/generated/index.js",
+  "types": "./dist/esm/generated/index.d.ts",
+  "exports": {
+    ".": {
+      "import": { "types": "./dist/esm/generated/index.d.ts", "default": "./dist/esm/generated/index.js" },
+      "require": { "types": "./dist/cjs/generated/index.d.ts", "default": "./dist/cjs/public/index.js" }
+    },
+    "./*.js": { "import": "./dist/esm/public/*.js", "require": "./dist/cjs/public/*.js" },
+    "./*.mjs": { "import": "./dist/esm/public/*.js", "require": "./dist/cjs/public/*.js" },
+    "./*": { "import": "./dist/esm/public/*.js", "require": "./dist/cjs/public/*.js" },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": { "*": {
+    "dist/*": ["dist/*"], "*.mjs": ["dist/esm/public/*.d.ts"], "*.js": ["dist/esm/public/*.d.ts"], "*": ["dist/esm/public/*.d.ts"]
+  } },
+  "scripts": { "build": "bun --no-env-file ./build.ts", "prepack": "bun --no-env-file ./build.ts", "test": "bun --no-env-file test" },
+  "dependencies": { "@react-email/render": "^2.0.0" }
+}

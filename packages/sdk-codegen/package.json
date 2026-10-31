@@ -1,0 +1,5 @@
+{
+  "name": "@inbound/sdk-codegen",
+  "private": true,
+  "type": "module"
+}
