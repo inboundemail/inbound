@@ -1,0 +1,27 @@
+{/* generated, do not edit — OpenAPI: postApiE2Email-addresses (POST /api/e2/email-addresses) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.emailAddresses.create({
+  address: "agent@example.com",
+  domainId: "dom_...",
+  isActive: true
+});
+```
+
+```bash cURL
+curl -X POST 'https://inbound.new/api/e2/email-addresses' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "address": "agent@example.com",
+  "domainId": "dom_...",
+  "isActive": true
+}'
+```
+
+</CodeGroup>

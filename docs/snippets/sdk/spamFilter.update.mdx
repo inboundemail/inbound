@@ -1,0 +1,23 @@
+{/* generated, do not edit — OpenAPI: putApiE2Spam-filter (PUT /api/e2/spam-filter) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.spamFilter.update({
+  level: "standard"
+});
+```
+
+```bash cURL
+curl -X PUT 'https://inbound.new/api/e2/spam-filter' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "level": "standard"
+}'
+```
+
+</CodeGroup>

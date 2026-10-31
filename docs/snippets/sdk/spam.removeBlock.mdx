@@ -1,0 +1,23 @@
+{/* generated, do not edit — OpenAPI: deleteApiE2MailboxesByIdSpamBlock (DELETE /api/e2/mailboxes/{id}/spam/block) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.spam.removeBlock("<mailboxId>", {
+  pattern: "agent@example.com"
+});
+```
+
+```bash cURL
+curl -X DELETE 'https://inbound.new/api/e2/mailboxes/<mailboxId>/spam/block' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "pattern": "agent@example.com"
+}'
+```
+
+</CodeGroup>

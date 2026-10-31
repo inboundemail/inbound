@@ -1,0 +1,23 @@
+{/* generated, do not edit — OpenAPI: putApiE2MailboxesById (PUT /api/e2/mailboxes/{id}) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.mailboxes.update("<mailboxId>", {
+  dailySendLimit: 500
+});
+```
+
+```bash cURL
+curl -X PUT 'https://inbound.new/api/e2/mailboxes/<mailboxId>' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "dailySendLimit": 500
+}'
+```
+
+</CodeGroup>

@@ -1,0 +1,25 @@
+{/* generated, do not edit — OpenAPI: getApiE2Email-addresses (GET /api/e2/email-addresses) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.emailAddresses.list({
+  limit: 50,
+  offset: 0
+});
+
+// Or iterate through all pages:
+for await (const item of inbound.emailAddresses.listAll()) {
+  // Process this item.
+}
+```
+
+```bash cURL
+curl -X GET 'https://inbound.new/api/e2/email-addresses?limit=50&offset=0' \
+  -H "Authorization: Bearer $INBOUND_API_KEY"
+```
+
+</CodeGroup>

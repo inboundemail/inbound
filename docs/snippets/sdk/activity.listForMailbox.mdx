@@ -1,0 +1,25 @@
+{/* generated, do not edit — OpenAPI: getApiE2MailboxesByIdActivity (GET /api/e2/mailboxes/{id}/activity) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.activity.listForMailbox("<mailboxId>", {
+  limit: 50,
+  offset: 0
+});
+
+// Or iterate through all pages:
+for await (const item of inbound.activity.listForMailboxAll("<mailboxId>")) {
+  // Process this item.
+}
+```
+
+```bash cURL
+curl -X GET 'https://inbound.new/api/e2/mailboxes/<mailboxId>/activity?limit=50&offset=0' \
+  -H "Authorization: Bearer $INBOUND_API_KEY"
+```
+
+</CodeGroup>

@@ -18,7 +18,8 @@ interface Target {
 }
 export type Mapping = Record<string, Target>;
 type Content = { content?: Record<string, { schema?: Schema }> };
-type Operation = { parameters?: Parameter[]; requestBody?: Content; responses: Record<string, Content> };
+export type CodeSample = { lang: "typescript" | "curl"; label: string; source: string };
+type Operation = { operationId?: string; parameters?: Parameter[]; requestBody?: Content; responses: Record<string, Content>; "x-codeSamples"?: CodeSample[] };
 type Verb = "get" | "put" | "post" | "patch" | "delete" | "head" | "options" | "trace";
 export interface Spec { paths: Record<string, Partial<Record<Verb, Operation>> & { parameters?: Parameter[] }> }
 const verbs: Verb[] = ["get", "put", "post", "patch", "delete", "head", "options", "trace"];
@@ -88,7 +89,7 @@ export function operations(spec: Spec, mapping: Mapping) {
 		const paging = page?.pagination?.properties;
 		const more = paging?.hasMore ? "hasMore" : "has_more";
 		const paginated = verb === "get" && query.includes("offset") && page?.data?.type === "array" && paging?.[more]?.type === "boolean" && ["limit", "offset", "total"].every(k => paging[k]?.type === "number" || paging[k]?.type === "integer");
-		return { ...target, operationId, verb: verb.toUpperCase(), path, args, query, headers, body: !!body, options, responses, binary: !!binary, more: paginated ? more : undefined };
+		return { ...target, operationId, operation: op, parameters, verb: verb.toUpperCase(), path, args, query, headers, body: !!body, options, responses, binary: !!binary, more: paginated ? more : undefined };
 	});
 }
 export type Route = ReturnType<typeof operations>[number];

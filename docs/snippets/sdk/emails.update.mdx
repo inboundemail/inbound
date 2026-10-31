@@ -1,0 +1,23 @@
+{/* generated, do not edit — OpenAPI: patchApiE2EmailsById (PATCH /api/e2/emails/{id}) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.emails.update("<emailId>", {
+  is_read: true
+});
+```
+
+```bash cURL
+curl -X PATCH 'https://inbound.new/api/e2/emails/<emailId>' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "is_read": true
+}'
+```
+
+</CodeGroup>
