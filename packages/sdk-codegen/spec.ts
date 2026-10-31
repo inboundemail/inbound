@@ -13,6 +13,7 @@ interface Target {
 	binary?: boolean;
 	legacyFilename?: boolean;
 	reactEmail?: boolean;
+	idempotent?: "header";
 	parameters?: Parameter[];
 }
 export type Mapping = Record<string, Target>;

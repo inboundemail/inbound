@@ -74,6 +74,30 @@ it("does not replay an unkeyed send after a server failure", async () => {
 	expect(calls).toBe(1);
 });
 
+it("does not replay endpoint creation or raw POSTs after a lost response, even with a key", async () => {
+	const writes: string[] = [];
+	const client = make(async (url, init) => {
+		writes.push(new URL(String(url)).pathname);
+		expect(new Headers(init?.headers).get("Idempotency-Key")).toBe("k");
+		throw new TypeError("connection lost after POST");
+	});
+	const endpoint = { type: "webhook", name: "test", config: { url: "https://example.invalid" } } as const;
+	await expect(Promise.resolve(client.endpoints.create(endpoint, { idempotencyKey: "k" }))).rejects.toBeInstanceOf(Inbound.APIConnectionError);
+	await expect(Promise.resolve(client.post("/api/e2/emails", { headers: { "Idempotency-Key": "k" } }))).rejects.toBeInstanceOf(Inbound.APIConnectionError);
+	expect(writes).toEqual(["/api/e2/endpoints", "/api/e2/emails"]);
+});
+
+it("replays a keyed generated reply when the first response is lost", async () => {
+	let calls = 0;
+	const c = make(async (_, init) => {
+		expect(new Headers(init?.headers).get("Idempotency-Key")).toBe("reply-key");
+		if (++calls === 1) throw new TypeError("lost response");
+		return Response.json({ id: "reply" });
+	});
+	expect((await c.emails.reply("id", { from: "x" }, { idempotencyKey: "reply-key" })).id).toBe("reply");
+	expect(calls).toBe(2);
+});
+
 it("exposes status, API code, raw error body and old error classes", async () => {
 	const body = { error: { message: "No such mailbox", code: "mailbox_missing" } };
 	const client = make(async () => Response.json(body, { status: 404 }));
@@ -263,7 +287,7 @@ it("retries network failures and uses a new per-attempt timeout", async () => {
 });
 
 it("honors 408, 409, retry-after-ms and explicit retry hints on safe requests", async () => {
-	for (const [method, status] of [["head", 408], ["options", 409], ["put", 400], ["delete", 503], ["post", 503]] as const) {
+	for (const [method, status] of [["head", 408], ["options", 409], ["put", 400], ["delete", 503]] as const) {
 		let n = 0;
 		const c = make(async () => ++n > 1 ? new Response("ok") : new Response(null, { status, headers: { "retry-after-ms": "15", "retry-after": "50", ...(status === 400 && { "x-should-retry": "true" }) } }));
 		const start = performance.now();

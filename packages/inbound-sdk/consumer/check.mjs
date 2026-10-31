@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { setImmediate } from "node:timers/promises";
+import { mock } from "node:test";
 import { writeFile } from "node:fs/promises";
 import { createElement } from "react";
 import Inbound, { Inbound as Named, render } from "inboundemail";
@@ -58,3 +59,22 @@ assert.equal(raw.bodyUsed, false);
 assert.deepEqual(await Promise.all([p, p]), [{ id: "fixture" }, { id: "fixture" }]);
 assert.equal((await p.withResponse()).response, raw);
 console.log("Lazy APIPromise raw response and memoized parsed body passed");
+
+const now = Date.UTC(2026, 0, 1);
+for (const hint of [{ "Retry-After": "120" }, { "retry-after-ms": "120000" }, { "Retry-After": new Date(now + 120_000).toUTCString() }]) {
+	mock.timers.enable({ apis: ["setTimeout", "Date"], now });
+	try {
+		let attempts = 0;
+		const c = new Inbound({ apiKey: "fixture", fetch: async () => ++attempts === 1 ? new Response(null, { status: 429, headers: hint }) : Response.json({}) });
+		const pending = c.spamFilter.retrieve();
+		await setImmediate();
+		mock.timers.tick(59_999);
+		await setImmediate();
+		assert.equal(attempts, 1);
+		mock.timers.tick(1);
+		await setImmediate();
+		assert.equal(attempts, 2);
+		await pending;
+	} finally { mock.timers.reset(); }
+}
+console.log("Retry-After: seconds, milliseconds and HTTP-date honored to the 60-second cap");

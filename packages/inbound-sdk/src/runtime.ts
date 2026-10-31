@@ -83,12 +83,13 @@ interface Layout {
 	headers?: Record<string, string>;
 	binary?: boolean;
 	reactEmail?: boolean;
+	idempotent?: "header";
 }
 function retryDelay(headers: Headers | undefined, attempt: number) {
 	const ms = headers?.get("retry-after-ms");
 	const after = headers?.get("retry-after");
 	const delay = ms != null && Number.isFinite(Number(ms)) ? Number(ms) : after ? (/^\d+(\.\d+)?$/.test(after) ? Number(after) * 1000 : Date.parse(after) - Date.now()) : NaN;
-	return delay >= 0 && delay < 60_000 ? delay : Math.min(500 * 2 ** attempt, 5000) * (1 - Math.random() / 4);
+	return Number.isFinite(delay) && delay >= 0 ? Math.min(delay, 60_000) : Math.min(500 * 2 ** attempt, 5000) * (1 - Math.random() / 4);
 }
 
 function wait(ms: number, signal?: AbortSignal | null) {
@@ -154,8 +155,11 @@ export class Transport {
 		return this.request<T>(Promise.resolve(opts).then(options => ({ ...options, method, path })));
 	}
 	request<T>(input: MaybePromise<RawRequest>, remainingRetries?: number | null): APIPromise<T> {
+		return this.execute<T>(input, remainingRetries);
+	}
+	private execute<T>(input: MaybePromise<RawRequest>, remainingRetries?: number | null, idempotent?: Layout["idempotent"]): APIPromise<T> {
 		const options = Promise.resolve(input);
-		return new APIPromise(options.then(o => this.send(o, remainingRetries)), async response => decode<T>(response, (await options).__binaryResponse));
+		return new APIPromise(options.then(o => this.send(o, remainingRetries, idempotent)), async response => decode<T>(response, (await options).__binaryResponse));
 	}
 	resourceRequest<T>(method: string, path: string, params: Record<string, unknown>, layout: Layout, options: RequestOptions = {}): APIPromise<T> {
 		const body = { ...params };
@@ -175,9 +179,9 @@ export class Transport {
 			return { ...options, path, method: method.toLowerCase() as Method, query: { ...query, ...options.query },
 				modeledHeaders: headers, body: layout.body ? body : undefined, __binaryResponse: layout.binary };
 		};
-		return this.request<T>(prepare());
+		return this.execute<T>(prepare(), undefined, layout.idempotent);
 	}
-	private async send(options: RawRequest & { modeledHeaders?: HeaderInput }, remaining?: number | null) {
+	private async send(options: RawRequest & { modeledHeaders?: HeaderInput }, remaining?: number | null, idempotent?: Layout["idempotent"]) {
 		const method = options.method.toUpperCase();
 		const timeout = options.timeout ?? this.timeout;
 		const retries = remaining ?? options.maxRetries ?? this.maxRetries;
@@ -203,7 +207,7 @@ export class Transport {
 			}
 		}
 		const headers = mergeHeaders({ Authorization: `Bearer ${this.apiKey}` }, this.options.defaultHeaders, { "Content-Type": contentType }, options.modeledHeaders, { "Idempotency-Key": options.idempotencyKey }, options.headers);
-		const safe = !streaming && (["GET", "HEAD", "OPTIONS", "PUT", "DELETE"].includes(method) || (method === "POST" && !!headers.get("Idempotency-Key")));
+		const safe = !streaming && (["GET", "HEAD", "OPTIONS", "PUT", "DELETE"].includes(method) || (method === "POST" && idempotent === "header" && !!headers.get("Idempotency-Key")));
 		for (let i = 0; ; i++) {
 			if (options.signal?.aborted) throw new Errors.APIUserAbortError();
 			const controller = new AbortController();

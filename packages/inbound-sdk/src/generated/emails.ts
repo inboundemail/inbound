@@ -247,7 +247,7 @@ export class Emails extends APIResource {
 	}
 
 	reply(id: string, params: EmailReplyParams, request?: RequestOptions): APIPromise<EmailReplyResponse> {
-		return this._client.resourceRequest("POST", `/api/e2/emails/${segment(id)}/reply`, params ?? {}, {"body":true,"headers":{"idempotencyKey":"Idempotency-Key"},"reactEmail":true}, request);
+		return this._client.resourceRequest("POST", `/api/e2/emails/${segment(id)}/reply`, params ?? {}, {"body":true,"headers":{"idempotencyKey":"Idempotency-Key"},"reactEmail":true,"idempotent":"header"}, request);
 	}
 
 	resume(id: string, request?: RequestOptions): APIPromise<EmailResumeResponse> {
@@ -263,7 +263,7 @@ export class Emails extends APIResource {
 	}
 
 	send(params: EmailSendParams, request?: RequestOptions): APIPromise<EmailSendResponse> {
-		return this._client.resourceRequest("POST", `/api/e2/emails`, params ?? {}, {"body":true,"headers":{"idempotencyKey":"Idempotency-Key"},"reactEmail":true}, request);
+		return this._client.resourceRequest("POST", `/api/e2/emails`, params ?? {}, {"body":true,"headers":{"idempotencyKey":"Idempotency-Key"},"reactEmail":true,"idempotent":"header"}, request);
 	}
 
 	update(id: string, params: EmailUpdateParams | null = {}, request?: RequestOptions): APIPromise<EmailUpdateResponse> {

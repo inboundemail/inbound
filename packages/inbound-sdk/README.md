@@ -39,7 +39,7 @@ if (mailboxes.length) {
 }
 ```
 
-`baseURL` overrides `INBOUND_BASE_URL` (default `https://inbound.new`). `timeout` limits each fetch attempt in milliseconds (default 60,000). GET, HEAD, OPTIONS, PUT, DELETE and keyed POSTs retry connection failures, timeouts, 408, 409, 429 and 5xx up to `maxRetries` times (default 2). The client respects `Retry-After`, `retry-after-ms` and `x-should-retry`. Unkeyed POSTs are not replayed. HTTP errors are `InboundError` instances with `status`, `code` (when supplied by the API) and `body`.
+`timeout` limits each fetch attempt in milliseconds (default 60,000). GET, HEAD, OPTIONS, PUT and DELETE retry connection failures, timeouts, 408, 409, 429 and 5xx up to `maxRetries` times (default 2). Only generated `emails.send` and `emails.reply` can retry a POST, and only with an `Idempotency-Key`: those routes enforce it on the server. Other POSTs, including raw requests, are never replayed. The client honors `x-should-retry` and waits for `Retry-After` (seconds or HTTP-date) or `retry-after-ms`, capped at 60 seconds. HTTP errors are `InboundError` instances with `status`, `code` (when supplied by the API) and `body`.
 
 Attachment downloads and raw messages return a standard `Response`: call `.arrayBuffer()` for bytes. Both `attachments.retrieve(id, filename)` and the legacy `attachments.retrieve(filename, { id })` work. `mail.list/retrieve` still access account threads; `threads` is an alias. For incremental folder sync (`sinceUid` or `sinceModseq`), use `folderMessages.list()`, not the offset-based `listAll()`.
 

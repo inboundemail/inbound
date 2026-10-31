@@ -59,6 +59,7 @@ function method(r: Route) {
 		...(r.body && { body: true }), ...(r.query.length && { query: r.query }),
 		...(Object.keys(r.headers).length && { headers: r.headers }), ...(r.binary && { binary: true }),
 		...(r.reactEmail && { reactEmail: true }),
+		...(r.idempotent && { idempotent: r.idempotent }),
 	};
 	let signature = `\t${r.method}(${args.join(", ")}): ${result} {`;
 	if (r.legacyFilename) signature = `\t${r.method}(${args.join(", ")}): ${result};
