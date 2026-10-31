@@ -13,11 +13,13 @@ Welcome to Inbound! Get started with sending emails, receiving emails, and build
   </Step>
   
   <Step title="Install the SDK (Recommended)">
-    Install our SDK for the best developer experience:
+    Install our TypeScript SDK for the best developer experience:
     
     ```bash
     npm install inboundemail
     ```
+
+    The SDK reads `INBOUND_API_KEY` from the environment, or pass `new Inbound({ apiKey })`. Every endpoint page in this reference shows a TypeScript sample using the SDK next to the cURL sample.
   </Step>
   
   <Step title="Send Your First Email">
@@ -25,20 +27,21 @@ Welcome to Inbound! Get started with sending emails, receiving emails, and build
     
     
     ```typescript SDK (typescript)
-    import { Inbound } from 'inboundemail'
+    import Inbound from 'inboundemail'
     
-    const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+    const inbound = new Inbound()
     
-    const { data, error } = await inbound.emails.send({
+    const result = await inbound.emails.send({
       from: 'Inbound User <agent@inbnd.dev>',
       to: 'youremail@inbound.new',
       subject: 'Welcome!',
-      html: '<p>Thanks for signing up!</p>',
-      tags: [{ name: 'campaign', value: 'welcome' }]
+      html: '<p>Thanks for signing up!</p>'
     })
     
-    console.log(`Email sent: ${data?.id}`)
+    console.log(`Email sent: ${result.id}`)
     ```
+
+    Errors throw an `APIError` with `status` and `message`; wrap calls in `try`/`catch`.
   </Step>
 </Steps>
 
