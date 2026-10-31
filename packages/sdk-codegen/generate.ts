@@ -64,8 +64,8 @@ function method(r: Route) {
 	let signature = `\t${r.method}(${args.join(", ")}): ${result} {`;
 	if (r.legacyFilename) signature = `\t${r.method}(${args.join(", ")}): ${result};
 	/** @deprecated Prefer retrieve(id, filename). */
-	${r.method}(filename: string, params: ${name}Params, request?: RequestOptions): ${result};
-	${r.method}(first: string, second: string | ${name}Params, request?: RequestOptions): ${result} {
+	${r.method}(filename: string, params: ${name}Params, request?: RequestOptions): APIPromise<void>;
+	${r.method}(first: string, second: string | ${name}Params, request?: RequestOptions): APIPromise<${name}Response | void> {
 		const [id, filename] = typeof second === "string" ? [first, second] : [second.id, first];`;
 	const lines = [signature, `\t\treturn this._client.resourceRequest(${JSON.stringify(r.verb)}, \`${path}\`, ${options ? "params ?? {}" : "{}"}, ${JSON.stringify(layout)}, request);`, "\t}"];
 	if (r.more) {

@@ -34,8 +34,8 @@ export class Attachments extends APIResource {
 
 	retrieve(id: string, filename: string, request?: RequestOptions): APIPromise<AttachmentRetrieveResponse>;
 	/** @deprecated Prefer retrieve(id, filename). */
-	retrieve(filename: string, params: AttachmentRetrieveParams, request?: RequestOptions): APIPromise<AttachmentRetrieveResponse>;
-	retrieve(first: string, second: string | AttachmentRetrieveParams, request?: RequestOptions): APIPromise<AttachmentRetrieveResponse> {
+	retrieve(filename: string, params: AttachmentRetrieveParams, request?: RequestOptions): APIPromise<void>;
+	retrieve(first: string, second: string | AttachmentRetrieveParams, request?: RequestOptions): APIPromise<AttachmentRetrieveResponse | void> {
 		const [id, filename] = typeof second === "string" ? [first, second] : [second.id, first];
 		return this._client.resourceRequest("GET", `/api/e2/attachments/${segment(id)}/${segment(filename)}`, {}, {"binary":true}, request);
 	}

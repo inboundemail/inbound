@@ -6,35 +6,35 @@ export { APIPromise } from "./api-promise.js";
 type FetchInit = NonNullable<Parameters<typeof fetch>[1]>;
 type FetchOptions = Omit<FetchInit, "method" | "headers" | "body" | "signal"> & { dispatcher?: unknown; agent?: unknown };
 type HeaderValue = string | null | undefined;
-type HeaderInput = Headers | readonly (readonly HeaderValue[])[] | Record<string, HeaderValue | readonly HeaderValue[]> | null;
+type HeaderInput = Headers | { values: Headers; nulls: Set<string> } | readonly (readonly HeaderValue[])[] | Record<string, HeaderValue | readonly HeaderValue[]> | null;
 type Method = "get" | "head" | "options" | "post" | "patch" | "put" | "delete";
 export type Logger = Pick<Console, "debug" | "info" | "warn" | "error">;
 export type LogLevel = "off" | "error" | "warn" | "info" | "debug";
 
 export interface RequestOptions {
-	headers?: HeaderInput;
-	query?: object | null;
+	headers?: HeaderInput | undefined;
+	query?: object | null | undefined;
 	body?: unknown;
-	fetchOptions?: FetchOptions;
-	idempotencyKey?: string;
-	__binaryResponse?: boolean;
-	stream?: boolean;
-	defaultBaseURL?: string;
-	signal?: AbortSignal | null;
-	timeout?: number;
-	maxRetries?: number;
+	fetchOptions?: FetchOptions | undefined;
+	idempotencyKey?: string | undefined;
+	__binaryResponse?: boolean | undefined;
+	stream?: boolean | undefined;
+	defaultBaseURL?: string | undefined;
+	signal?: AbortSignal | null | undefined;
+	timeout?: number | undefined;
+	maxRetries?: number | undefined;
 }
 export interface ClientOptions {
-	apiKey?: string;
-	baseURL?: string | null;
-	fetch?: (input: Parameters<typeof fetch>[0], init?: FetchInit) => Promise<Response>;
-	timeout?: number;
-	maxRetries?: number;
-	defaultHeaders?: HeaderInput;
-	defaultQuery?: Record<string, string | undefined>;
-	fetchOptions?: FetchOptions;
-	logLevel?: LogLevel;
-	logger?: Logger;
+	apiKey?: string | undefined;
+	baseURL?: string | null | undefined;
+	fetch?: ((input: Parameters<typeof fetch>[0], init?: FetchInit) => Promise<Response>) | undefined;
+	timeout?: number | undefined;
+	maxRetries?: number | undefined;
+	defaultHeaders?: HeaderInput | undefined;
+	defaultQuery?: Record<string, string | undefined> | undefined;
+	fetchOptions?: FetchOptions | undefined;
+	logLevel?: LogLevel | undefined;
+	logger?: Logger | undefined;
 }
 
 export type RawRequest = RequestOptions & { method: Method; path: string };
@@ -44,6 +44,11 @@ function mergeHeaders(...layers: (HeaderInput | undefined)[]) {
 	const headers = new Headers();
 	for (const layer of layers) {
 		if (!layer) continue;
+		if ("nulls" in layer && layer.nulls instanceof Set && layer.values instanceof Headers) {
+			layer.values.forEach((value, key) => headers.set(key, value));
+			for (const key of layer.nulls) headers.delete(key);
+			continue;
+		}
 		const seen = new Set<string>();
 		const rows = layer instanceof Headers ? layer.entries() : Array.isArray(layer) ? layer : Object.entries(layer);
 		for (const [name, entry] of rows) {

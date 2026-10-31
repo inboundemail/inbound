@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022", "module": "CommonJS", "moduleResolution": "node",
-    "lib": ["ES2022"], "types": ["node"], "strict": true, "skipLibCheck": false, "noEmit": true
+    "lib": ["ES2022"], "types": ["node"], "strict": true, "exactOptionalPropertyTypes": true, "skipLibCheck": false, "noEmit": true
   },
   "include": ["contract.ts", "subpaths.ts"]
 }

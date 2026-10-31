@@ -1,6 +1,8 @@
 import type { Inbound } from "./generated/index.js";
 import type { RawRequest } from "./runtime.js";
 
+type RejectionReason = Parameters<PromiseConstructor["reject"]>[0];
+
 interface ResponseContext {
 	response: Response;
 	options: RawRequest;
@@ -36,7 +38,7 @@ export class APIPromise<T> extends Promise<T> {
 	private data() { this.parsed ??= this.parse(); return this.parsed; }
 	asResponse() { return this.raw; }
 	async withResponse(): Promise<{ data: T; response: Response }> { return { data: await this.data(), response: await this.raw }; }
-	override then<A = T, B = never>(ok?: ((v: T) => A | PromiseLike<A>) | null, fail?: ((reason: unknown) => B | PromiseLike<B>) | null) { return this.data().then(ok, fail); }
-	override catch<B = never>(fail?: ((reason: unknown) => B | PromiseLike<B>) | null) { return this.data().catch(fail); }
+	override then<A = T, B = never>(ok?: ((v: T) => A | PromiseLike<A>) | null, fail?: ((reason: RejectionReason) => B | PromiseLike<B>) | null) { return this.data().then(ok, fail); }
+	override catch<B = never>(fail?: ((reason: RejectionReason) => B | PromiseLike<B>) | null) { return this.data().catch(fail); }
 	override finally(cb?: (() => void) | null) { return this.data().finally(cb); }
 }

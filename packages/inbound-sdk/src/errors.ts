@@ -1,5 +1,5 @@
 export class InboundError extends Error {
-	declare readonly status?: number;
+	declare readonly status?: number | undefined;
 	declare readonly code?: string;
 	declare readonly body?: unknown;
 }

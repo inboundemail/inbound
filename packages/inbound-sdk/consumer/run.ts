@@ -30,7 +30,11 @@ try {
 		}
 	}
 	if (checks.length !== 17) throw new Error(`Expected 17 published input interfaces, found ${checks.length}`);
-	await Bun.write(join(dir, "subpaths.ts"), ["type Accepts<New, Old extends New> = Old;", ...checks].join("\n"));
+	await Bun.write(join(dir, "subpaths.ts"), ["type Accepts<New, Old extends New> = Old;", ...checks,
+		'type ClientOptions = Accepts<import("inboundemail").ClientOptions, import("published-inboundemail").ClientOptions>;',
+		'type RequestOptions = Accepts<import("inboundemail").RequestOptions, import("published-inboundemail").Inbound.RequestOptions>;',
+	].join("\n"));
 	run(["node", "node_modules/typescript/bin/tsc", "-p", "tsconfig.json"]);
 	console.log(`${checks.length}/${checks.length} published 0.20 input interfaces assignable to packed 0.21 inputs`);
+	console.log("Published ClientOptions and RequestOptions assignable with exactOptionalPropertyTypes=true");
 } finally { await rm(dir, { recursive: true, force: true }); }

@@ -41,7 +41,8 @@ it("respects the environment and explicit constructor overrides", async () => {
 it("preserves the old attachment argument order and binary bytes", async () => {
 	const paths: string[] = [];
 	const client = make(async url => { paths.push(new URL(String(url)).pathname); return new Response(Uint8Array.of(0, 255)); });
-	const raw = await client.attachments.retrieve("invoice #2.pdf", { id: "email/a" });
+	const raw: unknown = await client.attachments.retrieve("invoice #2.pdf", { id: "email/a" });
+	if (!(raw instanceof Response)) throw new Error("Expected binary attachment response");
 	expect(new Uint8Array(await raw.arrayBuffer())).toEqual(Uint8Array.of(0, 255));
 	await client.attachments.retrieve("email/a", "invoice #2.pdf");
 	expect(paths[0]).toBe("/api/e2/attachments/email%2Fa/invoice%20%232.pdf");
@@ -279,6 +280,16 @@ it("passes idempotencyKey from request options for send and reply", async () => 
 	await client.emails.send({ from: "a", to: "b", subject: "s" }, { idempotencyKey: "send" });
 	await client.emails.reply("id", { from: "a" }, { idempotencyKey: "reply" });
 	expect(keys).toEqual(["send", "reply"]);
+});
+
+it("applies header values and removals from the published nullable-header shape", async () => {
+	const c = make(async (_, init) => {
+		const headers = new Headers(init?.headers);
+		expect(headers.get("x-value")).toBe("new");
+		expect(headers.has("x-remove")).toBe(false);
+		return Response.json({});
+	}, { defaultHeaders: { "x-value": "old", "x-remove": "old" } });
+	await c.domains.list({}, { headers: { values: new Headers({ "x-value": "new" }), nulls: new Set(["x-remove"]) } });
 });
 
 it("supports primitive HTTP methods, promised options, text, +json and 204 null", async () => {
