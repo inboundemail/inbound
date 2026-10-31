@@ -218,7 +218,7 @@ export class Guard extends APIResource {
 	}
 
 	listAll(params: GuardListParams | null = {}, request?: RequestOptions): AsyncIterableIterator<GuardListResponse["data"][number]> {
-		return paginate(Number(params?.offset ?? 0), offset => this.list({ ...params, offset }, request), "hasMore");
+		return paginate(params?.offset, request, (offset, pageRequest) => this.list({ ...params, offset }, pageRequest), "hasMore");
 	}
 
 	retrieve(id: string, request?: RequestOptions): APIPromise<GuardRetrieveResponse> {

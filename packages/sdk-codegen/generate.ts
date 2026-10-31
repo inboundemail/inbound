@@ -73,7 +73,7 @@ function method(r: Route) {
 		const iterArgs = args.map(arg => arg.replace(`params: ${name}Params`, `params: ${name}Params${cursors.length ? ` & { ${cursors.map(k => `${k}?: never`).join("; ")} }` : ""}`));
 		lines.push("", `\t${r.method}All(${iterArgs.join(", ")}): AsyncIterableIterator<${name}Response["data"][number]> {`,
 			...(cursors.length ? [`\t\tif (${cursors.map(k => `params?.${k} != null || (request?.query && "${k}" in request.query)`).join(" || ")}) throw new TypeError("Use list() for incremental folder sync; listAll() uses offsets");`] : []),
-			`\t\treturn paginate(Number(params?.offset ?? 0), offset => this.${r.method}(${[...r.args.map(p => p.name), "{ ...params, offset }", "request"].join(", ")}), ${JSON.stringify(r.more)});`, "\t}");
+			`\t\treturn paginate(params?.offset, request, (offset, pageRequest) => this.${r.method}(${[...r.args.map(p => p.name), "{ ...params, offset }", "pageRequest"].join(", ")}), ${JSON.stringify(r.more)});`, "\t}");
 	}
 	return lines.join("\n");
 }

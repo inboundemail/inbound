@@ -8,6 +8,8 @@ import Inbound from "inboundemail";
 const client = new Inbound(); // reads INBOUND_API_KEY; pass { apiKey } on edge
 ```
 
+Omitting `baseURL` uses `INBOUND_BASE_URL` if set. Pass `baseURL: null` to use `https://inbound.new` regardless of the environment.
+
 **Send an email.** Use the same key when retrying the same logical send.
 
 ```ts

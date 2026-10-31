@@ -183,7 +183,7 @@ export class FolderMessages extends APIResource {
 
 	listAll(id: string, folder: string, params: FolderMessageListParams & { sinceModseq?: never; sinceUid?: never } | null = {}, request?: RequestOptions): AsyncIterableIterator<FolderMessageListResponse["data"][number]> {
 		if (params?.sinceModseq != null || (request?.query && "sinceModseq" in request.query) || params?.sinceUid != null || (request?.query && "sinceUid" in request.query)) throw new TypeError("Use list() for incremental folder sync; listAll() uses offsets");
-		return paginate(Number(params?.offset ?? 0), offset => this.list(id, folder, { ...params, offset }, request), "hasMore");
+		return paginate(params?.offset, request, (offset, pageRequest) => this.list(id, folder, { ...params, offset }, pageRequest), "hasMore");
 	}
 
 	listAttachments(id: string, folder: string, uid: string, request?: RequestOptions): APIPromise<FolderMessageListAttachmentsResponse> {

@@ -75,7 +75,7 @@ export class Activity extends APIResource {
 	}
 
 	listAll(params: ActivityListParams | null = {}, request?: RequestOptions): AsyncIterableIterator<ActivityListResponse["data"][number]> {
-		return paginate(Number(params?.offset ?? 0), offset => this.list({ ...params, offset }, request), "hasMore");
+		return paginate(params?.offset, request, (offset, pageRequest) => this.list({ ...params, offset }, pageRequest), "hasMore");
 	}
 
 	listForMailbox(id: string, params: ActivityListForMailboxParams | null = {}, request?: RequestOptions): APIPromise<ActivityListForMailboxResponse> {
@@ -83,6 +83,6 @@ export class Activity extends APIResource {
 	}
 
 	listForMailboxAll(id: string, params: ActivityListForMailboxParams | null = {}, request?: RequestOptions): AsyncIterableIterator<ActivityListForMailboxResponse["data"][number]> {
-		return paginate(Number(params?.offset ?? 0), offset => this.listForMailbox(id, { ...params, offset }, request), "hasMore");
+		return paginate(params?.offset, request, (offset, pageRequest) => this.listForMailbox(id, { ...params, offset }, pageRequest), "hasMore");
 	}
 }

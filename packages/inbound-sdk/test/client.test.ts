@@ -21,10 +21,11 @@ it("authenticates and encodes positional segments and URL query values", async (
 it("respects the environment and explicit constructor overrides", async () => {
 	const saved = [process.env.INBOUND_API_KEY, process.env.INBOUND_BASE_URL];
 	try {
-		process.env.INBOUND_API_KEY = "environment-key";
-		process.env.INBOUND_BASE_URL = "https://environment.invalid";
+		process.env.INBOUND_API_KEY = "  environment-key\n";
+		process.env.INBOUND_BASE_URL = "\t https://environment.invalid  ";
 		expect(new Inbound().apiKey).toBe("environment-key");
 		expect(new Inbound().baseURL).toBe("https://environment.invalid");
+		expect(new Inbound({ baseURL: null }).baseURL).toBe("https://inbound.new");
 		expect(new Inbound({ apiKey: "explicit" }).apiKey).toBe("explicit");
 		delete process.env.INBOUND_BASE_URL;
 		expect(new Inbound().baseURL).toBe("https://inbound.new");
@@ -158,6 +159,30 @@ it("handles the email API's snake-case pagination and stops when the consumer br
 	const client = make(async () => Response.json({ data: [{ id: ++count }], pagination: { limit: 1, offset: count - 1, total: 3, has_more: true } }));
 	for await (const email of client.emails.listAll()) { if (email.id && count === 2) break; }
 	expect(count).toBe(2);
+});
+
+it("uses request.query.offset once without losing request filters on later pages", async () => {
+	const offsets: number[] = [];
+	const client = make(async url => {
+		const query = new URL(String(url)).searchParams;
+		const offset = Number(query.get("offset"));
+		offsets.push(offset);
+		expect(query.get("status")).toBe("pending");
+		return Response.json({ data: [{ id: String(offset) }], pagination: { offset, limit: 1, total: 5, hasMore: offset < 4 } });
+	});
+	const query = Object.freeze({ offset: "2", status: "pending" });
+	const ids: string[] = [];
+	for await (const item of client.domains.listAll({ offset: 1 }, { query })) ids.push(item.id);
+	expect(ids).toEqual(["2", "3", "4"]);
+	expect(offsets).toEqual([2, 3, 4]);
+	expect(query.offset).toBe("2");
+});
+
+it("honors a caller's binary request on a JSON route and forces binary on downloads", async () => {
+	const c = make(async () => Response.json({ id: "fixture" }));
+	const raw = await c.domains.list({}, { __binaryResponse: true });
+	expect(raw).toBeInstanceOf(Response);
+	expect(await c.attachments.retrieve("id", "name", { __binaryResponse: false })).toBeInstanceOf(Response);
 });
 
 it("retains published names, webhook helper, and a single response for multiple awaits", async () => {

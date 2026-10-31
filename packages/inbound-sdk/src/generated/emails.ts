@@ -239,7 +239,7 @@ export class Emails extends APIResource {
 	}
 
 	listAll(params: EmailListParams | null = {}, request?: RequestOptions): AsyncIterableIterator<EmailListResponse["data"][number]> {
-		return paginate(Number(params?.offset ?? 0), offset => this.list({ ...params, offset }, request), "has_more");
+		return paginate(params?.offset, request, (offset, pageRequest) => this.list({ ...params, offset }, pageRequest), "has_more");
 	}
 
 	pause(id: string, request?: RequestOptions): APIPromise<EmailPauseResponse> {

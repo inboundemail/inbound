@@ -65,10 +65,12 @@ export function segment(value: string | number): string {
 }
 
 type Page<T> = { data: T[]; pagination: { limit: number; offset: number; hasMore?: boolean; has_more?: boolean } };
-export async function* paginate<T>(start: number, load: (offset: number) => Promise<Page<T>>, more: "hasMore" | "has_more"): AsyncIterableIterator<T> {
-	let offset = start;
+export async function* paginate<T>(start: string | number | undefined, request: RequestOptions | undefined, load: (offset: number, pageRequest?: RequestOptions) => Promise<Page<T>>, more: "hasMore" | "has_more"): AsyncIterableIterator<T> {
+	const { offset: initial, ...query } = (request?.query ?? {}) as Record<string, unknown>;
+	const pageRequest = request && { ...request, query };
+	let offset = Number(initial ?? start ?? 0);
 	while (true) {
-		const page = await load(offset);
+		const page = await load(offset, pageRequest);
 		yield* page.data;
 		if (!page.pagination[more] || !page.data.length) return;
 		const next = page.pagination.offset + page.pagination.limit;
@@ -129,10 +131,11 @@ export class Transport {
 	constructor(private readonly options: ClientOptions) {
 		if (typeof window !== "undefined" && typeof window.document !== "undefined") throw new Errors.InboundError("Use Inbound on the server, not in a browser exposing a secret API key");
 		const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
-		const apiKey = options.apiKey ?? env?.INBOUND_API_KEY;
+		const apiKey = options.apiKey ?? env?.INBOUND_API_KEY?.trim();
 		if (!apiKey) throw new Errors.InboundError("Set apiKey or INBOUND_API_KEY");
 		this.apiKey = apiKey;
-		this.baseURL = ((options.baseURL ?? env?.INBOUND_BASE_URL) || "https://inbound.new").replace(/\/+$/, "");
+		const baseURL = options.baseURL === undefined ? env?.INBOUND_BASE_URL?.trim() : options.baseURL;
+		this.baseURL = (baseURL || "https://inbound.new").replace(/\/+$/, "");
 		this.timeout = options.timeout ?? Transport.DEFAULT_TIMEOUT;
 		this.maxRetries = options.maxRetries ?? 2;
 		this.fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
@@ -177,7 +180,7 @@ export class Transport {
 			if (layout.reactEmail && body.react != null) body.html = await render(body.react);
 			if (layout.reactEmail) delete body.react;
 			return { ...options, path, method: method.toLowerCase() as Method, query: { ...query, ...options.query },
-				modeledHeaders: headers, body: layout.body ? body : undefined, __binaryResponse: layout.binary };
+				modeledHeaders: headers, body: layout.body ? body : undefined, __binaryResponse: layout.binary || options.__binaryResponse };
 		};
 		return this.execute<T>(prepare(), undefined, layout.idempotent);
 	}

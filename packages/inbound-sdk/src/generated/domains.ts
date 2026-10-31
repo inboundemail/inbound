@@ -317,7 +317,7 @@ export class Domains extends APIResource {
 	}
 
 	listAll(params: DomainListParams | null = {}, request?: RequestOptions): AsyncIterableIterator<DomainListResponse["data"][number]> {
-		return paginate(Number(params?.offset ?? 0), offset => this.list({ ...params, offset }, request), "hasMore");
+		return paginate(params?.offset, request, (offset, pageRequest) => this.list({ ...params, offset }, pageRequest), "hasMore");
 	}
 
 	retrieve(id: string, params: DomainRetrieveParams | null = {}, request?: RequestOptions): APIPromise<DomainRetrieveResponse> {

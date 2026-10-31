@@ -222,7 +222,7 @@ export class Filters extends APIResource {
 	}
 
 	listAll(id: string, params: FilterListParams | null = {}, request?: RequestOptions): AsyncIterableIterator<FilterListResponse["data"][number]> {
-		return paginate(Number(params?.offset ?? 0), offset => this.list(id, { ...params, offset }, request), "hasMore");
+		return paginate(params?.offset, request, (offset, pageRequest) => this.list(id, { ...params, offset }, pageRequest), "hasMore");
 	}
 
 	reorder(id: string, params: FilterReorderParams, request?: RequestOptions): APIPromise<FilterReorderResponse> {

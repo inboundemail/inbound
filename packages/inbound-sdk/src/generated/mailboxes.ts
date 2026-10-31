@@ -274,7 +274,7 @@ export class Mailboxes extends APIResource {
 	}
 
 	listAll(params: MailboxListParams | null = {}, request?: RequestOptions): AsyncIterableIterator<MailboxListResponse["data"][number]> {
-		return paginate(Number(params?.offset ?? 0), offset => this.list({ ...params, offset }, request), "hasMore");
+		return paginate(params?.offset, request, (offset, pageRequest) => this.list({ ...params, offset }, pageRequest), "hasMore");
 	}
 
 	retrieve(id: string, request?: RequestOptions): APIPromise<MailboxRetrieveResponse> {
