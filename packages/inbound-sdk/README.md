@@ -39,6 +39,8 @@ if (mailboxes.length) {
 }
 ```
 
-`baseURL` overrides `INBOUND_BASE_URL` (default `https://inbound.new`). `timeout` is the total request deadline in milliseconds (default 60,000). GET, HEAD, PUT, DELETE and idempotency-keyed sends/replies retry 429 and 5xx up to `maxRetries` times (default 2), respecting `Retry-After`. Other POST requests are not replayed. HTTP errors are `InboundError` instances with `status`, `code` (when supplied by the API) and `body`.
+`baseURL` overrides `INBOUND_BASE_URL` (default `https://inbound.new`). `timeout` limits each fetch attempt in milliseconds (default 60,000). GET, HEAD, OPTIONS, PUT, DELETE and keyed POSTs retry connection failures, timeouts, 408, 409, 429 and 5xx up to `maxRetries` times (default 2). The client respects `Retry-After`, `retry-after-ms` and `x-should-retry`. Unkeyed POSTs are not replayed. HTTP errors are `InboundError` instances with `status`, `code` (when supplied by the API) and `body`.
 
-Attachment downloads and raw messages return a standard `Response`: call `.arrayBuffer()` for bytes. Both `attachments.retrieve(id, filename)` and the legacy `attachments.retrieve(filename, { id })` work. `mail.list/retrieve` still access account threads; `threads` is an alias. The SDK has no required runtime dependencies. If using the optional `react` email field or `render()` helper, install `@react-email/render` alongside the SDK.
+Attachment downloads and raw messages return a standard `Response`: call `.arrayBuffer()` for bytes. Both `attachments.retrieve(id, filename)` and the legacy `attachments.retrieve(filename, { id })` work. `mail.list/retrieve` still access account threads; `threads` is an alias. For incremental folder sync (`sinceUid` or `sinceModseq`), use `folderMessages.list()`, not the offset-based `listAll()`.
+
+`@react-email/render` is installed with the SDK and loaded only when using `render()` or a `react` email body.
