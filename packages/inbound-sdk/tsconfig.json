@@ -8,5 +8,5 @@
     "strict": true,
     "skipLibCheck": true
   },
-  "include": ["src", "test", "smoke.ts", "build.ts"]
+  "include": ["src", "test", "smoke.ts", "build.ts", "consumer/run.ts"]
 }
