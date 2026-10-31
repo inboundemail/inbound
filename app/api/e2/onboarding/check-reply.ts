@@ -172,6 +172,7 @@ export const checkOnboardingReply = new Elysia().get(
 			500: CheckReplyErrorResponse,
 		},
 		detail: {
+			hide: true,
 			tags: ["Onboarding"],
 			summary: "Check for onboarding demo reply",
 			description:

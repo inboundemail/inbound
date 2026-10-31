@@ -129,6 +129,6 @@ export const authenticateMailbox = new Elysia().post(
 			500: MailboxErrorSchema,
 			503: MailboxErrorSchema,
 		},
-		detail: { tags: ["Mailboxes"], summary: "Authenticate a mailbox" },
+		detail: { hide: true, tags: ["Mailboxes"], summary: "Authenticate a mailbox" },
 	},
 );

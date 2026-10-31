@@ -78,6 +78,6 @@ export const authenticateSmtp = new Elysia().post(
 			500: MailboxErrorSchema,
 			503: MailboxErrorSchema,
 		},
-		detail: { tags: ["Mailboxes"], summary: "Authenticate for SMTP" },
+		detail: { hide: true, tags: ["Mailboxes"], summary: "Authenticate for SMTP" },
 	},
 );

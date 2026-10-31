@@ -124,6 +124,7 @@ export const sendOnboardingDemo = new Elysia().post(
 			500: SendDemoErrorResponse,
 		},
 		detail: {
+			hide: true,
 			tags: ["Onboarding"],
 			summary: "Send onboarding demo email",
 			description:
