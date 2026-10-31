@@ -1,0 +1,71 @@
+# On npmjs.com, Ryan must add a GitHub Actions trusted publisher for inboundemail:
+# owner inboundemail, repository inbound, workflow publish-sdk.yml, no environment.
+# Alternatively, set the repository secret NPM_TOKEN (passed as NODE_AUTH_TOKEN).
+name: Publish inboundemail
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: npm dist-tag (not the Git tag)
+        type: string
+        required: true
+        default: latest
+      dry_run:
+        description: Validate without publishing
+        type: boolean
+        default: true
+  push:
+    tags: ['inboundemail-v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-inboundemail
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun --no-env-file run sdk:check
+      - run: bunx tsc --noEmit
+        working-directory: packages/sdk-codegen
+      - run: bunx tsc --noEmit
+        working-directory: packages/inbound-sdk
+      - run: bun --no-env-file test packages/sdk-codegen packages/inbound-sdk/test
+      - run: bun --no-env-file packages/inbound-sdk/consumer/run.ts
+      - name: Verify release ref (branch previews only)
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          expected="refs/tags/inboundemail-v$(node -p "require('./packages/inbound-sdk/package.json').version")"
+          if [[ "$GITHUB_REF" != "$expected" && ( "$GITHUB_REF" != refs/heads/* || "$DRY_RUN" != true ) ]]; then
+            echo "Expected $expected; got $GITHUB_REF" >&2
+            exit 1
+          fi
+      - run: bun run build
+        working-directory: packages/inbound-sdk
+      # Node 22 can ship npm 10; trusted publishing requires npm >=11.5.1.
+      - run: npm install --global npm@11
+      - name: Publish package
+        working-directory: packages/inbound-sdk
+        env:
+          DIST_TAG: ${{ inputs.tag || 'latest' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          args=(--provenance --access public "--tag=$DIST_TAG")
+          if [[ "$DRY_RUN" == true ]]; then args+=(--dry-run); fi
+          npm publish "${args[@]}"
