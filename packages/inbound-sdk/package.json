@@ -6,7 +6,7 @@
   "repository": { "type": "git", "url": "https://github.com/inboundemail/inbound.git", "directory": "packages/inbound-sdk" },
   "type": "module",
   "engines": { "node": ">=18" },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": ["dist", "README.md", "LICENSE", "CHANGELOG.md"],
   "main": "./dist/cjs/public/index.js",
   "module": "./dist/esm/generated/index.js",
   "types": "./dist/esm/generated/index.d.ts",

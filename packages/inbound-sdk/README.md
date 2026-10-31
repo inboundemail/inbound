@@ -46,3 +46,9 @@ if (mailboxes.length) {
 Attachment downloads and raw messages return a standard `Response`: call `.arrayBuffer()` for bytes. Use `attachments.retrieve(id, filename)` for a typed response; the legacy `attachments.retrieve(filename, { id })` overload keeps its `void` result type. `mail.list/retrieve` still access account threads; `threads` is an alias. For incremental folder sync (`sinceUid` or `sinceModseq`), use `folderMessages.list()`, not the offset-based `listAll()`.
 
 `@react-email/render` is installed with the SDK and loaded only when using `render()` or a `react` email body.
+
+## Releasing
+
+Once, as an `inboundemail` maintainer, open the package’s **Settings → Trusted Publisher** on npmjs.com. Select **GitHub Actions**, enter owner `inboundemail`, repository `inbound`, workflow filename `publish-sdk.yml`, leave the environment blank, and save. No npm secret is needed. Alternatively, set the GitHub Actions repository secret `NPM_TOKEN` to an npm granular access token with publish access for `inboundemail` and bypass 2FA enabled; the workflow passes it as `NODE_AUTH_TOKEN`.
+
+Preview with `bun run sdk:release -- <version> --dry-run`. From a clean `main`, replace `--dry-run` with `--apply` to prepare a local commit and annotated tag; optionally add `--notes "release notes"`. Review before running the printed push command: pushing the tag publishes to `latest`. Manual workflow runs default to dry-run; a real manual publish requires the matching Git tag as its ref and accepts a custom npm dist-tag.
