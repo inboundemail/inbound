@@ -80,13 +80,15 @@ The same mailbox password works over [IMAP](/mailboxes/connect-imap) and [SMTP](
 | `send_email` | Send a new email as the mailbox |
 | `download_attachment` | Fetch an attachment |
 
+The mailbox password also gets the folder, folder-message, filter, spam and activity tools listed under [Account tools](#account-tools), without a `mailbox_id` input, plus `rotate_my_password`. Filters, spam settings, activity and password rotation each need the matching `selfService` flag on the credential (`filters`, `spam`, `activity`, `password`); otherwise the API returns `403`. See [Access and limits](/mailboxes/access-and-limits#self-service).
+
 Mailbox read/unread and archive actions update the same folders and flags used by IMAP and the [HTTP mailbox API](/mailboxes/http-api), not the dashboard's separate account-level markers. Messages keep the `inbox`, `archive` and `sent` folder values; `folderPath` gives the exact folder when needed.
 
 Immediate sends and replies from a **Read & write** mailbox save a copy to its `Sent` folder a few seconds after the send returns. Account-key sends and replies also save to enabled read/write mailboxes whose sending address (or login email, when no sending address is set) exactly matches the From address; a matching domain scope is not enough. Scheduled sends and older account sent records are not copied, and a failed copy never resends the email. See [Sent copies](/mailboxes/http-api#sent-copies).
 
 ## Account tools
 
-Connected with OAuth or an API key, the server exposes 50 tools:
+Connected with OAuth or an API key, the server exposes 78 tools:
 
 | Area | Tools |
 |------|-------|
@@ -95,7 +97,14 @@ Connected with OAuth or an API key, the server exposes 50 tools:
 | Addresses | `list_email_addresses`, `get_email_address`, `create_email_address`, `update_email_address`, `delete_email_address` |
 | Emails | `list_emails`, `get_email`, `send_email`, `reply_to_email`, `update_email`, `cancel_scheduled_email`, `pause_scheduled_email`, `resume_scheduled_email`, `retry_email_delivery`, `list_threads`, `get_thread`, `list_attachments`, `download_attachment` |
 | Mailboxes | `list_mailboxes`, `create_mailbox`, `update_mailbox`, `delete_mailbox`, `rotate_mailbox_password`, `get_mailbox`, `list_mailbox_messages`, `read_mailbox_message`, `update_mailbox_message`, `get_mailbox_thread`, `send_from_mailbox`, `reply_from_mailbox`, `download_mailbox_attachment` |
+| Mailbox folders | `list_mailbox_folders`, `create_mailbox_folder`, `rename_mailbox_folder`, `delete_mailbox_folder` |
+| Folder messages | `list_folder_messages`, `get_folder_message`, `get_folder_message_raw`, `set_message_flags`, `move_message`, `copy_message`, `delete_folder_message`, `expunge_folder`, `append_message`, `list_folder_message_attachments`, `download_folder_message_attachment` |
+| Mailbox filters | `list_mailbox_filters`, `get_mailbox_filter`, `create_mailbox_filter`, `update_mailbox_filter`, `delete_mailbox_filter`, `reorder_mailbox_filters`, `apply_mailbox_filters` |
+| Mailbox spam | `get_mailbox_spam_settings`, `set_mailbox_spam_settings`, `add_spam_list_entry`, `remove_spam_list_entry` |
+| Mailbox activity | `list_mailbox_activity`, `list_account_activity` |
 | Guard | `list_guard_rules`, `get_guard_rule`, `create_guard_rule`, `update_guard_rule`, `delete_guard_rule`, `check_guard_rule`, `generate_guard_rule` |
+
+`update_mailbox` and `create_mailbox` also take the [access controls](/mailboxes/access-and-limits): `protocols`, `allowed_ips`, `storage_quota_bytes`, `daily_send_limit` and `self_service`. Folder tools work on the same folders, UIDs and flags as IMAP and the [HTTP mailbox API](/mailboxes/http-api); moving a message into `Junk` or back to `INBOX` marks it as junk or not junk for that mailbox only. Filters run on new mail; `apply_mailbox_filters` processes mail already in a folder. Activity tools return sign-ins, refused sign-ins, IMAP session events, quota errors and send failures for the last 30 days, never message content or passwords.
 
 To expose fewer tools, add `?toolsets=` with any of `domains,endpoints,addresses,emails,mailboxes,guard`, for example `https://inbound.new/mcp?toolsets=mailboxes,emails`.
 
@@ -106,5 +115,7 @@ To expose fewer tools, add `?toolsets=` with any of `domains,endpoints,addresses
 - "Create a mailbox for agent@mydomain.com and give me its MCP config"
 - "Reply to the last email from jane@example.com saying we'll ship Friday"
 - "Block cold sales outreach with a Guard rule"
+- "Add a filter to the support mailbox that moves invoices from billing@vendor.com into Finance"
+- "Show failed sign-ins for agent@mydomain.com this week"
 
 The server is open source: [inboundemail/mcp](https://github.com/inboundemail/mcp).
