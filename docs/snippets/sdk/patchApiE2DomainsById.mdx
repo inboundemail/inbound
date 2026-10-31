@@ -1,0 +1,23 @@
+{/* generated, do not edit */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.domains.update("<domainId>", {
+  includeSubdomains: true
+});
+```
+
+```bash cURL
+curl -X PATCH 'https://inbound.new/api/e2/domains/<domainId>' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "includeSubdomains": true
+}'
+```
+
+</CodeGroup>

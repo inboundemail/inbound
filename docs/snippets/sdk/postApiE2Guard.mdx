@@ -1,0 +1,67 @@
+{/* generated, do not edit */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.guard.create({
+  name: "Block suspicious support invoices",
+  type: "explicit",
+  config: {
+    to: {
+      operator: "OR",
+      values: [
+        "support@example.com"
+      ]
+    },
+    subject: {
+      operator: "OR",
+      values: [
+        "invoice",
+        "payment overdue"
+      ]
+    },
+    hasAttachment: true
+  },
+  description: "Block invoice emails with attachments sent to support.",
+  priority: 100,
+  action: {
+    action: "block"
+  }
+});
+```
+
+```bash cURL
+curl -X POST 'https://inbound.new/api/e2/guard' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "name": "Block suspicious support invoices",
+  "type": "explicit",
+  "config": {
+    "to": {
+      "operator": "OR",
+      "values": [
+        "support@example.com"
+      ]
+    },
+    "subject": {
+      "operator": "OR",
+      "values": [
+        "invoice",
+        "payment overdue"
+      ]
+    },
+    "hasAttachment": true
+  },
+  "description": "Block invoice emails with attachments sent to support.",
+  "priority": 100,
+  "action": {
+    "action": "block"
+  }
+}'
+```
+
+</CodeGroup>
