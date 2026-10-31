@@ -1,0 +1,23 @@
+{/* generated, do not edit — OpenAPI: postApiE2MailboxesByIdFoldersByFolderMessagesByUidCopy (POST /api/e2/mailboxes/{id}/folders/{folder}/messages/{uid}/copy) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.folderMessages.copy("<mailboxId>", "<folder>", "<uid>", {
+  destination: "Archive"
+});
+```
+
+```bash cURL
+curl -X POST 'https://inbound.new/api/e2/mailboxes/<mailboxId>/folders/<folder>/messages/<uid>/copy' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "destination": "Archive"
+}'
+```
+
+</CodeGroup>

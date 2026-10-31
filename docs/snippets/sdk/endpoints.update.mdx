@@ -1,0 +1,27 @@
+{/* generated, do not edit — OpenAPI: putApiE2EndpointsById (PUT /api/e2/endpoints/{id}) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.endpoints.update("<endpointId>", {
+  name: "Support",
+  isActive: true,
+  webhookFormat: "inbound"
+});
+```
+
+```bash cURL
+curl -X PUT 'https://inbound.new/api/e2/endpoints/<endpointId>' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "name": "Support",
+  "isActive": true,
+  "webhookFormat": "inbound"
+}'
+```
+
+</CodeGroup>

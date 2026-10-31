@@ -1,0 +1,23 @@
+{/* generated, do not edit — OpenAPI: postApiE2GuardByIdCheck (POST /api/e2/guard/{id}/check) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.guard.check("<ruleId>", {
+  structuredEmailId: "<structuredEmailId>"
+});
+```
+
+```bash cURL
+curl -X POST 'https://inbound.new/api/e2/guard/<ruleId>/check' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "structuredEmailId": "<structuredEmailId>"
+}'
+```
+
+</CodeGroup>

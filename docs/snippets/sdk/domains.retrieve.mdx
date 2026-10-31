@@ -1,0 +1,19 @@
+{/* generated, do not edit — OpenAPI: getApiE2DomainsById (GET /api/e2/domains/{id}) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.domains.retrieve("<domainId>", {
+  check: "true"
+});
+```
+
+```bash cURL
+curl -X GET 'https://inbound.new/api/e2/domains/<domainId>?check=true' \
+  -H "Authorization: Bearer $INBOUND_API_KEY"
+```
+
+</CodeGroup>

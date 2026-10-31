@@ -83,7 +83,7 @@ test(`parse all ${samples.length} curl commands without executing them`, () => {
 
 test(`all ${samples.length} committed guide snippets match the served samples`, async () => {
 	const files = snippets(spec);
-	expect((await readdir(snippetDir)).sort(), "Run bun run generate:samples").toEqual([...files.keys()].sort());
+	expect((await readdir(snippetDir)).sort(), "Run bun run generate:samples").toEqual(routes.map(r => `${r.operationId}.mdx`).sort());
 	for (const [name, expected] of files) {
 		expect(await readFile(join(snippetDir, name), "utf8"), `${name}: run bun run generate:samples`).toBe(expected);
 	}

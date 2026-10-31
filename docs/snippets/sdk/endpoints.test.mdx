@@ -1,0 +1,23 @@
+{/* generated, do not edit — OpenAPI: postApiE2EndpointsByIdTest (POST /api/e2/endpoints/{id}/test) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.endpoints.test("<endpointId>", {
+  webhookFormat: "inbound"
+});
+```
+
+```bash cURL
+curl -X POST 'https://inbound.new/api/e2/endpoints/<endpointId>/test' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "webhookFormat": "inbound"
+}'
+```
+
+</CodeGroup>

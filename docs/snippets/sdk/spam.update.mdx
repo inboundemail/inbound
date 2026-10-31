@@ -1,0 +1,35 @@
+{/* generated, do not edit — OpenAPI: putApiE2MailboxesByIdSpam (PUT /api/e2/mailboxes/{id}/spam) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.spam.update("<mailboxId>", {
+  level: "off",
+  allow: [
+    "agent@example.com"
+  ],
+  block: [
+    "spam@example.org"
+  ]
+});
+```
+
+```bash cURL
+curl -X PUT 'https://inbound.new/api/e2/mailboxes/<mailboxId>/spam' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "level": "off",
+  "allow": [
+    "agent@example.com"
+  ],
+  "block": [
+    "spam@example.org"
+  ]
+}'
+```
+
+</CodeGroup>

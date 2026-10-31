@@ -1,0 +1,25 @@
+{/* generated, do not edit — OpenAPI: postApiE2MailboxesAuthenticate-smtp (POST /api/e2/mailboxes/authenticate-smtp) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.access.authenticateSmtp({
+  loginAddress: "agent@example.com",
+  password: "<mailboxPassword>"
+});
+```
+
+```bash cURL
+curl -X POST 'https://inbound.new/api/e2/mailboxes/authenticate-smtp' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "loginAddress": "agent@example.com",
+  "password": "<mailboxPassword>"
+}'
+```
+
+</CodeGroup>

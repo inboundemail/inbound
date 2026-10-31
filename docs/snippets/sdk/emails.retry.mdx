@@ -1,0 +1,23 @@
+{/* generated, do not edit — OpenAPI: postApiE2EmailsByIdRetry (POST /api/e2/emails/{id}/retry) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.emails.retry("<emailId>", {
+  endpoint_id: "endpoint_..."
+});
+```
+
+```bash cURL
+curl -X POST 'https://inbound.new/api/e2/emails/<emailId>/retry' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "endpoint_id": "endpoint_..."
+}'
+```
+
+</CodeGroup>

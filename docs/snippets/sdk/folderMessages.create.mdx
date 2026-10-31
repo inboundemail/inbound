@@ -1,0 +1,27 @@
+{/* generated, do not edit — OpenAPI: postApiE2MailboxesByIdFoldersByFolderMessages (POST /api/e2/mailboxes/{id}/folders/{folder}/messages) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.folderMessages.create("<mailboxId>", "<folder>", {
+  text: "How can we help?",
+  subject: "Your support request",
+  to: "alex@example.com"
+});
+```
+
+```bash cURL
+curl -X POST 'https://inbound.new/api/e2/mailboxes/<mailboxId>/folders/<folder>/messages' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "text": "How can we help?",
+  "subject": "Your support request",
+  "to": "alex@example.com"
+}'
+```
+
+</CodeGroup>

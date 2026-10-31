@@ -1,0 +1,51 @@
+{/* generated, do not edit — OpenAPI: postApiE2MailboxesByIdFilters (POST /api/e2/mailboxes/{id}/filters) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.filters.create("<mailboxId>", {
+  name: "Support",
+  conditions: [
+    {
+      field: "from",
+      operator: "contains",
+      value: "agent@example.com"
+    }
+  ],
+  actions: [
+    {
+      type: "move_to",
+      value: "Archive"
+    }
+  ],
+  enabled: true
+});
+```
+
+```bash cURL
+curl -X POST 'https://inbound.new/api/e2/mailboxes/<mailboxId>/filters' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "name": "Support",
+  "conditions": [
+    {
+      "field": "from",
+      "operator": "contains",
+      "value": "agent@example.com"
+    }
+  ],
+  "actions": [
+    {
+      "type": "move_to",
+      "value": "Archive"
+    }
+  ],
+  "enabled": true
+}'
+```
+
+</CodeGroup>

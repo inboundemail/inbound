@@ -1,0 +1,29 @@
+{/* generated, do not edit — OpenAPI: patchApiE2MailboxesByIdFoldersByFolderMessagesByUid (PATCH /api/e2/mailboxes/{id}/folders/{folder}/messages/{uid}) */}
+
+<CodeGroup>
+
+```typescript TypeScript
+import Inbound from "inboundemail";
+
+const inbound = new Inbound();
+const result = await inbound.folderMessages.update("<mailboxId>", "<folder>", "<uid>", {
+  action: "add",
+  flags: [
+    "\\Seen"
+  ]
+});
+```
+
+```bash cURL
+curl -X PATCH 'https://inbound.new/api/e2/mailboxes/<mailboxId>/folders/<folder>/messages/<uid>' \
+  -H "Authorization: Bearer $INBOUND_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "action": "add",
+  "flags": [
+    "\\Seen"
+  ]
+}'
+```
+
+</CodeGroup>

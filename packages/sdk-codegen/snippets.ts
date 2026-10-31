@@ -3,18 +3,19 @@ import { join, resolve } from "node:path";
 import { resources } from "./resources";
 import { operations, type Spec } from "./spec";
 
-const marker = "{/* generated, do not edit */}";
+const marker = "{/* generated, do not edit ";
 export const snippetDir = resolve(import.meta.dir, "../../docs/snippets/sdk");
 
 export function snippets(spec: Spec) {
 	const files = new Map<string, string>();
-	for (const { operation, path, verb } of operations(spec, resources)) {
-		const id = operation.operationId;
-		if (!id || !/^[a-zA-Z0-9][\w.-]*$/.test(id) || files.has(`${id}.mdx`)) throw new Error(`Invalid or duplicate OpenAPI operationId for ${verb} ${path}: ${id}`);
+	for (const { operationId: id, operation, path, verb } of operations(spec, resources)) {
+		if (!/^\w+\.\w+$/.test(id)) throw new Error(`Invalid SDK snippet name: ${id}`);
+		if (!operation.operationId || !/^[a-zA-Z0-9][\w.-]*$/.test(operation.operationId)) throw new Error(`Invalid OpenAPI operationId for ${verb} ${path}: ${operation.operationId}`);
 		const samples = operation["x-codeSamples"];
 		if (!samples?.length) throw new Error(`Missing x-codeSamples for ${id}`);
 		const blocks = samples.map(s => `\`\`\`${s.lang === "curl" ? "bash" : s.lang} ${s.label}\n${s.source}\n\`\`\``);
-		files.set(`${id}.mdx`, `${marker}\n\n<CodeGroup>\n\n${blocks.join("\n\n")}\n\n</CodeGroup>\n`);
+		const header = `${marker}— OpenAPI: ${operation.operationId} (${verb} ${path}) */}`;
+		files.set(`${id}.mdx`, `${header}\n\n<CodeGroup>\n\n${blocks.join("\n\n")}\n\n</CodeGroup>\n`);
 	}
 	return files;
 }
